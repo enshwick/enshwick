@@ -638,6 +638,12 @@ pub(crate) fn queue(loader: &Loader, owner: ModIndex, spec: &Spec) -> Result<u64
         return Ok(spec.cancels);
     }
     let kind = kind(loader, spec)?;
+    let window = match kind {
+        // SAFETY: the mod's spec, its target borrowed for the call; the ask
+        // copies it.
+        Kind::Window(_) => Some(window_ask(spec, unsafe { text(spec.target) }?)?),
+        _ => None,
+    };
     crate::actions::client_snapshot::ask();
     if !runs(kind) {
         return Err(CommandError::Unavailable);
@@ -668,10 +674,8 @@ pub(crate) fn queue(loader: &Loader, owner: ModIndex, spec: &Spec) -> Result<u64
         let password = unsafe { text(spec.password) }?;
         play::join(id, target, password.as_bytes(), now)?;
     }
-    if let Kind::Window(_) = kind {
-        // SAFETY: the mod's spec, its target borrowed for the call.
-        let window = unsafe { text(spec.target) }?;
-        windows::park(id, window_ask(spec, window)?);
+    if let Some(ask) = window {
+        windows::park(id, ask);
     }
     commands.next_id += 1;
     commands.kept.push_back(Command {

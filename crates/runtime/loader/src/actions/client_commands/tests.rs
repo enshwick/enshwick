@@ -641,18 +641,25 @@ fn a_window_command_needs_a_window_an_item_and_a_pick_s_option() {
         ),
         Ok(Kind::Window(windows::Act::Text))
     );
-    for (spec, why) in [
-        (spec(Spec::WINDOW_PRESS, "panel", "ban#0", ""), "no mod"),
+    for (of, window, item, text, why) in [
+        (Spec::WINDOW_PRESS, "panel", "ban#0", "", "no mod"),
         (
-            spec(Spec::WINDOW_PRESS, "you.admin:panel", "Ban", ""),
+            Spec::WINDOW_PRESS,
+            "you.admin:panel",
+            "Ban",
+            "",
             "no item id",
         ),
         (
-            spec(Spec::WINDOW_PICK, "you.admin:panel", "ban/0", ""),
+            Spec::WINDOW_PICK,
+            "you.admin:panel",
+            "ban/0",
+            "",
             "no option",
         ),
     ] {
-        assert_eq!(kind(&loader, &spec), Err(CommandError::BadArgs), "{why}");
+        let read = window_ask(&spec(of, window, item, text), window);
+        assert_eq!(read, Err(CommandError::BadArgs), "{why}");
     }
     let long = "x".repeat(Spec::MAX_TEXT + 1);
     let past = Spec {
@@ -668,6 +675,7 @@ fn a_window_command_needs_a_window_an_item_and_a_pick_s_option() {
 
 #[test]
 fn a_handed_window_command_ends_as_the_carried_draw_answered() {
+    let _state = windows::tests::TEST_STATE.relock();
     let ask = windows::Ask::new("you.admin:panel", "@close", windows::Act::Press, "")
         .expect("ids a window can hold");
     let press = Command {
@@ -681,6 +689,7 @@ fn a_handed_window_command_ends_as_the_carried_draw_answered() {
     run(&mut commands, Some(world()), None, 150, |_| Applied::Taken);
     assert!(commands.kept[0].handed.is_some(), "handed to the draw");
     assert_eq!(windows::asked().map(|(id, _)| id), Some(77));
+    assert!(windows::claim(77));
     windows::answer(77, windows::Answer::Shown);
     run(&mut commands, Some(world()), None, 160, |_| Applied::Taken);
     assert_eq!(commands.kept[0].state, Status::OBSERVED);

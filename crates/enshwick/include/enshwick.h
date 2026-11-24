@@ -1437,11 +1437,16 @@ typedef struct EnshwickClientWindowItem {
 // A field of one of the game's templates, as `EnshwickClientWindowItem_ITEM`.
 #define EnshwickClientWindowItem_TEMPLATE 7
 // The window shows and takes commands: the newest the client holds.
+// While it steps aside for the Map screen, or the game's own popup
+// covers it, a command waits until it draws again.
 #define EnshwickClientWindowItem_SHOWN 1
 // A switch is on.
 #define EnshwickClientWindowItem_ON 2
-// The window draws the item off, as an action the player may not run
-// now.
+// The window draws the item off: an action the player may not run now,
+// or the map's button on a build that cannot open the map. A Run is
+// also drawn off while one of its fields holds no value, which this
+// flag does not show; a press of it ends
+// `EnshwickClientCommandStatus_ITEM_OFF` as well.
 #define EnshwickClientWindowItem_OFF 4
 
 // A comfort provider in a base registering its comfort for its category,
@@ -7619,8 +7624,9 @@ typedef struct EnshwickHostApi {
   // `sizeof(EnshwickClientWindowItem)`. Only the newest window shows and
   // takes `EnshwickClientCommand_WINDOW_PRESS` and its kin; its items are the
   // ones it draws now, a button's form's while one is open. The strings
-  // are borrowed for the call. Client only: `EnshwickStatus_UNAVAILABLE` on a
-  // server. Any thread; it runs no mod callback. ABI 12.24.
+  // stay valid until the next call on this thread. Client only:
+  // `EnshwickStatus_UNAVAILABLE` on a server. Any thread; it runs no mod
+  // callback. ABI 12.24.
   EnshwickStatus (*client_windows)(EnshwickModHandle me,
                                    struct EnshwickClientWindowItem *out,
                                    uint32_t entry_size,

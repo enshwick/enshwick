@@ -778,13 +778,16 @@ the action ids the window's mod declared:
 `input.client_windows()` lists the items of every window the client holds,
 with their kind, label and the line they stand under, such as the row's
 player. Only the newest window shows and takes commands, and its
-`shown` is true. While a button's form is open, the list holds the form's
-fields, its Run and Cancel, and Close.
+`shown` is true. While it steps aside for the Map screen, a command waits
+until it shows again. While a button's form is open, the list holds the
+form's fields, its Run and Cancel, and Close.
 
 A command is `Observed` once the window shows it: the press clicked, the
 option is picked, the field reads the text. An item the window that shows
 lacks is `Unavailable`. A command on an item the window draws off, such as
-a Run while a field is empty, is cancelled with `ItemOff`. A pick of a name
+a Run while a field is empty, is cancelled with `ItemOff`. The list's `off`
+shows only the player's rights and a map the build cannot open, not the
+empty field. A pick of a name
 the list lacks is cancelled the same way. A number field takes no command.
 
 ```rust

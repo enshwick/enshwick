@@ -98,8 +98,9 @@ pub(super) fn kind(loader: &Loader, spec: &Spec) -> Result<Kind, CommandError> {
             })
             .ok_or(CommandError::BadArgs),
         Spec::PING => on_map(spec.position).map(|at| Kind::Mark(Mark::Ping(at))),
+        // Its ids are read once, by `window_ask`, when it is queued.
         Spec::WINDOW_PRESS | Spec::WINDOW_PICK | Spec::WINDOW_TEXT => {
-            window_ask(spec, target).map(|ask| Kind::Window(ask.act))
+            Ok(Kind::Window(window_act(spec.kind)))
         }
         Spec::PRESS => press_bit(loader, target).map(|bit| {
             let interacts = INTERACTS.iter().any(|action| action.name() == target);
@@ -116,11 +117,7 @@ pub(super) fn kind(loader: &Loader, spec: &Spec) -> Result<Kind, CommandError> {
 /// [`CommandError::BadArgs`] for ids no window can hold, and for a pick or
 /// a text without one.
 pub(super) fn window_ask(spec: &Spec, window: &str) -> Result<windows::Ask, CommandError> {
-    let act = match spec.kind {
-        Spec::WINDOW_PICK => windows::Act::Pick,
-        Spec::WINDOW_TEXT => windows::Act::Text,
-        _ => windows::Act::Press,
-    };
+    let act = window_act(spec.kind);
     // SAFETY: the mod's spec, its item borrowed for the call; the ask
     // copies it.
     let item = unsafe { text(spec.item) }?;
@@ -131,6 +128,15 @@ pub(super) fn window_ask(spec: &Spec, window: &str) -> Result<windows::Ask, Comm
         return Err(CommandError::BadArgs);
     }
     windows::Ask::new(window, item, act, text).ok_or(CommandError::BadArgs)
+}
+
+/// What the window command of spec kind `kind` does to its item.
+const fn window_act(kind: u32) -> windows::Act {
+    match kind {
+        Spec::WINDOW_PICK => windows::Act::Pick,
+        Spec::WINDOW_TEXT => windows::Act::Text,
+        _ => windows::Act::Press,
+    }
 }
 
 /// The forms of the interact key, whose press opens the screen of what the

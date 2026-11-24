@@ -124,18 +124,24 @@ pub struct ClientWindowItem {
     /// empty for none.
     pub line: String,
     /// Whether its window shows and takes commands: only the newest does.
+    /// While it steps aside for the Map screen, or the game's own popup
+    /// covers it, a command waits until it draws again.
     pub shown: bool,
     /// Whether a switch is on.
     pub on: bool,
-    /// Whether the window draws it off, as an action the player may not
-    /// run now.
+    /// Whether the window draws it off: an action the player may not run
+    /// now, or the map's button on a build that cannot open the map. A Run
+    /// whose fields do not all hold a value is drawn off too, though this
+    /// reads false; a press of it is cancelled with
+    /// [`CancelReason::ItemOff`](super::CancelReason::ItemOff) all the same.
     pub off: bool,
 }
 
-/// The text of a string the loader lent for the call, owned.
+/// The text of a string the loader lent, owned.
 fn owned(text: Str) -> String {
-    // SAFETY: the loader lends the entry's strings for the call
-    // (`HostApi::client_windows`), inside which this copies them.
+    // SAFETY: the loader keeps the entry's strings until the next
+    // `HostApi::client_windows` call on this thread, and this copies them
+    // before that call.
     unsafe { text.as_str() }.unwrap_or_default().to_owned()
 }
 
@@ -173,7 +179,8 @@ impl Input {
         let host = self.0.host;
         let entry = u32::try_from(size_of::<Raw>()).unwrap_or(0);
         let mut count = 0u32;
-        // The loader lends the strings for one call: count first, then read.
+        // Count first, then read: the strings of the second call stay until
+        // the next one on this thread.
         world_status((host.api().client_windows)(
             host.handle(),
             core::ptr::null_mut(),

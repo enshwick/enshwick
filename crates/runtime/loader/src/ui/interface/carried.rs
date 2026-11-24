@@ -80,12 +80,13 @@ static STATE: Carried = Carried {
 
 /// The items of every window the client holds, the newest window last and
 /// alone [`ClientWindowItem::SHOWN`], handed to `put` with their strings
-/// borrowed for the call.
+/// kept until the next call on this thread.
 pub(crate) fn listed<R>(put: impl FnOnce(&[ClientWindowItem]) -> R) -> R {
     let held = STATE.held.load();
     let held = held.as_deref().map_or(&[][..], Vec::as_slice);
     let form = STATE.form.relock().clone();
-    let mut owned = Vec::new();
+    let map_opens = map_opens();
+    let mut listing = Vec::new();
     for (at, window) in held.iter().enumerate() {
         let shown = at + 1 == held.len();
         let open = form
@@ -93,31 +94,49 @@ pub(crate) fn listed<R>(put: impl FnOnce(&[ClientWindowItem]) -> R) -> R {
             .filter(|(id, name, _)| shown && *id == window.mod_id && *name == window.window)
             .map(|(.., form)| form);
         let name = format!("{}:{}", window.mod_id, window.window);
-        for item in items::list(&window.view, open) {
-            let flags = item.flags | if shown { ClientWindowItem::SHOWN } else { 0 };
-            owned.push((name.clone(), item.target.id(), item, flags));
+        for mut item in items::list(&window.view, open, map_opens) {
+            if shown {
+                item.flags |= ClientWindowItem::SHOWN;
+            }
+            listing.push((name.clone(), item.target.id(), item));
         }
     }
-    let raw: Vec<ClientWindowItem> = owned
-        .iter()
-        .map(|(window, id, item, flags)| ClientWindowItem {
-            kind: item.kind,
-            field: item.field,
-            flags: *flags,
-            window: Str::new(window),
-            item: Str::new(id),
-            label: Str::new(&item.label),
-            line: Str::new(&item.line),
-            ..ClientWindowItem::EMPTY
-        })
-        .collect();
-    put(&raw)
+    LENT.with_borrow_mut(|lent| {
+        // The caller copies the strings after its call returns, so the last
+        // listing's go only now.
+        *lent = listing;
+        let raw: Vec<ClientWindowItem> = lent
+            .iter()
+            .map(|(window, id, item)| ClientWindowItem {
+                kind: item.kind,
+                field: item.field,
+                flags: item.flags,
+                window: Str::new(window),
+                item: Str::new(id),
+                label: Str::new(&item.label),
+                line: Str::new(&item.line),
+                ..ClientWindowItem::EMPTY
+            })
+            .collect();
+        put(&raw)
+    })
 }
 
-/// Whether the carried windows draw on this build: the interface linked
-/// and their draw is not fused off.
+/// Whether the build opens the Map screen from a window, as
+/// [`Drawn::refresh`] reads it in each frame.
+fn map_opens() -> bool {
+    crate::engine::screens::byte(MAP_SCREEN).is_some()
+        && crate::actions::client_control::GROUPS
+            .toggle
+            .get()
+            .is_some()
+}
+
+/// Whether the carried windows draw on this build: the interface linked,
+/// and neither its frame nor their draw is fused off, so a command no draw
+/// can answer is refused when queued.
 pub(super) fn draws() -> bool {
-    !super::CARRIED_FUSE.is_off()
+    !super::INTERFACE_FUSE.is_off() && !super::CARRIED_FUSE.is_off()
 }
 
 /// Changes the windows the client holds with `change`, which may run more
@@ -168,12 +187,18 @@ pub(crate) fn heard(id: &str, window: &str, open: bool, text: &str) {
 /// The server closed mod `id`'s window `window`, or the player did.
 pub(crate) fn closed(id: &str, window: &str) {
     change(|held| held.retain(|h| !(h.mod_id == id && h.window == window)));
+    // A reopened window starts without the form, so none lists before it draws.
+    let _form = STATE
+        .form
+        .relock()
+        .take_if(|(of, name, _)| *of == id && *name == window);
 }
 
 /// Forgets every window, as when the client leaves its server or loses
 /// its link to it.
 pub(crate) fn forget() {
     STATE.held.store(None);
+    *STATE.form.relock() = None;
     mark();
 }
 
@@ -245,7 +270,7 @@ impl Drawn {
     /// once, and a press of a button or a switch is left for the draw.
     /// The answer, `None` for a press the draw makes.
     fn take(&mut self, view: &View, ask: &Ask) -> Option<Answer> {
-        let listed = items::list(view, self.form.as_ref());
+        let listed = items::list(view, self.form.as_ref(), self.map_opens.is_some());
         let Some(item) = listed.iter().find(|item| item.target == ask.target) else {
             return Some(Answer::Missing);
         };
@@ -260,11 +285,31 @@ impl Drawn {
             });
             return Some(if taken { Answer::Shown } else { Answer::Off });
         }
-        if ask.act != Act::Press || item.flags & ClientWindowItem::OFF != 0 {
+        if ask.act != Act::Press
+            || item.flags & ClientWindowItem::OFF != 0
+            || !self.fields_set(view, ask)
+        {
             return Some(Answer::Off);
         }
         self.pressing = Some(ask.target.clone());
         None
+    }
+
+    /// Whether the press `ask` names a Run whose fields all hold a value, or
+    /// no Run, as the draw turns a Run off while one is not set.
+    fn fields_set(&mut self, view: &View, ask: &Ask) -> bool {
+        let Target::Run(action) = &ask.target else {
+            return true;
+        };
+        let Some(entry) = view.entries.iter().find(|e| e.id == *action) else {
+            return true;
+        };
+        let from = self
+            .form
+            .as_ref()
+            .filter(|form| form.action == *action)
+            .map_or(0, |form| form.given.len());
+        values(action, &entry.args, from, self).is_some()
     }
 
     /// Takes in whether the build can open a screen this frame, since the
@@ -383,6 +428,9 @@ impl Drawn {
 }
 
 thread_local! {
+    /// The listing [`listed`] last lent on this thread, kept for the strings
+    /// it lent until its next call here.
+    static LENT: RefCell<Vec<(String, String, items::Listed)>> = const { RefCell::new(Vec::new()) };
     static DRAWN: RefCell<Option<Drawn>> = const { RefCell::new(None) };
     /// Whether this frame's draw wants the game's map key let through,
     /// taken by [`pass_map`] once every window of the frame drew.
@@ -411,7 +459,9 @@ enum Click {
 /// - No other window is open.
 pub(super) unsafe fn draw(engine: &Engine, context: usize, screen: Option<u8>) {
     let held = STATE.held.load();
-    let asked = windows::asked();
+    // Claimed before the draw acts on it, so a command a mod cancels on its
+    // own thread never acts; each claim ends in an answer or a retry.
+    let asked = windows::asked().filter(|(id, _)| windows::claim(*id));
     let Some(top) = held.as_deref().and_then(|held| held.last()) else {
         DRAWN.set(None);
         if let Some((id, _)) = asked {
@@ -422,15 +472,17 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize, screen: Option<u8>) {
     let click = DRAWN.with_borrow_mut(|slot| {
         let shows = |drawn: &Drawn| drawn.key.0 == top.mod_id && drawn.key.1 == top.window;
         if !slot.as_ref().is_some_and(shows) {
-            *slot = Some(Drawn::new((top.mod_id.clone(), top.window.clone())));
+            *slot = None;
         }
-        let Some(drawn) = slot.as_mut() else {
-            return Click::Nothing;
-        };
+        let drawn =
+            slot.get_or_insert_with(|| Drawn::new((top.mod_id.clone(), top.window.clone())));
         let aside = drawn.aside(screen);
         MAP_WANTED.set(!aside && drawn.passes_map(&top.view));
         if aside {
             drawn.step_aside();
+            if let Some((id, _)) = asked {
+                windows::retry(id);
+            }
             return Click::Nothing;
         }
         drawn.refresh(
@@ -458,10 +510,14 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize, screen: Option<u8>) {
         // `context` and no other open window; `drawn` stays in the
         // thread-local `DRAWN`, borrowed and unmoved for the call.
         let click = unsafe { window(engine, context, &top.view, drawn) };
-        if let Some(id) = pressed.filter(|_| drawn.pressing.take().is_some()) {
-            // A pressed widget the window draws off makes no click.
-            let clicked = click != Click::Nothing;
-            windows::answer(id, if clicked { Answer::Shown } else { Answer::Off });
+        if let Some((id, target)) = pressed.zip(drawn.pressing.take()) {
+            // Another click, the player's or Back, won the frame: the press
+            // waits for the next one.
+            if made(&top.view, &target, &click) {
+                windows::answer(id, Answer::Shown);
+            } else {
+                windows::retry(id);
+            }
         }
         drawn.after(&click);
         drawn.retry(click)
@@ -674,6 +730,33 @@ fn press(view: &View, button: &ButtonView) -> Click {
         })
     } else {
         Click::Run(button.action.clone(), button.args.clone())
+    }
+}
+
+/// Whether `click`, what the frame did in `view`, is the press of `target`
+/// a client command made, so no other click won the frame.
+fn made(view: &View, target: &Target, click: &Click) -> bool {
+    match (target, click) {
+        (Target::Close, Click::Close)
+        | (Target::Cancel, Click::Cancel)
+        | (Target::Map, Click::OpenMap(_)) => true,
+        (Target::Run(action), Click::Run(ran, _)) => action == ran,
+        (Target::Switch(action, key), Click::Run(ran, values)) => {
+            action == ran
+                && matches!(values.first(), Some(Value::Player { key: k, .. }) if k == key)
+        }
+        (Target::RowButton(action, n), _) => view
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                ItemView::Row { buttons, .. } => Some(buttons),
+                _ => None,
+            })
+            .flatten()
+            .filter(|button| button.action == *action)
+            .nth(*n)
+            .is_some_and(|button| press(view, button) == *click),
+        _ => false,
     }
 }
 

@@ -634,11 +634,16 @@ impl ClientWindowItem {
     /// A field of one of the game's templates, as [`ClientWindowItem::ITEM`].
     pub const TEMPLATE: u32 = 7;
     /// The window shows and takes commands: the newest the client holds.
+    /// While it steps aside for the Map screen, or the game's own popup
+    /// covers it, a command waits until it draws again.
     pub const SHOWN: u32 = 1;
     /// A switch is on.
     pub const ON: u32 = 2;
-    /// The window draws the item off, as an action the player may not run
-    /// now.
+    /// The window draws the item off: an action the player may not run now,
+    /// or the map's button on a build that cannot open the map. A Run is
+    /// also drawn off while one of its fields holds no value, which this
+    /// flag does not show; a press of it ends
+    /// [`ClientCommandStatus::ITEM_OFF`] as well.
     pub const OFF: u32 = 4;
     /// No item, its header set.
     pub const EMPTY: Self = Self {

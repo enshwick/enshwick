@@ -2515,8 +2515,9 @@ pub struct HostApi {
     /// `size_of::<ClientWindowItem>()`. Only the newest window shows and
     /// takes [`ClientCommand::WINDOW_PRESS`] and its kin; its items are the
     /// ones it draws now, a button's form's while one is open. The strings
-    /// are borrowed for the call. Client only: [`Status::UNAVAILABLE`] on a
-    /// server. Any thread; it runs no mod callback. ABI 12.24.
+    /// stay valid until the next call on this thread. Client only:
+    /// [`Status::UNAVAILABLE`] on a server. Any thread; it runs no mod
+    /// callback. ABI 12.24.
     pub client_windows: extern "system" fn(
         me: ModHandle,
         out: *mut ClientWindowItem,

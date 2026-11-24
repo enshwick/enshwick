@@ -76,6 +76,8 @@ const SHOWN: u8 = 2;
 const MISSING: u8 = 3;
 /// The draw answered [`Answer::Off`].
 const OFF: u8 = 4;
+/// The draw claimed the command and acts on it in this frame.
+const ACTING: u8 = 5;
 
 /// The window commands' state, one per process.
 struct State {
@@ -153,19 +155,35 @@ pub(crate) fn asked() -> Option<(u64, Ask)> {
     Some((id, ask))
 }
 
-/// The carried draw's answer to command `id`.
+/// Claims command `id` for the carried draw before it acts on the window;
+/// false once a cancel took it back, so a cancelled command never acts.
+pub(crate) fn claim(id: u64) -> bool {
+    STATE.handoff.advance(id, WAITING, ACTING)
+}
+
+/// Gives claimed command `id` back to wait for the next frame, as when its
+/// window did not draw or another click won the frame.
+pub(crate) fn retry(id: u64) {
+    let _waits = STATE.handoff.advance(id, ACTING, WAITING);
+}
+
+/// The carried draw's answer to claimed command `id`.
 pub(crate) fn answer(id: u64, answer: Answer) {
     let stage = match answer {
         Answer::Shown => SHOWN,
         Answer::Missing => MISSING,
         Answer::Off => OFF,
     };
-    let _moved = STATE.handoff.advance(id, WAITING, stage);
+    let _moved = STATE.handoff.advance(id, ACTING, stage);
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+
+    /// Held by every test that arms the window commands' process-wide
+    /// state, since `cargo test` runs tests as threads of one process.
+    pub(crate) static TEST_STATE: Mutex<()> = Mutex::new(());
 
     #[test]
     fn an_ask_names_its_window_by_its_mod_and_its_own_id() {
@@ -185,12 +203,21 @@ mod tests {
 
     #[test]
     fn a_handed_command_carries_its_ask_until_the_draw_answers() {
+        let _state = TEST_STATE.relock();
         let ask = Ask::new("m:w", "say/0", Act::Text, "hi").expect("a valid ask");
         park(41, ask.clone());
         assert_eq!(progress(41), None, "parked, not handed");
         assert!(hand(41));
         assert_eq!(asked(), Some((41, ask)));
         assert_eq!(progress(41), Some(Progress::Waiting));
+        answer(41, Answer::Off);
+        assert_eq!(progress(41), Some(Progress::Waiting), "answered unclaimed");
+        assert!(claim(41));
+        assert_eq!(asked(), None, "claimed");
+        assert_eq!(progress(41), Some(Progress::Waiting));
+        retry(41);
+        assert!(asked().is_some(), "given back for the next frame");
+        assert!(claim(41));
         answer(41, Answer::Off);
         assert_eq!(asked(), None, "answered");
         assert_eq!(
@@ -209,5 +236,21 @@ mod tests {
         assert!(hand(42), "a released handoff takes the next");
         assert_eq!(asked().map(|(_, ask)| ask), None, "its parked ask went");
         release(42);
+    }
+
+    #[test]
+    fn a_command_cancelled_after_the_draw_read_it_cannot_be_claimed() {
+        let _state = TEST_STATE.relock();
+        park(
+            43,
+            Ask::new("m:w", "ban#0", Act::Press, "").expect("a valid ask"),
+        );
+        assert!(hand(43));
+        let read = asked();
+        assert!(read.is_some(), "the draw read the ask");
+        release(43);
+        assert!(!claim(43), "the cancel won: the draw acts on nothing");
+        answer(43, Answer::Shown);
+        assert_eq!(progress(43), None, "nothing comes back to life");
     }
 }

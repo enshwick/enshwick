@@ -58,12 +58,12 @@ pub(super) const fn field_kind(arg: &ArgView) -> Option<u32> {
 }
 
 /// The items `view` draws: its own, or, with `form` open, the form's, and
-/// the window's Close last.
-pub(super) fn list(view: &View, form: Option<&Form>) -> Vec<Listed> {
+/// the window's Close last; its map's button off unless `map_opens`.
+pub(super) fn list(view: &View, form: Option<&Form>, map_opens: bool) -> Vec<Listed> {
     let mut listed = Vec::new();
     match form {
         Some(form) => form_items(view, form, &mut listed),
-        None => view_items(view, &mut listed),
+        None => view_items(view, map_opens, &mut listed),
     }
     let close = texts::text("actions.close");
     listed.push(Listed::button(Target::Close, close, "", false));
@@ -71,7 +71,7 @@ pub(super) fn list(view: &View, form: Option<&Form>) -> Vec<Listed> {
 }
 
 /// The items of `view` with no form open.
-fn view_items(view: &View, listed: &mut Vec<Listed>) {
+fn view_items(view: &View, map_opens: bool, listed: &mut Vec<Listed>) {
     // The row buttons running each action so far, for their `#n`.
     let mut counted: Vec<(&str, usize)> = Vec::new();
     for item in &view.items {
@@ -97,7 +97,7 @@ fn view_items(view: &View, listed: &mut Vec<Listed>) {
             }
             ItemView::Map(_) => {
                 let open = texts::text("windows.map.open");
-                listed.push(Listed::button(Target::Map, open, "", false));
+                listed.push(Listed::button(Target::Map, open, "", !map_opens));
             }
             _ => {}
         }
@@ -240,7 +240,7 @@ mod tests {
 
     #[test]
     fn a_window_lists_its_row_buttons_fields_switches_and_close_by_id() {
-        let listed = list(&check(), None);
+        let listed = list(&check(), None, true);
         assert_eq!(
             ids(&listed),
             ["ban#0", "ban#1", "say/0", "say", "friends@8", "@close"]
@@ -257,13 +257,26 @@ mod tests {
             action: "ban".into(),
             given: vec![Value::Toggle(true)],
         };
-        let listed = list(&check(), Some(&form));
+        let listed = list(&check(), Some(&form), true);
         assert_eq!(ids(&listed), ["ban/1", "ban", "@cancel", "@close"]);
         let gone = Form {
             action: "kick".into(),
             ..form
         };
-        assert_eq!(ids(&list(&check(), Some(&gone))), ["@close"]);
+        assert_eq!(ids(&list(&check(), Some(&gone), true)), ["@close"]);
+    }
+
+    #[test]
+    fn a_map_s_button_lists_off_on_a_build_that_cannot_open_the_map() {
+        let view = View {
+            items: vec![ItemView::Map(
+                enshwick_core::actions::window::MapView::default(),
+            )],
+            ..View::default()
+        };
+        let map = |opens| list(&view, None, opens)[0].flags & Raw::OFF;
+        assert_eq!(map(true), 0);
+        assert_eq!(map(false), Raw::OFF);
     }
 
     #[test]
@@ -272,7 +285,7 @@ mod tests {
         for entry in &mut view.entries {
             entry.offered = false;
         }
-        let listed = list(&view, None);
+        let listed = list(&view, None, true);
         let off = |id: &str| {
             listed
                 .iter()

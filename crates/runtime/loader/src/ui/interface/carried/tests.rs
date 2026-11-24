@@ -501,6 +501,10 @@ fn the_map_button_stays_off_on_a_build_that_cannot_open_the_map() {
     }));
 }
 
+/// Held by every test that changes the windows the client holds, since
+/// `cargo test` runs tests as threads of one process.
+static HELD: Mutex<()> = Mutex::new(());
+
 fn held() -> Vec<(String, String)> {
     let held = STATE.held.load();
     let held = held.as_deref().map_or_default(Vec::as_slice);
@@ -511,6 +515,7 @@ fn held() -> Vec<(String, String)> {
 
 #[test]
 fn the_server_s_close_takes_only_its_own_window() {
+    let _held = HELD.relock();
     heard("you.admin", "panel", true, "W\tPanel\n");
     heard("you.admin", "bans", true, "W\tBans\n");
     heard("you.other", "panel", true, "W\tOther\n");
@@ -617,13 +622,12 @@ fn a_command_on_an_item_the_window_lacks_or_draws_off_says_so() {
         Some(windows::Answer::Off),
         "a button takes no text"
     );
-    // Announce's Run is drawn off while its field is empty: the press makes
-    // no click.
-    assert_eq!(drawn.take(&view, &ask("say", Act::Press, "")), None);
     assert_eq!(
-        items(&Recorder::default(), &view, &mut drawn),
-        Click::Nothing
+        drawn.take(&view, &ask("say", Act::Press, "")),
+        Some(windows::Answer::Off),
+        "Announce's Run is drawn off while its field is empty"
     );
+    assert_eq!(drawn.pressing, None, "the draw presses nothing");
     let mut refused = ban_and_say();
     refused.entries[1].offered = false;
     let off = drawn.take(&refused, &ask("say", Act::Press, ""));
@@ -696,7 +700,7 @@ fn a_commanded_cancel_leaves_the_open_form_and_lists_follow_it() {
         }],
     };
     drawn.after(&Click::Form(form.clone()));
-    let open: Vec<String> = items::list(&view, drawn.form.as_ref())
+    let open: Vec<String> = items::list(&view, drawn.form.as_ref(), true)
         .iter()
         .map(|item| item.target.id())
         .collect();
@@ -715,9 +719,111 @@ fn a_commanded_cancel_leaves_the_open_form_and_lists_follow_it() {
 
 #[test]
 fn a_lost_link_forgets_the_windows_so_none_draws_over_the_menu() {
+    let _held = HELD.relock();
     heard("you.admin", "panel", true, "W\tPanel\n");
     assert_eq!(held().len(), 1);
     let _running = crate::engine::loader::install_for_test(crate::start::tests::bare_loader());
     crate::base::net::link_lost();
     assert!(STATE.held.load().is_none());
+}
+
+#[test]
+fn a_listing_s_strings_stay_until_the_next_listing_on_its_thread() {
+    let _held = HELD.relock();
+    heard("you.admin", "panel", true, "W\tPanel\n");
+    let lent = listed(<[ClientWindowItem]>::to_vec);
+    let handed: Vec<String> = lent
+        .iter()
+        .map(|item| format!("{:?} {:?}", item.window, item.item))
+        .collect();
+    let kept: Vec<String> = LENT.with_borrow(|kept| {
+        kept.iter()
+            .map(|(window, id, _)| format!("{:?} {:?}", Str::new(window), Str::new(id)))
+            .collect()
+    });
+    assert_eq!(
+        handed, kept,
+        "every string handed points into the kept listing"
+    );
+    // SAFETY: the listing stays until the next call on this thread.
+    let read = |text: Str| unsafe { text.as_str() }.map(str::to_owned);
+    assert_eq!(
+        (read(lent[0].window), read(lent[0].item)),
+        (Some("you.admin:panel".into()), Some("@close".into()))
+    );
+    assert_ne!(lent[0].flags & ClientWindowItem::SHOWN, 0);
+    closed("you.admin", "panel");
+}
+
+#[test]
+fn a_window_closed_or_forgotten_with_a_form_open_lists_no_form_when_it_reopens() {
+    let _held = HELD.relock();
+    let form = || {
+        Some((
+            "you.admin".to_owned(),
+            "panel".to_owned(),
+            Form {
+                label: "Ban".into(),
+                action: "ban".into(),
+                given: Vec::new(),
+            },
+        ))
+    };
+    *STATE.form.relock() = form();
+    closed("you.admin", "other");
+    assert_eq!(*STATE.form.relock(), form(), "another window closed");
+    closed("you.admin", "panel");
+    assert_eq!(*STATE.form.relock(), None);
+    *STATE.form.relock() = form();
+    forget();
+    assert_eq!(*STATE.form.relock(), None);
+}
+
+#[test]
+fn a_commanded_press_counts_only_when_its_own_click_won_the_frame() {
+    let view = ban_and_say();
+    let mut drawn = drawn();
+    assert_eq!(drawn.take(&view, &ask("ban#0", Act::Press, "")), None);
+    // The player clicks a Ban too in the same frame, and Bob's row draws last.
+    let paint = Recorder::default().answer("Ban", Answer::Press);
+    let click = items(&paint, &view, &mut drawn);
+    let row = |n| Target::RowButton("ban".into(), n);
+    assert!(!made(&view, &row(0), &click), "Bob's row won the frame");
+    assert!(made(&view, &row(1), &click));
+    assert!(made(&view, &Target::Close, &Click::Close));
+    assert!(
+        !made(&view, &Target::Run("say".into()), &Click::Close),
+        "the player closed the window"
+    );
+    assert!(
+        !made(&view, &Target::Cancel, &Click::Nothing),
+        "Back ended the typing"
+    );
+    let ann = Value::Player {
+        key: PlayerKey::new(7),
+        name: String::new(),
+    };
+    let flipped = Click::Run("allowed".into(), vec![ann, Value::Toggle(true)]);
+    let switch = |key| Target::Switch("allowed".into(), PlayerKey::new(key));
+    assert!(made(&view, &switch(7), &flipped));
+    assert!(
+        !made(&view, &switch(8), &flipped),
+        "another player's switch"
+    );
+}
+
+#[test]
+fn a_commanded_map_press_is_off_on_a_build_that_cannot_open_the_map() {
+    let mut drawn = drawn();
+    let map = ask("@map", Act::Press, "");
+    assert_eq!(drawn.take(&map_view(), &map), Some(windows::Answer::Off));
+    drawn.map_opens = Some(5);
+    assert_eq!(drawn.take(&map_view(), &map), None, "the draw presses");
+}
+
+#[test]
+fn window_commands_are_refused_while_the_interface_frame_is_fused_off() {
+    assert!(draws());
+    super::super::INTERFACE_FUSE.blow("a test");
+    assert!(!draws(), "no frame would answer the command");
 }
