@@ -42,8 +42,20 @@ entries! {
                 unsafe { id.write(spec.cancels) };
                 return Status::OK;
             }
-            if !(Spec::OPEN_SCREEN..=Spec::WINDOW_TEXT).contains(&spec.kind) || !spec.in_bounds() {
+            if !(Spec::OPEN_SCREEN..=Spec::ANSWER_DIALOG).contains(&spec.kind) || !spec.in_bounds() {
                 return Status::BAD_ARGS;
+            }
+            // As the loader: an answer goes to the dialog it names while that
+            // one shows, and only by a button it has.
+            if spec.kind == Spec::ANSWER_DIALOG {
+                let Some((_, buttons, _)) = on_screen(s)
+                    .filter(|&(number, ..)| number != 0 && number == spec.dialog)
+                else {
+                    return Status::UNAVAILABLE;
+                };
+                if buttons & 1 << spec.answer == 0 {
+                    return Status::BAD_ARGS;
+                }
             }
             // As the loader: a waypoint or ping inside the map's frame, when
             // the world has one.
@@ -170,6 +182,28 @@ entries! {
 /// [`FakeHost::player_input`](crate::test::FakeHost::player_input) declares,
 /// names the game action `name`, as the loader finds a press's bit; a host
 /// without it names none.
+/// The dialog on screen as the loader tells it: `None` before the mod's
+/// init returned, since the loader shows dialogs in game only once its hooks
+/// are armed; else the oldest waiting one, numbered by the answers before
+/// it as the loader numbers dialogs as they show, 0 while none waits, its
+/// buttons, and whether the mod under test asked it.
+fn on_screen(s: &crate::test::table::State) -> Option<(u32, u32, bool)> {
+    if s.base.registration != crate::test::table::Registration::Closed {
+        return None;
+    }
+    Some(
+        s.ui.dialogs
+            .first()
+            .map_or((0, 0, false), |(shown, asked)| {
+                (
+                    s.ui.dialogs_answered % 65_535 + 1,
+                    shown.buttons,
+                    asked.owner() == Some(s.host.base.handle),
+                )
+            }),
+    )
+}
+
 fn reflects_action(host: &crate::test::FakeHost, name: &str) -> bool {
     host.base
         .type_hashes
@@ -252,11 +286,27 @@ entries! {
                 return Status::UNAVAILABLE;
             }
             s.ui.snapshot_reads.0 = true;
-            let snapshot = if s.ui.snapshot_reads.1 {
+            let mut snapshot = if s.ui.snapshot_reads.1 {
                 s.ui.client_snapshot
             } else {
                 enshwick_core::abi::ClientSnapshot::EMPTY
             };
+            if let Some((number, buttons, mine)) = on_screen(s) {
+                snapshot.available |= enshwick_core::abi::ClientSnapshot::DIALOG;
+                snapshot.dialog = number;
+                snapshot.dialog_buttons = buttons;
+                // shortcut: the fake knows no id for a pack or another mod, so
+                // their dialogs name none; give them ids if a test needs one.
+                // The manifest's id lives as long as the fake.
+                snapshot.dialog_mod = s
+                    .base
+                    .manifest
+                    .as_ref()
+                    .filter(|_| mine)
+                    .map_or(enshwick_core::abi::Str::EMPTY, |manifest| {
+                        enshwick_core::abi::Str::new(&manifest.id)
+                    });
+            }
             crate::test::table::put_headed(out, snapshot)
         })
     }

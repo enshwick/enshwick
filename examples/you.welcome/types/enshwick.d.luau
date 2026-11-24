@@ -535,7 +535,7 @@ export type ChunkData = {
 
 --- `ClientCommand` as Luau gives it; its `Debug` shows none of the password.
 export type ClientCommand = {
-	--- `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`, `"move"`, `"highlight_recipe"`, `"join"`, `"leave"`, `"press"`, `"set_waypoint"`, `"clear_waypoint"`, `"ping"`, `"host"`, `"open_mods"`, `"open_mod"`, `"open_mod_settings"`, `"press_window_item"`, `"pick_window_item"` or `"set_window_text"`.
+	--- `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`, `"move"`, `"highlight_recipe"`, `"join"`, `"leave"`, `"press"`, `"set_waypoint"`, `"clear_waypoint"`, `"ping"`, `"host"`, `"open_mods"`, `"open_mod"`, `"open_mod_settings"`, `"press_window_item"`, `"pick_window_item"`, `"set_window_text"` or `"answer_dialog"`.
 	kind: string,
 	--- The session, as `client_snapshot().session` gives it.
 	session: string,
@@ -569,6 +569,10 @@ export type ClientCommand = {
 	item: string?,
 	--- The option a pick picks or the text a window's field takes.
 	text: string?,
+	--- The response a dialog's answer gives.
+	answer: Response?,
+	--- The dialog an answer answers, as `client_snapshot().dialog` numbers it.
+	dialog: number?,
 }
 
 --- The client's state in one copy, as `Input.client_snapshot` gives it to Luau.
@@ -581,7 +585,7 @@ export type ClientSnapshot = {
 	age_ms: string?,
 	--- The world's name.
 	scene: string?,
-	--- The parts the build reads: `"screens"`, `"menu_tab"`, `"held"`, `"player"`, `"recipe"` and `"loader_screen"`.
+	--- The parts the build reads: `"screens"`, `"menu_tab"`, `"held"`, `"player"`, `"recipe"`, `"loader_screen"` and `"dialog"`.
 	reads: {string},
 	--- The open HUD screen.
 	hud_screen: string?,
@@ -603,6 +607,12 @@ export type ClientSnapshot = {
 	loader_screen: string?,
 	--- The id of the mod that page names.
 	loader_screen_mod: string?,
+	--- The responses of the buttons of the loader's dialog that shows; empty while none does, nil where dialogs do not show in game.
+	dialog_buttons: {Response}?,
+	--- The id of the mod whose dialog shows; nil for the loader's own.
+	dialog_mod: string?,
+	--- The number of the dialog that shows, which `answer_dialog` names; 0 while none does.
+	dialog: number,
 }
 
 --- `ClientWindowItem` as Luau gives it.
@@ -4553,7 +4563,7 @@ declare enshwick: {
 		--- Changes the vanilla quest `quest` in memory, on the server and the client alike: its rewards, whether it unlocks for every player, and its steps' knowledge. Mods that change one quest change it in load order, each on the one before's result; `Knowledge.quests` lists the quest ids. The game gives an added reward's experience and only draws an added item, which the mod gives on `QuestCompleted`, as for its own quest (see `QuestReward`). `Knowledge.quests`: crate.knowledge.Knowledge.quests
 		--- Only while the mod starts, at the top level of main.luau.
 		change_quest: (quest: number, change: QuestChange) -> (),
-		--- Removes the vanilla quest `quest` from the journal in memory, on the server and the client alike, with its steps; its knowledge stays, so a save that holds its progress still opens. Mods change and remove a quest in load order. A removal is logged and left out when the journal first builds while a step of another mod's quest earlier in load order asks for the quest's or one of its steps' id, itself or through a game query that reads it, such as one of `Load.add_query`, with the queries it names in turn; while the game's queries do not read, every game query counts.
+		--- Removes the vanilla quest `quest` from the journal in memory, on the server and the client alike, with its steps; its knowledge stays, so a save that holds its progress still opens. Mods change and remove a quest in load order. A removal is logged and left out when the journal first builds while anything a mod earlier in load order put in the journal asks for the quest's or one of its steps' id: a step of its own quest, a step it inserted into a vanilla quest or a query it put in a vanilla step, an entry of a lore page, or an item set. It asks by the id itself or through a game query that reads it, such as one of `Load.add_query`, with the queries it names in turn; while the game's queries do not read, every game query counts. The game's own queries never hold a quest, even in a step another mod changed.
 		--- Only while the mod starts, at the top level of main.luau.
 		remove_quest: (quest: number) -> (),
 		--- Changes the vanilla lore page `page` in memory, on the server and the client alike: its category, title, priority, tutorial mark, document and entries. Mods that change one page change it in load order.

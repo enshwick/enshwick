@@ -556,15 +556,17 @@ step, and the server takes it as the player's own.
 
 | Command | Bounds | Observed |
 | --- | --- | --- |
-| `SetWaypoint` | a finite position, inside the map | the step's input carries it to the server |
+| `SetWaypoint` | a finite position below 2,147,483,648 metres on each axis, inside the map | the step's input carries it to the server |
 | `ClearWaypoint` | none | the same |
-| `Ping` | a finite position, inside the map | the same |
+| `Ping` | a finite position below 2,147,483,648 metres on each axis, inside the map | the same |
 
 A position that is not finite returns `WorldError::Refused`. So does a
-position outside the map's frame in a hosted world. The loader reads that
-frame shortly after a mod first takes a client snapshot or queues a client
-command. A client joined to a server has no frame, so there the loader
-checks only that the position is finite. The
+position whose metres on an axis reach 2,147,483,648 (2^31) either way, the
+range of the game's fixed-point world positions. So does a position outside
+the map's frame in a hosted world. The loader reads that frame shortly after
+a mod first takes a client snapshot or queues a client command. A client
+joined to a server has no frame, so there the loader checks only the
+fixed-point range. The
 server's waypoint follows the request.
 [`load.on_waypoint`](map.md#hearing-waypoints-and-pings) and
 [`map.waypoint`](map.md#waypoints) tell when it changed. They run on the
@@ -814,5 +816,57 @@ for _, item in enshwick.input.client_windows() do
             item = item.item,
         })
     end
+end
+```
+
+## Answering the loader's dialog
+
+`CommandAction::AnswerDialog { dialog, response }` answers the loader's
+dialog that shows on the client, as a click on its button would. That is a mod's dialog
+from [`ui.dialog` or `ui.ask`](interface.md#dialogs), or one of the loader's own,
+such as a warning. It runs at the main menu and in a world.
+
+| Snapshot | Holds |
+| --- | --- |
+| `dialog_buttons()` | the responses of the dialog's buttons, empty while none shows, `None` where dialogs do not show in game |
+| `dialog_mod()` | the id of the mod whose dialog shows, `None` for the loader's own |
+| `dialog()` | the number of the dialog that shows, 0 while none shows |
+
+The command names the dialog by the snapshot's number, so an answer never
+reaches a dialog that showed after the snapshot. It is `Observed` once the
+dialog closes with that answer, and the dialog's mod hears it as from the
+player. While the named dialog does not show, the command returns
+`WorldError::Unavailable`, and it ends `Unavailable` when that dialog
+closes before the answer lands. A response the dialog has no
+button for returns `WorldError::Refused`. A dialog the loader shows as a
+system message box, where dialogs do not show in game, takes no command.
+
+```rust
+use enshwick::input::{ClientCommand, CommandAction, Input};
+use enshwick::ui::Response;
+
+fn accept(input: Input) -> Option<()> {
+    let snapshot = input.client_snapshot().ok()?;
+    if !snapshot.dialog_buttons()?.contains(&Response::Ok) {
+        return None;
+    }
+    let ok = CommandAction::AnswerDialog {
+        dialog: snapshot.dialog(),
+        response: Response::Ok,
+    };
+    input.client_command(&ClientCommand::new(ok, snapshot.session())).ok()?;
+    Some(())
+}
+```
+
+```luau
+local snapshot = enshwick.input.client_snapshot()
+if snapshot.dialog_buttons and table.find(snapshot.dialog_buttons, "Ok") then
+    enshwick.input.client_command({
+        kind = "answer_dialog",
+        session = snapshot.session,
+        dialog = snapshot.dialog,
+        answer = "Ok",
+    })
 end
 ```

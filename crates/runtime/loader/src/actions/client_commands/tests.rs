@@ -1,6 +1,8 @@
 use super::*;
 use enshwick_core::abi::Str;
 
+mod dialog_answers;
+
 /// The frame's step while no command opens or closes a screen.
 fn next(command: &Command, seen: &Seen, progress: Option<Progress>, now: u64) -> Next {
     super::next(command, seen, progress, now, false)

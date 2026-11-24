@@ -13,11 +13,12 @@
 //! instead, so the game never waits.
 
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use enshwick_core::abi::{Side, UiAnswerFn, UiDialog};
 
+use crate::actions::client_commands::dialogs;
 use crate::base::dialogs::{KEPT, TAGS, tag_id};
 use crate::engine::loader::{Loader, Registered};
 use crate::engine::mod_index::ModIndex;
@@ -134,6 +135,8 @@ struct Shown {
 struct Current {
     answerer: Answerer,
     buttons: u32,
+    /// Its number, which a client command's answer names.
+    number: u32,
     state: Box<Buf<{ engine::POPUP_SIZE }>>,
     texts: Arc<Shown>,
     /// Whether it belongs to a world, and the worlds ended before it showed.
@@ -152,6 +155,18 @@ impl Current {
             buttons: self.buttons,
             answerer: self.answerer,
             world: self.world,
+        }
+    }
+
+    /// What a client command and the snapshot see of it.
+    fn on_screen(&self) -> dialogs::Shown {
+        dialogs::Shown {
+            number: self.number,
+            buttons: self.buttons,
+            owner: match &self.answerer {
+                Answerer::Mod(registered) => Some(registered.owner.get()),
+                Answerer::Loader(_) => None,
+            },
         }
     }
 
@@ -238,6 +253,11 @@ struct State {
     /// The count of `ended` whose waiting dialogs the interface thread
     /// closed.
     closed: AtomicU64,
+    /// The dialog on screen after the last draw, as `Shown::to_word`
+    /// writes it; 0 while none shows.
+    on_screen: AtomicU64,
+    /// The dialogs that showed, counted, which number them.
+    numbered: AtomicU32,
 }
 
 static STATE: State = State {
@@ -248,6 +268,8 @@ static STATE: State = State {
     in_world: AtomicBool::new(false),
     ended: AtomicU64::new(0),
     closed: AtomicU64::new(0),
+    on_screen: AtomicU64::new(0),
+    numbered: AtomicU32::new(0),
 };
 
 thread_local! {
@@ -472,10 +494,27 @@ pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
             }
             *current = take_next(&layout, engine.layout.popup_active);
         }
-        let Some(shown) = current.as_mut() else {
+        let commanded = dialogs::take();
+        let Some(on_screen) = current.as_ref().map(Current::on_screen) else {
+            if let Some((id, _)) = commanded {
+                dialogs::answered(id, false);
+            }
             return;
         };
         DRAWN.set(Some(super::tick()));
+        if let Some((id, ask)) = commanded {
+            // A client command's answer, as the button would give it, only
+            // to the dialog it names: never one that showed after it.
+            let fits = ask.fits(on_screen);
+            dialogs::answered(id, fits);
+            if fits && let Some(done) = current.take() {
+                done.answerer.answer(ask.answer);
+                return;
+            }
+        }
+        let Some(shown) = current.as_mut() else {
+            return;
+        };
         // SAFETY: `host` is non-zero, checked by the guard before it, and is
         // the interface host read from the frame's live context; its answer
         // flag sits at the table's `ui.host_answered`, and only this thread,
@@ -536,6 +575,20 @@ pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
             done.answerer.answer(u32::from(index));
         }
     });
+    CURRENT.with_borrow(|current| {
+        let word = current
+            .as_ref()
+            .map_or(0, |shown| shown.on_screen().to_word());
+        STATE.on_screen.store(word, Ordering::Release);
+    });
+}
+
+/// The dialog on screen for a client command and the snapshot, numbered 0
+/// while none shows; `None` while dialogs do not show in game. From any
+/// thread.
+pub(super) fn on_screen() -> Option<dialogs::Shown> {
+    (STATE.mode.load(Ordering::Acquire) == IN_GAME)
+        .then(|| dialogs::Shown::from_word(STATE.on_screen.load(Ordering::Acquire)))
 }
 
 fn take_next(layout: &DialogLayout, active: usize) -> Option<Current> {
@@ -573,6 +626,7 @@ fn take_next(layout: &DialogLayout, active: usize) -> Option<Current> {
     Some(Current {
         answerer: dialog.answerer,
         buttons: dialog.buttons,
+        number: STATE.numbered.fetch_add(1, Ordering::Relaxed) % dialogs::MAX_NUMBER + 1,
         state,
         texts,
         world: dialog.world,
@@ -685,6 +739,7 @@ mod tests {
         let on_screen = Current {
             answerer: loader(),
             buttons: 1 << UiDialog::CANCEL,
+            number: 1,
             state: Box::new(Buf::zeroed()),
             texts: Arc::new(Shown {
                 slot: 0,
@@ -755,6 +810,7 @@ mod tests {
         let shown = |world: bool| Current {
             answerer: Answerer::Loader(Box::new(|_| {})),
             buttons: 1 << UiDialog::OK,
+            number: 1,
             state: Box::new(Buf::zeroed()),
             texts: Arc::new(Shown {
                 slot: 0,
@@ -779,6 +835,7 @@ mod tests {
         let shown_late = Current {
             answerer: Answerer::Loader(Box::new(|_| {})),
             buttons: 1 << UiDialog::OK,
+            number: 1,
             state: Box::new(Buf::zeroed()),
             texts: Arc::new(Shown {
                 slot: 0,

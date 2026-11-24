@@ -3,6 +3,8 @@
 
 use std::cell::LazyCell;
 
+use rustc_hash::FxHashMap;
+
 use crate::content::knowledge::{KnowledgeQuery, hash_key, key_of_hash};
 use crate::knowledge::KnowledgeId;
 use crate::resources::Value;
@@ -11,7 +13,8 @@ use crate::{ItemId, Off};
 
 use super::{
     COLLECTIONS, DOCUMENT, DONE, ENTRIES, EntryId, FOR_ALL, Guid, PROGRESS, QUERY_ID, QUESTS,
-    QuestReward, QuestStep, REWARDS, SHOWN, TYPE, entry_id, holds, list_mut, never, text_key,
+    QuestReward, QuestStep, REWARDS, SHOWN, TYPE, entry_id, holds, item_sets, list_mut, never,
+    text_key,
 };
 
 /// The knowledge each game query reads, by query id, sorted; `None` when
@@ -204,23 +207,150 @@ fn reads_knowledge(
         })
 }
 
-/// Whether a step of the collection `entry` asks for one of the knowledge
-/// `ids`, itself or through a game query of `reads`.
-fn asks_for(entry: &Value, ids: &[u32], reads: &LazyCell<Reads, impl FnOnce() -> Reads>) -> bool {
-    let Some(Value::List(steps)) = entry.field(ENTRIES) else {
-        return false;
+/// Every knowledge query in `value`, in order: each struct that names a
+/// query id, nested ones too.
+fn queries(value: &Value) -> Vec<&Value> {
+    fn walk<'v>(value: &'v Value, out: &mut Vec<&'v Value>) {
+        match value {
+            Value::Struct(_) if value.field(QUERY_ID).is_some() => out.push(value),
+            Value::Struct(fields) => fields.iter().for_each(|(_, field)| walk(field, out)),
+            Value::List(items) => items.iter().for_each(|item| walk(item, out)),
+            Value::Variant(variant) => walk(variant.value(), out),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    walk(value, &mut out);
+    out
+}
+
+/// Every step of every collection in the list `list` of `journal`, with
+/// the ids of its collection and its own.
+fn steps<'v>(journal: &'v Value, list: &str) -> impl Iterator<Item = (u32, u32, &'v Value)> {
+    let listed = |value: Option<&'v Value>| match value {
+        Some(Value::List(items)) => items.as_slice(),
+        _ => &[],
     };
-    steps.iter().any(|step| {
-        let progress = match step.field(PROGRESS) {
-            Some(Value::List(parts)) => parts.as_slice(),
-            _ => &[],
+    listed(journal.field(list))
+        .iter()
+        .filter_map(|held| Some((entry_id(held)?, held)))
+        .flat_map(move |(owner, held)| {
+            listed(held.field(ENTRIES))
+                .iter()
+                .filter_map(move |step| Some((owner, entry_id(step)?, step)))
+        })
+}
+
+/// The queries of `found` the game's same entry, `game`, does not hold, each
+/// of the game's matching one copy: all of them where the game has none.
+fn added(found: Vec<&Value>, game: Option<&[&Value]>) -> Vec<Value> {
+    let mut unmatched = game.unwrap_or_default().to_vec();
+    let mut put = Vec::new();
+    for query in found {
+        match unmatched.iter().position(|held| *held == query) {
+            Some(at) => {
+                let _matched = unmatched.swap_remove(at);
+            }
+            None => put.push(query.clone()),
+        }
+    }
+    put
+}
+
+/// The queries another mod put in the journal before a patch, which the
+/// game's archive does not hold there: by list, collection and step, and by
+/// item set. The patch's own changes come after, so they are never among
+/// them. Made once per patch that removes a quest.
+#[derive(Debug, Default)]
+pub(super) struct Others {
+    steps: FxHashMap<(&'static str, u32, u32), Vec<Value>>,
+    sets: FxHashMap<u32, Vec<Value>>,
+}
+
+/// What other mods put in the journal, for a patch with a removal, or why
+/// the game's journal did not read; `None` for a patch without one.
+pub(super) type Found = Option<Result<Others, Off>>;
+
+impl Others {
+    /// What `found`, the journal a patch was given, asks that the game's
+    /// journal `game` does not.
+    pub(super) fn new(found: &Value, game: &Value) -> Self {
+        let mut others = Self::default();
+        for list in [QUESTS, COLLECTIONS] {
+            let game_steps: FxHashMap<(u32, u32), Vec<&Value>> = steps(game, list)
+                .map(|(owner, step, value)| ((owner, step), queries(value)))
+                .collect();
+            for (owner, step, value) in steps(found, list) {
+                let put = added(
+                    queries(value),
+                    game_steps.get(&(owner, step)).map(Vec::as_slice),
+                );
+                if !put.is_empty() {
+                    others.steps.insert((list, owner, step), put);
+                }
+            }
+        }
+        let game_sets: FxHashMap<u32, Vec<&Value>> = item_sets::sets(game)
+            .map(|(set, value)| (set, queries(value)))
+            .collect();
+        for (set, value) in item_sets::sets(found) {
+            let put = added(queries(value), game_sets.get(&set).map(Vec::as_slice));
+            if !put.is_empty() {
+                others.sets.insert(set, put);
+            }
+        }
+        others
+    }
+
+    /// The others `found` holds.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the game's journal did not read, or was not read.
+    pub(super) fn of(found: &Found) -> Result<&Self, Off> {
+        match found {
+            Some(Ok(others)) => Ok(others),
+            Some(Err(off)) => Err(Off::new(format!("the game's journal: {off}"))),
+            None => Err(Off::new("the game's journal was not read")),
+        }
+    }
+
+    /// Why the quest `quest` stays: a query another mod put in a step of a
+    /// quest or an entry of a page, or in an item set, still in `journal`,
+    /// that asks for one of the knowledge `ids`, itself or through a game
+    /// query of `reads`; `None` when none does.
+    fn hold(
+        &self,
+        journal: &Value,
+        quest: u32,
+        ids: &[u32],
+        reads: &LazyCell<Reads, impl FnOnce() -> Reads>,
+    ) -> Option<String> {
+        let asks = |queries: &[Value]| {
+            queries
+                .iter()
+                .any(|query| reads_knowledge(query, ids, reads))
         };
-        [step.field(SHOWN), step.field(DONE)]
-            .into_iter()
-            .flatten()
-            .chain(progress)
-            .any(|query| reads_knowledge(query, ids, reads))
-    })
+        for (list, kind, part) in [
+            (QUESTS, "quest", "step"),
+            (COLLECTIONS, "journal page", "entry"),
+        ] {
+            if let Some((owner, ..)) = steps(journal, list).find(|&(owner, step, _)| {
+                (list != QUESTS || owner != quest)
+                    && self
+                        .steps
+                        .get(&(list, owner, step))
+                        .is_some_and(|put| asks(put))
+            }) {
+                return Some(format!(
+                    "another mod's {part} in the {kind} {owner} asks for it"
+                ));
+            }
+        }
+        item_sets::sets(journal)
+            .find(|&(set, _)| self.sets.get(&set).is_some_and(|put| asks(put)))
+            .map(|(set, _)| format!("another mod's item set {set} asks for it"))
+    }
 }
 
 impl StepChange {
@@ -471,36 +601,29 @@ pub(super) fn change_page_in(
     Ok(())
 }
 
-/// Removes the vanilla quest `quest` from `registry`, refused while a quest
-/// of another mod asks for its or a step's knowledge, itself or through a
-/// game query of `reads`: a quest neither in the game's quests `vanilla`
-/// (sorted) nor the mod's own `own`.
+/// Removes the vanilla quest `quest` from `registry`, refused while anything
+/// `others` tells another mod put in the journal asks for its or a step's
+/// knowledge, itself or through a game query of `reads`: a step of a quest,
+/// vanilla or its own, an entry of a lore page, or an item set.
 pub(super) fn remove_quest_in(
     registry: &mut Value,
     quest: KnowledgeId,
-    vanilla: &[u32],
-    own: &[u32],
+    others: &Others,
     reads: &LazyCell<Reads, impl FnOnce() -> Reads>,
 ) -> Result<(), Off> {
     let id = quest.get();
     let at = position(registry, QUESTS, id)
         .ok_or_else(|| Off::new(format!("quest {quest}: no quest of the journal")))?;
-    let quests = list_mut(registry, QUESTS)?;
     let mut ids = vec![id];
-    if let Some(Value::List(steps)) = quests[at].field(ENTRIES) {
+    if let Some(Value::List(all)) = registry.field(QUESTS)
+        && let Some(Value::List(steps)) = all[at].field(ENTRIES)
+    {
         ids.extend(steps.iter().filter_map(entry_id));
     }
-    if let Some(chained) = quests.iter().find(|held| {
-        entry_id(held).is_some_and(|held| {
-            held != id && vanilla.binary_search(&held).is_err() && !own.contains(&held)
-        }) && asks_for(held, &ids, reads)
-    }) {
-        return Err(Off::new(format!(
-            "quest {quest}: the quest {} of another mod chains on it",
-            entry_id(chained).unwrap_or_default()
-        )));
+    if let Some(why) = others.hold(registry, id, &ids, reads) {
+        return Err(Off::new(format!("quest {quest}: {why}")));
     }
-    let _removed = quests.remove(at);
+    let _removed = list_mut(registry, QUESTS)?.remove(at);
     Ok(())
 }
 

@@ -170,14 +170,14 @@ fn a_buffer_past_the_address_space_is_refused_before_the_body_runs() {
 
 #[test]
 fn a_quiet_refusal_answers_its_status_and_logs_nothing() {
-    let _turn = crate::engine::log::capture_turn();
+    crate::engine::log::capture();
     assert_eq!(lamp(0), Status::MISSING);
     assert!(crate::engine::log::captured().is_empty());
 }
 
 #[test]
 fn a_refusal_to_warn_of_answers_its_status_and_logs_its_reason() {
-    let _turn = crate::engine::log::capture_turn();
+    crate::engine::log::capture();
     assert_eq!(lamp(12), Status::REFUSED);
     let logged = crate::engine::log::captured();
     assert!(

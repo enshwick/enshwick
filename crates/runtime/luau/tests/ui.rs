@@ -367,7 +367,7 @@ mod tests {
             ..ClientSnapshot::EMPTY
         });
         let _drawn = loader.draw_frame();
-        for line in ["never 0 nil nil nil 0", "fresh 2 InGameMenu Character 16 2"] {
+        for line in ["never 0 nil nil nil 1", "fresh 2 InGameMenu Character 16 3"] {
             assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
         }
     }

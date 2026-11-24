@@ -107,6 +107,8 @@ pub(crate) struct UiState {
     pub(crate) inputs: Vec<(String, crate::test::Input)>,
     /// Dialogs waiting for an answer, with where it goes.
     pub(crate) dialogs: Vec<(crate::test::ShownDialog, Registered<UiAnswerFn>)>,
+    /// The dialogs answered, which number the next to show.
+    pub(crate) dialogs_answered: u32,
     /// Whether the player pressed Back over a window under the dialog this
     /// frame, which closes the dialog once the frame's windows drew.
     pub(crate) dialog_backed: bool,
@@ -141,6 +143,7 @@ impl Default for UiState {
             frame: None,
             inputs: Vec::new(),
             dialogs: Vec::new(),
+            dialogs_answered: 0,
             dialog_backed: false,
             sound: sound::SoundState::default(),
         }

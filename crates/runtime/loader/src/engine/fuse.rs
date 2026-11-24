@@ -616,7 +616,7 @@ mod tests {
     #[test]
     fn a_feature_reports_off_once_and_another_fuse_of_its_name_stays_on() {
         static LAMPS: Fuse = Fuse::new("twin lamps");
-        let _turn = crate::engine::log::capture_turn();
+        crate::engine::log::capture();
         LAMPS.turn_off(&Off::fault("twin lamps", "the first site"));
         LAMPS.blow("a later site");
         #[cfg(windows)]

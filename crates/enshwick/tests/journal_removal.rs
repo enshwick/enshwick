@@ -1,6 +1,6 @@
 //! Mods remove a vanilla quest and a vanilla lore page from the journal,
-//! steps and entries with them, and keep a quest another mod's step asks
-//! for through a game query.
+//! steps and entries with them, and keep a quest another mod's step or lore
+//! page entry asks for through a game query.
 
 #[cfg(test)]
 mod tests {
@@ -139,7 +139,44 @@ mod tests {
         assert!(!held.contains(&PAGE.get()), "the page still goes");
         assert!(
             logs.iter().any(|(level, line)| *level == Level::WARN
-                && line.contains(&format!("the quest {OTHER} of another mod chains on it"))),
+                && line.contains(&format!(
+                    "another mod's step in the quest {OTHER} asks for it"
+                ))),
+            "{logs:?}"
+        );
+    }
+
+    #[test]
+    fn a_quest_another_mod_s_lore_page_entry_asks_for_through_a_mod_query_stays() {
+        let (held, logs) = journal(|base| {
+            let mut entry = list(&mut list(base, "quests")[0], "entries")[0].clone();
+            set(
+                &mut entry,
+                &["entryId", "value"],
+                Value::Uint(OTHER_STEP.into()),
+            );
+            set(
+                &mut entry,
+                &["knowledgeRequirement", "knowledgeOrQueryId", "value"],
+                Value::Uint(ASKS.guid().fnv1a().into()),
+            );
+            set(
+                &mut entry,
+                &["knowledgeRequirement", "type"],
+                Value::Name("Extern".into()),
+            );
+            let mut other = list(base, "collections")[0].clone();
+            set(&mut other, &["entryId", "value"], Value::Uint(OTHER.into()));
+            list(&mut other, "entries").push(entry);
+            list(base, "collections").push(other);
+        });
+        assert!(held.contains(&VANILLA_QUEST), "{held:?}");
+        assert!(held.contains(&OTHER), "{held:?}");
+        assert!(
+            logs.iter().any(|(level, line)| *level == Level::WARN
+                && line.contains(&format!(
+                    "another mod's entry in the journal page {OTHER} asks for it"
+                ))),
             "{logs:?}"
         );
     }

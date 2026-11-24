@@ -363,7 +363,7 @@ mod tests {
 
     #[test]
     fn a_name_clash_is_logged_once_without_a_build_code_and_listed_off() {
-        let turn = crate::engine::log::capture_turn();
+        crate::engine::log::capture();
         for _ in 0..2 {
             part_off(
                 "test alias /lamp",
@@ -372,7 +372,6 @@ mod tests {
             );
         }
         let lines = crate::engine::log::captured();
-        drop(turn);
         let logged = lines
             .iter()
             .filter(|(_, _, line)| line == "test alias /lamp off: /lamp is taken")

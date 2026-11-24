@@ -7,7 +7,7 @@ use enshwick_core::controls::GameAction;
 use enshwick_gamedata::catalogue;
 
 use super::play::Host;
-use super::{CommandError, Kind, ModsAsk, windows};
+use super::{CommandError, Kind, ModsAsk, dialogs, windows};
 use crate::actions::client_control::{Mark, MenuTab};
 use crate::engine::loader::Loader;
 
@@ -29,8 +29,8 @@ pub(super) unsafe fn text<'a>(name: Str) -> Result<&'a str, CommandError> {
 }
 
 /// `at` when it lies inside the map's frame the loader last read; with no
-/// frame read, as on a client joined to a server, any finite `at`, which
-/// the ABI's bounds checked.
+/// frame read, as on a client joined to a server, any `at` within the
+/// fixed-point range, which the ABI's bounds checked.
 ///
 /// # Errors
 ///
@@ -73,6 +73,10 @@ pub(super) fn kind(loader: &Loader, spec: &Spec) -> Result<Kind, CommandError> {
         Spec::LOOK => Ok(Kind::Look(spec.look)),
         Spec::MOVE => Ok(Kind::Move(spec.direction, spec.hold_ms)),
         Spec::HIGHLIGHT_RECIPE => Ok(Kind::Highlight(spec.recipe)),
+        Spec::ANSWER_DIALOG => Ok(Kind::Answer(dialogs::Ask {
+            answer: spec.answer,
+            dialog: spec.dialog,
+        })),
         Spec::JOIN => Ok(Kind::Join),
         Spec::HOST => Ok(Kind::Host(Host {
             world: spec.world,

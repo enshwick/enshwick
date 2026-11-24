@@ -9,6 +9,7 @@
 //! recipe to highlight or a window's item to the code that acts on it (see
 //! [`Handoff`]). Until a mod queues, each runs nothing but one atomic load.
 
+pub(crate) mod dialogs;
 mod handoff;
 mod play;
 mod spec;
@@ -86,6 +87,9 @@ pub(crate) enum Kind {
     /// Acts on an item of a carried window; its ask lives in [`windows`]
     /// from the queue on.
     Window(windows::Act),
+    /// Answers the loader's dialog of one number with the raw answer,
+    /// through [`dialogs`].
+    Answer(dialogs::Ask),
 }
 
 impl Kind {
@@ -112,6 +116,7 @@ impl Kind {
             Self::Window(windows::Act::Press) => Spec::WINDOW_PRESS,
             Self::Window(windows::Act::Pick) => Spec::WINDOW_PICK,
             Self::Window(windows::Act::Text) => Spec::WINDOW_TEXT,
+            Self::Answer(_) => Spec::ANSWER_DIALOG,
         }
     }
 
@@ -270,6 +275,7 @@ impl Command {
             // A handed join or leave runs through `plays_next` instead.
             Kind::Mark(_) => client_input::mark_progress(self.id),
             Kind::Window(_) => windows::progress(self.id),
+            Kind::Answer(_) => dialogs::progress(self.id),
             Kind::Join
             | Kind::Leave
             | Kind::Host(_)
@@ -294,6 +300,7 @@ impl Command {
             Kind::Leave => play::leave(self.id, local_held::now_ms()).is_ok(),
             Kind::Mark(mark) => client_input::mark(self.id, self.owner, mark),
             Kind::Window(_) => windows::hand(self.id),
+            Kind::Answer(answer) => dialogs::hand(self.id, answer),
             // A join and a host are handed when queued, a join with its
             // target and password.
             Kind::Join
@@ -324,6 +331,7 @@ impl Command {
                 play::release(self.id, local_held::now_ms(), by_mod);
             }
             Kind::Mark(_) => client_input::unmark(self.id),
+            Kind::Answer(_) => dialogs::release(self.id),
             Kind::Open(_) | Kind::Close(_) | Kind::Tab(_) | Kind::Mods(_) | Kind::Window(_) => {}
         }
     }
@@ -418,7 +426,8 @@ fn next(
         | Kind::Leave
         | Kind::Host(_)
         | Kind::Mark(_)
-        | Kind::Window(_) => false,
+        | Kind::Window(_)
+        | Kind::Answer(_) => false,
     };
     if shows {
         return Next::End(Status::OBSERVED, 0);
@@ -474,7 +483,8 @@ fn next(
             | Kind::Leave
             | Kind::Host(_)
             | Kind::Mark(_)
-            | Kind::Window(_) => true,
+            | Kind::Window(_)
+            | Kind::Answer(_) => true,
         };
         // One that waits for its detour, such as for a press's slot, times
         // out as one that waits for its effect.
@@ -589,8 +599,11 @@ impl From<play::StartError> for CommandError {
 /// read for tabs, the builder's detour for looks and moves, the recipe
 /// browser's for recipes.
 fn runs(kind: Kind) -> bool {
-    // Every kind checks itself against the frame's screen reads.
-    if FUSE.is_off() || crate::engine::screens::READS_FUSE.is_off() {
+    // Every kind but the dialog's answer, which reads no screen, checks
+    // itself against the frame's screen reads.
+    if FUSE.is_off()
+        || (!matches!(kind, Kind::Answer(_)) && crate::engine::screens::READS_FUSE.is_off())
+    {
         return false;
     }
     let groups = &crate::actions::client_control::GROUPS;
@@ -607,6 +620,7 @@ fn runs(kind: Kind) -> bool {
         Kind::Mods(_) => mods_screen_opens(),
         Kind::Mark(_) => client_input::marks_run(),
         Kind::Window(_) => windows::runs(),
+        Kind::Answer(_) => dialogs::runs(),
     }
 }
 
@@ -647,6 +661,9 @@ pub(crate) fn queue(loader: &Loader, owner: ModIndex, spec: &Spec) -> Result<u64
     crate::actions::client_snapshot::ask();
     if !runs(kind) {
         return Err(CommandError::Unavailable);
+    }
+    if let Kind::Answer(ask) = kind {
+        dialogs::check(ask)?;
     }
     // SAFETY: the mod's spec, its text borrowed for the call.
     let expected = expected_screen(kind, unsafe { text(spec.expected_screen) }?)?;
@@ -745,8 +762,8 @@ pub(crate) fn status(owner: ModIndex, id: u64) -> Option<Status> {
 /// Runs the open commands in the interface frame with what it read of the
 /// `game`: `apply` hands one to the game. One atomic load while none is
 /// open. A frame that reads no game, outside a world or without the screen
-/// reads, runs the Mods screen's commands with the `menu` read and only
-/// ends the others that waited too long.
+/// reads, runs the Mods screen's and the dialog's commands with the `menu`
+/// read and only ends the others that waited too long.
 /// A panic in it turns off only the commands, never the interface frame.
 pub(crate) fn frame(
     game: impl FnOnce() -> Option<Seen>,
@@ -789,8 +806,8 @@ pub(crate) fn play_frame(
 }
 
 /// Runs the open `commands` at `now` with what the frame read of the
-/// `game`, or outside one of the `menu`, which only the Mods screen's
-/// commands read; whether one is still open.
+/// `game`, or outside one of the `menu`, which only the Mods screen's and
+/// the dialog's commands read; whether one is still open.
 fn run(
     commands: &mut Commands,
     game: Option<Seen>,
@@ -804,7 +821,7 @@ fn run(
             || (command.kind.handed() && !runs(command.kind));
         let seen = game.as_ref().or_else(|| {
             menu.as_ref()
-                .filter(|_| matches!(command.kind, Kind::Mods(_)))
+                .filter(|_| matches!(command.kind, Kind::Mods(_) | Kind::Answer(_)))
         });
         let next = if off {
             Next::End(Status::CANCELLED, Status::MOD_OFF)

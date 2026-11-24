@@ -72,10 +72,9 @@ fn controls_that_follow_game_actions_are_listed_off_when_the_input_system_did_no
 
 #[test]
 fn a_press_the_server_cannot_take_leaves_a_warning_in_the_log() {
-    let turn = crate::engine::log::capture_turn();
+    crate::engine::log::capture();
     press("you.weather", "day");
     let lines = crate::engine::log::captured();
-    drop(turn);
     assert!(
         lines
             .iter()

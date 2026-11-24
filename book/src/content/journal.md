@@ -291,8 +291,12 @@ takes the same fields:
 
 `load.remove_quest(quest)` removes a vanilla quest with its steps. Its
 knowledge stays, so a save with its progress still opens. The loader logs
-and skips a removal while another mod's quest asks for it or one of its steps.
-A step asks by the id or through a game query that reads it.
+and skips a removal while something another mod put in the journal asks for
+it or one of its steps. That may be a step of the other mod's own quest. It
+may be a step it inserted into a vanilla quest, or a query it put in a
+vanilla step. It may also be an entry of a lore page or an item set. Each
+asks by the id or through a game query that reads it. The game's own
+queries never keep a quest, even in a step another mod changed.
 
 Lore pages need the `unstable` feature:
 

@@ -23,7 +23,7 @@ fn a_missing_recipe_list_lookup_is_off_on_its_build_and_in_the_status() {
     let off = LiftLimitError::NotInBuild {
         entry: pinned::recipe::LIST_LOOKUP.id().to_owned(),
     };
-    let _turn = crate::engine::log::capture_turn();
+    crate::engine::log::capture();
     let why = off.to_string();
     let reason = build.reason(off.entry(), &why);
     let off = crate::engine::fuse::Off::build(LOOKUP_FEATURE, &build.name, off.entry(), reason);
@@ -168,7 +168,7 @@ fn a_loader_patch_given_up_while_the_game_runs_turns_its_feature_off_as_a_fault(
         feature: Some(&STOPS),
         ..patch(ModIndex::LOADER, 0x40, &[0x90], &[0xcc])
     };
-    let _turn = crate::engine::log::capture_turn();
+    crate::engine::log::capture();
     let reason = "a thread stayed inside it through every wait";
     skipped(&loader, &stop, (SkipCause::Fault, reason), &mut Vec::new());
     assert!(STOPS.is_off());

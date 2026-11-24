@@ -320,16 +320,14 @@ struct State {
     recent: Mutex<Recent>,
     levels: ArcSwapOption<Settings>,
     /// Whether lines go to `lines` instead of the files.
+    #[cfg(not(test))]
     on: AtomicBool,
     /// Lines kept in memory instead of written. Its lock stays off the
     /// loader's poison policy: recovering it would log, and logging takes
-    /// this lock, so a poisoned capture drops lines instead.
+    /// this lock, so a poisoned capture drops lines instead. The loader's
+    /// own tests capture per test instead ([`crate::engine::per_test`]).
+    #[cfg(not(test))]
     lines: Mutex<Option<Vec<(Level, String, String)>>>,
-    /// The turn of the one test that captures or reads the log files: the
-    /// capture is process-wide, so a test running beside one would lose its
-    /// lines.
-    #[cfg(test)]
-    turn: Mutex<()>,
 }
 
 static STATE: State = State {
@@ -343,13 +341,14 @@ static STATE: State = State {
     },
     recent: Mutex::new(Recent::new()),
     levels: ArcSwapOption::const_empty(),
+    #[cfg(not(test))]
     on: AtomicBool::new(false),
+    #[cfg(not(test))]
     lines: Mutex::new(None),
-    #[cfg(test)]
-    turn: Mutex::new(()),
 };
 
 /// Keeps every line from now on in memory, for [`captured`].
+#[cfg(not(test))]
 pub fn capture() {
     // Off the poison policy, as `State::lines` says.
     // ast-grep-ignore: lock-through-relock
@@ -359,7 +358,16 @@ pub fn capture() {
     STATE.on.store(true, Ordering::Release);
 }
 
+/// Keeps every line the calling test logs from now on in memory, for
+/// [`captured`]: those of its thread and of work it carries to another
+/// ([`crate::engine::per_test::carried`]), never another test's.
+#[cfg(test)]
+pub fn capture() {
+    crate::engine::per_test::with_lines(|lines| *lines = Some(Vec::new()));
+}
+
 /// The lines kept since [`capture`]: level, source and message.
+#[cfg(not(test))]
 #[must_use]
 pub fn captured() -> Vec<(Level, String, String)> {
     // Off the poison policy, as `State::lines` says.
@@ -372,66 +380,44 @@ pub fn captured() -> Vec<(Level, String, String)> {
         .unwrap_or_default()
 }
 
-/// A test's turn over the log, from [`capture_turn`] or [`file_turn`].
+/// The lines the calling test kept since [`capture`]: level, source and
+/// message.
 #[cfg(test)]
-pub(crate) struct LogTurn {
-    capturing: bool,
-    _turn: std::sync::MutexGuard<'static, ()>,
+#[must_use]
+pub fn captured() -> Vec<(Level, String, String)> {
+    crate::engine::per_test::with_lines(|lines| lines.clone().unwrap_or_default())
 }
 
-#[cfg(test)]
-impl Drop for LogTurn {
-    fn drop(&mut self) {
-        if self.capturing {
-            STATE.on.store(false, Ordering::Release);
-            if let Ok(mut lines) = STATE.lines.lock() {
-                *lines = None;
-            }
-        }
+/// Keeps a line in memory while [`capture`] runs; whether it does.
+#[cfg(not(test))]
+fn kept(level: Level, source: &str, message: &str) -> bool {
+    if !STATE.on.load(Ordering::Acquire) {
+        return false;
     }
-}
-
-#[cfg(test)]
-fn take_turn() -> std::sync::MutexGuard<'static, ()> {
-    // A test that panicked in its turn leaves nothing behind but the flag
-    // its turn's drop already cleared.
-    STATE
-        .turn
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
-
-/// [`capture`] until the turn drops, one test at a time.
-#[cfg(test)]
-pub(crate) fn capture_turn() -> LogTurn {
-    let turn = take_turn();
-    capture();
-    LogTurn {
-        capturing: true,
-        _turn: turn,
+    // Off the poison policy, as `State::lines` says.
+    // ast-grep-ignore: lock-through-relock
+    if let Ok(mut lines) = STATE.lines.lock()
+        && let Some(lines) = lines.as_mut()
+    {
+        lines.push((level, source.to_owned(), message.to_owned()));
     }
+    true
 }
 
-/// A turn in which no test captures, for a test that reads what reached
-/// the files.
+/// Keeps a line in memory while the calling test captures; whether it does.
 #[cfg(test)]
-pub(crate) fn file_turn() -> LogTurn {
-    LogTurn {
-        capturing: false,
-        _turn: take_turn(),
-    }
+fn kept(level: Level, source: &str, message: &str) -> bool {
+    crate::engine::per_test::with_lines(|lines| {
+        lines
+            .as_mut()
+            .map(|lines| lines.push((level, source.to_owned(), message.to_owned())))
+            .is_some()
+    })
 }
 
 /// Writes one line under `source`, the loader or a mod id.
 pub fn write(level: Level, source: &str, message: &str) {
-    if STATE.on.load(Ordering::Acquire) {
-        // Off the poison policy, as `State::lines` says.
-        // ast-grep-ignore: lock-through-relock
-        if let Ok(mut lines) = STATE.lines.lock()
-            && let Some(lines) = lines.as_mut()
-        {
-            lines.push((level, source.to_owned(), message.to_owned()));
-        }
+    if kept(level, source, message) {
         return;
     }
     let Some(lines) = STATE.sender.get() else {
@@ -598,8 +584,21 @@ mod tests {
     }
 
     #[test]
+    fn a_capture_keeps_its_test_s_lines_and_those_of_work_it_carries_but_no_other_thread_s() {
+        capture();
+        let other = std::thread::spawn(|| write(Level::INFO, LOADER_ID, "another test's line"));
+        assert!(other.join().is_ok());
+        let carried = std::thread::spawn(crate::engine::per_test::carried(|| {
+            write(Level::INFO, LOADER_ID, "carried work's line");
+        }));
+        assert!(carried.join().is_ok());
+        write(Level::WARN, LOADER_ID, "the test's own line");
+        let lines: Vec<String> = captured().into_iter().map(|(_, _, line)| line).collect();
+        assert_eq!(lines, ["carried work's line", "the test's own line"]);
+    }
+
+    #[test]
     fn a_line_written_before_settling_is_among_the_latest() {
-        let _turn = file_turn();
         let dir = std::env::temp_dir().join(format!("enshwick-settle-{}", std::process::id()));
         open(&dir);
         write(Level::ERROR, LOADER_ID, "the line a report needs");

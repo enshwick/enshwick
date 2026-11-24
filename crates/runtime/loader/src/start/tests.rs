@@ -421,7 +421,7 @@ fn the_ready_line_is_followed_by_a_warning_naming_each_mod_off_and_its_reason() 
     };
     let (loader, order) = loader(&[TestMod::plain("you.lanterns"), failing], false);
     let order: Vec<&Library> = order.iter().collect();
-    let _turn = crate::engine::log::capture_turn();
+    crate::engine::log::capture();
     initialise(&loader, &order, None);
     ready(&loader, &order, None);
     let loader_lines: Vec<(Level, String)> = crate::engine::log::captured()
@@ -452,7 +452,7 @@ fn a_mod_flagged_off_before_its_reason_is_stored_gets_no_empty_warning() {
     let order: Vec<&Library> = order.iter().collect();
     initialise(&loader, &order, None);
     loader.mods[0].off.store(true, Ordering::Release);
-    let _turn = crate::engine::log::capture_turn();
+    crate::engine::log::capture();
     log_ready(&loader);
     let warnings: Vec<String> = crate::engine::log::captured()
         .into_iter()

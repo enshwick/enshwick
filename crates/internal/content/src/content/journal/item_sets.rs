@@ -362,6 +362,14 @@ fn sets_of(category: &Value) -> &[Value] {
     }
 }
 
+/// Every set of `registry` with its id.
+pub(super) fn sets(registry: &Value) -> impl Iterator<Item = (u32, &Value)> {
+    categories(registry)
+        .iter()
+        .flat_map(sets_of)
+        .filter_map(|set| Some((key(set, SET_ID)?, set)))
+}
+
 /// The key a `HashKey32` field `name` of `value` holds.
 fn key(value: &Value, name: &str) -> Option<u32> {
     value.field(name).and_then(key_of_hash)

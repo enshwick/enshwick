@@ -666,7 +666,10 @@ impl Installed {
     /// ```
     pub fn answer(&self, answer: Option<enshwick_core::ui::Response>) -> bool {
         let first = table::with(None, |s| {
-            (!s.ui.dialogs.is_empty()).then(|| s.ui.dialogs.remove(0))
+            (!s.ui.dialogs.is_empty()).then(|| {
+                s.ui.dialogs_answered = s.ui.dialogs_answered.wrapping_add(1);
+                s.ui.dialogs.remove(0)
+            })
         });
         let Some((_, answered)) = first else {
             return false;

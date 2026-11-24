@@ -1,13 +1,13 @@
 //! What one of the loader's own tests turned off, kept apart from every
 //! other test in the process: the fuses it blew or checked, the parts it
-//! listed off and the mods it turned off. libtest runs every test on a thread
+//! listed off, the mods it turned off and the log lines it captures. libtest runs every test on a thread
 //! of its own, even with one test thread, so a test's scope is its thread's,
 //! and work it hands another
 //! thread through [`carried`] joins it. Outside the loader's tests the
 //! loader keeps one process-wide state and [`carried`] is the work itself.
 
 #[cfg(test)]
-pub(crate) use scope::with;
+pub(crate) use scope::{with, with_lines};
 
 /// `work`, to run on another thread as part of the calling test: in the
 /// loader's tests that thread sees and turns off what the test does.
@@ -31,12 +31,16 @@ pub(crate) fn carried<R>(work: impl FnOnce() -> R + Send) -> impl FnOnce() -> R 
 #[cfg(test)]
 mod scope {
     use std::cell::RefCell;
-    use std::sync::{Arc, Mutex};
+    use std::sync::{Arc, Mutex, PoisonError};
 
     use enshwick_base::Relock;
+    use enshwick_core::abi::Level;
     use rustc_hash::FxHashSet;
 
     use crate::engine::diag::{PartOff, TurnedOff};
+
+    /// A captured log line: level, source and message.
+    pub(crate) type CapturedLine = (Level, String, String);
 
     /// What one test turned off or checked.
     #[derive(Debug, Default)]
@@ -50,7 +54,17 @@ mod scope {
         pub(crate) mods: Vec<TurnedOff>,
     }
 
-    type Scope = Arc<Mutex<Turned>>;
+    /// One test's state.
+    #[derive(Debug, Default)]
+    pub(super) struct Scoped {
+        turned: Mutex<Turned>,
+        /// The log lines it captures, while it captures. A lock of its own,
+        /// off the poison policy: recovering a lock logs, and a logged line
+        /// comes here.
+        lines: Mutex<Option<Vec<CapturedLine>>>,
+    }
+
+    type Scope = Arc<Scoped>;
 
     std::thread_local! {
         /// The scope of the test this thread runs for, made at first use.
@@ -69,7 +83,19 @@ mod scope {
 
     /// Runs `work` on what the calling thread's test turned off.
     pub(crate) fn with<R>(work: impl FnOnce(&mut Turned) -> R) -> R {
-        work(&mut current().relock())
+        work(&mut current().turned.relock())
+    }
+
+    /// Runs `work` on the log lines the calling thread's test captures,
+    /// `None` while it does not.
+    pub(crate) fn with_lines<R>(work: impl FnOnce(&mut Option<Vec<CapturedLine>>) -> R) -> R {
+        // Off the poison policy, as `Scoped::lines` says.
+        work(
+            &mut current()
+                .lines
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner),
+        )
     }
 }
 

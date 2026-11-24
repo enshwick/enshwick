@@ -62,6 +62,7 @@ pub mod near;
 pub mod net;
 pub mod pacing;
 pub mod points;
+pub mod ui;
 #[doc(inline)]
 pub use enshwick_abi::raw;
 pub mod resources;

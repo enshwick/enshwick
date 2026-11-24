@@ -304,8 +304,8 @@ mod tests {
             Response::Ok,
             Response::Ignore,
         ] {
-            assert_eq!(Response::from_raw(response.bit()), Some(response));
-            assert_ne!(UiDialog::BUTTONS & 1 << response.bit(), 0);
+            assert_eq!(Response::from_raw(response.to_raw()), Some(response));
+            assert_ne!(UiDialog::BUTTONS & 1 << response.to_raw(), 0);
         }
         assert_eq!(Response::from_raw(4), None);
         assert_eq!(Response::from_raw(UiDialog::CLOSED), None);
