@@ -983,4 +983,5 @@ fn the_stable_doctests_skip_unstable_modules_under_either_path_separator() {
     assert!(!skipped("crates\\enshwick\\src\\lib.rs - item (line 1)"));
 }
 
+mod docs;
 mod targets;

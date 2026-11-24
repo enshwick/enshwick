@@ -10,8 +10,11 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read as _;
+use std::panic::{self, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -27,6 +30,9 @@ const FAKE_HOST: &str = "FakeHost";
 /// rerun under nextest: tests sharing one process can wait on each other
 /// forever, and the longest test took 39 s (2026-11-16).
 const BINARY_LIMIT: Duration = Duration::from_secs(300);
+
+/// The variable that sets libtest's test threads.
+const TEST_THREADS_VAR: &str = "RUST_TEST_THREADS";
 
 /// How often a running test binary is polled for its exit.
 const POLL: Duration = Duration::from_millis(50);
@@ -76,7 +82,7 @@ impl Binary {
     /// Runs the binary's tests as cargo test would, within [`BINARY_LIMIT`]:
     /// its standard output when it ended, `None` when it did not start or
     /// was stopped.
-    fn run(&self) -> Option<(bool, String)> {
+    fn run(&self, threads: usize) -> Option<(bool, String)> {
         // Cargo puts the folders of the build's own libraries first on the
         // search path, where Windows looks for a test's DLLs.
         let deps = self.executable.parent()?;
@@ -93,6 +99,7 @@ impl Binary {
             .env("CARGO_PKG_NAME", &self.package)
             .env("CARGO_PKG_VERSION", &self.version)
             .env("PATH", path)
+            .env(TEST_THREADS_VAR, threads.to_string())
             .arg("--quiet");
         finish(command, BINARY_LIMIT)
     }
@@ -148,8 +155,10 @@ pub(super) fn run(names: &BTreeSet<String>, workspace: &[String]) -> bool {
     }
     // Failed tests by package; `None`: rerun the whole package.
     let mut again: BTreeMap<String, Option<BTreeSet<String>>> = BTreeMap::new();
-    for binary in &binaries {
-        let failed = match binary.run() {
+    let (lanes, each) = split(test_threads(), binaries.len());
+    let outcomes = run_all(&binaries, lanes, |binary| binary.run(each));
+    for (binary, outcome) in binaries.iter().zip(outcomes) {
+        let failed = match outcome.flatten() {
             Some((true, _)) => continue,
             Some((false, stdout)) => failures(&stdout),
             None => None,
@@ -184,6 +193,66 @@ pub(super) fn run(names: &BTreeSet<String>, workspace: &[String]) -> bool {
         .then_owned(workspace)
         .then(&["-E", &retry_filter(&again)])
         .run(false)
+}
+
+/// The run's test threads: `RUST_TEST_THREADS`, the run's share of the
+/// machine when set, else every thread.
+fn test_threads() -> usize {
+    std::env::var(TEST_THREADS_VAR)
+        .ok()
+        .and_then(|threads| threads.trim().parse().ok())
+        .or_else(|| thread::available_parallelism().ok().map(usize::from))
+        .unwrap_or(1)
+        .max(1)
+}
+
+/// How `threads` split over `binaries`: how many run at once, and the test
+/// threads each gets, about the square root of `threads` both, so together
+/// they never use more than `threads`. A few binaries hold one long test
+/// that reads the game's executables and sets the run's length at any
+/// thread count (22 to 24 s), while a binary with many tests needs threads
+/// (the loader's took 3.4 s on 8, 15 s on 1). Thirteen dependents' binaries
+/// on 8 threads took 28.5 s as 2 lanes of 4, 29 to 31 s as 4 of 2 and 33 s
+/// as 8 of 1 (2026-11-24).
+fn split(threads: usize, binaries: usize) -> (usize, usize) {
+    let lanes = threads.isqrt().min(binaries).max(1);
+    (lanes, (threads / lanes).max(1))
+}
+
+/// `run` over each of `items` on at most `workers` threads at once, the
+/// results in the order of `items`; `None` for an item whose run panicked,
+/// and the thread goes on with the next.
+fn run_all<T: Sync, R: Send>(
+    items: &[T],
+    workers: usize,
+    run: impl Fn(&T) -> R + Sync,
+) -> Vec<Option<R>> {
+    let next = AtomicUsize::new(0);
+    let (sender, done) = mpsc::channel();
+    thread::scope(|scope| {
+        for _ in 0..workers.clamp(1, items.len().max(1)) {
+            let sender = sender.clone();
+            let (next, run) = (&next, &run);
+            scope.spawn(move || {
+                loop {
+                    let at = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(item) = items.get(at) else {
+                        return;
+                    };
+                    if let Ok(result) = panic::catch_unwind(AssertUnwindSafe(|| run(item))) {
+                        // The receiver outlives every worker.
+                        let _sent = sender.send((at, result));
+                    }
+                }
+            });
+        }
+        drop(sender);
+    });
+    let mut results: Vec<Option<R>> = items.iter().map(|_| None).collect();
+    for (at, result) in done {
+        results[at] = Some(result);
+    }
+    results
 }
 
 /// The test binaries of `names` among those `cargo test --no-run` builds
@@ -299,6 +368,58 @@ mod tests {
             failures(stdout),
             Some(["a::b".to_owned(), "c::d".to_owned()].into())
         );
+    }
+
+    #[test]
+    fn binaries_run_side_by_side_up_to_the_workers_and_answer_in_their_order() {
+        let running = AtomicUsize::new(0);
+        let most = AtomicUsize::new(0);
+        // The first item of each worker waits for the others: all three run.
+        let start = std::sync::Barrier::new(3);
+        let items: Vec<usize> = (0..12).collect();
+        let results = run_all(&items, 3, |&item| {
+            let now = running.fetch_add(1, Ordering::SeqCst) + 1;
+            most.fetch_max(now, Ordering::SeqCst);
+            if item < 3 {
+                start.wait();
+            }
+            running.fetch_sub(1, Ordering::SeqCst);
+            assert_ne!(item, 7, "a binary's run that panics");
+            item * 2
+        });
+        let expected: Vec<Option<usize>> = items
+            .iter()
+            .map(|&item| (item != 7).then_some(item * 2))
+            .collect();
+        assert_eq!(results, expected);
+        assert_eq!(most.load(Ordering::SeqCst), 3);
+        assert!(run_all(&[] as &[usize], 4, |&item| item).is_empty());
+    }
+
+    #[test]
+    fn a_run_that_panics_leaves_its_worker_running_the_items_after_it() {
+        let items: Vec<usize> = (0..5).collect();
+        let results = run_all(&items, 1, |&item| {
+            assert_ne!(item, 1, "a binary's run that panics");
+            item
+        });
+        assert_eq!(results, [Some(0), None, Some(2), Some(3), Some(4)]);
+    }
+
+    #[test]
+    fn binaries_side_by_side_share_the_test_threads_and_never_use_more() {
+        assert_eq!(split(8, 14), (2, 4));
+        assert_eq!(split(16, 14), (4, 4));
+        assert_eq!(split(16, 3), (3, 5));
+        assert_eq!(split(8, 1), (1, 8));
+        assert_eq!(split(1, 14), (1, 1));
+        assert_eq!(split(4, 0), (1, 4));
+        for threads in 1..=33 {
+            for binaries in 0..=40 {
+                let (lanes, each) = split(threads, binaries);
+                assert!(lanes * each <= threads, "{threads} over {binaries}");
+            }
+        }
     }
 
     #[test]
