@@ -744,9 +744,12 @@ windows inside the game. Joined friends get theirs over the network.
 ### A map in a window
 
 A window may hold one map. Its markers show on the player's own Map screen
-while the player holds the window. The window's Open the map button opens
-that screen, and the window steps aside while it is open. The button stays
-off on a build that cannot open the Map screen. When the player holds
+while the player holds the window. The game's map key opens that screen
+under the window, by whatever key, mouse button or gamepad button the player
+bound to it, as does the window's Open the map button; other game keys stay
+held while the window shows. The window steps aside while the map is open,
+on the Map screen or on the in-game menu's Map tab. The button stays off on a
+build that cannot open the Map screen. When the player holds
 several windows with a map, the newest one counts: its markers show and its actions run. The waypoint the
 player sets on the map runs the mod's actions:
 

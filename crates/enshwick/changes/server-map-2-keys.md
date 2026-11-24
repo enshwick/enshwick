@@ -6,3 +6,5 @@
   lets through its windows while such a window shows, and gives the game
   its own keys back once the window closes, steps aside for the map or a
   field of it has the caret. Other game keys stay held under the window.
+- Loader: a window from the server steps aside on the in-game menu's Map
+  tab as it does on the Map screen.
