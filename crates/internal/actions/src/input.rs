@@ -61,7 +61,7 @@ pub use commands::{
     JoinFailure, JoinPhase, Password,
 };
 pub use snapshot::{ClientSnapshot, LoaderPage, SnapshotPart, SnapshotState};
-pub use windows::{WindowItem, WindowItemKind};
+pub use windows::{ClientWindowItem, WindowItemKind};
 
 /// The bits of the game's `PlayerDigitalInput`, a `Bitmask64`.
 const BITS: usize = 64;

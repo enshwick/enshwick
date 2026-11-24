@@ -347,7 +347,8 @@ cancels a command in these cases:
 - another screen shows;
 - the player presses a control;
 - the mod turns off;
-- two seconds pass without its effect, in a world or outside one.
+- two seconds pass without its effect, in a world or outside one;
+- a window command finds its item drawn off (`ItemOff`).
 
 A reason a newer loader gives reads as `CancelReason::Other`, `"other"` in
 Luau. In Rust, the `name()` of a reason, a join failure or a join phase is
@@ -749,4 +750,66 @@ enshwick.input.client_command({
     session = enshwick.input.client_snapshot().session,
     target = "you.trail",
 })
+```
+
+## Pressing and typing in a server mod's window
+
+A server's mod shows [windows](actions.md#windows-from-the-server) on players' clients.
+On the client, three commands act on the newest of them as the player's
+clicks and typing would:
+
+| Command | Does |
+| --- | --- |
+| `PressWindowItem { window, item }` | clicks a button, flips a list's switch or an on-or-off field |
+| `PickWindowItem { window, item, option }` | picks the option of a field's list by the name the window shows |
+| `SetWindowText { window, item, text }` | sets a field's text, at most 255 bytes |
+
+`window` is `mod:window`, the mod's id and the window's. `item` comes from
+the action ids the window's mod declared:
+
+| Item id | Names |
+| --- | --- |
+| `<action>` | the button that runs the action, drawn whole or in its form |
+| `<action>/<n>` | the field of the action's argument `n`, from 0 |
+| `<action>@<account>` | a list's switch for one player, by the account key |
+| `<action>#<n>` | the window's `n`th row button that runs the action, from 0 |
+| `@cancel`, `@close`, `@map` | a form's Cancel, the window's Close, the map's button |
+
+`input.client_windows()` lists the items of every window the client holds,
+with their kind, label and the line they stand under, such as the row's
+player. Only the newest window shows and takes commands, and its
+`shown` is true. While a button's form is open, the list holds the form's
+fields, its Run and Cancel, and Close.
+
+A command is `Observed` once the window shows it: the press clicked, the
+option is picked, the field reads the text. An item the window that shows
+lacks is `Unavailable`. A command on an item the window draws off, such as
+a Run while a field is empty, is cancelled with `ItemOff`, and so is a
+pick of a name the list lacks. A number field takes no command.
+
+```rust
+use enshwick::input::{ClientCommand, CommandAction, Input};
+
+fn announce(input: Input, line: &str) -> Option<()> {
+    let session = input.client_snapshot().ok()?.session();
+    let window = "you.admin:panel".to_owned();
+    let text = CommandAction::SetWindowText { window: window.clone(), item: "say/0".to_owned(), text: line.to_owned() };
+    input.client_command(&ClientCommand::new(text, session)).ok()?;
+    let run = CommandAction::PressWindowItem { window, item: "say".to_owned() };
+    input.client_command(&ClientCommand::new(run, session)).ok()?;
+    Some(())
+}
+```
+
+```luau
+for _, item in enshwick.input.client_windows() do
+    if item.shown and item.kind == "button" and item.line == "Bob" then
+        enshwick.input.client_command({
+            kind = "press_window_item",
+            session = enshwick.input.client_snapshot().session,
+            window = item.window,
+            item = item.item,
+        })
+    end
+end
 ```

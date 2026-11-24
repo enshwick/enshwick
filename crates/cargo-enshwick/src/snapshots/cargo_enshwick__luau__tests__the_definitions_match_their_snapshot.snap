@@ -539,7 +539,7 @@ export type ChunkData = {
 
 --- `ClientCommand` as Luau gives it; its `Debug` shows none of the password.
 export type ClientCommand = {
-	--- `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`, `"move"`, `"highlight_recipe"`, `"join"`, `"leave"`, `"press"`, `"set_waypoint"`, `"clear_waypoint"`, `"ping"`, `"host"`, `"open_mods"`, `"open_mod"` or `"open_mod_settings"`.
+	--- `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`, `"move"`, `"highlight_recipe"`, `"join"`, `"leave"`, `"press"`, `"set_waypoint"`, `"clear_waypoint"`, `"ping"`, `"host"`, `"open_mods"`, `"open_mod"`, `"open_mod_settings"`, `"press_window_item"`, `"pick_window_item"` or `"set_window_text"`.
 	kind: string,
 	--- The session, as `client_snapshot().session` gives it.
 	session: string,
@@ -567,6 +567,12 @@ export type ClientCommand = {
 	character: number?,
 	--- Whether a host opens its world online; offline without it.
 	online: boolean?,
+	--- A window command's window, as `mod:window`.
+	window: string?,
+	--- A window command's item, by its id in the window.
+	item: string?,
+	--- The option a pick picks or the text a window's field takes.
+	text: string?,
 }
 
 --- The client's state in one copy, as `Input.client_snapshot` gives it to Luau.
@@ -601,6 +607,26 @@ export type ClientSnapshot = {
 	loader_screen: string?,
 	--- The id of the mod that page names.
 	loader_screen_mod: string?,
+}
+
+--- `ClientWindowItem` as Luau gives it.
+export type ClientWindowItem = {
+	--- The window, as `mod:window`.
+	window: string,
+	--- The item's id in it.
+	item: string,
+	--- `"button"`, `"switch"`, `"player_field"`, `"choice_field"`, `"number_field"`, `"toggle_field"`, `"text_field"`, `"item_field"`, `"template_field"` or `"other"`.
+	kind: string,
+	--- What it shows.
+	label: string,
+	--- The line it stands under.
+	line: string,
+	--- Whether its window shows and takes commands.
+	shown: boolean,
+	--- Whether a switch is on.
+	on: boolean,
+	--- Whether the window draws it off.
+	off: boolean,
 }
 
 --- The mod's factor on how fast the server's clock runs.
@@ -5291,6 +5317,8 @@ declare enshwick: {
 		cancel_command: (id: string) -> (),
 		--- Where the mod's command `id` stands.
 		command_status: (id: string) -> CommandStatus,
+		--- The items of the windows the server's mods show this client, the newest window last, by the ids client commands name them; the items of a form while one is open. Any thread.
+		client_windows: () -> {ClientWindowItem},
 		--- The keys the player's keyboard and mouse bindings give `action`, a mod's rebind included. Client only, on any thread; the interface reads the bindings every few frames, so a change the player applies shows within a quarter second.
 		binding: (action: typed_input_mapping_runtime_GameplayAction) -> Binding,
 		--- Binds `key` as the first key of the game's control `action`, in the player's keyboard and mouse bindings, until `Input.reset_binding` gives it back or the mod turns off; the second key stays. The game's input and its key glyphs follow at the interface's next frame, and the loader writes the key again each time the game rebuilds its bindings from a change the player applies, so one call holds. The game's Controls page still shows the player's own key, and the game saves only that. Of the mods that rebind one action, the one that rebound it last wins, and asking again for the same rebind keeps a mod's place. Client only, on any thread.

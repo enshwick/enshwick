@@ -678,6 +678,7 @@ abi::ClientCommand::MAX_LOOK
 abi::ClientCommand::MAX_PASSWORD
 abi::ClientCommand::MAX_PRESS_MS
 abi::ClientCommand::MAX_SLOTS
+abi::ClientCommand::MAX_TEXT
 abi::ClientCommand::MOVE
 abi::ClientCommand::OPEN_MOD
 abi::ClientCommand::OPEN_MODS
@@ -686,6 +687,9 @@ abi::ClientCommand::OPEN_SCREEN
 abi::ClientCommand::PING
 abi::ClientCommand::PRESS
 abi::ClientCommand::SET_WAYPOINT
+abi::ClientCommand::WINDOW_PICK
+abi::ClientCommand::WINDOW_PRESS
+abi::ClientCommand::WINDOW_TEXT
 abi::ClientCommand::cancels
 abi::ClientCommand::character
 abi::ClientCommand::direction
@@ -693,6 +697,7 @@ abi::ClientCommand::expected_screen
 abi::ClientCommand::header
 abi::ClientCommand::hold_ms
 abi::ClientCommand::in_bounds
+abi::ClientCommand::item
 abi::ClientCommand::kind
 abi::ClientCommand::look
 abi::ClientCommand::online
@@ -702,6 +707,7 @@ abi::ClientCommand::recipe
 abi::ClientCommand::reserved
 abi::ClientCommand::session
 abi::ClientCommand::target
+abi::ClientCommand::text
 abi::ClientCommand::world
 abi::ClientCommandStatus
 abi::ClientCommandStatus::APPLIED
@@ -712,6 +718,7 @@ abi::ClientCommandStatus::EMPTY
 abi::ClientCommandStatus::FAILED
 abi::ClientCommandStatus::FULL
 abi::ClientCommandStatus::INPUT_BLOCKED
+abi::ClientCommandStatus::ITEM_OFF
 abi::ClientCommandStatus::JOIN_TIMED_OUT
 abi::ClientCommandStatus::MOD_OFF
 abi::ClientCommandStatus::NOT_FOUND
@@ -744,6 +751,7 @@ abi::ClientCommandStatus::reserved
 abi::ClientCommandStatus::state
 abi::ClientSnapshot
 abi::ClientSnapshot::BORN
+abi::ClientSnapshot::CHARACTER
 abi::ClientSnapshot::EMPTY
 abi::ClientSnapshot::FRESH
 abi::ClientSnapshot::HELD
@@ -755,9 +763,11 @@ abi::ClientSnapshot::MOD_MISMATCH
 abi::ClientSnapshot::MOD_PAGE
 abi::ClientSnapshot::MOD_SERVER_SETTINGS
 abi::ClientSnapshot::NEVER
+abi::ClientSnapshot::NO_CHARACTER
 abi::ClientSnapshot::NO_LOADER_SCREEN
 abi::ClientSnapshot::OFF
 abi::ClientSnapshot::PLAYER
+abi::ClientSnapshot::PROMPT
 abi::ClientSnapshot::RECIPE
 abi::ClientSnapshot::SCREENS
 abi::ClientSnapshot::SERVER_MOD_LIST
@@ -773,13 +783,42 @@ abi::ClientSnapshot::loader_screen
 abi::ClientSnapshot::loader_screen_mod
 abi::ClientSnapshot::menu_tab
 abi::ClientSnapshot::player
+abi::ClientSnapshot::prompt_target
+abi::ClientSnapshot::prompt_verb
 abi::ClientSnapshot::reserved
 abi::ClientSnapshot::reserved2
+abi::ClientSnapshot::reserved3
 abi::ClientSnapshot::return_screen
 abi::ClientSnapshot::scene
+abi::ClientSnapshot::selected_character
 abi::ClientSnapshot::server
 abi::ClientSnapshot::session
 abi::ClientSnapshot::state
+abi::ClientWindowItem
+abi::ClientWindowItem::BORN
+abi::ClientWindowItem::BUTTON
+abi::ClientWindowItem::CHOICE
+abi::ClientWindowItem::EMPTY
+abi::ClientWindowItem::FIELD
+abi::ClientWindowItem::ITEM
+abi::ClientWindowItem::NUMBER
+abi::ClientWindowItem::OFF
+abi::ClientWindowItem::ON
+abi::ClientWindowItem::PLAYER
+abi::ClientWindowItem::SHOWN
+abi::ClientWindowItem::SWITCH
+abi::ClientWindowItem::TEMPLATE
+abi::ClientWindowItem::TEXT
+abi::ClientWindowItem::TOGGLE
+abi::ClientWindowItem::field
+abi::ClientWindowItem::flags
+abi::ClientWindowItem::header
+abi::ClientWindowItem::item
+abi::ClientWindowItem::kind
+abi::ClientWindowItem::label
+abi::ClientWindowItem::line
+abi::ClientWindowItem::reserved
+abi::ClientWindowItem::window
 abi::Comfort
 abi::Comfort::BORN
 abi::Comfort::category
@@ -1114,6 +1153,7 @@ abi::HostApi::chat_muted
 abi::HostApi::client_command
 abi::HostApi::client_command_status
 abi::HostApi::client_snapshot
+abi::HostApi::client_windows
 abi::HostApi::code_range
 abi::HostApi::comfort_filter
 abi::HostApi::command_list
@@ -5373,6 +5413,7 @@ input::BoundKey::into_value unstable
 input::CancelReason unstable
 input::CancelReason::ByMod unstable
 input::CancelReason::InputBlocked unstable
+input::CancelReason::ItemOff unstable
 input::CancelReason::ModOff unstable
 input::CancelReason::Other unstable
 input::CancelReason::OtherScreen unstable
@@ -5404,6 +5445,17 @@ input::ClientSnapshot::scene unstable
 input::ClientSnapshot::server unstable
 input::ClientSnapshot::session unstable
 input::ClientSnapshot::state unstable
+input::ClientWindowItem unstable
+input::ClientWindowItem::TY unstable
+input::ClientWindowItem::into_value unstable
+input::ClientWindowItem::item unstable
+input::ClientWindowItem::kind unstable
+input::ClientWindowItem::label unstable
+input::ClientWindowItem::line unstable
+input::ClientWindowItem::off unstable
+input::ClientWindowItem::on unstable
+input::ClientWindowItem::shown unstable
+input::ClientWindowItem::window unstable
 input::CommandAction unstable
 input::CommandAction::ChooseTab unstable
 input::CommandAction::ClearWaypoint unstable
@@ -5418,9 +5470,12 @@ input::CommandAction::OpenMod unstable
 input::CommandAction::OpenModSettings unstable
 input::CommandAction::OpenMods unstable
 input::CommandAction::OpenScreen unstable
+input::CommandAction::PickWindowItem unstable
 input::CommandAction::Ping unstable
 input::CommandAction::Press unstable
+input::CommandAction::PressWindowItem unstable
 input::CommandAction::SetWaypoint unstable
+input::CommandAction::SetWindowText unstable
 input::CommandId unstable
 input::CommandId::TY unstable
 input::CommandId::as_u64 unstable
@@ -5448,6 +5503,7 @@ input::Input::binding unstable
 input::Input::cancel_command unstable
 input::Input::client_command unstable
 input::Input::client_snapshot unstable
+input::Input::client_windows unstable
 input::Input::command_status unstable
 input::Input::functions unstable
 input::Input::held unstable
@@ -5518,6 +5574,18 @@ input::SnapshotState::Fresh unstable
 input::SnapshotState::Never unstable
 input::SnapshotState::Off unstable
 input::SnapshotState::Stale unstable
+input::WindowItemKind unstable
+input::WindowItemKind::Button unstable
+input::WindowItemKind::ChoiceField unstable
+input::WindowItemKind::ItemField unstable
+input::WindowItemKind::NumberField unstable
+input::WindowItemKind::Other unstable
+input::WindowItemKind::PlayerField unstable
+input::WindowItemKind::Switch unstable
+input::WindowItemKind::TemplateField unstable
+input::WindowItemKind::TextField unstable
+input::WindowItemKind::ToggleField unstable
+input::WindowItemKind::name unstable
 interactions
 interactions::Interaction
 interactions::Interaction::TY

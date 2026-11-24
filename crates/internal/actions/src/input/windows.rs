@@ -7,7 +7,7 @@ use crate::WorldError;
 use crate::abi::{ClientWindowItem as Raw, Status, Str};
 use enshwick_world::__internal::world_status;
 
-/// What an item of a window is, from [`WindowItem::kind`].
+/// What an item of a window is, from [`ClientWindowItem::kind`].
 ///
 /// # Examples
 ///
@@ -102,16 +102,16 @@ impl WindowItemKind {
 /// # Examples
 ///
 /// ```
-/// use enshwick::input::{Input, WindowItem};
+/// use enshwick::input::{Input, ClientWindowItem};
 ///
-/// fn ban_of(input: Input, name: &str) -> Option<WindowItem> {
+/// fn ban_of(input: Input, name: &str) -> Option<ClientWindowItem> {
 ///     let items = input.client_windows().ok()?;
 ///     items.into_iter().find(|item| item.shown && item.item.starts_with("ban#") && item.line == name)
 /// }
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct WindowItem {
+pub struct ClientWindowItem {
     /// The window, as `mod:window`.
     pub window: String,
     /// The item's id in it.
@@ -139,7 +139,7 @@ fn owned(text: Str) -> String {
     unsafe { text.as_str() }.unwrap_or_default().to_owned()
 }
 
-impl WindowItem {
+impl ClientWindowItem {
     fn from_raw(raw: &Raw) -> Self {
         Self {
             window: owned(raw.window),
@@ -167,9 +167,9 @@ impl Input {
     ///
     /// # Examples
     ///
-    /// See [`WindowItem`].
+    /// See [`ClientWindowItem`].
     #[script]
-    pub fn client_windows(self) -> Result<Vec<WindowItem>, WorldError> {
+    pub fn client_windows(self) -> Result<Vec<ClientWindowItem>, WorldError> {
         let host = self.0.host;
         let entry = u32::try_from(size_of::<Raw>()).unwrap_or(0);
         let mut count = 0u32;
@@ -195,13 +195,13 @@ impl Input {
         }
         // Items listed between the two calls past the room are left out.
         let read = usize::try_from(count).unwrap_or(0).min(raw.len());
-        Ok(raw[..read].iter().map(WindowItem::from_raw).collect())
+        Ok(raw[..read].iter().map(ClientWindowItem::from_raw).collect())
     }
 }
 
-/// [`WindowItem`] as Luau gives it.
+/// [`ClientWindowItem`] as Luau gives it.
 #[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
-#[script(name = "WindowItem")]
+#[script(name = "ClientWindowItem")]
 struct LuauItem {
     /// The window, as `mod:window`.
     pub window: String,
@@ -223,8 +223,8 @@ struct LuauItem {
     pub off: bool,
 }
 
-impl From<WindowItem> for LuauItem {
-    fn from(item: WindowItem) -> Self {
+impl From<ClientWindowItem> for LuauItem {
+    fn from(item: ClientWindowItem) -> Self {
         Self {
             kind: item.kind.name().to_owned(),
             window: item.window,
@@ -238,11 +238,11 @@ impl From<WindowItem> for LuauItem {
     }
 }
 
-impl crate::script::Typed for WindowItem {
+impl crate::script::Typed for ClientWindowItem {
     const TY: &'static crate::script::Ty = <LuauItem as crate::script::Typed>::TY;
 }
 
-impl crate::script::IntoScript for WindowItem {
+impl crate::script::IntoScript for ClientWindowItem {
     fn into_value(self) -> crate::script::Value {
         LuauItem::from(self).into_value()
     }
@@ -264,7 +264,7 @@ mod tests {
             line: Str::new("Announce"),
             ..Raw::EMPTY
         };
-        let item = WindowItem::from_raw(&raw);
+        let item = ClientWindowItem::from_raw(&raw);
         assert_eq!(item.kind, WindowItemKind::TextField);
         assert_eq!((item.shown, item.on, item.off), (true, false, true));
         assert_eq!(

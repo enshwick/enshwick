@@ -509,6 +509,54 @@ mod tests {
     }
 
     #[test]
+    fn a_script_presses_and_types_in_a_carried_window_by_the_ids_it_lists() {
+        use enshwick::abi::ClientWindowItem;
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r#"
+            local typed = enshwick.input.client_command({
+                kind = "set_window_text", session = "1",
+                window = "you.admin:panel", item = "say/0", text = "Restart soon",
+            })
+            local bare = pcall(enshwick.input.client_command, {
+                kind = "press_window_item", session = "1", window = "you.admin:panel",
+            })
+            enshwick.log.info(`queued {typed} bare {bare}`)
+            enshwick.ui.on_frame(function()
+                for _, item in enshwick.input.client_windows() do
+                    enshwick.log.info(`item {item.item} {item.kind} {item.line} shown {item.shown}`)
+                end
+            end)
+            "#,
+        );
+        assert_eq!(
+            loader.client_commands(),
+            [(
+                1,
+                enshwick::abi::ClientCommand::WINDOW_TEXT,
+                "you.admin:panel".to_owned()
+            )]
+        );
+        loader.set_client_windows(vec![ClientWindowItem {
+            kind: ClientWindowItem::FIELD,
+            field: ClientWindowItem::TEXT,
+            flags: ClientWindowItem::SHOWN,
+            window: enshwick::abi::Str::new("you.admin:panel"),
+            item: enshwick::abi::Str::new("say/0"),
+            label: enshwick::abi::Str::new("Message"),
+            line: enshwick::abi::Str::new("Announce"),
+            ..ClientWindowItem::EMPTY
+        }]);
+        let _drawn = loader.draw_frame();
+        for line in [
+            "queued 1 bare false",
+            "item say/0 text_field Announce shown true",
+        ] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
+    }
+
+    #[test]
     fn a_script_hosts_a_world_by_its_list_place_and_reads_the_phase() {
         use enshwick::abi::ClientCommandStatus as Status;
         let loader = run(
