@@ -62,6 +62,16 @@ fn a_snapshot_read_back_writes_the_same_bytes() {
 }
 
 #[test]
+fn a_snapshot_with_keys_a_newer_tree_writes_still_reads() {
+    let line = r#"{"name":"a","kind":18,"size":4,"align":4,"later":1,"fields":[{"name":"x","offset":0,"later":true}]}"#;
+    let catalogue = Catalogue::from_snapshot(line).unwrap();
+    assert_eq!(
+        catalogue.snapshot().trim_end(),
+        r#"{"name":"a","kind":18,"size":4,"align":4,"fields":[{"name":"x","offset":0}]}"#
+    );
+}
+
+#[test]
 fn roles_follow_bases_suffixes_and_the_left_out_names() {
     let mut catalogue = fixture();
     for ty in catalogue.types.values_mut() {

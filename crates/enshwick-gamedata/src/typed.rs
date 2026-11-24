@@ -305,19 +305,19 @@ struct LeftOut {
 /// ```
 #[derive(Debug, thiserror::Error)]
 #[error("the relevance rule: {0}")]
-pub struct RelevanceError(#[from] toml::de::Error);
+pub struct ParseRelevanceError(#[from] toml::de::Error);
 
 impl Relevance {
     /// The rule `text` holds, as `relevant.toml` writes it.
     ///
     /// # Errors
     ///
-    /// [`RelevanceError`] for a text that is no such rule.
+    /// [`ParseRelevanceError`] for a text that is no such rule.
     ///
     /// # Examples
     ///
     /// See [`Relevance`].
-    pub fn parse(text: &str) -> Result<Self, RelevanceError> {
+    pub fn parse(text: &str) -> Result<Self, ParseRelevanceError> {
         Ok(toml::from_str(text)?)
     }
 
@@ -364,8 +364,10 @@ impl Relevance {
 }
 
 /// A reflected type, as the snapshot keeps it: names and layout only.
+///
+/// Unknown keys are ignored: every tree on a machine reads one snapshot, so
+/// a key a newer tree writes must not refuse it to an older one.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub(crate) struct Ty {
     pub(crate) name: String,
     #[serde(with = "kind_byte")]
@@ -388,9 +390,8 @@ pub(crate) struct Ty {
     pub(crate) roles: Vec<Role>,
 }
 
-/// A field of a reflected struct.
+/// A field of a reflected struct; unknown keys are ignored, as in [`Ty`].
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub(crate) struct Field {
     pub(crate) name: String,
     pub(crate) offset: u64,
