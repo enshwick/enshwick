@@ -90,7 +90,6 @@ mod scope {
     /// `None` while it does not.
     pub(crate) fn with_lines<R>(work: impl FnOnce(&mut Option<Vec<CapturedLine>>) -> R) -> R {
         // Off the poison policy, as `Scoped::lines` says.
-        // ast-grep-ignore: lock-through-relock
         work(
             &mut current()
                 .lines

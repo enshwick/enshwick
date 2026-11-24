@@ -65,7 +65,7 @@ pub(super) fn takes(answer: u32) -> bool {
 /// is handed.
 pub(super) fn hand(id: u64, answer: u32) -> bool {
     STATE.handoff.arm(id, WAITING, || {
-        STATE.answer.store(answer, Ordering::Release)
+        STATE.answer.store(answer, Ordering::Release);
     })
 }
 

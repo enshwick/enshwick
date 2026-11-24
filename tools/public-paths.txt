@@ -662,6 +662,7 @@ abi::ChunkData::size
 abi::ChunkData::x
 abi::ChunkData::z
 abi::ClientCommand
+abi::ClientCommand::ANSWER_DIALOG
 abi::ClientCommand::BORN
 abi::ClientCommand::CANCEL
 abi::ClientCommand::CHOOSE_TAB
@@ -690,6 +691,7 @@ abi::ClientCommand::SET_WAYPOINT
 abi::ClientCommand::WINDOW_PICK
 abi::ClientCommand::WINDOW_PRESS
 abi::ClientCommand::WINDOW_TEXT
+abi::ClientCommand::answer
 abi::ClientCommand::cancels
 abi::ClientCommand::character
 abi::ClientCommand::direction
@@ -705,6 +707,7 @@ abi::ClientCommand::password
 abi::ClientCommand::position
 abi::ClientCommand::recipe
 abi::ClientCommand::reserved
+abi::ClientCommand::reserved2
 abi::ClientCommand::session
 abi::ClientCommand::target
 abi::ClientCommand::text
@@ -751,6 +754,7 @@ abi::ClientCommandStatus::reserved
 abi::ClientCommandStatus::state
 abi::ClientSnapshot
 abi::ClientSnapshot::BORN
+abi::ClientSnapshot::DIALOG
 abi::ClientSnapshot::EMPTY
 abi::ClientSnapshot::FRESH
 abi::ClientSnapshot::HELD
@@ -771,6 +775,8 @@ abi::ClientSnapshot::SERVER_MOD_LIST
 abi::ClientSnapshot::STALE
 abi::ClientSnapshot::age_ms
 abi::ClientSnapshot::available
+abi::ClientSnapshot::dialog_buttons
+abi::ClientSnapshot::dialog_mod
 abi::ClientSnapshot::header
 abi::ClientSnapshot::held
 abi::ClientSnapshot::highlighted_recipe
@@ -782,6 +788,7 @@ abi::ClientSnapshot::menu_tab
 abi::ClientSnapshot::player
 abi::ClientSnapshot::reserved
 abi::ClientSnapshot::reserved2
+abi::ClientSnapshot::reserved3
 abi::ClientSnapshot::return_screen
 abi::ClientSnapshot::scene
 abi::ClientSnapshot::server
@@ -5423,6 +5430,8 @@ input::ClientCommand::try_from unstable
 input::ClientSnapshot unstable
 input::ClientSnapshot::TY unstable
 input::ClientSnapshot::age_ms unstable
+input::ClientSnapshot::dialog_buttons unstable
+input::ClientSnapshot::dialog_mod unstable
 input::ClientSnapshot::held unstable
 input::ClientSnapshot::highlighted_recipe unstable
 input::ClientSnapshot::host unstable
@@ -5450,6 +5459,7 @@ input::ClientWindowItem::on unstable
 input::ClientWindowItem::shown unstable
 input::ClientWindowItem::window unstable
 input::CommandAction unstable
+input::CommandAction::AnswerDialog unstable
 input::CommandAction::ChooseTab unstable
 input::CommandAction::ClearWaypoint unstable
 input::CommandAction::CloseScreen unstable
@@ -5556,6 +5566,7 @@ input::Password unstable
 input::Password::fmt unstable
 input::Password::new unstable
 input::SnapshotPart unstable
+input::SnapshotPart::Dialog unstable
 input::SnapshotPart::Held unstable
 input::SnapshotPart::LoaderScreen unstable
 input::SnapshotPart::MenuTab unstable
@@ -35008,6 +35019,7 @@ ui::Prompt::into_value unstable
 ui::Prompt::title unstable
 ui::Prompt::verb unstable
 ui::Response
+ui::Response::ALL
 ui::Response::Cancel
 ui::Response::Disable
 ui::Response::Erase
@@ -35020,6 +35032,7 @@ ui::Response::TY
 ui::Response::from_raw
 ui::Response::from_value
 ui::Response::into_value
+ui::Response::of_buttons
 ui::Response::to_raw
 ui::Screen
 ui::Screen::InGame

@@ -7914,6 +7914,8 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, character) == 130, "offse
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, online) == 132, "offset of ClientCommand.online");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, item) == 136, "offset of ClientCommand.item");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, text) == 152, "offset of ClientCommand.text");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, answer) == 168, "offset of ClientCommand.answer");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, reserved2) == 172, "offset of ClientCommand.reserved2");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientCommandStatus) == 40, "size of ClientCommandStatus");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientCommandStatus) == 8, "alignment of ClientCommandStatus");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, header) == 0, "offset of ClientCommandStatus.header");
@@ -7944,6 +7946,9 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, server) == 120, "offset 
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, loader_screen_mod) == 136, "offset of ClientSnapshot.loader_screen_mod");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, loader_screen) == 152, "offset of ClientSnapshot.loader_screen");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, reserved2) == 156, "offset of ClientSnapshot.reserved2");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, dialog_mod) == 160, "offset of ClientSnapshot.dialog_mod");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, dialog_buttons) == 176, "offset of ClientSnapshot.dialog_buttons");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, reserved3) == 180, "offset of ClientSnapshot.reserved3");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientWindowItem) == 88, "size of ClientWindowItem");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientWindowItem) == 8, "alignment of ClientWindowItem");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientWindowItem, header) == 0, "offset of ClientWindowItem.header");
