@@ -25,6 +25,49 @@ fn an_optional_callback_is_written_as_the_nullable_callback_type() {
 const GOLDEN: &str = "abi 5.2\nPair size 8 align 4 born 8\n    left at 0 size 4 type u32\n    right at 4 size 4 type extern \"system\" fn(u32)\nStatus size 4 align 4\n    0 at 0 size 4 type i32\n";
 
 #[test]
+fn a_struct_and_callback_in_a_domain_folder_reach_the_header_with_their_asserts() {
+    let root = Scratch::new("header-test-nested").unwrap();
+    let files = [
+        (ABI_SOURCE, "mod events;\npub use events::*;\n"),
+        (VALUES_ABI_SOURCE, ""),
+        (
+            "crates/internal/abi/src/abi/events.rs",
+            "mod knowledge;\npub use knowledge::*;\n",
+        ),
+        (
+            "crates/internal/abi/src/abi/events/knowledge.rs",
+            "/// A deep one.\n#[repr(C)]\npub struct Deep {\n    pub value: u32,\n}\n\
+             /// Runs on the game thread.\npub type DeepFn = extern \"system\" fn(value: u32);\n",
+        ),
+        (
+            LAYOUT,
+            "abi 1.0\nDeep size 4 align 4\n    value at 0 size 4 type u32\n",
+        ),
+        (
+            CONFIG,
+            "language = \"C\"\ntrailer = \"#pragma pack(pop)\"\n",
+        ),
+    ];
+    for (path, text) in files {
+        let path = root.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+    let header = generate(&root);
+    drop(root);
+    let header = header.unwrap();
+    assert!(header.contains("typedef struct EnshwickDeep {"), "{header}");
+    assert!(
+        header.contains("(*EnshwickDeepFn)(uint32_t value)"),
+        "{header}"
+    );
+    assert!(
+        header.contains("offsetof(EnshwickDeep, value) == 0"),
+        "{header}"
+    );
+}
+
+#[test]
 fn the_layout_file_reads_into_shapes() {
     let shapes = parse_layout(GOLDEN).unwrap();
     assert_eq!(shapes.len(), 2);

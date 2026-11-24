@@ -2,7 +2,7 @@
 //! their fields, and the value of every constant.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// The parsed files of the ABI source.
 fn abi_sources() -> Vec<syn::File> {
@@ -10,14 +10,26 @@ fn abi_sources() -> Vec<syn::File> {
     // The ABI types the ABI module re-exports from the value types' crate.
     let values = root.join("../../values/src/abi.rs");
     let mut files = vec![root.join("abi.rs"), values];
-    if let Ok(dir) = std::fs::read_dir(root.join("abi")) {
-        files.extend(dir.filter_map(|entry| entry.ok().map(|entry| entry.path())));
+    rust_files(&root.join("abi"), &mut files);
+    files.iter().map(|file| parse(file)).collect()
+}
+
+/// Adds the Rust files under `dir`, a domain's folder (`events/knowledge.rs`)
+/// included, to `out`.
+fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            rust_files(&path, out);
+        } else if path.extension().is_some_and(|ext| ext == "rs") {
+            out.push(path);
+        }
     }
-    files
-        .iter()
-        .filter(|file| file.extension().is_some_and(|ext| ext == "rs"))
-        .map(|file| syn::parse_file(&std::fs::read_to_string(file).unwrap()).unwrap())
-        .collect()
+}
+
+/// The Rust file at `path`, parsed.
+fn parse(path: &Path) -> syn::File {
+    syn::parse_file(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 
 /// The constants the version names itself by, which change on every bump
@@ -151,8 +163,13 @@ fn evaluate(
 
 /// The structs of the ABI source, with their field names in order.
 pub(super) fn structs_in_source() -> BTreeMap<String, Vec<String>> {
+    structs_in(abi_sources())
+}
+
+/// The `repr` structs of `files`, with their field names in order.
+fn structs_in(files: Vec<syn::File>) -> BTreeMap<String, Vec<String>> {
     let mut found = BTreeMap::new();
-    for parsed in abi_sources() {
+    for parsed in files {
         for item in parsed.items {
             let syn::Item::Struct(item) = item else {
                 continue;
@@ -176,4 +193,30 @@ pub(super) fn structs_in_source() -> BTreeMap<String, Vec<String>> {
         }
     }
     found
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_struct_in_a_domain_folder_is_listed() {
+        let dir = std::env::temp_dir().join(format!("enshwick-abi-source-{}", std::process::id()));
+        let domain = dir.join("events");
+        std::fs::create_dir_all(&domain).unwrap();
+        std::fs::write(dir.join("events.rs"), "mod knowledge;\n").unwrap();
+        std::fs::write(
+            domain.join("knowledge.rs"),
+            "#[repr(C)]\npub struct Deep {\n    pub value: u32,\n}\n",
+        )
+        .unwrap();
+        let mut files = Vec::new();
+        rust_files(&dir, &mut files);
+        let parsed = files.iter().map(|file| parse(file)).collect();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(
+            structs_in(parsed).get("Deep"),
+            Some(&vec!["value".to_owned()])
+        );
+    }
 }
