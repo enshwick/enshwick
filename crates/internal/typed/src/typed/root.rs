@@ -3549,6 +3549,31 @@ crate::typed::runtime::reflected_struct! {
 }
 
 crate::typed::runtime::reflected_struct! {
+    /// The game's struct `GameKnowledgeQueryResourceDb`, 44 bytes.
+    ///
+    /// A resource: read and serve it through [`crate::typed::ResourceType`](struct.ResourceType.html).
+    GameKnowledgeQueryResourceDb {
+        /// `demoKnowledgeId`, of `KnowledgeId`.
+        demo_knowledge_id: KnowledgeId = "demoKnowledgeId",
+        /// `playerQueryStartIndex`, of `uint32`.
+        player_query_start_index: u32 = "playerQueryStartIndex",
+        /// `runtimePlayerQueryStartIndex`, of `uint32`.
+        runtime_player_query_start_index: u32 = "runtimePlayerQueryStartIndex",
+        /// `npcQueryCount`, of `uint32`.
+        npc_query_count: u32 = "npcQueryCount",
+        /// `queries`, of `BlobArray<GameKnowledgeQueryResource>`.
+        queries: ::std::vec::Vec<GameKnowledgeQueryResource> = "queries",
+        /// `runtimeQueries`, of `BlobArray<GameRuntimeQueryResource>`.
+        runtime_queries: ::std::vec::Vec<GameRuntimeQueryResource> = "runtimeQueries",
+        /// `queriedItems`, of `BlobArray<ItemId>`.
+        queried_items: ::std::vec::Vec<ItemId> = "queriedItems",
+        /// `runtimeQueryHash`, of `HashKey32`.
+        runtime_query_hash: HashKey32 = "runtimeQueryHash",
+    }
+}
+crate::typed::runtime::named!(GameKnowledgeQueryResourceDb = "GameKnowledgeQueryResourceDb": Resource);
+
+crate::typed::runtime::reflected_struct! {
     /// The game's struct `GameKnowledgeQueryTrigger`, 252 bytes.
     GameKnowledgeQueryTrigger {
         /// `requirement`, of `GameKnowledgeRequirement`.

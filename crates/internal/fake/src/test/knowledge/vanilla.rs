@@ -71,12 +71,17 @@ pub const VANILLA_WORLD_KNOWLEDGE: u32 = 0x0000_0203;
 const BUCKETS: u32 = 8;
 
 /// A struct type of `fields`.
-fn named(name: &'static str, size: u32, align: u16, fields: Vec<Field<'static>>) -> Type<'static> {
+pub(super) fn named(
+    name: &'static str,
+    size: u32,
+    align: u16,
+    fields: Vec<Field<'static>>,
+) -> Type<'static> {
     Type::new(name, Kind::Struct, size, align).with_fields(fields)
 }
 
 /// A blob array of `of`.
-fn blobs(of: &'static str) -> Type<'static> {
+pub(super) fn blobs(of: &'static str) -> Type<'static> {
     Type::new(
         Box::leak(format!("demo::BlobArray<{of}>").into_boxed_str()),
         Kind::BlobArray,
@@ -195,6 +200,8 @@ fn knowledge_types() -> Vec<Type<'static>> {
     types.extend(map("demo::WorldKnowledgeMap", WORLD_OBJECT));
     types.extend(map("demo::PlayerKnowledgeMap", PLAYER_OBJECT));
     types.extend(journal_types());
+    types.extend(super::queries::query_types());
+    types.extend(super::rules::rule_types());
     types.extend(skill_types());
     types.extend(balancing_types());
     types
@@ -438,7 +445,7 @@ fn tree_value() -> Value {
 }
 
 /// An enum type of `constants`, one byte.
-fn enumeration(name: &'static str, constants: &[&'static str]) -> Type<'static> {
+pub(super) fn enumeration(name: &'static str, constants: &[&'static str]) -> Type<'static> {
     let constants = constants
         .iter()
         .zip(0..)
@@ -569,22 +576,28 @@ fn journal_types() -> Vec<Type<'static>> {
         blobs(QUEST),
         named(
             JOURNAL,
-            16,
+            32,
             4,
-            vec![
+            [
                 field("quests", 0, "demo::BlobArray<demo::JournalQuestResource>"),
                 field(
                     "collections",
                     8,
                     "demo::BlobArray<demo::JournalCollectionResource>",
                 ),
-            ],
+            ]
+            .into_iter()
+            .chain(super::item_sets::item_set_fields())
+            .collect(),
         ),
     ]
+    .into_iter()
+    .chain(super::item_sets::item_set_types())
+    .collect()
 }
 
 /// A `HashKey32` of `key`.
-fn hash_key(key: u32) -> Value {
+pub(super) fn hash_key(key: u32) -> Value {
     fields(vec![("value", Value::Uint(key.into()))])
 }
 
@@ -646,14 +659,19 @@ fn journal_value() -> Value {
         ("isTutorial", Value::Bool(false)),
         ("entries", Value::List(Vec::new())),
     ]);
-    fields(vec![
-        ("quests", Value::List(vec![quest])),
-        ("collections", Value::List(vec![page])),
-    ])
+    fields(
+        vec![
+            ("quests", Value::List(vec![quest])),
+            ("collections", Value::List(vec![page])),
+        ]
+        .into_iter()
+        .chain(super::item_sets::item_set_values())
+        .collect(),
+    )
 }
 
 /// A struct value of `fields`.
-fn fields(fields: Vec<(&str, Value)>) -> Value {
+pub(super) fn fields(fields: Vec<(&str, Value)>) -> Value {
     Value::Struct(
         fields
             .into_iter()
@@ -776,6 +794,16 @@ impl FakeHost {
                 host = host.resource(Guid::parse(guid).key_by_hash(hash(ty)), bytes);
             }
         }
+        let database = super::queries::DATABASE;
+        if let Ok(bytes) = registry.encode(database, &super::queries::database_value(), None) {
+            let key = super::queries::QUERY_DATABASE.key_by_hash(hash(database));
+            host = host.resource(key, bytes);
+        }
+        let triggers = super::rules::TRIGGERS;
+        if let Ok(bytes) = registry.encode(triggers, &super::rules::rules_value(), None) {
+            let key = super::rules::KNOWLEDGE_RULES.key_by_hash(hash(triggers));
+            host = host.resource(key, bytes);
+        }
         if let Ok(bytes) = registry.encode(BALANCING, &balancing_value(), None) {
             host = host.resource(BALANCING_TABLE.key_by_hash(hash(BALANCING)), bytes);
         }
@@ -793,6 +821,14 @@ impl FakeHost {
             .type_hash("ecs::UnlockedSkillNodes", hash(UNLOCKS))
             .type_hash("GameKnowledgeResource", hash(KNOWLEDGE))
             .type_hash("JournalRegistryResource", hash(JOURNAL))
+            .type_hash(
+                "GameKnowledgeQueryResourceDb",
+                hash(super::queries::DATABASE),
+            )
+            .type_hash(
+                "GameKnowledgeQueryTriggerResource",
+                hash(super::rules::TRIGGERS),
+            )
             .type_hash("ecs::PlayerQuestProgressionMode", hash(PROGRESSION))
             .type_size("ecs::PlayerQuestProgressionMode", 8)
     }
@@ -815,6 +851,10 @@ mod tests {
         );
         let bytes = registry.encode(JOURNAL, &journal_value(), None).unwrap();
         assert_eq!(registry.decode(JOURNAL, &bytes).unwrap(), journal_value());
+        let database = super::super::queries::DATABASE;
+        let value = super::super::queries::database_value();
+        let bytes = registry.encode(database, &value, None).unwrap();
+        assert_eq!(registry.decode(database, &bytes).unwrap(), value);
         let bytes = registry.encode(TREE, &tree_value(), None).unwrap();
         assert_eq!(registry.decode(TREE, &bytes).unwrap(), tree_value());
     }

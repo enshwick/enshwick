@@ -104,6 +104,14 @@ pub use content::{LiveChange, ServedResource};
 pub use inventory::SubmittedRequest;
 pub use inventory::containers::{CHEST_ITEM, CHEST_SLOTS};
 #[cfg(feature = "typed")]
+pub use knowledge::item_sets::{ITEM_SET_CATEGORY, VANILLA_ITEM_SET, VANILLA_ITEM_SET_REWARD};
+#[cfg(feature = "typed")]
+pub use knowledge::queries::{
+    QUERY_DATABASE, VANILLA_PLAYER_QUERY, VANILLA_QUERY_NAME, VANILLA_WORLD_QUERY,
+};
+#[cfg(feature = "typed")]
+pub use knowledge::rules::KNOWLEDGE_RULES;
+#[cfg(feature = "typed")]
 pub use knowledge::vanilla::{
     ATTRIBUTE_NODE, BALANCING_TABLE, LORE_CATEGORY, PROGRESSION, QUEST_ITEM, ROOT_NODE, SKILL_ROOM,
     VANILLA_EXPERIENCE, VANILLA_PERK, VANILLA_PLAYER_KNOWLEDGE, VANILLA_QUEST,

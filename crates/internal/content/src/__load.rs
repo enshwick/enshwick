@@ -14,6 +14,8 @@ pub use crate::content::items::LoadMethods as _;
 #[cfg(feature = "typed")]
 pub use crate::content::journal::LoadMethods as _;
 #[cfg(feature = "typed")]
+pub use crate::content::journal::item_sets::LoadMethods as _;
+#[cfg(feature = "typed")]
 pub(crate) use crate::content::knowledge::LoadHelpers as _;
 #[cfg(feature = "typed")]
 pub use crate::content::knowledge::LoadMethods as _;

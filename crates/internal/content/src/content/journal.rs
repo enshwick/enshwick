@@ -51,10 +51,19 @@ use crate::{Host, ItemId, Off};
 
 use super::{EngineFacts, Guid, Id};
 
+mod change;
+pub mod item_set_category;
+pub(crate) mod item_sets;
 #[cfg(feature = "unstable")]
 pub mod lore_category;
 #[cfg(feature = "typed")]
 pub(crate) mod objectives;
+
+pub use change::{PageChange, QuestChange, StepChange, StepEdit, StepInsert, StepMove};
+use change::{change_page_in, change_quest_in, remove_page_in, remove_quest_in};
+pub use item_sets::{
+    ItemSetCategory, ItemSetChange, ItemSetEntry, ItemSetHint, ItemSetId, NewItemSet,
+};
 
 #[cfg(feature = "typed")]
 #[doc(hidden)]
@@ -82,6 +91,59 @@ const PROGRESS: &str = "progressStepsRequirement";
 /// The priority the journal sorts a mod's quests and pages by, the most
 /// common of the game's own quests (server 387).
 const PRIORITY: u32 = 100;
+
+/// The id of a journal entry: a quest's step, a lore page or one of its
+/// entries.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::content::journal::EntryId;
+///
+/// assert_eq!(EntryId::new(9).get(), 9);
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+pub struct EntryId(u32);
+
+impl EntryId {
+    /// The entry of id `id`.
+    ///
+    /// # Examples
+    ///
+    /// See [`EntryId`].
+    #[must_use]
+    pub const fn new(id: u32) -> Self {
+        Self(id)
+    }
+
+    /// Its id.
+    ///
+    /// # Examples
+    ///
+    /// See [`EntryId`].
+    #[must_use]
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
+/// The key the journal holds for the text tag `tag`: 0, which names no
+/// text, for a tag of zeros.
+fn text_key(tag: Guid) -> u32 {
+    if tag == Guid([0; 16]) { 0 } else { tag.fnv1a() }
+}
+
+/// A query no knowledge holds, as the game's own lore entries complete
+/// (server 387).
+fn never() -> Value {
+    Value::Struct(vec![
+        ("knowledgeOrQueryId".into(), hash_key(0)),
+        ("compareValue".into(), Value::Uint(0)),
+        ("compareOperator".into(), Value::Name("GreaterThan".into())),
+        ("type".into(), Value::Name("Extern".into())),
+        ("isExplicitPlayerKnowledgeQuery".into(), Value::Bool(false)),
+    ])
+}
 
 /// What the journal shows as a quest's reward.
 ///
@@ -150,6 +212,11 @@ pub struct QuestStep {
     /// The level it suits; 0 for none.
     #[script(default)]
     pub level: u8,
+    /// The text tag of the map marker its "show on map" points at, as a
+    /// marker of `ui::map` carries it; `None` for no marker.
+    pub marker: Option<Guid>,
+    /// The voiceover it plays; `None` for none.
+    pub voiceover: Option<Guid>,
     /// What the journal counts on it, each on a counter of the loader's
     /// that its `progress` shows; a step without `done_when` is done once
     /// every count is reached.
@@ -180,6 +247,8 @@ impl QuestStep {
             progress: Vec::new(),
             icon: None,
             level: 0,
+            marker: None,
+            voiceover: None,
             #[cfg(feature = "typed")]
             objectives: Vec::new(),
         }
@@ -213,6 +282,8 @@ impl QuestStep {
             progress: Vec::new(),
             icon: None,
             level: 0,
+            marker: None,
+            voiceover: None,
             #[cfg(feature = "typed")]
             objectives: Vec::new(),
         }
@@ -235,11 +306,17 @@ impl QuestStep {
             (ENTRY_ID.into(), hash_key(entry)),
             ("name".into(), hash_key(self.name.fnv1a())),
             ("text".into(), hash_key(self.text.fnv1a())),
-            ("mapMarkerReference".into(), hash_key(0)),
+            (
+                "mapMarkerReference".into(),
+                hash_key(self.marker.map_or(0, text_key)),
+            ),
             (SHOWN.into(), query(self.shown_when)?),
             (DONE.into(), query(self.done_when)?),
             (PROGRESS.into(), Value::List(progress)),
-            ("voiceover".into(), Value::Guid(Guid([0; 16]))),
+            (
+                "voiceover".into(),
+                Value::Guid(self.voiceover.unwrap_or(Guid([0; 16]))),
+            ),
             (
                 "itemIconId".into(),
                 hash_key(self.icon.map_or(0, ItemId::get)),
@@ -276,6 +353,15 @@ pub struct NewQuest {
     /// the game gives of it.
     #[script(default)]
     pub rewards: Vec<QuestReward>,
+    /// Where the journal sorts it among the others; `None` for the
+    /// priority most of the game's quests hold, 100.
+    pub priority: Option<u32>,
+    /// Whether it belongs to the tutorial.
+    #[script(default)]
+    pub tutorial: bool,
+    /// The text tag of the document it names; `None` for the one the
+    /// game's quests share.
+    pub document: Option<Guid>,
 }
 
 impl NewQuest {
@@ -296,6 +382,9 @@ impl NewQuest {
             for_all_players: false,
             steps,
             rewards: Vec::new(),
+            priority: None,
+            tutorial: false,
+            document: None,
         }
     }
 }
@@ -336,41 +425,6 @@ pub struct NewJournalPage {
     pub name: Guid,
     /// Its entries, in order.
     pub entries: Vec<PageEntry>,
-}
-
-/// A change of a step of a vanilla quest; `None` keeps a query.
-///
-/// # Examples
-///
-/// See [`Load::change_quest`](../../struct.Load.html#method.change_quest).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
-pub struct StepChange {
-    /// The step, from 0.
-    pub step: u32,
-    /// When the journal shows it.
-    pub shown_when: Option<KnowledgeQuery>,
-    /// When it is done.
-    pub done_when: Option<KnowledgeQuery>,
-}
-
-/// A change of a vanilla quest for [`Load::change_quest`](../../struct.Load.html#method.change_quest); `None` and empty
-/// lists keep what the quest holds.
-///
-/// # Examples
-///
-/// See [`Load::change_quest`](../../struct.Load.html#method.change_quest).
-#[derive(Clone, Debug, Default, PartialEq, Eq, crate::Script)]
-pub struct QuestChange {
-    /// The rewards in place of the quest's.
-    pub rewards: Option<Vec<QuestReward>>,
-    /// Rewards after those.
-    #[script(default)]
-    pub add_rewards: Vec<QuestReward>,
-    /// Whether one player's completion unlocks it for every player.
-    pub for_all_players: Option<bool>,
-    /// Changes of its steps' knowledge.
-    #[script(default)]
-    pub steps: Vec<StepChange>,
 }
 
 /// The entry id of a journal entry.
@@ -427,10 +481,11 @@ fn header(
     ]
 }
 
-/// Whether the journal holds an entry `id` among its quests, its pages or
-/// their steps.
+/// Whether the journal holds an entry `id` among its quests, its pages,
+/// their steps, its item sets or their entries.
 fn holds(registry: &Value, id: u32) -> bool {
-    [QUESTS, COLLECTIONS].iter().any(|list| match registry.field(list) {
+    item_sets::sets_hold(registry, id)
+        || [QUESTS, COLLECTIONS].iter().any(|list| match registry.field(list) {
         Some(Value::List(all)) => all.iter().any(|entry| {
             entry_id(entry) == Some(id)
                 || matches!(entry.field(ENTRIES), Some(Value::List(steps)) if steps.iter().any(|s| entry_id(s) == Some(id)))
@@ -538,7 +593,15 @@ pub(crate) fn quest_value(new: &NewQuest, document: Value) -> Result<Value, Off>
         .zip(step_ids(new.id, new.steps.len()))
         .map(|(step, id)| step.to_value(id))
         .collect::<Result<_, _>>()?;
+    let document = new.document.map_or(document, |tag| hash_key(text_key(tag)));
     let mut fields = header(quest, 0, new.name, document, steps);
+    for (name, value) in &mut fields {
+        match name.as_str() {
+            "priority" => *value = Value::Uint(new.priority.unwrap_or(PRIORITY).into()),
+            "isTutorial" => *value = Value::Bool(new.tutorial),
+            _ => {}
+        }
+    }
     fields.extend([
         ("source".into(), new.source.to_value()),
         ("type".into(), new.kind.to_value()),
@@ -557,9 +620,9 @@ pub(crate) fn quest_value(new: &NewQuest, document: Value) -> Result<Value, Off>
 /// data, which are the ones the game's pages name, and drops a page of any
 /// other without a word (client 26430625).
 #[cfg(feature = "unstable")]
-fn category_key(registry: &Value, new: &NewJournalPage) -> Result<u32, Off> {
+fn category_key(registry: &Value, owner: &str, category: Guid) -> Result<u32, Off> {
     let held = held_categories(registry);
-    let key = new.category.fnv1a();
+    let key = category.fnv1a();
     if held.contains(&key) {
         return Ok(key);
     }
@@ -573,9 +636,7 @@ fn category_key(registry: &Value, new: &NewJournalPage) -> Result<u32, Off> {
         })
         .collect();
     Err(Off::new(format!(
-        "journal page {}: the game has no lore category {} (key {key}), and the journal shows no page of another; the game's are {}",
-        new.id,
-        new.category,
+        "{owner}: the game has no lore category {category} (key {key}), and the journal shows no page of another; the game's are {}",
         names.join(", ")
     )))
 }
@@ -601,7 +662,7 @@ fn held_categories(registry: &Value) -> Vec<u32> {
 /// registry is left as it was.
 #[cfg(feature = "unstable")]
 fn add_page_to(registry: &mut Value, new: &NewJournalPage) -> Result<(), Off> {
-    let category = category_key(registry, new)?;
+    let category = category_key(registry, &format!("journal page {}", new.id), new.category)?;
     let page = new.id.guid().fnv1a();
     let ids = step_ids(new.id, new.entries.len());
     if let Some(id) = core::iter::once(page)
@@ -613,14 +674,6 @@ fn add_page_to(registry: &mut Value, new: &NewJournalPage) -> Result<(), Off> {
             new.id
         )));
     }
-    // An entry no knowledge completes, as the game's own pages hold it (server 387).
-    let never = Value::Struct(vec![
-        ("knowledgeOrQueryId".into(), hash_key(0)),
-        ("compareValue".into(), Value::Uint(0)),
-        ("compareOperator".into(), Value::Name("GreaterThan".into())),
-        ("type".into(), Value::Name("Extern".into())),
-        ("isExplicitPlayerKnowledgeQuery".into(), Value::Bool(false)),
-    ]);
     let entries = new
         .entries
         .iter()
@@ -630,54 +683,13 @@ fn add_page_to(registry: &mut Value, new: &NewJournalPage) -> Result<(), Off> {
                 QuestStep::new(entry.name, entry.text, entry.shown_when, entry.shown_when)
                     .to_value(id)?;
             if let Some(done) = step.field_mut(DONE) {
-                *done = never.clone();
+                *done = never();
             }
             Ok(step)
         })
         .collect::<Result<_, Off>>()?;
     let fields = header(page, category, new.name, document(registry), entries);
     list_mut(registry, COLLECTIONS)?.push(Value::Struct(fields));
-    Ok(())
-}
-
-/// Changes the vanilla quest `quest` in `registry` by `change`; on an error
-/// the registry is left as it was.
-fn change_quest_in(
-    registry: &mut Value,
-    quest: KnowledgeId,
-    change: &QuestChange,
-) -> Result<(), Off> {
-    let held = list_mut(registry, QUESTS)?
-        .iter_mut()
-        .find(|held| entry_id(held) == Some(quest.get()))
-        .ok_or_else(|| Off::new(format!("quest {quest}: no quest of the journal")))?;
-    let steps = list_mut(held, ENTRIES)?.len();
-    let mut queries = Vec::new();
-    for step in &change.steps {
-        let at = usize::try_from(step.step)
-            .ok()
-            .filter(|&at| at < steps)
-            .ok_or_else(|| Off::new(format!("quest {quest}: no step {}", step.step)))?;
-        for (field, query) in [(SHOWN, step.shown_when), (DONE, step.done_when)] {
-            if let Some(query) = query {
-                queries.push((at, field, query.to_value()?));
-            }
-        }
-    }
-    let rewards = list_mut(held, REWARDS)?;
-    if let Some(new) = &change.rewards {
-        *rewards = new.iter().map(|reward| reward.to_value()).collect();
-    }
-    rewards.extend(change.add_rewards.iter().map(|reward| reward.to_value()));
-    if let (Some(all), Some(held)) = (change.for_all_players, held.field_mut(FOR_ALL)) {
-        *held = Value::Bool(all);
-    }
-    let steps = list_mut(held, ENTRIES)?;
-    for (at, field, query) in queries {
-        if let Some(held) = steps[at].field_mut(field) {
-            *held = query;
-        }
-    }
     Ok(())
 }
 
@@ -691,18 +703,62 @@ pub(crate) enum Edit {
     Page(NewJournalPage),
     /// A change of a vanilla quest.
     Change(KnowledgeId, QuestChange),
+    /// A change of a vanilla page, its category's key checked.
+    #[cfg(feature = "unstable")]
+    ChangePage(EntryId, Option<u32>, PageChange),
+    /// A removal of a vanilla quest, with the game's quest ids, sorted.
+    Remove(KnowledgeId, Arc<[u32]>),
+    /// A removal of a vanilla page.
+    #[cfg(feature = "unstable")]
+    RemovePage(EntryId),
+    /// An item set of its own, or a change or removal of a vanilla one.
+    ItemSet(item_sets::SetEdit),
 }
 
 impl Edit {
-    /// Makes the change in `registry`, which is left as it was on an error.
-    fn apply(&self, registry: &mut Value) -> Result<(), Off> {
+    /// The quest id of a quest of the mod's own.
+    fn own_quest(&self) -> Option<u32> {
+        match self {
+            Self::Quest(new) => Some(KnowledgeId::from_guid(new.id.guid()).get()),
+            _ => None,
+        }
+    }
+
+    /// Makes the change in `registry`, which is left as it was on an error;
+    /// `own` holds the quest ids of the mod's own quests.
+    fn apply(&self, registry: &mut Value, own: &[u32]) -> Result<(), Off> {
         match self {
             Self::Quest(new) => add_quest_to(registry, new),
             #[cfg(feature = "unstable")]
             Self::Page(new) => add_page_to(registry, new),
             Self::Change(quest, change) => change_quest_in(registry, *quest, change),
+            #[cfg(feature = "unstable")]
+            Self::ChangePage(page, category, change) => {
+                change_page_in(registry, *page, *category, change)
+            }
+            Self::Remove(quest, vanilla) => remove_quest_in(registry, *quest, vanilla, own),
+            #[cfg(feature = "unstable")]
+            Self::RemovePage(page) => remove_page_in(registry, *page),
+            Self::ItemSet(edit) => edit.apply(registry),
         }
     }
+}
+
+/// The quest ids of the journal `registry`, sorted.
+fn quest_ids(registry: &Value) -> Arc<[u32]> {
+    let mut ids: Vec<u32> = match registry.field(QUESTS) {
+        Some(Value::List(quests)) => quests.iter().filter_map(entry_id).collect(),
+        _ => Vec::new(),
+    };
+    ids.sort_unstable();
+    ids.into()
+}
+
+/// Whether the journal `registry` holds the page `page`.
+#[cfg(feature = "unstable")]
+fn holds_page(registry: &Value, page: EntryId) -> bool {
+    matches!(registry.field(COLLECTIONS), Some(Value::List(pages))
+        if pages.iter().any(|held| entry_id(held) == Some(page.get())))
 }
 
 /// The journal changes a mod made, in order, which one patch of the
@@ -715,8 +771,9 @@ impl AddedJournal {
     /// a change that fails is logged and left out, and the rest are made.
     fn serve(host: Host, key: crate::abi::ResourceKey) -> Result<Self, Off> {
         let edits = serve_list(host, key, move |mut registry, edits: &[Edit]| {
+            let own: Vec<u32> = edits.iter().filter_map(Edit::own_quest).collect();
             for edit in edits {
-                if let Err(off) = edit.apply(&mut registry) {
+                if let Err(off) = edit.apply(&mut registry, &own) {
                     host.log(Level::WARN, &off.to_string());
                 }
             }
@@ -742,6 +799,20 @@ pub trait LoadMethods {
     /// As `Load::change_quest`.
     #[doc(hidden)]
     fn change_quest(&mut self, quest: KnowledgeId, change: QuestChange) -> Result<(), Off>;
+
+    /// As `Load::remove_quest`.
+    #[doc(hidden)]
+    fn remove_quest(&mut self, quest: KnowledgeId) -> Result<(), Off>;
+
+    /// As `Load::change_journal_page`.
+    #[doc(hidden)]
+    #[cfg(feature = "unstable")]
+    fn change_journal_page(&mut self, page: EntryId, change: PageChange) -> Result<(), Off>;
+
+    /// As `Load::remove_journal_page`.
+    #[doc(hidden)]
+    #[cfg(feature = "unstable")]
+    fn remove_journal_page(&mut self, page: EntryId) -> Result<(), Off>;
 }
 
 impl LoadMethods for crate::BaseLoad {
@@ -821,7 +892,11 @@ impl LoadMethods for crate::BaseLoad {
             entry.shown_when.to_value()?;
         }
         let key = self.journal_key()?;
-        category_key(&self.host().game_value(key)?, &new)?;
+        category_key(
+            &self.host().game_value(key)?,
+            &format!("journal page {}", new.id),
+            new.category,
+        )?;
         self.declare(new.id)?;
         self.edit_journal(key, Edit::Page(new))
     }
@@ -830,6 +905,41 @@ impl LoadMethods for crate::BaseLoad {
         let key = self.journal_key()?;
         change_quest_in(&mut self.host().game_value(key)?, quest, &change)?;
         self.edit_journal(key, Edit::Change(quest, change))
+    }
+
+    fn remove_quest(&mut self, quest: KnowledgeId) -> Result<(), Off> {
+        let key = self.journal_key()?;
+        let vanilla = quest_ids(&self.host().game_value(key)?);
+        if vanilla.binary_search(&quest.get()).is_err() {
+            return Err(Off::new(format!(
+                "quest {quest}: no quest of the game's journal"
+            )));
+        }
+        self.edit_journal(key, Edit::Remove(quest, vanilla))
+    }
+
+    #[cfg(feature = "unstable")]
+    fn change_journal_page(&mut self, page: EntryId, change: PageChange) -> Result<(), Off> {
+        let key = self.journal_key()?;
+        let mut held = self.host().game_value(key)?;
+        let category = change
+            .category
+            .map(|category| category_key(&held, &format!("journal page {}", page.get()), category))
+            .transpose()?;
+        change_page_in(&mut held, page, category, &change)?;
+        self.edit_journal(key, Edit::ChangePage(page, category, change))
+    }
+
+    #[cfg(feature = "unstable")]
+    fn remove_journal_page(&mut self, page: EntryId) -> Result<(), Off> {
+        let key = self.journal_key()?;
+        if !holds_page(&self.host().game_value(key)?, page) {
+            return Err(Off::new(format!(
+                "journal page {}: no page of the game's journal",
+                page.get()
+            )));
+        }
+        self.edit_journal(key, Edit::RemovePage(page))
     }
 }
 

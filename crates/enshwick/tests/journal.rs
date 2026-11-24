@@ -9,7 +9,7 @@ mod tests {
     use enshwick::abi::Status;
     use enshwick::content::journal::{
         JOURNAL_REGISTRY, NewJournalPage, NewQuest, PageEntry, QuestChange, QuestReward, QuestStep,
-        StepChange,
+        StepChange, StepEdit,
     };
     use enshwick::content::knowledge::{GAME_KNOWLEDGE, KnowledgeQuery, NewKnowledge};
     use enshwick::content::{EngineFacts, Guid, Id};
@@ -102,11 +102,11 @@ mod tests {
                 vanilla,
                 QuestChange {
                     add_rewards: vec![QuestReward::Item(TORCH)],
-                    steps: vec![StepChange {
+                    steps: vec![StepEdit::Change(StepChange {
                         step: 0,
-                        shown_when: None,
                         done_when: Some(is(given)),
-                    }],
+                        ..StepChange::default()
+                    })],
                     ..QuestChange::default()
                 },
             )?;
@@ -119,11 +119,11 @@ mod tests {
             refused(load.change_quest(
                 vanilla,
                 QuestChange {
-                    steps: vec![StepChange {
+                    steps: vec![StepEdit::Change(StepChange {
                         step: 4,
                         shown_when: Some(is(given)),
-                        done_when: None,
-                    }],
+                        ..StepChange::default()
+                    })],
                     ..QuestChange::default()
                 },
             ));
