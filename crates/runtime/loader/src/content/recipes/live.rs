@@ -672,16 +672,29 @@ const MAX_SERVER_RECIPES: usize = 1 << 14;
 
 /// A part of the server's disabled recipes, on the client.
 pub(crate) fn received(first: bool, last: bool, ids: &[u32]) {
-    STATE.live(|l| match l.incoming.add(first, last, ids.iter().copied()) {
-        Some(ids) => l.server = Some(ids),
-        None if last => crate::log!(
-            WARN,
-            "recipes: the server's disabled recipes are over {MAX_SERVER_RECIPES}; kept the last list"
-        ),
-        None => {}
-    });
-    if last {
-        STATE.changed();
+    STATE.received(crate::engine::world::hosting(), first, last, ids);
+}
+
+impl Recipes {
+    /// A part of the server's disabled recipes, on the client. A client that
+    /// hosts the game is that server: its own list comes back to it through
+    /// its own connection, and taken as a joined server's it would freeze
+    /// the rules at that moment's.
+    fn received(&self, hosting: bool, first: bool, last: bool, ids: &[u32]) {
+        if hosting {
+            return;
+        }
+        self.live(|l| match l.incoming.add(first, last, ids.iter().copied()) {
+            Some(ids) => l.server = Some(ids),
+            None if last => crate::log!(
+                WARN,
+                "recipes: the server's disabled recipes are over {MAX_SERVER_RECIPES}; kept the last list"
+            ),
+            None => {}
+        });
+        if last {
+            self.changed();
+        }
     }
 }
 
