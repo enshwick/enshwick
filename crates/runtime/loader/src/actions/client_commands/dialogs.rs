@@ -105,11 +105,17 @@ pub(crate) fn answered(id: u64, done: bool) {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+    use enshwick_base::Relock;
+
+    /// Held by every test that arms the dialog command's process-wide
+    /// handoff, since `cargo test` runs tests as threads of one process.
+    pub(crate) static TEST_STATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn a_handed_answer_is_claimed_once_and_ends_as_the_draw_tells() {
+        let _state = TEST_STATE.relock();
         assert!(hand(51, 7));
         assert_eq!(progress(51), Some(Progress::Waiting));
         assert_eq!(take(), Some((51, 7)));

@@ -818,3 +818,47 @@ for _, item in enshwick.input.client_windows() do
     end
 end
 ```
+
+## Answering the loader's dialog
+
+`CommandAction::AnswerDialog(response)` answers the loader's dialog that
+shows on the client, as a click on its button would. That is a mod's dialog
+from [`ui.dialog` or `ui.ask`](interface.md#dialogs), or one of the loader's own,
+such as a warning. It runs at the main menu and in a world.
+
+| Snapshot | Holds |
+| --- | --- |
+| `dialog_buttons()` | the responses of the dialog's buttons, empty while none shows, `None` where dialogs do not show in game |
+| `dialog_mod()` | the id of the mod whose dialog shows, `None` for the loader's own |
+
+The command is `Observed` once the dialog closes with that answer, and the
+dialog's mod hears it as from the player. While no dialog shows, the
+command returns `WorldError::Unavailable`. A response the dialog has no
+button for returns `WorldError::Refused`. A dialog the loader shows as a
+system message box, where dialogs do not show in game, takes no command.
+
+```rust
+use enshwick::input::{ClientCommand, CommandAction, Input};
+use enshwick::ui::Response;
+
+fn accept(input: Input) -> Option<()> {
+    let snapshot = input.client_snapshot().ok()?;
+    if !snapshot.dialog_buttons()?.contains(&Response::Ok) {
+        return None;
+    }
+    let ok = CommandAction::AnswerDialog(Response::Ok);
+    input.client_command(&ClientCommand::new(ok, snapshot.session())).ok()?;
+    Some(())
+}
+```
+
+```luau
+local snapshot = enshwick.input.client_snapshot()
+if snapshot.dialog_buttons and table.find(snapshot.dialog_buttons, "Ok") then
+    enshwick.input.client_command({
+        kind = "answer_dialog",
+        session = snapshot.session,
+        answer = "Ok",
+    })
+end
+```

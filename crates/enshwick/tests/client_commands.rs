@@ -11,12 +11,14 @@ mod tests {
     use std::sync::Mutex;
 
     static INPUT: Mutex<Option<Input>> = Mutex::new(None);
+    static UI: Mutex<Option<enshwick::ui::Ui>> = Mutex::new(None);
 
     struct Driver;
 
     impl Mod for Driver {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             *INPUT.lock().unwrap() = Some(load.input()?);
+            *UI.lock().unwrap() = load.ui().ok();
             Ok(Self)
         }
     }
@@ -675,6 +677,51 @@ side = "both""#
         }
         let clear = ClientCommand::new(CommandAction::ClearWaypoint, 1);
         assert!(input.client_command(&clear).is_ok());
+    }
+
+    #[test]
+    fn a_dialog_answer_goes_to_the_dialog_that_shows_by_a_button_it_has() {
+        use enshwick::ui::{Dialog, Response};
+
+        let (loader, input) = input(Side::CLIENT);
+        let answer = |response| ClientCommand::new(CommandAction::AnswerDialog(response), 1);
+        assert!(
+            matches!(
+                input.client_command(&answer(Response::Ok)),
+                Err(WorldError::Unavailable)
+            ),
+            "no dialog shows"
+        );
+        assert_eq!(
+            input.client_snapshot().unwrap().dialog_buttons(),
+            Some(vec![])
+        );
+        let ui = UI.lock().unwrap().unwrap();
+        let ask =
+            Dialog::new("Reset", "Reset the world?").buttons(&[Response::Ok, Response::Cancel]);
+        ui.dialog(&ask, |_| {}).unwrap();
+        assert_eq!(
+            input.client_snapshot().unwrap().dialog_buttons(),
+            Some(vec![Response::Cancel, Response::Ok])
+        );
+        assert!(
+            matches!(
+                input.client_command(&answer(Response::Retry)),
+                Err(WorldError::Refused)
+            ),
+            "the dialog has no Retry"
+        );
+        let id = input.client_command(&answer(Response::Ok)).unwrap();
+        assert_eq!(
+            loader.client_commands(),
+            [(1, Raw::ANSWER_DIALOG, String::new())]
+        );
+        assert!(loader.answer(Some(Response::Ok)));
+        loader.set_command_status(1, Status::OBSERVED, 0);
+        assert_eq!(
+            input.command_status(id).unwrap().state,
+            CommandState::Observed
+        );
     }
 
     #[test]

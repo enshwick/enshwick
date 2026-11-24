@@ -704,6 +704,10 @@ mod tests {
         assert!(ClientCommand::try_from(luau("open_screen", None)).is_err());
         assert!(ClientCommand::try_from(luau("dance", None)).is_err());
         assert!(
+            ClientCommand::try_from(luau("answer_dialog", None)).is_err(),
+            "an answer needs its response"
+        );
+        assert!(
             ClientCommand::try_from(luau("close_screen", None))
                 .is_ok_and(|c| c.action == CommandAction::CloseScreen)
         );

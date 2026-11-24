@@ -42,8 +42,18 @@ entries! {
                 unsafe { id.write(spec.cancels) };
                 return Status::OK;
             }
-            if !(Spec::OPEN_SCREEN..=Spec::WINDOW_TEXT).contains(&spec.kind) || !spec.in_bounds() {
+            if !(Spec::OPEN_SCREEN..=Spec::ANSWER_DIALOG).contains(&spec.kind) || !spec.in_bounds() {
                 return Status::BAD_ARGS;
+            }
+            // As the loader: an answer goes to the dialog that shows, the
+            // oldest waiting one here, and only by a button it has.
+            if spec.kind == Spec::ANSWER_DIALOG {
+                let Some((shown, _)) = s.ui.dialogs.first() else {
+                    return Status::UNAVAILABLE;
+                };
+                if shown.buttons & 1 << spec.answer == 0 {
+                    return Status::BAD_ARGS;
+                }
             }
             // As the loader: a waypoint or ping inside the map's frame, when
             // the world has one.
@@ -252,11 +262,15 @@ entries! {
                 return Status::UNAVAILABLE;
             }
             s.ui.snapshot_reads.0 = true;
-            let snapshot = if s.ui.snapshot_reads.1 {
+            let mut snapshot = if s.ui.snapshot_reads.1 {
                 s.ui.client_snapshot
             } else {
                 enshwick_core::abi::ClientSnapshot::EMPTY
             };
+            // As the loader: the dialog that shows, the oldest waiting one
+            // here, by its buttons; the fake names no mod.
+            snapshot.available |= enshwick_core::abi::ClientSnapshot::DIALOG;
+            snapshot.dialog_buttons = s.ui.dialogs.first().map_or(0, |(shown, _)| shown.buttons);
             crate::test::table::put_headed(out, snapshot)
         })
     }

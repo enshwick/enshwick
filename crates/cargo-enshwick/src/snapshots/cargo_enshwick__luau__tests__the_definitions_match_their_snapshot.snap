@@ -539,7 +539,7 @@ export type ChunkData = {
 
 --- `ClientCommand` as Luau gives it; its `Debug` shows none of the password.
 export type ClientCommand = {
-	--- `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`, `"move"`, `"highlight_recipe"`, `"join"`, `"leave"`, `"press"`, `"set_waypoint"`, `"clear_waypoint"`, `"ping"`, `"host"`, `"open_mods"`, `"open_mod"`, `"open_mod_settings"`, `"press_window_item"`, `"pick_window_item"` or `"set_window_text"`.
+	--- `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`, `"move"`, `"highlight_recipe"`, `"join"`, `"leave"`, `"press"`, `"set_waypoint"`, `"clear_waypoint"`, `"ping"`, `"host"`, `"open_mods"`, `"open_mod"`, `"open_mod_settings"`, `"press_window_item"`, `"pick_window_item"`, `"set_window_text"` or `"answer_dialog"`.
 	kind: string,
 	--- The session, as `client_snapshot().session` gives it.
 	session: string,
@@ -573,6 +573,8 @@ export type ClientCommand = {
 	item: string?,
 	--- The option a pick picks or the text a window's field takes.
 	text: string?,
+	--- The response a dialog's answer gives.
+	answer: Response?,
 }
 
 --- The client's state in one copy, as `Input.client_snapshot` gives it to Luau.
@@ -585,7 +587,7 @@ export type ClientSnapshot = {
 	age_ms: string?,
 	--- The world's name.
 	scene: string?,
-	--- The parts the build reads: `"screens"`, `"menu_tab"`, `"held"`, `"player"`, `"recipe"` and `"loader_screen"`.
+	--- The parts the build reads: `"screens"`, `"menu_tab"`, `"held"`, `"player"`, `"recipe"`, `"loader_screen"` and `"dialog"`.
 	reads: {string},
 	--- The open HUD screen.
 	hud_screen: string?,
@@ -607,6 +609,10 @@ export type ClientSnapshot = {
 	loader_screen: string?,
 	--- The id of the mod that page names.
 	loader_screen_mod: string?,
+	--- The responses of the buttons of the loader's dialog that shows; empty while none does, nil where dialogs do not show in game.
+	dialog_buttons: {Response}?,
+	--- The id of the mod whose dialog shows; nil for the loader's own.
+	dialog_mod: string?,
 }
 
 --- `ClientWindowItem` as Luau gives it.
