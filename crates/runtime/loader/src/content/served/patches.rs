@@ -14,10 +14,12 @@
 //! before they show is built again once they show: the loader keeps its
 //! base for it.
 
+mod buffer;
+
 use core::cell::RefCell;
-use core::mem::ManuallyDrop;
-use core::ptr::NonNull;
 use std::sync::atomic::{Ordering, fence};
+
+use buffer::{Buffer, Lent, tail, zeroed};
 
 pub(super) use enshwick_base::__internal::Build;
 use enshwick_base::__internal::{self as builds, BuildResourceError, PatchFailure, Unbuilt, View};
@@ -95,12 +97,11 @@ pub(super) unsafe fn build_first(
             (data, len),
         )
     };
-    let copy_base = || {
-        let mut base = vec![0; len];
+    let copy_base = |mut base: Vec<u8>| {
         // SAFETY: the caller guarantees `len` readable bytes at `data`,
         // unchanged for the call.
         unsafe { crate::engine::memory::read_bytes(data, 0, &mut base) };
-        base.into_boxed_slice()
+        base
     };
     let Ok(built) = first.built else {
         state.failed = true;
@@ -109,18 +110,18 @@ pub(super) unsafe fn build_first(
         }
         // A changed vanilla key whose every patch failed reads as the
         // archive has it: missing, it would take the game's own data away.
-        let kept = Buffer::new(copy_base());
+        let kept = Buffer::new(copy_base(zeroed(len)));
         let result = (kept.at(), len);
         kept.keep();
         state.built = Some(result);
         return Some(result);
     };
     if first.keep_base {
-        state.base = Some(copy_base());
+        state.base = Some(copy_base(vec![0; len]).into_boxed_slice());
     }
     state.built_by = built.by;
     let result = (built.bytes.data, built.len);
-    built.bytes.owned.keep();
+    built.bytes.keep(built.len);
     state.built = Some(result);
     Some(result)
 }
@@ -271,9 +272,9 @@ pub(crate) fn lend(len: usize) -> Option<*mut u8> {
         return None;
     }
     let mut bytes = Vec::new();
-    bytes.try_reserve_exact(len).ok()?;
+    bytes.try_reserve_exact(len.checked_add(tail(len))?).ok()?;
     bytes.resize(len, 0);
-    hand_over(bytes.into_boxed_slice())
+    hand_over(Buffer::new(bytes))
 }
 
 /// Hands the loader's own patch output `built` to the build running on this
@@ -289,7 +290,7 @@ pub(crate) unsafe fn hand_out(built: Vec<u8>, out: *mut *mut u8, out_len: *mut u
     let Ok(len) = u32::try_from(built.len()) else {
         return Status::REFUSED;
     };
-    let Some(at) = hand_over(built.into_boxed_slice()) else {
+    let Some(at) = hand_over(Buffer::new(built)) else {
         return Status::REFUSED;
     };
     // SAFETY: the caller guarantees `out` writable for one pointer.
@@ -317,7 +318,7 @@ pub(crate) unsafe fn patched(
     (out, out_len): (*mut *mut u8, *mut u32),
     build: impl FnOnce(Vec<u8>) -> Option<Vec<u8>>,
 ) -> Status {
-    let mut bytes = vec![0; base_len as usize];
+    let mut bytes = zeroed(base_len as usize);
     // SAFETY: the caller guarantees `base_len` readable bytes at `base`,
     // unchanged for the call.
     unsafe { enshwick_core::raw::read_bytes_at(base, 0, &mut bytes) };
@@ -381,11 +382,10 @@ unsafe extern "system" fn apply_own<P: OwnPatch>(
     }
 }
 
-/// Gives `bytes` to the build running on this thread, which frees them once
-/// nothing reads them; where they lie, `None` outside a build.
-fn hand_over(bytes: Box<[u8]>) -> Option<*mut u8> {
-    let buffer = Buffer::new(bytes);
-    let at = buffer.0.cast::<u8>().as_ptr();
+/// Gives `buffer` to the build running on this thread, which frees it once
+/// nothing reads it; where it lies, `None` outside a build.
+fn hand_over(buffer: Buffer) -> Option<*mut u8> {
+    let at = buffer.all.cast::<u8>().as_ptr();
     BUILDING.with_borrow_mut(|frames| frames.last_mut().map(|frame| frame.buffers.push(buffer)))?;
     Some(at)
 }
@@ -458,65 +458,6 @@ pub(crate) fn enter_build(key: ResourceKey) -> impl Sized {
     Building::enter(key, Build::Game)
 }
 
-#[cfg(test)]
-thread_local! {
-    /// How many buffers are alive on this thread, kept ones included.
-    static LIVE: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
-}
-
-/// Bytes the loader owns for a patch's output, freed on drop unless kept.
-struct Buffer(NonNull<[u8]>);
-
-impl Buffer {
-    fn new(bytes: Box<[u8]>) -> Self {
-        #[cfg(test)]
-        LIVE.set(LIVE.get() + 1);
-        Self(NonNull::from(Box::leak(bytes)))
-    }
-
-    fn at(&self) -> usize {
-        self.0.cast::<u8>().as_ptr().expose_provenance()
-    }
-
-    fn bytes(&self) -> &[u8] {
-        // SAFETY: `self.0` came from `Box::leak` in `new` and lives until
-        // `self` goes; the patches that wrote it have returned.
-        unsafe { self.0.as_ref() }
-    }
-
-    /// Whether the `len` bytes at `data` lie in the buffer.
-    fn holds(&self, data: usize, len: usize) -> bool {
-        data >= self.at()
-            && data
-                .checked_add(len)
-                .is_some_and(|end| end <= self.at() + self.0.len())
-    }
-
-    /// Leaves the bytes for the process: the game holds them.
-    fn keep(self) {
-        let _kept = ManuallyDrop::new(self);
-    }
-
-    fn into_box(self) -> Box<[u8]> {
-        #[cfg(test)]
-        LIVE.set(LIVE.get() - 1);
-        let this = ManuallyDrop::new(self);
-        // SAFETY: `this.0` came from `Box::leak` in `new`, and `ManuallyDrop`
-        // keeps `drop` from freeing it again.
-        unsafe { Box::from_raw(this.0.as_ptr()) }
-    }
-}
-
-impl Drop for Buffer {
-    fn drop(&mut self) {
-        #[cfg(test)]
-        LIVE.set(LIVE.get() - 1);
-        // SAFETY: `self.0` came from `Box::leak` in `new`, and only this drop,
-        // `keep` and `into_box` take it, each once.
-        drop(unsafe { Box::from_raw(self.0.as_ptr()) });
-    }
-}
-
 /// Marks a key's patches running on this thread until dropped, unwinding
 /// included; the buffers its patches took go with it.
 struct Building;
@@ -552,25 +493,6 @@ impl Building {
 impl Drop for Building {
     fn drop(&mut self) {
         BUILDING.with_borrow_mut(Vec::pop);
-    }
-}
-
-/// The bytes of a finished build and the loader's buffer they lie in, freed
-/// with them unless kept.
-pub(super) struct Lent {
-    data: usize,
-    owned: Buffer,
-}
-
-impl Lent {
-    /// The `len` bytes, taken over without a copy when they fill their
-    /// buffer.
-    fn into_bytes(self, len: usize) -> Vec<u8> {
-        let start = self.data - self.owned.at();
-        if start == 0 && self.owned.0.len() == len {
-            return self.owned.into_box().into_vec();
-        }
-        self.owned.bytes()[start..start + len].to_vec()
     }
 }
 

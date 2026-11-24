@@ -2,6 +2,7 @@ use core::ffi::c_void;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 
 use super::super::{Patch, State};
+use super::buffer::{LIVE, PAGE};
 use super::*;
 
 const KEY: ResourceKey = ResourceKey {
@@ -268,6 +269,73 @@ fn the_game_s_build_whose_every_patch_fails_serves_a_changed_key_as_archived_and
     // SAFETY: `base` holds three readable bytes, unchanged for the call.
     assert!(unsafe { build_first(&added, &mut state, at, base.len()) }.is_none());
     assert!(state.failed);
+}
+
+/// Whether the [`tail`] after the `len` bytes at `data` reads as zero.
+///
+/// # Safety
+///
+/// - `data` holds `len + tail(len)` readable bytes.
+unsafe fn zero_tail_after(data: usize, len: usize) -> bool {
+    // SAFETY: the caller guarantees `len + tail(len)` readable bytes at
+    // `data`.
+    let bytes = unsafe {
+        core::slice::from_raw_parts(
+            core::ptr::with_exposed_provenance::<u8>(data),
+            len + tail(len),
+        )
+    };
+    bytes[len..].iter().all(|&byte| byte == 0)
+}
+
+#[test]
+fn a_large_buffer_keeps_zeros_past_the_whole_last_layer_the_game_sweeps() {
+    // `VoxelTemperatureResource` part 3 on client 26430625: a 44-byte head,
+    // 83 layers of 548 x 244 bytes and 7,280 of the 84th, read whole.
+    let layer = 548 * 244;
+    let len = 44 + 83 * layer + 7_280;
+    assert_eq!(len, 11_105_420);
+    assert!(tail(len) >= layer - 7_280);
+    assert_eq!(tail(1), PAGE, "a small buffer keeps a page");
+}
+
+#[test]
+fn every_buffer_a_build_lends_or_takes_has_its_zeroed_tail_after_its_bytes() {
+    let _build = enter_build(KEY);
+    assert!(lend(5).is_some());
+    let (mut out, mut out_len) = (core::ptr::null_mut::<u8>(), 0u32);
+    // SAFETY: `out` and `out_len` are locals, writable for the call.
+    let status = unsafe { hand_out(vec![7; 3], &raw mut out, &raw mut out_len) };
+    assert_eq!((status, out_len), (Status::OK, 3));
+    BUILDING.with_borrow(|frames| {
+        let buffers = &frames.last().unwrap().buffers;
+        for (buffer, len) in buffers.iter().zip([5, 3]) {
+            assert!(buffer.holds(buffer.at(), len), "its own bytes");
+            assert!(
+                !buffer.holds(buffer.at(), len + 1),
+                "no output reaches past them"
+            );
+            assert!(buffer.all.len() >= len + tail(len), "room for the tail");
+            // SAFETY: the buffer is alive in the open build, and its
+            // allocation holds `len + tail(len)` bytes, as checked above.
+            assert!(unsafe { zero_tail_after(buffer.at(), len) });
+        }
+    });
+}
+
+#[test]
+fn the_game_s_kept_build_and_its_failed_build_copy_read_zero_for_their_tail_past_their_end() {
+    let base = [5u8; 3];
+    let at = base.as_ptr().expose_provenance();
+    for apply in [grow, note_building, fail, skip_first, short_of_buffer] {
+        let entry = Served::new(KEY, KEY, vec![by_loader(apply)], false);
+        let mut state = State::default();
+        // SAFETY: `base` holds three readable bytes, unchanged for the call.
+        let (data, len) = unsafe { build_first(&entry, &mut state, at, base.len()) }.unwrap();
+        // SAFETY: `build_first` kept `len` bytes at `data` and at least
+        // `tail(len)` zeroed bytes after them for the process.
+        assert!(unsafe { zero_tail_after(data, len) });
+    }
 }
 
 #[test]
