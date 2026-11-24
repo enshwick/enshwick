@@ -275,7 +275,7 @@ has its own entry at the end of the list, with its keys alone. A click on a
 key waits for the next key or combination, which becomes the binding; Escape
 cancels and Unbind clears it. The left mouse button works the page, so it is
 bound in the file only. The page warns when a key is shared with another
-control, of any mod; the game's own keys are not checked.
+control, of any mod, and names the game's actions that use the same key.
 
 The page writes `mod-controls.toml` in the game's folder: only the keys the
 player changed, each a scan code with its name beside it. A person may edit

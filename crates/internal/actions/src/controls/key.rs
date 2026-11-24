@@ -162,6 +162,46 @@ const NAMES: &[(&str, u32)] = &[
 /// Keys that belong to the game or the system, by name: never a binding.
 const PROTECTED: &[&str] = &["Escape", "Win", "LeftWin", "RightWin"];
 
+/// Keys a game control may hold and a mod control may not, by their US
+/// name and set 1 scan code: Escape, the Windows keys and each modifier
+/// alone.
+const RESERVED: &[(&str, u32)] = &[
+    ("Escape", 0x01),
+    ("LeftCtrl", 0x1d),
+    ("LeftShift", 0x2a),
+    ("RightShift", 0x36),
+    ("LeftAlt", 0x38),
+    ("RightCtrl", EXTENDED | 0x1d),
+    ("RightAlt", EXTENDED | 0x38),
+    ("LeftWin", EXTENDED | 0x5b),
+    ("RightWin", EXTENDED | 0x5c),
+];
+
+/// The US name of `bits`, a key no mod control may take alone, such as
+/// Shift for the game's sprint; `None` for any other bits.
+#[cfg_attr(
+    not(any(feature = "typed", test)),
+    expect(dead_code, reason = "only the game's bindings read it")
+)]
+pub(crate) fn reserved(bits: u32) -> Option<&'static str> {
+    RESERVED
+        .iter()
+        .find(|&&(_, code)| code == bits)
+        .map(|&(name, _)| name)
+}
+
+/// The name of the reserved key `text` names, in any case.
+#[cfg_attr(
+    not(feature = "typed"),
+    expect(dead_code, reason = "only the game's bindings read it")
+)]
+pub(crate) fn reserved_named(text: &str) -> Option<&'static str> {
+    RESERVED
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case(text.trim()))
+        .map(|&(name, _)| name)
+}
+
 /// The bit of Alt, and the keys that with Alt belong to the system with
 /// any other modifiers: F4 closes the window, Tab switches it.
 const ALT: u32 = 1 << 18;
@@ -397,6 +437,16 @@ mod tests {
         assert_eq!(every.len(), NAMES.len());
         assert!(every.contains(&Key::parse("Mouse5").unwrap()));
         assert!(every.iter().all(|k| k.modifiers() == 0));
+    }
+
+    #[test]
+    fn a_reserved_key_has_a_name_and_no_control_takes_it() {
+        assert_eq!(reserved(0x2a), Some("LeftShift"));
+        assert_eq!(reserved(0x12), None, "E is a key, not a reserved one");
+        assert_eq!(reserved(0x2a | 1 << 17), None, "a modifier with another");
+        for (name, code) in RESERVED {
+            assert_eq!(Key::from_bits(*code), None, "{name}");
+        }
     }
 
     #[test]

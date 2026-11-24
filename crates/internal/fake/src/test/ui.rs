@@ -34,6 +34,7 @@ fn step() {
     table::with((), |s| {
         s.ui.local_held.stepped |= s.ui.local_held.asked;
         s.ui.snapshot_reads.1 |= s.ui.snapshot_reads.0;
+        s.actions.bindings.step();
     });
     sound::frame();
 }
@@ -365,9 +366,13 @@ impl Installed {
     /// assert!(loader.draw_frame().is_empty());
     /// ```
     pub fn game_action(&self, action: &str, bound: bool) {
+        let first = if bound {
+            enshwick_core::abi::GameBinding::OTHER
+        } else {
+            0
+        };
         table::with((), |s| {
-            s.ui.game_actions.retain(|(name, _)| name != action);
-            s.ui.game_actions.push((action.to_owned(), bound));
+            crate::test::actions::set_player_keys(s, action, [first, 0]);
         });
     }
 

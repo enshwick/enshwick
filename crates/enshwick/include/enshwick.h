@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 19
+#define ENSHWICK_ABI_MINOR 20
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -1885,6 +1885,26 @@ typedef struct EnshwickFogInfo {
   // The box's width and height in pixels.
   uint32_t uncovered_size[2];
 } EnshwickFogInfo;
+
+// The keys a game control holds in the client's keyboard and mouse
+// bindings, as `EnshwickHostApi.game_binding`
+// writes them. ABI 12.20.
+//
+// Each key is in the form of `EnshwickControlSpec.key`, 0 for none. A key a
+// mod control may not take, such as Shift alone or Escape, keeps its scan
+// code; input that is no key, such as the mouse wheel, is
+// `EnshwickGameBinding_OTHER`.
+typedef struct EnshwickGameBinding {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The first key.
+  uint32_t first;
+  // The second key.
+  uint32_t second;
+} EnshwickGameBinding;
+// A slot that holds input the key form does not name: the mouse
+// wheel, a gamepad, or a key without a name.
+#define EnshwickGameBinding_OTHER UINT32_MAX
 
 // A game event handed to a `EnshwickGameEventFn`, from the ECS event streams
 // of the server's systems.
@@ -7260,6 +7280,33 @@ typedef struct EnshwickHostApi {
                                    const struct EnshwickResourceKey *from,
                                    EnshwickResourcePatchFn patch,
                                    void *user);
+  // Writes to `out`, a headed `EnshwickGameBinding`, the keys the client's
+  // keyboard and mouse bindings give the game action named `action`, as
+  // its reflection names it (`ContextualAction`), a mod's rebind
+  // included. The interface reads the bindings every few frames, so a
+  // change the player applies shows within a quarter second.
+  // `EnshwickStatus_UNAVAILABLE` on a server, before the interface drew its
+  // first frame and on a build where the loader does not find the
+  // bindings; `EnshwickStatus_MISSING` for an action the build does not name;
+  // `EnshwickStatus_BAD_ARGS` for a null or unheaded `out`. Any thread; the
+  // strings are borrowed for the call. ABI 12.20.
+  EnshwickStatus (*game_binding)(EnshwickModHandle me,
+                                 struct EnshwickStr action,
+                                 struct EnshwickGameBinding *out);
+  // Binds `key`, in the form of `EnshwickControlSpec.key`, as the first key of
+  // the game action named `action` in the client's keyboard and mouse
+  // bindings for the mod `me`, or with 0 ends `me`'s rebind of it. The
+  // interface writes it at its next frame and again after each change
+  // the player applies, which the game rebuilds its bindings from, so the
+  // rebind holds until the mod ends it or turns off; the game's Controls
+  // page never shows it. Of the mods that rebind an action, the one that
+  // rebound it last wins; asking again for the same rebind keeps a mod's
+  // place, and an action no mod rebinds holds the game's own key.
+  // `EnshwickStatus_UNAVAILABLE` as for `EnshwickHostApi.game_binding`;
+  // `EnshwickStatus_MISSING` for an action the build does not name;
+  // `EnshwickStatus_BAD_ARGS` for a key a mod control may not take, or a
+  // modifier the game's bindings do not list. Any thread. ABI 12.20.
+  EnshwickStatus (*game_rebind)(EnshwickModHandle me, struct EnshwickStr action, uint32_t key);
 } EnshwickHostApi;
 
 // The layout the loader was built with, from its golden layout file.
@@ -7699,6 +7746,11 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickFogInfo, uncovered_pixels) == 48, "offse
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickFogInfo, reserved) == 52, "offset of FogInfo.reserved");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickFogInfo, uncovered_min) == 56, "offset of FogInfo.uncovered_min");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickFogInfo, uncovered_size) == 64, "offset of FogInfo.uncovered_size");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickGameBinding) == 16, "size of GameBinding");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickGameBinding) == 4, "alignment of GameBinding");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickGameBinding, header) == 0, "offset of GameBinding.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickGameBinding, first) == 8, "offset of GameBinding.first");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickGameBinding, second) == 12, "offset of GameBinding.second");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickGameEventData) == 24, "size of GameEventData");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickGameEventData) == 8, "alignment of GameEventData");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickGameEventData, header) == 0, "offset of GameEventData.header");
@@ -7722,7 +7774,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, detour) == 16, "offset of Hook
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, next) == 24, "offset of HookSpec.next");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, priority) == 32, "offset of HookSpec.priority");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, flags) == 36, "offset of HookSpec.flags");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1832, "size of HostApi");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1848, "size of HostApi");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, header) == 0, "offset of HostApi.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, host_version) == 8, "offset of HostApi.host_version");
@@ -7952,6 +8004,8 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_state) == 1800, "offset o
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_play_for) == 1808, "offset of HostApi.sound_play_for");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_steer_for) == 1816, "offset of HostApi.sound_steer_for");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, rekey_resource) == 1824, "offset of HostApi.rekey_resource");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_binding) == 1832, "offset of HostApi.game_binding");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_rebind) == 1840, "offset of HostApi.game_rebind");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 96, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");

@@ -49,6 +49,8 @@ mod key;
 pub(crate) mod script;
 
 pub use key::{Key, ParseKeyError};
+#[cfg(feature = "typed")]
+pub(crate) use key::{reserved, reserved_named};
 #[doc(hidden)]
 pub use script::ControlFns;
 

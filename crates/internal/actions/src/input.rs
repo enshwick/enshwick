@@ -48,9 +48,13 @@ use crate::resources::Registry;
 use crate::{Entity, Host, Off, WorldError};
 use enshwick_world::__internal::world_status;
 
+#[cfg(feature = "typed")]
+mod bindings;
 mod commands;
 mod snapshot;
 
+#[cfg(feature = "typed")]
+pub use bindings::{Binding, BindingError, BoundKey};
 pub use commands::{
     CancelReason, ClientCommand, CommandAction, CommandId, CommandState, CommandStatus,
     JoinFailure, JoinPhase, Password,
@@ -77,6 +81,8 @@ impl crate::script::Bound for Input {
         Self::SCRIPT_LOCAL_STATUS,
         Self::SCRIPT_CLIENT_SNAPSHOT,
         Self::SCRIPT_CLIENT_COMMANDS,
+        #[cfg(feature = "typed")]
+        Self::SCRIPT_BINDINGS,
     ];
 
     fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {

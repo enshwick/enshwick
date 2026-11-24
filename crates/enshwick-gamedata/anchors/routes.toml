@@ -10075,3 +10075,102 @@ in = "ui.attribute_row_push"
 shape = ["imul rdx,[rdi+?],?i", "mov eax,?i", "add rdx,[rdi]"]
 take = "spelled"
 value = 0x0
+
+[[route]]
+id = "~fn:input.binding_hud"
+sides = ["client"]
+callees = "ui.hud"
+shape = ["mov rax,[rip+?]", "mov rdx,[rax+{ui.context_state}]", "mov rdx,[rdx+?]", "call ?"]
+
+[[route]]
+id = "input.bindings"
+sides = ["client"]
+in = "~fn:input.binding_hud"
+shape = ["mov rax,[rip+?]", "mov rdx,[rax+{ui.context_state}]", "mov rdx,[rdx+*]", "call ?"]
+take = "value"
+range = [0x19e68, 0x679e0]
+align = 8
+
+[[route]]
+id = "~fn:input.binding_copy"
+sides = ["client"]
+in = "~fn:input.binding_hud"
+shape = ["mov rax,[rip+?]", "mov rdx,[rax+{ui.context_state}]", "mov rdx,[rdx+?]", "call *"]
+take = "address"
+check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi", "push rdi", "sub rsp,0x20", "movzx eax,r8l"]
+
+[[route]]
+id = "input.binding_size"
+sides = ["client"]
+in = "~fn:input.binding_copy"
+shape = ["movzx eax,r8l", "mov rbx,rdx", "imul rsi,rax,*"]
+take = "value"
+range = [0x8c, 0x230]
+align = 8
+
+[[route]]
+id = "input.binding_modifiers"
+sides = ["client"]
+in = "~fn:input.binding_copy"
+shape = ["mov rcx,rdi", "lea r8,[rbx+*]", "call ?"]
+take = "value"
+range = [0x4c94, 0x13480]
+align = 8
+
+[[route]]
+id = "input.binding_first"
+sides = ["client"]
+in = "~fn:input.binding_copy"
+shape = ["lea rdx,[rsi+*]", "mov rcx,rdi", "lea r8,[rbx+{input.binding_modifiers}]"]
+take = "value"
+range = [16, 0x50]
+
+[[route]]
+id = "input.binding_second"
+sides = ["client"]
+in = "~fn:input.binding_copy"
+shape = ["lea rdx,[rsi+*]", "lea rcx,[rdi+?]", "lea r8,[rbx+{input.binding_modifiers}]"]
+take = "value"
+range = [0x2e, 0xb8]
+
+[[route]]
+id = "~fn:input.binding_combo"
+sides = ["client"]
+in = "~fn:input.binding_copy"
+shape = ["mov rcx,rdi", "lea r8,[rbx+{input.binding_modifiers}]", "call *"]
+take = "address"
+
+[[route]]
+id = "input.binding_mask"
+sides = ["client"]
+in = "~fn:input.binding_combo"
+shape = ["mov ecx,[rbx+*]", "bt ecx,eax"]
+take = "value"
+range = [22, 0x58]
+align = 4
+
+[[route]]
+id = "input.modifier_size"
+sides = ["client"]
+in = "~fn:input.binding_combo"
+shape = ["inc ?1", "add ?2,*", "cmp ?1,[?+0x8]"]
+take = "value"
+range = [20, 0x50]
+align = 8
+
+[[route]]
+id = "input.modifier_count"
+sides = ["client"]
+in = "~fn:input.binding_combo"
+shape = ["mov eax,r9d", "cmp [r8+*],rax"]
+take = "value"
+range = [4, 16]
+align = 8
+
+[[route]]
+id = "input.modifier_items"
+sides = ["client"]
+in = "~fn:input.binding_combo"
+shape = ["mov rcx,[r11]", "inc r9"]
+take = "spelled"
+value = 0x0

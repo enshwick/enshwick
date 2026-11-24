@@ -456,6 +456,7 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     engine::caret_next_frame(now);
     crate::engine::screens::note_window(window_shown());
     crate::actions::controls::frame(context);
+    crate::actions::game_bindings::frame(context);
     // SAFETY: inside the frame on the interface thread, `context` non-zero
     // by the guard before it.
     unsafe { snapshot::note(engine, context) };

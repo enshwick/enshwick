@@ -17,7 +17,7 @@
 "controls.press" = "Pulsa una tecla o una combinación. Escape cancela."
 "controls.clear" = "Desasignar"
 "controls.clash" = "La misma tecla activa {controls}."
-"controls.game-keys" = "No se comprueban las teclas propias del juego. Una tecla que el juego también usa hace ambas cosas."
+"controls.game-keys" = "Una tecla que el juego también usa hace ambas cosas."
 "controls.off" = "Las teclas de mods están desactivadas en esta versión del juego."
 "controls.saved" = "Guardado."
 "controls.not-saved" = "La tecla funciona hasta cerrar el juego, pero no se guardó: {reason}"

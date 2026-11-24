@@ -130,3 +130,51 @@ impl_headed!(ControlEvent);
 /// The safe layer wraps it in `Load::control`, behind the `unstable`
 /// feature.
 pub type ControlFn = unsafe extern "system" fn(event: *const ControlEvent, user: *mut c_void);
+
+/// The keys a game control holds in the client's keyboard and mouse
+/// bindings, as [`HostApi::game_binding`](super::HostApi::game_binding)
+/// writes them. ABI 12.20.
+///
+/// Each key is in the form of [`ControlSpec::key`], 0 for none. A key a
+/// mod control may not take, such as Shift alone or Escape, keeps its scan
+/// code; input that is no key, such as the mouse wheel, is
+/// [`GameBinding::OTHER`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::GameBinding;
+///
+/// let unbound = GameBinding::EMPTY;
+/// assert_eq!((unbound.first, unbound.second), (0, 0));
+/// assert_ne!(GameBinding::OTHER, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct GameBinding {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The first key.
+    pub first: u32,
+    /// The second key.
+    pub second: u32,
+}
+
+impl_headed!(GameBinding);
+
+impl GameBinding {
+    /// A slot that holds input the key form does not name: the mouse
+    /// wheel, a gamepad, or a key without a name.
+    pub const OTHER: u32 = u32::MAX;
+
+    /// Its header set and no key, the value a read starts from.
+    ///
+    /// # Examples
+    ///
+    /// See [`GameBinding`].
+    pub const EMPTY: Self = Self {
+        header: Header::of::<Self>(),
+        first: 0,
+        second: 0,
+    };
+}

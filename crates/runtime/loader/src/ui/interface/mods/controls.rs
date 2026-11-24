@@ -192,6 +192,14 @@ fn control(
         let line = texts::fill("controls.clash", &[("controls", &others.join(", "))]);
         paint.label(line.as_bytes(), UiWidget::STYLE_WARNING, true, false);
     }
+    if row
+        .keys
+        .iter()
+        .any(|&key| crate::actions::game_bindings::shares(key))
+    {
+        let line = texts::text("controls.game-clash");
+        paint.label(line.as_bytes(), UiWidget::STYLE_WARNING, true, false);
+    }
 }
 
 /// One look of the capture: a key binds, Escape or a lost focus cancels.

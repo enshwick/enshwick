@@ -40,6 +40,7 @@ unstable = [
     "enshwick-inventory/unstable",
     "enshwick-world/unstable",
 ]
+typed = ["unstable", "enshwick-content/typed", "enshwick-world/typed"]
 
 [lints]
 workspace = true

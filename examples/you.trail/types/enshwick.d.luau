@@ -312,6 +312,14 @@ export type BedCheck = {
 	bed_at: {number},
 }
 
+--- The keys the player's keyboard and mouse bindings give one of the game's controls, as the game's input and key glyphs use them, a mod's rebind included.
+export type Binding = {
+	--- The first key, nil for none.
+	first: string?,
+	--- The second key, nil for none.
+	second: string?,
+}
+
 --- What a player did to a building block, the fields the engine's building events share; the name is enshwick's, not the game's.
 export type Block = {
 	--- The player's character.
@@ -4920,6 +4928,12 @@ declare enshwick: {
 		cancel_command: (id: string) -> (),
 		--- Where the mod's command `id` stands.
 		command_status: (id: string) -> CommandStatus,
+		--- The keys the player's keyboard and mouse bindings give `action`, a mod's rebind included. Client only, on any thread; the interface reads the bindings every few frames, so a change the player applies shows within a quarter second.
+		binding: (action: typed_input_mapping_runtime_GameplayAction) -> Binding,
+		--- Binds `key` as the first key of the game's control `action`, in the player's keyboard and mouse bindings, until `Input.reset_binding` gives it back or the mod turns off; the second key stays. The game's input and its key glyphs follow at the interface's next frame, and the loader writes the key again each time the game rebuilds its bindings from a change the player applies, so one call holds. The game's Controls page still shows the player's own key, and the game saves only that. Of the mods that rebind one action, the one that rebound it last wins, and asking again for the same rebind keeps a mod's place. Client only, on any thread.
+		rebind: (action: typed_input_mapping_runtime_GameplayAction, key: string) -> (),
+		--- Ends this mod's rebind of the game's control `action`, which then takes another mod's rebind of it or else the first key the player's own bindings hold; nothing for an action this mod does not rebind. Client only, on any thread.
+		reset_binding: (action: typed_input_mapping_runtime_GameplayAction) -> (),
 	},
 	--- The client's interface, drawn with the game's own widgets.
 	ui: {

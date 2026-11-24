@@ -11,7 +11,7 @@ use crate::abi::{
     ClientSnapshot, ComfortFilterFn, CommandInfo, ConfigCheckFn, ContainerRuleFn, ContentRename,
     ControlFn, ControlSpec, CraftFilterFn, DamageFilterFn, DataChange, DaytimeInfo, DropRequest,
     EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperienceFilterFn,
-    FogInfo, GameEventFn, Header, HookSpec, InteractionFilterFn, InteractionPrompt,
+    FogInfo, GameBinding, GameEventFn, Header, HookSpec, InteractionFilterFn, InteractionPrompt,
     InventoryRequest, InventoryResultFn, ItemFilterFn, ItemLine, ItemTypeInfo, JoinRuleFn,
     KnowledgeChange, KnowledgeInfo, KnowledgeInputFilterFn, Level, LoaderOff, LocalInputInfo,
     LoopWaitFn, LoopWaitSites, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec,
@@ -2440,6 +2440,32 @@ pub struct HostApi {
         patch: Option<ResourcePatchFn>,
         user: *mut c_void,
     ) -> Status,
+    /// Writes to `out`, a headed [`GameBinding`], the keys the client's
+    /// keyboard and mouse bindings give the game action named `action`, as
+    /// its reflection names it (`ContextualAction`), a mod's rebind
+    /// included. The interface reads the bindings every few frames, so a
+    /// change the player applies shows within a quarter second.
+    /// [`Status::UNAVAILABLE`] on a server, before the interface drew its
+    /// first frame and on a build where the loader does not find the
+    /// bindings; [`Status::MISSING`] for an action the build does not name;
+    /// [`Status::BAD_ARGS`] for a null or unheaded `out`. Any thread; the
+    /// strings are borrowed for the call. ABI 12.20.
+    pub game_binding:
+        extern "system" fn(me: ModHandle, action: Str, out: *mut GameBinding) -> Status,
+    /// Binds `key`, in the form of [`ControlSpec::key`], as the first key of
+    /// the game action named `action` in the client's keyboard and mouse
+    /// bindings for the mod `me`, or with 0 ends `me`'s rebind of it. The
+    /// interface writes it at its next frame and again after each change
+    /// the player applies, which the game rebuilds its bindings from, so the
+    /// rebind holds until the mod ends it or turns off; the game's Controls
+    /// page never shows it. Of the mods that rebind an action, the one that
+    /// rebound it last wins; asking again for the same rebind keeps a mod's
+    /// place, and an action no mod rebinds holds the game's own key.
+    /// [`Status::UNAVAILABLE`] as for [`HostApi::game_binding`];
+    /// [`Status::MISSING`] for an action the build does not name;
+    /// [`Status::BAD_ARGS`] for a key a mod control may not take, or a
+    /// modifier the game's bindings do not list. Any thread. ABI 12.20.
+    pub game_rebind: extern "system" fn(me: ModHandle, action: Str, key: u32) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2676,5 +2702,7 @@ const _: () = {
     assert!(offset_of!(HostApi, sound_play_for) == 24 + 223 * 8);
     assert!(offset_of!(HostApi, sound_steer_for) == 24 + 224 * 8);
     assert!(offset_of!(HostApi, rekey_resource) == 24 + 225 * 8);
-    assert!(size_of::<HostApi>() == 24 + 226 * 8);
+    assert!(offset_of!(HostApi, game_binding) == 24 + 226 * 8);
+    assert!(offset_of!(HostApi, game_rebind) == 24 + 227 * 8);
+    assert!(size_of::<HostApi>() == 24 + 228 * 8);
 };

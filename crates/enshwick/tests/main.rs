@@ -107,6 +107,8 @@ mod init_only;
 #[cfg(feature = "unstable")]
 mod input;
 #[cfg(feature = "typed")]
+mod input_bindings;
+#[cfg(feature = "typed")]
 mod input_hint;
 mod interaction_filter;
 #[cfg(feature = "unstable")]

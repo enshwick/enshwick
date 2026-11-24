@@ -3,6 +3,7 @@
 
 use enshwick_gamedata::catalogue;
 
+use crate::actions::game_bindings::GameActions;
 use crate::engine::interface_parts::Missing;
 use crate::engine::loader::Loader;
 use crate::engine::pinned;
@@ -20,10 +21,7 @@ type InputHintFn = unsafe extern "system" fn(action: u8, label: *const UiText) -
 #[derive(Debug)]
 pub(crate) struct InputHints {
     call: InputHintFn,
-    /// The `GameplayAction` names of this build with their numbers, sorted
-    /// by name; the numbers move between builds (139 values on client 410,
-    /// 140 on 26430625).
-    actions: Vec<(&'static str, u8)>,
+    actions: GameActions,
 }
 
 impl InputHints {
@@ -48,7 +46,7 @@ impl InputHints {
         let call = unsafe { core::mem::transmute::<usize, InputHintFn>(address) };
         Ok(Self {
             call,
-            actions: actions(info.enum_values().iter().map(|v| (v.name(), v.value()))),
+            actions: GameActions::new(info.enum_values().iter().map(|v| (v.name(), v.value()))),
         })
     }
 
@@ -64,77 +62,11 @@ impl InputHints {
     ///   hint labels are frame memory; the `UiText` itself lives only for
     ///   the call, as for every widget the loader draws.
     pub(in crate::ui::interface) unsafe fn draw(&self, name: &str, label: &UiText) -> Option<bool> {
-        let action = action(&self.actions, name)?;
+        let action = self.actions.number(name)?;
         // SAFETY: `self.call` is the game's hint wrapper, found in
         // `resolve`; `action` is a number this build's reflection names, and
         // the wrapper refuses one past the count as well; the open node and
         // the label's life are this function's `# Safety`.
-        Some(unsafe { (self.call)(action, label) } != 0)
-    }
-}
-
-/// The reflected sentinel after the last game action, which the hint
-/// refuses as it does any action at or past it.
-const COUNT: &str = "Count";
-
-/// The game actions that fit the hint's byte, below the build's count,
-/// sorted by name.
-fn actions(values: impl Iterator<Item = (&'static str, u64)>) -> Vec<(&'static str, u8)> {
-    let values: Vec<_> = values.collect();
-    let count = values
-        .iter()
-        .find(|&&(name, _)| name == COUNT)
-        .map_or(u64::MAX, |&(_, value)| value);
-    let mut actions: Vec<(&'static str, u8)> = values
-        .into_iter()
-        .filter(|&(_, value)| value < count)
-        .filter_map(|(name, value)| Some((name, u8::try_from(value).ok()?)))
-        .collect();
-    actions.sort_unstable_by_key(|&(name, _)| name);
-    actions
-}
-
-/// The number of the action named `name` in `actions`, sorted by name.
-fn action(actions: &[(&str, u8)], name: &str) -> Option<u8> {
-    actions
-        .binary_search_by_key(&name, |&(n, _)| n)
-        .ok()
-        .and_then(|at| actions.get(at))
-        .map(|&(_, value)| value)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn an_action_is_found_by_its_reflected_name_whatever_its_number() {
-        let actions = actions(
-            [
-                ("MovementLeft", 0),
-                ("ContextualAction", 15),
-                ("Sneak", 139),
-            ]
-            .into_iter(),
-        );
-        assert_eq!(action(&actions, "ContextualAction"), Some(15));
-        assert_eq!(action(&actions, "MovementLeft"), Some(0));
-        assert_eq!(action(&actions, "Sneak"), Some(139));
-        assert_eq!(action(&actions, "contextualaction"), None);
-        assert_eq!(action(&actions, ""), None);
-    }
-
-    #[test]
-    fn an_action_past_the_hint_s_byte_is_left_out() {
-        let actions = actions([("Far", 256), ("Near", 255)].into_iter());
-        assert_eq!(actions, vec![("Near", 255)]);
-    }
-
-    #[test]
-    fn the_count_sentinel_and_actions_past_it_are_no_actions() {
-        let actions = actions([("Jump", 3), ("Count", 140), ("Past", 141)].into_iter());
-        assert_eq!(action(&actions, "Count"), None);
-        assert_eq!(action(&actions, "Past"), None);
-        assert_eq!(action(&actions, "Jump"), Some(3));
+        Some(unsafe { (self.call)(action.get(), label) } != 0)
     }
 }

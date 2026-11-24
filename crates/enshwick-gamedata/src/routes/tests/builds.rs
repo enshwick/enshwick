@@ -7,6 +7,7 @@ use crate::reflect::{Image, Layout, Reflection};
 use crate::{Side, Table, exact, kept};
 
 mod attributes;
+mod bindings;
 
 /// Entries a route finds on a table build that its own table does not pin
 /// and no pattern of the newest table finds there either, by table name.
@@ -688,6 +689,7 @@ fn routed_only() -> impl Iterator<Item = (&'static str, &'static str, u64)> {
         .iter()
         .chain(ITEM_UI_SYMBOLS)
         .chain(SOUND_SYMBOLS)
+        .chain(bindings::BINDING_SYMBOLS)
         .chain(attributes::ATTRIBUTE_SYMBOLS)
         .copied()
         .chain(CLIENT_TABLES.into_iter().flat_map(|table| {
@@ -697,6 +699,7 @@ fn routed_only() -> impl Iterator<Item = (&'static str, &'static str, u64)> {
                 .chain(WIDGET_READS)
                 .chain(ITEM_UI_READS)
                 .chain(SOUND_READS)
+                .chain(bindings::BINDING_READS)
                 .chain(attributes::ATTRIBUTE_ROW_READS)
                 .chain(attributes::ATTRIBUTE_TEXT_READS)
                 .map(move |(id, value)| (table, id, value))

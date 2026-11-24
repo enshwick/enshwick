@@ -61,6 +61,7 @@ change in any release, a patch included.
 | Damage filters: `Load::on_damage` and `Damage`. Also `DamageCause` and `events::PlayerDied`. `EntityDiedEvent::killer` and `EntityDiedEvent::killer_player`. `damage::causes_off`. | the order of the game's attributes and who it records as a killer are not yet seen |
 | `Load::add_recipe` and `Load::add_recipe_with`. Also `Load::derive_recipes`. | what crafting a new recipe leaves in a player's knowledge is not yet seen |
 | `input`. `Frame::open_screen` and `Load::on_screen_changed`. Also `Load::input`. | young; which control each bit stands for and which screen is open are not yet seen in the game |
+| `Input::binding` and `Input::rebind`. Also `Input::reset_binding`, all with the typed feature. Also `input::Binding` and `input::BoundKey`. Also `input::BindingError`. | only a plain key's rebind is seen in the game; modifiers, mouse buttons and the glyph after a rebind are not yet |
 | `Frame::prompt` and `Frame::screen_host`. Also `interactions::Targets` and `Load::on_fog_uncovered`. `ui::Prompt`, `Load::interaction_targets`. | the prompt, the screen's host, a player's prompt target and the uncovered fog are not yet seen in the game |
 | `Load::prompt`. `interactions::ObjectPrompt`, `interactions::Verb`. | the verb on a vanilla client, the empty action and the mod's text are not yet seen in the game |
 | `Frame::screen_host_template` and `Frame::screen_host_position`. Also `Load::extend_screen_for`. | the host's template and position are not yet seen in the game |

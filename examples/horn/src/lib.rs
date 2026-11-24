@@ -1,10 +1,15 @@
 //! An example mod with two controls: G honks, through a player action the
 //! server runs and answers with a notice, and a control linked to the
-//! game's interact key logs, on the server, who interacted.
+//! game's interact key logs, on the server, who interacted. On a client it
+//! also logs the key the player bound to interact and moves the game's jump
+//! to J.
 
+use enshwick::abi::Side;
 use enshwick::actions::{Action, Outcome};
 use enshwick::controls::{Control, GameAction, Key};
 use enshwick::i18n::Texts;
+use enshwick::input::BindingError;
+use enshwick::typed::input_mapping::runtime::GameplayAction;
 use enshwick::{Load, Mod, Off};
 
 /// The mod's texts.
@@ -49,6 +54,25 @@ impl Mod for Horn {
                 }
             },
         )?;
+        if load.host().build().side == Side::CLIENT {
+            let input = load.input()?;
+            let jump = Key::parse("J")?;
+            let mut done = false;
+            load.on_frame(move |_| {
+                // The bindings read from the interface's first frame; the
+                // loader keeps the rebind through the game's own rebuilds.
+                if done {
+                    return;
+                }
+                if let Ok(binding) = input.binding(&GameplayAction::ContextualAction) {
+                    if let Some(key) = binding.first {
+                        enshwick::info_once!("interact is {key}");
+                    }
+                    let rebound = input.rebind(&GameplayAction::Jump, jump);
+                    done = rebound != Err(BindingError::Unavailable);
+                }
+            })?;
+        }
         Ok(Self)
     }
 }
@@ -65,7 +89,7 @@ mod tests {
     use super::*;
 
     fn start(host: enshwick::test::FakeHost) -> enshwick::test::Installed {
-        let loader = host.install();
+        let loader = host.player_input().install();
         // SAFETY: the exports of this crate's `declare_mod!(Horn)`.
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
@@ -75,15 +99,33 @@ mod tests {
 
     #[test]
     fn g_asks_the_server_to_honk() {
-        let loader = start(enshwick::test::FakeHost::new().side(enshwick::abi::Side::CLIENT));
+        let loader = start(enshwick::test::FakeHost::new().side(Side::CLIENT));
         let g = Key::parse("G").unwrap();
         assert_eq!(loader.keys(&[g], Duration::from_millis(16)), 1);
         assert_eq!(loader.action_runs(), [("honk".to_owned(), String::new())]);
     }
 
     #[test]
+    fn a_client_logs_the_interact_key_and_moves_jump_to_j() {
+        let loader = start(enshwick::test::FakeHost::new().side(Side::CLIENT));
+        loader.bind_game_action("ContextualAction", Some(Key::parse("E").unwrap()), None);
+        loader.bind_game_action("Jump", Some(Key::parse("Space").unwrap()), None);
+        let _first = loader.draw_frame();
+        let _second = loader.draw_frame();
+        assert_eq!(loader.game_rebind("Jump"), Key::parse("J").ok());
+        assert!(
+            loader
+                .logs()
+                .iter()
+                .any(|(_, line)| line.contains("interact is E")),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
     fn interacting_is_logged_on_the_server_for_the_player() {
-        let loader = start(enshwick::test::FakeHost::new().side(enshwick::abi::Side::SERVER));
+        let loader = start(enshwick::test::FakeHost::new().side(Side::SERVER));
         let mut ann = PlayerInfo {
             header: Header::of::<PlayerInfo>(),
             slot: 0,

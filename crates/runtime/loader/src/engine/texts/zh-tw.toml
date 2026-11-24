@@ -17,7 +17,7 @@
 "controls.press" = "按下一個鍵或組合鍵。Esc 取消。"
 "controls.clear" = "解除綁定"
 "controls.clash" = "同一按鍵也會觸發 {controls}。"
-"controls.game-keys" = "不檢查遊戲本身的按鍵。遊戲也使用的按鍵會同時執行兩者。"
+"controls.game-keys" = "遊戲也使用的按鍵會同時執行兩者。"
 "controls.off" = "此遊戲版本中模組按鍵已關閉。"
 "controls.saved" = "已儲存。"
 "controls.not-saved" = "按鍵在遊戲關閉前有效，但未能儲存：{reason}"
