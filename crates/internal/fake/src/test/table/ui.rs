@@ -12,6 +12,7 @@ use enshwick_core::abi::{
     FogInfo, MapMarkerTypeInfo, ModHandle, Side, Status, UiAnswerFn, UiDialog, UiExtension,
     UiFrameFn, UiMarker, UiTooltipFn, UiTooltipItem, UiWidget,
 };
+use enshwick_core::controls::GameAction;
 #[cfg(feature = "unstable")]
 pub(crate) use sound::hear;
 pub(crate) use sound::{sound_play, sound_play_for, sound_state, sound_steer, sound_steer_for};
@@ -760,17 +761,29 @@ entries! {
                 unsafe { id.write(spec.cancels) };
                 return Status::OK;
             }
-            if !(Spec::OPEN_SCREEN..=Spec::LEAVE).contains(&spec.kind)
+            if !(Spec::OPEN_SCREEN..=Spec::PRESS).contains(&spec.kind)
                 || !spec.in_bounds()
                 || !named_as_the_loader_takes(&spec)
             {
                 return Status::BAD_ARGS;
             }
-            if s.ui
-                .client_commands
-                .iter()
-                .any(|(_, kind, _, status)| *kind == spec.kind && open(status))
-            {
+            // SAFETY: the mod's spec, its target borrowed for the call; the
+            // password is never read, kept or returned.
+            let target = unsafe { spec.target.as_str() }
+                .unwrap_or_default()
+                .to_owned();
+            if spec.kind == Spec::PRESS {
+                if !GameAction::ALL.iter().any(|action| action.name() == target) {
+                    return Status::BAD_ARGS;
+                }
+                if !reflects_action(&s.host, &target) {
+                    return Status::UNAVAILABLE;
+                }
+            }
+            // One of each kind waits, and one press of each action.
+            if s.ui.client_commands.iter().any(|(_, kind, queued, status)| {
+                *kind == spec.kind && open(status) && (spec.kind != Spec::PRESS || *queued == target)
+            }) {
                 return Status::REFUSED;
             }
             // One join or leave at a time; a join from the main menu, outside a
@@ -787,11 +800,6 @@ entries! {
                 }
             }
             let next = s.ui.client_commands.len() as u64 + 1;
-            // SAFETY: the mod's spec, its target borrowed for the call; the
-            // password is never read, kept or returned.
-            let target = unsafe { spec.target.as_str() }
-                .unwrap_or_default()
-                .to_owned();
             s.ui.client_commands.push((
                 next,
                 spec.kind,
@@ -813,6 +821,23 @@ entries! {
             Status::OK
         })
     }
+}
+
+/// Whether the host's reflected `PlayerInputType`, which
+/// [`FakeHost::player_input`](crate::test::FakeHost::player_input) declares,
+/// names the game action `name`, as the loader finds a press's bit; a host
+/// without it names none.
+fn reflects_action(host: &crate::test::FakeHost, name: &str) -> bool {
+    host.base
+        .type_hashes
+        .get(enshwick_core::__fake::ids::PLAYER_INPUT_TYPE)
+        .and_then(|hash| {
+            host.content
+                .type_list
+                .iter()
+                .find(|ty| ty.qualified_hash() == *hash)
+        })
+        .is_some_and(|ty| ty.constants().iter().any(|c| c.name() == name))
 }
 
 /// Whether `spec`'s target and expected screen are ones the loader takes:

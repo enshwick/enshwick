@@ -2,6 +2,7 @@
 #[cfg(test)]
 mod tests {
     use enshwick::abi::{ClientCommand as Raw, ClientCommandStatus as Status, Side};
+    use enshwick::controls::GameAction;
     use enshwick::input::{
         CancelReason, ClientCommand, CommandAction, CommandState, Input, JoinFailure, JoinPhase,
         Password,
@@ -209,6 +210,120 @@ side = "both""#
                 "{command:?}"
             );
         }
+    }
+
+    fn press(action: GameAction, hold_ms: u32) -> ClientCommand {
+        ClientCommand::new(CommandAction::Press { action, hold_ms }, 1)
+    }
+
+    #[test]
+    fn a_press_holds_until_observed_beside_a_move_and_another_press() {
+        let (loader, input) = input(Side::CLIENT);
+        let block = input
+            .client_command(&press(GameAction::Block, 2000))
+            .unwrap();
+        let attack = input
+            .client_command(&press(GameAction::MainhandAction, 16))
+            .unwrap();
+        let walking = input.client_command(&walk(250)).unwrap();
+        assert_eq!(
+            loader.client_commands(),
+            [
+                (1, Raw::PRESS, "Block".to_owned()),
+                (2, Raw::PRESS, "MainhandAction".to_owned()),
+                (3, Raw::MOVE, String::new()),
+            ]
+        );
+        assert!(
+            matches!(
+                input.client_command(&press(GameAction::Block, 100)),
+                Err(WorldError::Refused)
+            ),
+            "one press of an action at a time"
+        );
+        loader.set_command_status(1, Status::APPLIED, 0);
+        assert_eq!(
+            input.command_status(block).unwrap().state,
+            CommandState::Applied,
+            "the builder holds the bit"
+        );
+        loader.set_command_status(1, Status::OBSERVED, 0);
+        assert_eq!(
+            input.command_status(block).unwrap().state,
+            CommandState::Observed,
+            "the hold ran out"
+        );
+        assert!(
+            input.client_command(&press(GameAction::Block, 100)).is_ok(),
+            "released"
+        );
+        for id in [attack, walking] {
+            assert_eq!(
+                input.command_status(id).unwrap().state,
+                CommandState::Pending
+            );
+        }
+    }
+
+    #[test]
+    fn a_press_past_its_bounds_or_off_the_world_screen_is_refused() {
+        let (_loader, input) = input(Side::CLIENT);
+        for refused in [
+            press(GameAction::Block, 0),
+            press(GameAction::Block, Raw::MAX_PRESS_MS + 1),
+            press(GameAction::Block, 16).on_screen("Backpack"),
+        ] {
+            assert!(
+                matches!(input.client_command(&refused), Err(WorldError::Refused)),
+                "{refused:?}"
+            );
+        }
+        assert!(
+            input
+                .client_command(&press(GameAction::Block, Raw::MAX_PRESS_MS).on_screen("InGame"))
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn a_press_of_an_action_the_build_lacks_is_unavailable() {
+        let (_loader, input) = input(Side::CLIENT);
+        assert!(matches!(
+            input.client_command(&press(GameAction::Jump, 16)),
+            Err(WorldError::Unavailable)
+        ));
+    }
+
+    #[test]
+    fn each_cancel_reason_ends_a_press() {
+        let (loader, input) = input(Side::CLIENT);
+        for (reason, expected) in [
+            (Status::PLAYER_INPUT, CancelReason::PlayerInput),
+            (Status::OTHER_SCREEN, CancelReason::OtherScreen),
+            (Status::SESSION_CHANGED, CancelReason::SessionChanged),
+            (Status::INPUT_BLOCKED, CancelReason::InputBlocked),
+            (Status::MOD_OFF, CancelReason::ModOff),
+            (Status::TIMED_OUT, CancelReason::TimedOut),
+        ] {
+            let id = input
+                .client_command(&press(GameAction::ContextualAction, 500))
+                .unwrap();
+            let raw = loader.client_commands().last().unwrap().0;
+            loader.set_command_status(raw, Status::CANCELLED, reason);
+            assert_eq!(
+                input.command_status(id).unwrap().state,
+                CommandState::Cancelled(expected),
+                "{reason}"
+            );
+        }
+        let id = input
+            .client_command(&press(GameAction::ContextualAction, 500))
+            .unwrap();
+        input.cancel_command(id).unwrap();
+        assert_eq!(
+            input.command_status(id).unwrap().state,
+            CommandState::Cancelled(CancelReason::ByMod)
+        );
     }
 
     #[test]

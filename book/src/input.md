@@ -445,6 +445,72 @@ enshwick.input.client_command({
 })
 ```
 
+## Pressing a game action
+
+`CommandAction::Press { action, hold_ms }` holds one `GameAction` in the
+local player's input for 1 to 2000 ms, as its key would. The loader sets
+the action's bit right after the game builds the input, on every step of
+the hold. A hold of 1 ms holds it for one step, a tap.
+
+| Command | Bounds | Applied | Observed |
+| --- | --- | --- | --- |
+| `Press` | a `GameAction` the running build names; 1 to 2000 ms | the first step holds the bit | the hold ran out |
+
+The game acts on the form of an action its key sets, and the loader sets
+only the action a press names. For an action with `Tap`, `Hold` or
+`Release` forms, press the form the key gives (client 26430625, seen on a
+hosted world and on a client joined to a server):
+
+| To do this | Press |
+| --- | --- |
+| interact with the prompt's target | `ContextualActionTap` |
+| attack, mine or use the held item | `MainhandActionTap` and `MainhandActionRelease` |
+| jump, sprint, block, use a quick-use slot | the action itself, such as `Jump`, `Sprint`, `Block` or `QuickUse0` |
+
+A press of `MainhandAction` alone does nothing: that bit is the key held,
+and the game attacks on its tap.
+
+A press runs only on the world's own screen, `InGame`. It is cancelled in
+the same cases as a move, with the same reasons. A control the player
+presses cancels it with `PlayerInput`; the bits presses set are not the
+player's own input, so they cancel no command. When a press ends for any
+reason, the bit is the game's own again in the same step.
+
+Several presses hold at once, beside a look or a move, so a mod can sprint
+while it moves. A mod holds one press of each action at a time: a second
+press of the same action returns `WorldError::Refused` until the first
+ends. Up to eight presses hold at once across all mods; another waits
+until one ends.
+
+The server sees a press as the player's key: `Input::held` names it there,
+and `Input::local_held` names it on the client. The server checks every
+action it gets, as it does for a player's own key.
+
+```rust
+use enshwick::controls::GameAction;
+use enshwick::input::{ClientCommand, CommandAction};
+
+fn interact(input: enshwick::input::Input) {
+    let Ok(snapshot) = input.client_snapshot() else {
+        return;
+    };
+    let action = CommandAction::Press { action: GameAction::ContextualActionTap, hold_ms: 50 };
+    let _queued = input.client_command(&ClientCommand::new(action, snapshot.session()));
+}
+```
+
+A script names the action by its game name, as a control's `link` does:
+
+```luau
+local snapshot = enshwick.input.client_snapshot()
+enshwick.input.client_command({
+    kind = "press",
+    session = snapshot.session,
+    action = "ContextualAction_Tap",
+    hold_ms = 50,
+})
+```
+
 ## Highlighting a recipe
 
 `CommandAction::HighlightRecipe(recipe)` asks the open crafting menu to
