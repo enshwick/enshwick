@@ -7,6 +7,12 @@ use enshwick_core::abi::{Comfort, ExperiencePass, ExperienceRow, Header, Knowled
 use crate::test::{Installed, table};
 
 #[cfg(feature = "typed")]
+pub(crate) mod item_sets;
+#[cfg(feature = "typed")]
+pub(crate) mod queries;
+#[cfg(feature = "typed")]
+pub(crate) mod rules;
+#[cfg(feature = "typed")]
 pub(crate) mod vanilla;
 
 #[expect(

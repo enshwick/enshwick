@@ -41,6 +41,35 @@ pub fn query_from_data(data: &KnowledgeQueryData) -> Option<KnowledgeQuery> {
     KnowledgeQuery::from_data(data)
 }
 
+/// The game's query data of `query`, as quests and journal pages write it.
+///
+/// # Errors
+///
+/// [`Off`] for a count from 0, flags without bits or an unknown form.
+#[cfg(feature = "typed")]
+pub fn query_value(query: KnowledgeQuery) -> Result<crate::resources::Value, Off> {
+    query.to_value()
+}
+
+/// Serves one patch of the resource `key` that makes all of a mod's changes
+/// `T` with `apply` each time the game builds it, and returns the list the
+/// mod adds its changes to.
+///
+/// # Errors
+///
+/// [`Off`] when the loader refuses the patch.
+#[cfg(feature = "typed")]
+pub fn serve_list<T: Send + 'static>(
+    host: Host,
+    key: crate::abi::ResourceKey,
+    apply: impl Fn(crate::resources::Value, &[T]) -> Result<crate::resources::Value, Off>
+    + Send
+    + Sync
+    + 'static,
+) -> Result<std::sync::Arc<std::sync::Mutex<Vec<T>>>, Off> {
+    crate::content::knowledge::serve_list(host, key, apply)
+}
+
 /// Whether every id `new` derives fits; the reason when one does not.
 ///
 /// # Errors

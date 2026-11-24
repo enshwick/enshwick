@@ -184,11 +184,49 @@ a mod's page is seen on its card in the game. A Luau mod passes the text tag.
 
 ## Changing a vanilla quest
 
-`load.change_quest(quest, QuestChange)` changes a vanilla quest in memory:
+`load.change_quest(quest, QuestChange)` changes a vanilla quest in memory.
+Each field left `None` keeps what the quest holds:
 
-- `rewards` replaces its rewards, and `add_rewards` adds after them;
-- `for_all_players` sets whether one player's completion unlocks it for all;
-- `steps` replaces the knowledge a step shows or completes on.
+| Field | What it sets |
+| --- | --- |
+| `name`, `document` | the title's and the document's text tags |
+| `source`, `kind`, `main` | who gives it, whose it is, whether it is a main quest |
+| `for_all_players` | whether one player's completion unlocks it for all |
+| `priority`, `tutorial` | where the journal sorts it, whether it is the tutorial's |
+| `rewards`, `add_rewards` | its rewards, and rewards after them |
+| `steps` | `StepEdit`s, applied in order |
+
+A `StepEdit` changes, inserts, removes or moves one step, each on the steps
+the edits before it left:
+
+- `Change(StepChange)` sets a step's title, text, queries, `progress`, map
+  marker, voiceover, icon or level; a text tag of zeros clears the marker
+  and the voiceover;
+- `Insert(StepInsert { at, step })` inserts a step, which names both its
+  queries, with an entry id no other entry of the journal holds;
+- `Remove(index)` and `Move(StepMove { from, to })`.
+
+A step's `marker` is the text tag that a map marker of `ui::map` carries.
+The journal's "show on map" then points at that marker. A mod's own quest
+takes the same fields:
+
+| Type | Fields |
+| --- | --- |
+| `QuestStep` | `marker`, `voiceover` |
+| `NewQuest` | `priority`, `tutorial`, `document` |
+
+`load.remove_quest(quest)` removes a vanilla quest with its steps. Its
+knowledge stays, so a save with its progress still opens. The loader logs
+and skips a removal while a quest of another mod asks for the quest's id.
+
+Lore pages need the `unstable` feature:
+
+- `load.change_journal_page(page, PageChange)` changes a vanilla page the
+  way `change_quest` changes a quest. An inserted entry needs only its
+  `shown_when`;
+- `load.remove_journal_page(page)` removes one.
+
+`Quests::pages` lists each page's `EntryId`.
 
 Mods that change one quest change it in load order, each on the one before's
 result. `knowledge.quests()` lists the quest ids of the running game.
@@ -196,6 +234,62 @@ result. `knowledge.quests()` lists the quest ids of the running game.
 The game gives the experience of an added reward and only draws an added
 item. A mod gives that item itself on `QuestCompleted`, as for a quest of
 its own (see [Giving a quest's items](#giving-a-quests-items)).
+
+## An item set
+
+An item set is a collection on the journal's collection screen. Each entry
+is an item to find, and the set gives experience once every entry is done.
+`Load::add_item_set` adds one to a category of the game's:
+
+```rust
+use enshwick::ItemId;
+use enshwick::content::id;
+use enshwick::content::journal::{ItemSetEntry, NewItemSet, item_set_category};
+
+fn init(load: &mut enshwick::Load<'_>, shells: [ItemId; 2]) -> Result<(), enshwick::Off> {
+    load.add_item_set(NewItemSet::new(
+        id!("shells"),
+        item_set_category::COLLECTIONS,
+        id!("shells.name").guid(),
+        shells.map(ItemSetEntry::new).to_vec(),
+    ))?;
+    Ok(())
+}
+```
+
+| Field | What it is |
+| --- | --- |
+| `category` | one of the game's categories; any other is refused |
+| `entries` | `ItemSetEntry`: the item, its `done_when`, a recipe the screen names, and hints |
+| `experience` | what the game gives once every entry is done |
+| `recipe_rewards` | the recipes the screen lists as the set's reward |
+| `shown_when` | when the screen shows the set; `None` for once one entry is done |
+
+The journal holds a category as the key of its title text.
+`journal::item_set_category` names the game's 20 categories in English,
+from client 426's texts: `BUILDING_BLOCKS`, `COLLECTIONS`, `ENEMY_TROPHIES`,
+`MUSIC` and the rest. Luau passes the key, such as `3331860567` for
+"Collections", and `quests.item_sets()` gives each set's key.
+
+An entry's `done_when` left `None` is done once a player first picks its
+item up. That is the item's pickup flag, as the game's own entries ask.
+The loader adds two queries to the game's query database for the set, as
+the game's own sets have them. One asks all of the entries, for the set's
+completion. The other asks any of them, for showing the set (see
+[A query of the mod's own](knowledge.md#a-query-of-the-mods-own)).
+
+The game's server pays a set as it pays its own. It walks the pay rows, at
+most 50 a run. A player whose set holds and who lacks the set's bool gets
+the experience, and the game sets the bool. So a set pays once. This is
+read in the code of server 26430253. Whether the game grants the recipes
+is not read yet, so a mod that wants them granted grants them itself.
+
+`Load::change_item_set` changes a vanilla set: its title, experience,
+recipes, entries and queries, and its pay row with them. New entries need
+the set's `done_when` too, since the game's completion query asks for the
+old ones. `Load::remove_item_set` removes a vanilla set with its pay row.
+`quests.item_sets()` reads every set of the running game, with its entries,
+queries and pay row's bool.
 
 ## Personal quest progression
 
@@ -220,8 +314,8 @@ read builds it, every mod's quests and changes in:
 | `state(player, id)` | per step whether it shows and is done, and whether the quest started, is done and was paid |
 | `world_state(id)` | the same from the world's knowledge alone |
 
-A step can ask one of the game's own queries (`KnowledgeTest::Holds` or
-`Fails`). It then takes the game's answer, the one the game reads when it
+A step can ask one of the game's own queries (`KnowledgeTest::Holds`). It
+then takes the game's answer, the one the game reads when it
 pays a quest. A step reads as unknown before the game has evaluated its
 query. It also reads as unknown for a form enshwick does not read
 (`KnowledgeTest::Unknown`) and for a player not in the game.
@@ -266,7 +360,7 @@ state, so a save, a rejoin and a vanilla client agree with it.
 
 A grant goes the game's way and applies at the next step of the world. One
 call grants each entry once, even when two steps test it. A step on a game
-query, `KnowledgeTest::Holds` or `Fails`, is refused. The error is
+query, `KnowledgeTest::Holds`, is refused. The error is
 `MoveQuestError::Unwritable`, since the game computes that query from its
 parts. The mod grants those parts itself. A test no grant reaches, such as a count
 below a value, is refused the same way.
@@ -380,11 +474,26 @@ Objectives need the `typed` feature.
 
 ## From Luau
 
-Three of the same calls run at the top level of `main.luau`:
+The same calls run at the top level of `main.luau`:
 
 - `enshwick.content.add_quest{...}`
 - `enshwick.content.add_journal_page{...}`
 - `enshwick.content.change_quest(id, {...})`
+- `enshwick.content.remove_quest(id)`
+- `enshwick.content.change_journal_page(page, {...})` and
+  `enshwick.content.remove_journal_page(page)`
+- `enshwick.content.add_item_set{...}`
+- `enshwick.content.change_item_set(set, {...})` and
+  `enshwick.content.remove_item_set(set)`
+
+A step edit is a table with one key:
+
+| Edit | Luau |
+| --- | --- |
+| change | `{ Change = { step = 0, level = 9 } }` |
+| insert | `{ Insert = { at = 0, step = {...} } }` |
+| remove | `{ Remove = 1 }` |
+| move | `{ Move = { from = 0, to = 2 } }` |
 
 `enshwick.on("QuestCompleted", handler)` subscribes there too, and
 `enshwick.inventory.give_what_fits(to, item, count, done)` gives the items.
@@ -461,4 +570,4 @@ end)
 ## Who needs the mod
 
 The client draws the journal from its own copy of the data. So a mod that
-adds a quest or a page runs on both sides.
+adds a quest, a page or an item set runs on both sides.

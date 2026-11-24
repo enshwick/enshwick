@@ -72,7 +72,10 @@ fn roles_follow_bases_suffixes_and_the_left_out_names() {
             (Role::Component, "demo::ecs::Component".to_owned()),
             (Role::Event, "demo::ecs::Event".to_owned()),
         ]),
-        suffixes: BTreeMap::from([(Role::Resource, "Resource".to_owned())]),
+        suffixes: BTreeMap::from([(
+            Role::Resource,
+            vec!["Resource".to_owned(), "ResourceDb".to_owned()],
+        )]),
         left_out: LeftOut {
             namespaces: vec!["demo::ds::".to_owned()],
             words: vec!["Rang".to_owned()],

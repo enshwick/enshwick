@@ -66,6 +66,7 @@ runtime::named_table! {
     "FishingEffectResource" => FishingEffectResource,
     "FogVoxelMappingResource" => FogVoxelMappingResource,
     "GameKnowledgeQueryResource" => GameKnowledgeQueryResource,
+    "GameKnowledgeQueryResourceDb" => GameKnowledgeQueryResourceDb,
     "GameKnowledgeQueryTriggerResource" => GameKnowledgeQueryTriggerResource,
     "GameKnowledgeResource" => GameKnowledgeResource,
     "GameRuntimeQueryResource" => GameRuntimeQueryResource,

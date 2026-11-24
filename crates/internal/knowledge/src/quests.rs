@@ -29,8 +29,9 @@ use crate::content::knowledge::{ExperienceValue, KnowledgeQuery, KnowledgeTest};
 use crate::locks::Relock as _;
 use crate::resources::Value;
 use crate::typed::{
-    JournalCollectionResource, JournalEntryResource, JournalQuestResource, JournalRegistryResource,
-    Named as _, QuestSourceType, QuestType, Reflected,
+    JournalCollectionResource, JournalEntryResource, JournalItemSetCategoryResource,
+    JournalItemSetRewardResource, JournalQuestResource, JournalRegistryResource, Named as _,
+    QuestSourceType, QuestType, Reflected,
 };
 use crate::{Entity, ItemId, Off};
 
@@ -38,9 +39,12 @@ use crate::__load::*;
 use crate::knowledge::{Knowledge, KnowledgeId, Scope};
 
 mod control;
+mod item_sets;
 pub(crate) mod objectives;
 
+pub use crate::content::journal::EntryId;
 pub use control::{Holder, MoveQuestError};
+pub use item_sets::{ItemSetEntryInfo, ItemSetHintInfo, ItemSetInfo};
 
 /// The key of a text the journal names, the FNV-1a of its text tag's GUID.
 ///
@@ -83,41 +87,6 @@ impl TextKey {
     }
 }
 
-/// The id of a journal entry: a quest's step or a lore page and its
-/// entries.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::quests::EntryId;
-///
-/// assert_eq!(EntryId::new(9).get(), 9);
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
-pub struct EntryId(u32);
-
-impl EntryId {
-    /// The entry of id `id`.
-    ///
-    /// # Examples
-    ///
-    /// See [`EntryId`].
-    #[must_use]
-    pub const fn new(id: u32) -> Self {
-        Self(id)
-    }
-
-    /// Its id.
-    ///
-    /// # Examples
-    ///
-    /// See [`EntryId`].
-    #[must_use]
-    pub const fn get(self) -> u32 {
-        self.0
-    }
-}
-
 /// A step of a quest or an entry of a lore page, as the journal holds it.
 ///
 /// The name is enshwick's; the game's is `JournalEntryResource`.
@@ -151,7 +120,7 @@ pub struct StepInfo {
 impl StepInfo {
     fn of(entry: &JournalEntryResource) -> Self {
         Self {
-            entry: EntryId(entry.entry_id.value),
+            entry: EntryId::new(entry.entry_id.value),
             name: TextKey::of_key(entry.name.value),
             text: TextKey::of_key(entry.text.value),
             shown_when: enshwick_content::__internal::query_from_data(&entry.knowledge_requirement),
@@ -199,7 +168,7 @@ pub struct PageInfo {
 impl PageInfo {
     fn of(page: &JournalCollectionResource) -> Self {
         Self {
-            id: EntryId(page.entry_id.value),
+            id: EntryId::new(page.entry_id.value),
             category: TextKey::of_key(page.lore_category.value),
             name: TextKey::of_key(page.name.value),
             priority: page.priority,
@@ -322,10 +291,11 @@ pub struct QuestState {
 struct Journal {
     quests: Vec<QuestInfo>,
     pages: Vec<PageInfo>,
+    item_sets: Vec<ItemSetInfo>,
 }
 
 impl Journal {
-    /// The quests and pages of the journal `registry`; a list that does not
+    /// The quests, pages and item sets of the journal `registry`; a list that does not
     /// read, such as one whose type a build changed, fails the whole read.
     fn of(registry: &Value) -> Result<Self, Off> {
         fn list<T: Reflected>(registry: &Value, name: &str) -> Result<Vec<T>, Off> {
@@ -342,16 +312,29 @@ impl Journal {
         }
         let quests: Vec<JournalQuestResource> = list(registry, QUESTS)?;
         let pages: Vec<JournalCollectionResource> = list(registry, COLLECTIONS)?;
+        let categories: Vec<JournalItemSetCategoryResource> = list(registry, ITEM_SETS)?;
+        let rewards: Vec<JournalItemSetRewardResource> = list(registry, ITEM_SET_REWARDS)?;
         Ok(Self {
             quests: quests.iter().map(QuestInfo::of).collect(),
             pages: pages.iter().map(PageInfo::of).collect(),
+            item_sets: categories
+                .iter()
+                .flat_map(|category| {
+                    let key = category.category_name.value;
+                    category.entries.iter().map(move |set| (key, set))
+                })
+                .map(|(key, set)| ItemSetInfo::of(key, set, &rewards))
+                .collect(),
         })
     }
 }
 
-/// The game's names of the journal's lists of quests and lore pages.
+/// The game's names of the journal's lists of quests, lore pages and item
+/// sets.
 const QUESTS: &str = "quests";
 const COLLECTIONS: &str = "collections";
+const ITEM_SETS: &str = "itemSetCategories";
+const ITEM_SET_REWARDS: &str = "itemSetRewards";
 
 /// The journal a [`Quests`] read, kept once a read succeeds.
 #[derive(Debug, Default)]
@@ -390,11 +373,12 @@ pub struct Quests {
 
 impl crate::script::Bound for Quests {
     const NAME: &'static str = "quests";
-    const DOC: &'static str = "The journal's quests and lore pages, mods' included, and where each player stands in them.";
+    const DOC: &'static str = "The journal's quests, lore pages and item sets, mods' included, and where each player stands in them.";
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[
         Self::SCRIPT_QUESTS,
         Self::SCRIPT_CONTROL,
         Self::SCRIPT_OBJECTIVES,
+        Self::SCRIPT_ITEM_SETS,
     ];
 
     fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
@@ -422,9 +406,10 @@ impl Quests {
                 host.log(
                     crate::abi::Level::INFO,
                     &format!(
-                        "quests: read the journal, {} quests and {} pages, in {} ms",
+                        "quests: read the journal, {} quests, {} pages and {} item sets, in {} ms",
                         journal.quests.len(),
                         journal.pages.len(),
+                        journal.item_sets.len(),
                         start.elapsed().as_millis()
                     ),
                 );
@@ -448,9 +433,8 @@ impl Quests {
     /// that does not read, such as a player not in the game, a game query
     /// the game has not answered, or a form enshwick does not read.
     fn holds(&self, player: Option<Entity>, query: KnowledgeQuery) -> Option<bool> {
-        if let KnowledgeTest::Holds | KnowledgeTest::Fails = query.test {
-            let held = self.game_query(player.unwrap_or(Entity(0)), query.id.get())?;
-            return Some(held == (query.test == KnowledgeTest::Holds));
+        if query.test == KnowledgeTest::Holds {
+            return self.game_query(player.unwrap_or(Entity(0)), query.id.get());
         }
         let known = match (player, query.scope) {
             (Some(player), _) => self.knowledge.get(player, query.id)?,
@@ -644,17 +628,37 @@ mod tests {
             read(Ty::SimpleFlag, Op::Equals, 2),
             Some(KnowledgeTest::HasFlag(2))
         );
-        assert_eq!(read(Ty::Extern, Op::Equals, 1), Some(KnowledgeTest::Holds));
-        assert_eq!(
-            read(Ty::Extern, Op::GreaterThan, 0),
-            Some(KnowledgeTest::Holds)
-        );
-        assert_eq!(read(Ty::Extern, Op::Equals, 0), Some(KnowledgeTest::Fails));
         assert_eq!(
             enshwick_content::__internal::query_from_data(&data(0, Ty::Extern, Op::GreaterThan, 0)),
             None,
             "a lore entry's never"
         );
+    }
+
+    #[test]
+    fn a_game_query_holds_on_the_game_s_answer_whatever_its_compare() {
+        use CompareOperator as Op;
+        use KnowledgeQueryDataType as Ty;
+        // Every Extern step and item set of the journal is Equals 0, and the evaluator reads no compare (server 26430253).
+        for (op, value) in [
+            (Op::Equals, 0),
+            (Op::Equals, 1),
+            (Op::GreaterThan, 0),
+            (Op::GreaterThan, 1),
+            (Op::LessThan, 2),
+        ] {
+            assert_eq!(
+                enshwick_content::__internal::query_from_data(&data(
+                    7,
+                    Ty::Extern,
+                    op.clone(),
+                    value
+                ))
+                .map(|q| q.test),
+                Some(KnowledgeTest::Holds),
+                "{op:?} {value}"
+            );
+        }
     }
 
     #[test]
@@ -667,8 +671,6 @@ mod tests {
         for (kind, op, value, why) in [
             (Ty::SimpleCount, Op::LessThan, 0, "never holds"),
             (Ty::SimpleCount, Op::GreaterThan, u32::MAX, "never holds"),
-            (Ty::Extern, Op::GreaterThan, 1, "never holds"),
-            (Ty::Extern, Op::LessThan, 2, "always holds"),
             (Ty::SimpleFlag, Op::Equals, 0, "no bits"),
             (
                 Ty::SimpleCount,
@@ -703,7 +705,6 @@ mod tests {
             KnowledgeTest::Below(2),
             KnowledgeTest::HasFlag(0b101),
             KnowledgeTest::Holds,
-            KnowledgeTest::Fails,
         ] {
             let query = KnowledgeQuery {
                 id,

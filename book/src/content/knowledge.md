@@ -103,13 +103,97 @@ with it. Its `test` is one of:
 | `Below(n)` | a counter is below `n`, from 1 |
 | `HasFlag(bits)` | flags hold any of `bits` |
 | `Holds` (`KnowledgeQuery::game`) | the game's query of the id holds |
-| `Fails` | the game's query of the id does not hold |
 | `Unknown` | only the game answers: a form of the game's that enshwick does not read |
 
-`query.not()` gives the opposite test, where the game has one: none for an
-exact count other than 0, for flags or for `Unknown`. A mod cannot write
+`query.not()` gives the opposite test, where the game has one. It has none
+for an exact count other than 0, for flags, for a game query or for
+`Unknown`. The game reads a game query's answer alone, with no compare.
+So the opposite of one is a query of the mod's own that inverts it. A mod cannot write
 `Unknown`; it only reads back from the game's own steps. A player's entry is
 tested for the player the game asks about.
+
+## A query of the mod's own
+
+`Load::add_query` adds a query to the game's query database, beside the
+game's own 5280 named queries (server 26430253). The game evaluates it as
+it evaluates its own. A quest step, a lore entry or an item set asks it
+with `KnowledgeQuery::game` and reads the game's answer. The call returns
+its `GameQuery`.
+
+| Field | What it is |
+| --- | --- |
+| `id` | its content id; its query id is the FNV-1a of the id's GUID |
+| `scope` | `Player` for a query asked for each player, `World` for the world |
+| `form` | how the parts join: all, any, or exactly one of two (`QueryForm`) |
+| `invert` | whether it holds where its form does not |
+| `parts` | knowledge tests, or game queries: the game's, or ones a mod added before it |
+
+`invert` is the one way to the opposite of a game query. The game reads
+a game query's answer and no compare, so `KnowledgeQuery::not` has none.
+
+`Load::game_query(name)` finds one of the game's queries by the name its
+database gives it, such as `ItemSetCompleted_Grassland`.
+
+```rust
+use enshwick::content::id;
+use enshwick::content::knowledge::{KnowledgeQuery, NewQuery, QueryForm};
+use enshwick::knowledge::Scope;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let grassland = load.game_query("ItemSetCompleted_Grassland")?;
+    let unfinished = load.add_query(NewQuery {
+        invert: true,
+        ..NewQuery::new(id!("grassland-unfinished"), Scope::Player, QueryForm::All, vec![KnowledgeQuery::game(grassland)])
+    })?;
+    let _shown_when = KnowledgeQuery::game(unfinished);
+    Ok(())
+}
+```
+
+The database lists the world's queries first and the players' after them.
+A world query goes at the end of the world's range, and a player query at
+the end. Every index the game keeps past the world's range moves with it.
+That includes the index a part keeps of the query it names. One patch of the
+database serves all of a mod's queries. When the game first reads the
+database, a query whose id another mod's holds is logged and left out. So
+is a query whose part names a query the database lacks. This is read in
+the code of server 26430253.
+
+## A knowledge rule
+
+`Load::add_knowledge_rule` adds a rule to the game's own trigger list.
+While the rule's query holds, the game's server grants its knowledge, and
+no mod code runs at that moment. The game unlocks much of its own knowledge
+this way.
+
+```rust
+use enshwick::content::id;
+use enshwick::content::knowledge::KnowledgeQuery;
+use enshwick::knowledge::{Grant, KnowledgeId, NewRule, RuleGrant, Scope};
+
+fn init(load: &mut enshwick::Load<'_>, both: KnowledgeQuery, crowned: KnowledgeId) -> Result<(), enshwick::Off> {
+    load.add_knowledge_rule(NewRule {
+        id: id!("crown-on-both"),
+        scope: Scope::Player,
+        when: both,
+        grant: vec![RuleGrant { id: crowned, grant: Grant::Set }],
+    })
+}
+```
+
+A player's rule runs for each player and a world's for the world, every 32
+steps of the world. A grant of knowledge the holder has already is
+skipped. A rule sets bools and flags; it cannot add to a counter, since the
+game adds on every run while the query holds. The game grants only an
+entry its knowledge holds, the game's or a mod's. The list is the server's
+alone, so a mod that only adds rules runs on the server. This is read in
+the code of server 26430253.
+
+`Load::knowledge_rules()` lists the game's rules with their `RuleId`: the
+side and the place in its list. `Load::change_knowledge_rule` changes a
+rule's query or grants. `Load::remove_knowledge_rule` turns a rule off. It
+keeps its place with a query the game skips, so the places of the rules
+after it stay the same for every mod.
 
 ## From Luau
 
@@ -133,6 +217,29 @@ Experience values are `enshwick.content.experience_values()` and
 local xp = enshwick.content.add_experience({ id = "you.lore:shrine-xp", source = "Exploration", gain = 250 })
 enshwick.content.add_knowledge({ id = "you.lore:found-it", scope = "Player", kind = "Bool", experience = xp })
 ```
+
+Queries are `enshwick.content.add_query{...}` and
+`enshwick.content.game_query(name)`:
+
+```luau
+local grassland = enshwick.content.game_query("ItemSetCompleted_Grassland")
+local unfinished = enshwick.content.add_query({
+    id = "you.lore:grassland-unfinished",
+    scope = "Player",
+    form = "All",
+    invert = true,
+    parts = { { id = grassland, scope = "World", test = "Holds" } },
+})
+```
+
+Rules take the same names under `enshwick.content`:
+
+- `add_knowledge_rule{...}`
+- `knowledge_rules()`
+- `change_knowledge_rule(rule, {...})`
+- `remove_knowledge_rule(rule)`
+
+A grant is a table such as `{ id = crowned, grant = "Set" }`.
 
 ## When the mod is removed
 

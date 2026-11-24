@@ -1324,6 +1324,104 @@ export type ItemModifier = {
 --- How rare an affix is.
 export type ItemRarity = "Common" | "Uncommon" | "Rare" | "Epic" | "Legendary"
 
+--- A change of a vanilla item set for `Load.change_item_set`; nil keeps what the set holds.
+export type ItemSetChange = {
+	--- Its title's text tag.
+	name: string?,
+	--- The experience the game gives when it is complete.
+	experience: number?,
+	--- The recipes the collection screen lists as its reward.
+	recipe_rewards: {number}?,
+	--- Its entries in place of its own; a set given entries names its `done_when`, since the game's completion query asks for the old ones.
+	entries: {ItemSetEntry}?,
+	--- When it is complete and pays: a game query, such as one of `Load.add_query`.
+	done_when: KnowledgeQuery?,
+	--- When the screen shows it.
+	shown_when: KnowledgeQuery?,
+}
+
+--- One entry of an item set: an item, done once `done_when` holds. The name is enshwick's; the game's is `JournalItemSetEntryResource`.
+export type ItemSetEntry = {
+	--- The item it shows.
+	item: number,
+	--- When it is done; nil for once the player first picks the item up, as the game's own entries ask.
+	done_when: KnowledgeQuery?,
+	--- The recipe the screen names beside it.
+	recipe: number?,
+	--- Its hints, in order.
+	hints: {ItemSetHint}?,
+}
+
+--- An entry of an item set, as the journal holds it. The name is enshwick's; the game's is `JournalItemSetEntryResource`.
+export type ItemSetEntryInfo = {
+	--- Its entry id.
+	entry: number,
+	--- The item it shows.
+	item: number,
+	--- When it is done; the game's own entries ask their item's pickup flag.
+	done_when: KnowledgeQuery?,
+	--- The quest step the screen points at.
+	quest: number?,
+	--- The recipe the screen names beside it.
+	recipe: number?,
+	--- Its hints, in order.
+	hints: {ItemSetHintInfo},
+}
+
+--- A hint of an item set entry: an objective the collection screen shows while `shown_when` holds, ticked once `done_when` holds. The name is enshwick's; the game's is `JournalItemSetEntryHintResource`.
+export type ItemSetHint = {
+	--- When the screen shows it.
+	shown_when: KnowledgeQuery,
+	--- When it is ticked.
+	done_when: KnowledgeQuery,
+	--- Its objective's text tag.
+	objective: string,
+	--- Its description's text tag.
+	text: string,
+	--- The text tag of the map marker it points at, as a marker of `ui.map` carries it; nil for no marker.
+	marker: string?,
+	--- The level it suits; 0 for none.
+	level: number,
+}
+
+--- A hint of an item set entry, as the journal holds it. The name is enshwick's; the game's is `JournalItemSetEntryHintResource`.
+export type ItemSetHintInfo = {
+	--- When the collection screen shows it.
+	shown_when: KnowledgeQuery?,
+	--- When it is ticked.
+	done_when: KnowledgeQuery?,
+	--- Its objective's text.
+	objective: number?,
+	--- Its description.
+	text: number?,
+	--- The text tag of the map marker it points at.
+	marker: number?,
+	--- The level it suits; 0 for none.
+	level: number,
+}
+
+--- An item set of the journal, the game's or a mod's: a collection the game pays once every entry is done. The name is enshwick's; the game's is `JournalItemSetResource`.
+export type ItemSetInfo = {
+	--- Its set id.
+	id: number,
+	--- The category the collection screen lists it under.
+	category: number,
+	--- Its title's text.
+	name: number?,
+	--- Its entries, in order.
+	entries: {ItemSetEntryInfo},
+	--- The recipes the collection screen lists as its reward.
+	recipe_rewards: {number},
+	--- The experience the game gives when it is complete.
+	experience: number?,
+	--- When it is complete: the game's own sets ask an all-of query of their entries.
+	done_when: KnowledgeQuery?,
+	--- When the screen shows it: the game's own sets ask an any-of query of their entries.
+	shown_when: KnowledgeQuery?,
+	--- The player's knowledge its pay row names, nil for a set without one.
+	rewarded: number?,
+}
+
 --- What a single item gives the entity that wears it, kept as its item data of kind `ITEM_KIND`: modifiers of its own and the affixes it rolled.
 export type ItemStats = {
 	--- The modifiers, in the order they apply.
@@ -1406,7 +1504,7 @@ export type KnowledgeRequest = {
 }
 
 --- What a `KnowledgeQuery` asks of its entry, or of the game query it names. The name is enshwick's, not the game's.
-export type KnowledgeTest = "IsSet" | { AtLeast: number } | { Equals: number } | { Below: number } | { HasFlag: number } | "Holds" | "Fails" | "Unknown"
+export type KnowledgeTest = "IsSet" | { AtLeast: number } | { Equals: number } | { Below: number } | { HasFlag: number } | "Holds" | "Unknown"
 
 --- What a knowledge value is.
 export type KnowledgeType = "Bool" | "Counter" | "Flags" | { Other: number }
@@ -1864,6 +1962,24 @@ export type NewItem = {
 	icon: Icon?,
 }
 
+--- A new item set for `Load.add_item_set`. The name is enshwick's; the game's is `JournalItemSetResource`.
+export type NewItemSet = {
+	--- Its content id; its set id is the FNV-1a of the id's GUID.
+	id: string,
+	--- The game's category the collection screen lists it under, one of `item_set_category`; a category no set of the game's journal is listed under is refused.
+	category: number,
+	--- Its title's text tag.
+	name: string,
+	--- Its entries, in order.
+	entries: {ItemSetEntry},
+	--- The recipes the collection screen lists as its reward.
+	recipe_rewards: {number}?,
+	--- The experience the game gives when every entry is done.
+	experience: number?,
+	--- When the screen shows it; nil for once one entry is done, as the game's own sets show.
+	shown_when: KnowledgeQuery?,
+}
+
 --- A new lore page for `Load.add_journal_page`. The name is enshwick's; the game's is `JournalCollectionResource`.
 export type NewJournalPage = {
 	--- Its content id.
@@ -1960,6 +2076,20 @@ export type NewProp = {
 	crafting_prop: CraftingPropSetup?,
 }
 
+--- A new query for `Load.add_query`: parts joined by a form, which the game evaluates as it does its own named queries. The name is enshwick's; the game's is `GameKnowledgeQueryResource`.
+export type NewQuery = {
+	--- Its content id; its query id is the FNV-1a of the id's GUID, and the id is its name in the database.
+	id: string,
+	--- Whose it is: a player's is asked for each player, a world's for the world.
+	scope: Scope,
+	--- How it joins its parts.
+	form: QueryForm,
+	--- Whether it holds where its form does not: the one way to the opposite of a game query, which the game reads with no compare.
+	invert: boolean?,
+	--- Its parts: knowledge entries, or game queries of the database (the game's, or ones a mod added before it).
+	parts: {KnowledgeQuery},
+}
+
 --- A new quest for `Load.add_quest`.
 export type NewQuest = {
 	--- Its content id; its quest id is the id's `KnowledgeId.from_guid`.
@@ -1978,6 +2108,12 @@ export type NewQuest = {
 	steps: {QuestStep},
 	--- What the journal shows as its reward; see `QuestReward` for what the game gives of it.
 	rewards: {QuestReward}?,
+	--- Where the journal sorts it among the others; nil for the priority most of the game's quests hold, 100.
+	priority: number?,
+	--- Whether it belongs to the tutorial.
+	tutorial: boolean?,
+	--- The text tag of the document it names; nil for the one the game's quests share.
+	document: string?,
 }
 
 --- A new recipe for `Load.add_recipe`.
@@ -1994,6 +2130,18 @@ export type NewRecipe = {
 	cost: number,
 	--- The workshop the recipe is made at, such as one from `Load.add_workshop`; nil keeps the copied recipe's.
 	workshop: string?,
+}
+
+--- A new knowledge rule for `Load.add_knowledge_rule`. The name is enshwick's; the game's is `GameKnowledgeQueryTrigger`.
+export type NewRule = {
+	--- Its content id, for the loader's refusals and logs.
+	id: string,
+	--- Whose it is: a player's rule runs for each player, a world's for the world.
+	scope: Scope,
+	--- When it grants: a game query, such as one of `Load.add_query`, or a test of one entry.
+	when: KnowledgeQuery,
+	--- What it grants: bools set and flags; a counter is refused, since the game adds to it on every run while the query holds.
+	grant: {RuleGrant},
 }
 
 --- A new skill node for `Load.add_skill_node`: a copy of the vanilla node `like`, its effect and icons among it, with the values it gives.
@@ -2231,6 +2379,22 @@ export type Outcome = {
 	done: Done,
 	--- One per operation when the request ran, else empty.
 	ops: {OpResult},
+}
+
+--- A change of a vanilla lore page for `Load.change_journal_page`; nil and an empty list keep what the page holds. The name is enshwick's; the game's page is `JournalCollectionResource`.
+export type PageChange = {
+	--- The text tag of the game's lore category it moves to; refused as `Load.add_journal_page` refuses one.
+	category: string?,
+	--- Its title's text tag.
+	name: string?,
+	--- Where the journal sorts it among the others.
+	priority: number?,
+	--- Whether it belongs to the tutorial.
+	tutorial: boolean?,
+	--- The text tag of the document it names.
+	document: string?,
+	--- Edits of its entries, in order.
+	entries: {StepEdit}?,
 }
 
 --- One entry of a journal page, shown once `shown_when` holds.
@@ -2541,16 +2705,33 @@ export type PurposeUniqueness = {
 	home: {number},
 }
 
+--- How a query of a mod's own joins its parts. The names are enshwick's; the game's are `AND`, `OR` and `XOR`.
+export type QueryForm = "All" | "Any" | "OneOf"
+
 --- A change of a vanilla quest for `Load.change_quest`; nil and empty lists keep what the quest holds.
 export type QuestChange = {
+	--- Its title's text tag.
+	name: string?,
+	--- Who gives it, which groups it in the journal.
+	source: typed_QuestSourceType?,
+	--- Whether it is the world's, each player's, or the game's `Auto`.
+	kind: typed_QuestType?,
+	--- Whether the journal lists it as a main quest.
+	main: boolean?,
+	--- Whether one player's completion unlocks it for every player.
+	for_all_players: boolean?,
+	--- Where the journal sorts it among the others.
+	priority: number?,
+	--- Whether it belongs to the tutorial.
+	tutorial: boolean?,
+	--- The text tag of the document it names.
+	document: string?,
 	--- The rewards in place of the quest's.
 	rewards: {QuestReward}?,
 	--- Rewards after those.
 	add_rewards: {QuestReward}?,
-	--- Whether one player's completion unlocks it for every player.
-	for_all_players: boolean?,
-	--- Changes of its steps' knowledge.
-	steps: {StepChange}?,
+	--- Edits of its steps, in order.
+	steps: {StepEdit}?,
 }
 
 --- The data of the `QuestCompleted` event.
@@ -2616,6 +2797,10 @@ export type QuestStep = {
 	icon: number?,
 	--- The level it suits; 0 for none.
 	level: number?,
+	--- The text tag of the map marker its "show on map" points at, as a marker of `ui.map` carries it; nil for no marker.
+	marker: string?,
+	--- The voiceover it plays; nil for none.
+	voiceover: string?,
 	--- What the journal counts on it, each on a counter of the loader's that its `progress` shows; a step without `done_when` is done once every count is reached.
 	objectives: {Objective}?,
 }
@@ -2827,6 +3012,42 @@ export type Rolled = {
 
 --- A `RecipeRule` a script gives, owning its names.
 export type Rule = { Recipe: string } | { Output: string } | { Workshop: string } | "Hand"
+
+--- A change of a vanilla rule for `Load.change_knowledge_rule`; nil keeps what the rule holds.
+export type RuleChange = {
+	--- When it grants.
+	when: KnowledgeQuery?,
+	--- What it grants, in place of its own.
+	grant: {RuleGrant}?,
+}
+
+--- One grant of a knowledge rule: an entry and what the rule grants of it.
+export type RuleGrant = {
+	--- The entry granted; the game grants only an entry its knowledge holds, the game's or a mod's.
+	id: number,
+	--- What of it.
+	grant: Grant,
+}
+
+--- A rule of the game's trigger list: its side and its place there.
+export type RuleId = {
+	--- Its list: the world's rules, or each player's.
+	scope: Scope,
+	--- Its place in the list, from 0.
+	index: number,
+}
+
+--- A rule of the game's trigger list, as the game holds it.
+export type RuleInfo = {
+	--- Its side and place.
+	id: RuleId,
+	--- When it grants; nil for a rule the game skips.
+	when: KnowledgeQuery?,
+	--- What it grants; a grant of a kind enshwick does not read is left out.
+	grant: {RuleGrant},
+	--- Whether it waits for an event too, which this API does not write.
+	on_event: boolean,
+}
 
 --- The save of the world the server runs, from `World.save_info`.
 export type SaveInfo = {
@@ -3252,15 +3473,32 @@ export type Stats = {
 	aggregate: (self: Stats, def: StatDef, modifiers: {ScriptModifier}) -> number,
 }
 
---- A change of a step of a vanilla quest; nil keeps a query.
+--- A change of one step of a vanilla quest or entry of a vanilla page; nil keeps a field. A text tag of zeros clears the map marker and the voiceover, and item 0 the icon. The name is enshwick's; the game's step is `JournalEntryResource`.
 export type StepChange = {
-	--- The step, from 0.
+	--- The step, from 0, where the step edits before it leave it.
 	step: number,
+	--- Its title's text tag.
+	name: string?,
+	--- Its text's tag.
+	text: string?,
 	--- When the journal shows it.
 	shown_when: KnowledgeQuery?,
 	--- When it is done.
 	done_when: KnowledgeQuery?,
+	--- The parts the journal counts as it moves on, in place of its own.
+	progress: {KnowledgeQuery}?,
+	--- The text tag of the map marker its "show on map" points at, as a marker of `ui.map` carries it.
+	marker: string?,
+	--- The voiceover it plays.
+	voiceover: string?,
+	--- The item whose icon it shows.
+	icon: number?,
+	--- The level it suits; 0 for none.
+	level: number?,
 }
+
+--- One edit of the steps of a vanilla quest or the entries of a vanilla page, applied in order, each on the steps the edits before it left. The name is enshwick's, not the game's.
+export type StepEdit = { Change: StepChange } | { Insert: StepInsert } | { Remove: number } | { Move: StepMove }
 
 --- A step of a quest or an entry of a lore page, as the journal holds it. The name is enshwick's; the game's is `JournalEntryResource`.
 export type StepInfo = {
@@ -3282,6 +3520,22 @@ export type StepInfo = {
 	icon: number?,
 	--- The level it suits; 0 for none.
 	level: number,
+}
+
+--- A step inserted into a vanilla quest or page by `StepEdit.Insert`.
+export type StepInsert = {
+	--- Where it goes, from 0; the step there and those after move down. The step count puts it last.
+	at: number,
+	--- The step. A quest's names both its queries; a page entry needs only `shown_when`.
+	step: QuestStep,
+}
+
+--- A step moved inside a vanilla quest or page by `StepEdit.Move`.
+export type StepMove = {
+	--- The step to move, from 0.
+	from: number,
+	--- Where it ends up, from 0, counted once it has left `from`.
+	to: number,
 }
 
 --- Where a player or the world stands in one step; nil where the answer is not known. Not known are a game query the game has not answered (not evaluated yet, or a build without the game's query calls), a form enshwick does not read, and knowledge that does not read, such as a player not in the game.
@@ -4198,6 +4452,12 @@ declare enshwick: {
 		--- Adds an experience value beside the game's own and returns it, for a knowledge entry's `NewKnowledge.experience` or a quest's experience reward. The game counts the experience under its source, as it does a vanilla value's; `experience_values` lists those. Adding the same id again replaces its source and gain. One patch of the balancing table serves all of a mod's values; it adds none when another mod's value there has the id of one of them.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_experience: (new: NewExperience) -> number,
+		--- Adds a query to the game's query database beside its own named queries, on the server and the client alike, and returns its id for `KnowledgeQuery.game`: its parts joined by its form, inverted when it asks, evaluated by the game as it evaluates its own. A quest step, a lore entry or an item set that asks it reads the game's answer. A part may name a game query, the game's or one a mod added before it. One patch of the database serves all of a mod's queries; a query whose id another mod's holds, or whose part names a query the database lacks when the game first reads it, is logged and left out.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_query: (new: NewQuery) -> number,
+		--- The game's named query `name`, as its database names it, for a mod to ask where the game asks it: `ItemSetCompleted_Grassland` is the query of a full Grassland collection (server 26430253).
+		--- Only while the mod starts, at the top level of main.luau.
+		game_query: (name: string) -> number,
 		--- Adds a quest to the journal beside the game's, on the server and the client alike, and returns its quest id: a player's bool the game sets when it pays the quest, as for its own. Each step shows while its `shown_when` holds and is done once its `done_when` holds; a query left nil gets knowledge of the loader's, which `Quests` moves on, and each objective of a step a counter the loader raises on its events. When the last step is done the game gives the experience of the rewards and raises `QuestCompleted`; it draws an item reward and never gives it, so the mod gives its items in a handler of that event (`give_what_fits`). A mod moves the quest on with `Quests` or by granting the knowledge its steps ask for.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_quest: (new: NewQuest) -> number,
@@ -4207,6 +4467,36 @@ declare enshwick: {
 		--- Changes the vanilla quest `quest` in memory, on the server and the client alike: its rewards, whether it unlocks for every player, and its steps' knowledge. Mods that change one quest change it in load order, each on the one before's result; `Knowledge.quests` lists the quest ids. The game gives an added reward's experience and only draws an added item, which the mod gives on `QuestCompleted`, as for its own quest (see `QuestReward`). `Knowledge.quests`: crate.knowledge.Knowledge.quests
 		--- Only while the mod starts, at the top level of main.luau.
 		change_quest: (quest: number, change: QuestChange) -> (),
+		--- Removes the vanilla quest `quest` from the journal in memory, on the server and the client alike, with its steps; its knowledge stays, so a save that holds its progress still opens. Mods change and remove a quest in load order. A removal is logged and left out when the journal first builds while a quest of another mod earlier in load order asks for the quest's id.
+		--- Only while the mod starts, at the top level of main.luau.
+		remove_quest: (quest: number) -> (),
+		--- Changes the vanilla lore page `page` in memory, on the server and the client alike: its category, title, priority, tutorial mark, document and entries. Mods that change one page change it in load order.
+		--- Only while the mod starts, at the top level of main.luau.
+		change_journal_page: (page: number, change: PageChange) -> (),
+		--- Removes the vanilla lore page `page` from the journal in memory, on the server and the client alike, with its entries.
+		--- Only while the mod starts, at the top level of main.luau.
+		remove_journal_page: (page: number) -> (),
+		--- Adds an item set to the journal's collections beside the game's, on the server and the client alike, and returns its set id. Each entry is done once its `done_when` holds, by default once a player first picks its item up, as the game's own entries are. The set shows once `shown_when` holds, by default once one entry is done, and is complete once every entry is: the loader adds those two queries to the game's query database (see `Load.add_query`), as the game's own sets ask theirs. The game's server walks the pay rows, at most 50 a run: for a player without the set's bool, a bool of the loader's, whose completion query holds, it gives the set's experience and sets the bool, so a set pays once (server 26430253, read in the code). The set's recipes are what the collection screen lists; whether the game grants them is not read yet, so a mod that wants them granted grants them itself.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_item_set: (new: NewItemSet) -> number,
+		--- Changes the vanilla item set `set` in memory, on the server and the client alike: its title, experience, recipes, entries and queries, and its pay row with them. Mods that change one set change it in load order; `Quests.item_sets` lists the sets.
+		--- Only while the mod starts, at the top level of main.luau.
+		change_item_set: (set: number, change: ItemSetChange) -> (),
+		--- Removes the vanilla item set `set` from the journal in memory, on the server and the client alike, with its entries and its pay row; the knowledge its entries ask stays.
+		--- Only while the mod starts, at the top level of main.luau.
+		remove_item_set: (set: number) -> (),
+		--- Adds a knowledge rule to the game's own trigger list: while `when` holds, the game's server grants the rule's knowledge, with no mod code running then. A player's rule runs for each player, a world's for the world, every 32 steps of the world; a grant the knowledge holds already is skipped (server 26430253, read in the code). The list is the server's alone, so the rule needs the mod on the server only. The game grants only an entry its knowledge holds, the game's or a mod's.
+		--- Only while the mod starts, at the top level of main.luau.
+		add_knowledge_rule: (new: NewRule) -> (),
+		--- The game's own knowledge rules, the world's and the players', as its trigger list holds them.
+		--- Only while the mod starts, at the top level of main.luau.
+		knowledge_rules: () -> {RuleInfo},
+		--- Changes the vanilla rule `rule` in memory: when it grants and what. Mods that change one rule change it in load order.
+		--- Only while the mod starts, at the top level of main.luau.
+		change_knowledge_rule: (rule: RuleId, change: RuleChange) -> (),
+		--- Turns the vanilla rule `rule` off in memory: it keeps its place with a query the game skips, so the places of the rules after it stay.
+		--- Only while the mod starts, at the top level of main.luau.
+		remove_knowledge_rule: (rule: RuleId) -> (),
 		--- The vanilla nodes of the skill tree, to link a mod's nodes from and place them beside.
 		--- Only while the mod starts, at the top level of main.luau.
 		skill_nodes: () -> {SkillNode},
@@ -4802,7 +5092,7 @@ declare enshwick: {
 		--- Only while the mod starts, at the top level of main.luau.
 		on_knowledge_input: (filter: (arg1: KnowledgeRequest) -> boolean?) -> (),
 	},
-	--- The journal's quests and lore pages, mods' included, and where each player stands in them.
+	--- The journal's quests, lore pages and item sets, mods' included, and where each player stands in them.
 	quests: {
 		--- Every quest of the journal, the game's and mods', in its order; empty until the journal reads, such as during init.
 		all: () -> {QuestInfo},
@@ -4826,6 +5116,8 @@ declare enshwick: {
 		reset: (holder: Holder, quest: number) -> (),
 		--- Sends the mod's signal `signal` for `holder`: each open step of the mod's quests with an `Objective.Custom` of that signal counts `amount` towards it, a player's quest for a player and a world quest for the world. A signal no objective of the mod counts does nothing.
 		signal: (holder: Holder, signal: string, amount: number) -> (),
+		--- Every item set of the journal, the game's and mods', by category; empty until the journal reads, such as during init.
+		item_sets: () -> {ItemSetInfo},
 	},
 	--- Player actions: what a player asks a mod to do, declared once and run from its controls, panels or the console.
 	actions: {

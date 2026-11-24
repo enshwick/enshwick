@@ -31,6 +31,8 @@ pub(super) const NAMESPACES: &[Namespace] = &[
             #[cfg(feature = "typed")]
             Load::SCRIPT_CONTENT_JOURNAL,
             #[cfg(feature = "typed")]
+            Load::SCRIPT_CONTENT_RULES,
+            #[cfg(feature = "typed")]
             Load::SCRIPT_CONTENT_SKILLS,
             #[cfg(feature = "typed")]
             Load::SCRIPT_CONTENT_REMOVAL,

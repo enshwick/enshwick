@@ -150,10 +150,7 @@ impl<'a> Moves<'a> {
             return Ok(());
         };
         let unwritable = MoveQuestError::Unwritable { step, query };
-        if matches!(
-            query.test,
-            KnowledgeTest::Holds | KnowledgeTest::Fails | KnowledgeTest::Unknown
-        ) {
+        if matches!(query.test, KnowledgeTest::Holds | KnowledgeTest::Unknown) {
             return Err(unwritable);
         }
         if !self.held.iter().any(|known| known.id == query.id) {
@@ -383,12 +380,7 @@ impl Quests {
                     .chain(step.done_when)
                     .chain(step.progress.iter().copied())
             })
-            .filter(|query| {
-                !matches!(
-                    query.test,
-                    KnowledgeTest::Holds | KnowledgeTest::Fails | KnowledgeTest::Unknown
-                )
-            })
+            .filter(|query| !matches!(query.test, KnowledgeTest::Holds | KnowledgeTest::Unknown))
             .map(|query| query.id)
             .collect();
         if let Holder::Player(_) = holder {

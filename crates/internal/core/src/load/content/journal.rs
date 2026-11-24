@@ -114,4 +114,159 @@ impl Load<'_> {
     /// ```
     #[script]
     pub fn change_quest(&mut self, quest: KnowledgeId, change: QuestChange) -> Result<(), Off>;
+
+    /// Removes the vanilla quest `quest` from the journal in memory, on the
+    /// server and the client alike, with its steps; its knowledge stays, so
+    /// a save that holds its progress still opens. Mods change and remove a
+    /// quest in load order. A removal is logged and left out when the
+    /// journal first builds while a quest of another mod earlier in load
+    /// order asks for the quest's id.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when `quest` is no quest of the game's journal.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>, tutorial: enshwick::knowledge::KnowledgeId) -> Result<(), enshwick::Off> {
+    ///     load.remove_quest(tutorial)
+    /// }
+    /// ```
+    #[script]
+    pub fn remove_quest(&mut self, quest: KnowledgeId) -> Result<(), Off>;
+
+    /// Changes the vanilla lore page `page` in memory, on the server and the
+    /// client alike: its category, title, priority, tutorial mark, document
+    /// and entries. Mods that change one page change it in load order.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when `page` is no page of the game's journal, a category no
+    /// page of the game's journal is listed under, an entry an edit names
+    /// past the page's, an inserted entry without `shown_when`, or a count
+    /// query from 0.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::id;
+    /// use enshwick::content::journal::{EntryId, PageChange};
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>, page: EntryId) -> Result<(), enshwick::Off> {
+    ///     load.change_journal_page(page, PageChange {
+    ///         name: Some(id!("old-page.name").guid()),
+    ///         ..PageChange::default()
+    ///     })
+    /// }
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[script]
+    pub fn change_journal_page(
+        &mut self,
+        page: crate::content::journal::EntryId,
+        change: crate::content::journal::PageChange,
+    ) -> Result<(), Off>;
+
+    /// Removes the vanilla lore page `page` from the journal in memory, on
+    /// the server and the client alike, with its entries.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when `page` is no page of the game's journal.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>, page: enshwick::content::journal::EntryId) -> Result<(), enshwick::Off> {
+    ///     load.remove_journal_page(page)
+    /// }
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[script]
+    pub fn remove_journal_page(
+        &mut self,
+        page: crate::content::journal::EntryId,
+    ) -> Result<(), Off>;
+
+    /// Adds an item set to the journal's collections beside the game's, on
+    /// the server and the client alike, and returns its set id. Each entry
+    /// is done once its `done_when` holds, by default once a player first
+    /// picks its item up, as the game's own entries are. The set shows once
+    /// `shown_when` holds, by default once one entry is done, and is
+    /// complete once every entry is: the loader adds those two queries to
+    /// the game's query database (see [`Load::add_query`]), as the game's
+    /// own sets ask theirs. The game's server walks the pay rows, at most 50
+    /// a run: for a player without the set's bool, a bool of the loader's,
+    /// whose completion query holds, it gives the set's experience and sets
+    /// the bool, so a set pays once (server 26430253, read in the code). The
+    /// set's recipes are what the collection screen lists; whether the game
+    /// grants them is not read yet, so a mod that wants them granted grants
+    /// them itself.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for a set without entries, a count query from 0, an id too
+    /// long to name the loader's parts in, a category no set of the game's
+    /// journal is listed under, or an id the loader refuses (see
+    /// [`Load::declare`]). An id the journal already holds is logged when the
+    /// game first reads it, and the set is left out.
+    ///
+    /// # Examples
+    ///
+    /// See [`NewItemSet`](crate::content::journal::NewItemSet).
+    #[script]
+    pub fn add_item_set(
+        &mut self,
+        new: crate::content::journal::NewItemSet,
+    ) -> Result<crate::content::journal::ItemSetId, Off>;
+
+    /// Changes the vanilla item set `set` in memory, on the server and the
+    /// client alike: its title, experience, recipes, entries and queries,
+    /// and its pay row with them. Mods that change one set change it in
+    /// load order; [`Quests::item_sets`](crate::quests::Quests::item_sets)
+    /// lists the sets.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when `set` is no set of the game's journal, new entries come
+    /// without the set's `done_when`, or a count query starts from 0.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::journal::{ItemSetChange, ItemSetId};
+    /// use enshwick::content::knowledge::ExperienceValue;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>, set: ItemSetId, more: ExperienceValue) -> Result<(), enshwick::Off> {
+    ///     load.change_item_set(set, ItemSetChange {
+    ///         experience: Some(more),
+    ///         ..ItemSetChange::default()
+    ///     })
+    /// }
+    /// ```
+    #[script]
+    pub fn change_item_set(
+        &mut self,
+        set: crate::content::journal::ItemSetId,
+        change: crate::content::journal::ItemSetChange,
+    ) -> Result<(), Off>;
+
+    /// Removes the vanilla item set `set` from the journal in memory, on the
+    /// server and the client alike, with its entries and its pay row; the
+    /// knowledge its entries ask stays.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when `set` is no set of the game's journal.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>, set: enshwick::content::journal::ItemSetId) -> Result<(), enshwick::Off> {
+    ///     load.remove_item_set(set)
+    /// }
+    /// ```
+    #[script]
+    pub fn remove_item_set(&mut self, set: crate::content::journal::ItemSetId) -> Result<(), Off>;
 }

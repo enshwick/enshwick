@@ -38,9 +38,11 @@ use crate::{Host, Off};
 use super::{EngineFacts, Guid, Id};
 
 mod experience;
+mod queries;
 
 pub use experience::NewExperience;
 pub(crate) use experience::{balance_parts, balancing_table, source_type, values_of};
+pub use queries::{NewQuery, QueryForm};
 
 /// The game's knowledge: every world and player entry and the skill
 /// points they unlock (server 387 and 399, `GameKnowledgeResource`).
@@ -117,10 +119,10 @@ pub enum KnowledgeTest {
     Below(u32),
     /// Flags holding any of these bits, not 0.
     HasFlag(u32),
-    /// The game query of the id holds.
+    /// The game query of the id holds. The game reads only the query's own
+    /// answer here and no compare (server 26430253), so a query that holds
+    /// where another fails is a query of its own with `invert`.
     Holds,
-    /// The game query of the id does not hold.
-    Fails,
     /// A form of the game's that enshwick does not read, such as a test
     /// that never holds or one a later build adds; only the game answers
     /// it, and a mod cannot write it.
@@ -138,7 +140,7 @@ impl KnowledgeTest {
             Self::Equals(count) => value == count,
             Self::Below(count) => value < count,
             Self::HasFlag(bits) => value & bits != 0,
-            Self::Holds | Self::Fails | Self::Unknown => return None,
+            Self::Holds | Self::Unknown => return None,
         })
     }
 }
@@ -207,7 +209,7 @@ impl KnowledgeQuery {
     ///
     /// let met = KnowledgeQuery::game(GameQuery::new(0x5e11_c0de));
     /// assert_eq!(met.test, KnowledgeTest::Holds);
-    /// assert_eq!(met.not().map(|q| q.test), Some(KnowledgeTest::Fails));
+    /// assert_eq!(met.not(), None);
     /// ```
     #[must_use]
     pub const fn game(query: GameQuery) -> Self {
@@ -219,8 +221,8 @@ impl KnowledgeQuery {
     }
 
     /// The query that holds where this one does not; `None` for a test the
-    /// game has no opposite of: an exact count other than 0, flags, or an
-    /// unknown form.
+    /// game has no opposite of: an exact count other than 0, flags, a game
+    /// query, or an unknown form.
     ///
     /// # Examples
     ///
@@ -238,9 +240,10 @@ impl KnowledgeQuery {
             KnowledgeTest::Equals(0) => KnowledgeTest::IsSet,
             KnowledgeTest::AtLeast(count) => KnowledgeTest::Below(count),
             KnowledgeTest::Below(count) => KnowledgeTest::AtLeast(count),
-            KnowledgeTest::Holds => KnowledgeTest::Fails,
-            KnowledgeTest::Fails => KnowledgeTest::Holds,
-            KnowledgeTest::Equals(_) | KnowledgeTest::HasFlag(_) | KnowledgeTest::Unknown => {
+            KnowledgeTest::Equals(_)
+            | KnowledgeTest::HasFlag(_)
+            | KnowledgeTest::Holds
+            | KnowledgeTest::Unknown => {
                 return None;
             }
         };
@@ -250,7 +253,8 @@ impl KnowledgeQuery {
     /// The game's query data, in the forms the game's own steps take
     /// (server 387): a bool equal to 1, a count compared with its operator
     /// (at least `n` as greater than `n - 1`), flags equal to their bits,
-    /// and a game query equal to 1 or 0.
+    /// and a game query equal to 0, the compare the game writes on every
+    /// one and reads on none.
     pub(crate) fn to_value(self) -> Result<Value, Off> {
         let refuse = |why: &str| Err(Off::new(format!("knowledge query {}: {why}", self.id)));
         let (kind, operator, compare) = match self.test {
@@ -264,8 +268,7 @@ impl KnowledgeQuery {
             KnowledgeTest::Equals(count) => ("SimpleCount", "Equals", count),
             KnowledgeTest::Below(count) => ("SimpleCount", "LessThan", count),
             KnowledgeTest::HasFlag(bits) => ("SimpleFlag", "Equals", bits),
-            KnowledgeTest::Holds => ("Extern", "Equals", 1),
-            KnowledgeTest::Fails => ("Extern", "Equals", 0),
+            KnowledgeTest::Holds => ("Extern", "Equals", 0),
         };
         Ok(Value::Struct(vec![
             ("knowledgeOrQueryId".into(), hash_key(self.id.get())),
@@ -292,12 +295,6 @@ impl KnowledgeQuery {
             return None;
         }
         let value = data.compare_value;
-        let compare = |held: u32| match data.compare_operator {
-            CompareOperator::GreaterThan => Some(held > value),
-            CompareOperator::LessThan => Some(held < value),
-            CompareOperator::Equals => Some(held == value),
-            _ => None,
-        };
         let test = match data.r#type {
             KnowledgeQueryDataType::SimpleBool => Some(KnowledgeTest::IsSet),
             KnowledgeQueryDataType::SimpleFlag if value != 0 => Some(KnowledgeTest::HasFlag(value)),
@@ -307,12 +304,9 @@ impl KnowledgeQuery {
                 CompareOperator::Equals => Some(KnowledgeTest::Equals(value)),
                 _ => None,
             },
-            // A game query's state is 0 or 1.
-            KnowledgeQueryDataType::Extern => match (compare(1), compare(0)) {
-                (Some(true), Some(false)) => Some(KnowledgeTest::Holds),
-                (Some(false), Some(true)) => Some(KnowledgeTest::Fails),
-                _ => None,
-            },
+            // The game's evaluator reads the query's state bit alone and neither the
+            // compare value nor the operator (FUN_140a284c0, server 26430253).
+            KnowledgeQueryDataType::Extern => Some(KnowledgeTest::Holds),
             _ => None,
         };
         let scope = if data.is_explicit_player_knowledge_query {
@@ -692,9 +686,25 @@ pub trait LoadMethods {
     /// As `Load::add_experience`.
     #[doc(hidden)]
     fn add_experience(&mut self, new: NewExperience) -> Result<ExperienceValue, Off>;
+
+    /// As `Load::add_query`.
+    #[doc(hidden)]
+    fn add_query(&mut self, new: NewQuery) -> Result<GameQuery, Off>;
+
+    /// As `Load::game_query`.
+    #[doc(hidden)]
+    fn game_query(&mut self, name: &str) -> Result<GameQuery, Off>;
 }
 
 impl LoadMethods for crate::BaseLoad {
+    fn add_query(&mut self, new: NewQuery) -> Result<GameQuery, Off> {
+        queries::add(self, new)
+    }
+
+    fn game_query(&mut self, name: &str) -> Result<GameQuery, Off> {
+        queries::named(self, name)
+    }
+
     fn add_knowledge(&mut self, new: NewKnowledge) -> Result<KnowledgeId, Off> {
         new.to_value(KnowledgeId::from_guid(new.id.guid()).get())?;
         self.knowledge_without(new.id)?;
@@ -940,6 +950,13 @@ mod tests {
             Some(&Value::Name("GreaterThan".into()))
         );
         assert_eq!(count.field("compareValue"), Some(&Value::Uint(24)));
+        let game = KnowledgeQuery::game(GameQuery::new(9)).to_value().unwrap();
+        assert_eq!(game.field("type"), Some(&Value::Name("Extern".into())));
+        assert_eq!(
+            game.field("compareValue"),
+            Some(&Value::Uint(0)),
+            "as every Extern query of the game's journal"
+        );
         assert!(
             KnowledgeQuery::at_least(id, Scope::World, 0)
                 .to_value()
