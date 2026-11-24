@@ -466,7 +466,7 @@ impl Refusal for crate::inventory::transactions::SubmitInventoryError {
 
 /// An item the game does not have is missing; a build, registry or world
 /// without the item lookup unavailable.
-impl Refusal for crate::inventory::transactions::ItemInfoError {
+impl Refusal for crate::content::item_info::ItemInfoError {
     fn status(&self) -> Status {
         match self {
             Self::NoItem => Status::MISSING,

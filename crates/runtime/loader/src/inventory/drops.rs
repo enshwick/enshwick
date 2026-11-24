@@ -249,7 +249,7 @@ pub(crate) enum DropError {
     /// The item's data did not read: the game has no such item, or the
     /// build, the registry or the world to read it is missing.
     #[error(transparent)]
-    Item(#[from] crate::inventory::transactions::ItemInfoError),
+    Item(#[from] crate::content::item_info::ItemInfoError),
     /// The server's world, unreadable now.
     #[error(transparent)]
     World(#[from] crate::engine::world::WorldError),
@@ -321,7 +321,7 @@ mod tests {
 
     #[test]
     fn a_drop_keeps_why_its_item_did_not_read() {
-        use crate::inventory::transactions::ItemInfoError;
+        use crate::content::item_info::ItemInfoError;
         let all = [
             ItemInfoError::Unread,
             ItemInfoError::NoRegistry,

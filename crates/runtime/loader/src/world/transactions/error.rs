@@ -85,7 +85,7 @@ pub(crate) enum TransactionError {
     /// The item the change places, unreadable now.
     #[cfg(windows)]
     #[error(transparent)]
-    Item(#[from] crate::inventory::transactions::ItemInfoError),
+    Item(#[from] crate::content::item_info::ItemInfoError),
     /// The prop's spawn, as the server answered.
     #[cfg(windows)]
     #[error(transparent)]

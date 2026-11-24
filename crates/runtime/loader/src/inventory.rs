@@ -43,6 +43,12 @@ pub(crate) static PARTS: &[&Part] = &[
         end: Some(|_| {
             transactions::end();
         }),
+        seal: Some(|_| {
+            crate::content::item_info::on_lookup(crate::content::item_info::Lookup {
+                at: transactions::item_info_at,
+                info: transactions::item_info,
+            });
+        }),
         ..part!("inventory", transactions)
     },
     &Part {

@@ -49,7 +49,7 @@ fn item_prop(
     access: &ServerAccess<'_>,
     item: u32,
 ) -> Result<ItemProp, TransactionError> {
-    let info = crate::inventory::transactions::item_info_at(loader, access, item)?
+    let info = crate::content::item_info::item_info_at(loader, access, item)?
         .ok_or(TransactionError::BadItem)?;
     let flags_at = offset(loader, catalogue::ids::ITEM_INFO_FLAGS)?;
     // SAFETY: `info` is the item's live `ItemInfo`, with its `u32` flags at

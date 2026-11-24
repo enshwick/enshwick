@@ -241,7 +241,7 @@ fn building_material(
     access: &ServerAccess<'_>,
     item: u32,
 ) -> Result<u8, TransactionError> {
-    let info = crate::inventory::transactions::item_info_at(loader, access, item)?
+    let info = crate::content::item_info::item_info_at(loader, access, item)?
         .ok_or(TransactionError::BadItem)?;
     let at = |id| {
         catalogue::constant(id, &loader.reflection)

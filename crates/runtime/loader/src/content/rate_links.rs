@@ -264,7 +264,7 @@ unsafe fn scale_slot(slot: *mut u8, rate: f32) {
     // reflected `stackSize`, which `SlotFields::checked` keeps inside the
     // slot.
     let count: u16 = unsafe { crate::engine::memory::read(slot, fields.count) };
-    let Ok(info) = crate::inventory::transactions::item_info(loader, item) else {
+    let Ok(info) = crate::content::item_info::item_info(loader, item) else {
         return;
     };
     // SAFETY: the caller's slot is writable at the reflected `stackSize`, a

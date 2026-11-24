@@ -22,6 +22,8 @@ pub(crate) mod content_renames;
 )]
 pub(crate) mod crafting_props;
 pub mod data_changes;
+#[cfg(windows)]
+pub(crate) mod item_info;
 pub mod item_kinds;
 #[cfg_attr(
     all(not(windows), not(test)),

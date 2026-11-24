@@ -31,6 +31,7 @@ use enshwick_core::abi::{
 };
 use run::run;
 
+use crate::content::item_info::ItemInfoError;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::memory::read_ptr;
@@ -677,24 +678,6 @@ pub(crate) enum SubmitInventoryError {
     /// The operations do not read or break the request rules.
     #[error("the request's operations are malformed")]
     BadOps,
-}
-
-/// Why an item's static data could not be read; every reason is the item
-/// missing to its caller.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-pub(crate) enum ItemInfoError {
-    /// The build lacks the item lookup.
-    #[error("this build lacks the item lookup")]
-    Unread,
-    /// The loader knows no item registry yet.
-    #[error("no item registry yet")]
-    NoRegistry,
-    /// No world runs.
-    #[error("no world runs")]
-    NoWorld,
-    /// The game has no such item.
-    #[error("the game has no such item")]
-    NoItem,
 }
 
 /// Links the row hook when a mod asked for inventories, and always on a
