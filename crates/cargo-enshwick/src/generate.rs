@@ -278,16 +278,19 @@ mod tests {
     fn the_api_follows_the_rule_of_the_repository_it_is_written_into() {
         let root = repo("rule");
         let data = data(&root);
+        let written = || -> String {
+            std::fs::read_dir(root.join(TYPED))
+                .unwrap()
+                .map(|entry| std::fs::read_to_string(entry.unwrap().path()).unwrap())
+                .collect()
+        };
         run(&root, &data, None, false).unwrap();
-        let ecs = root.join(TYPED).join("ecs.rs");
-        assert!(std::fs::read_to_string(&ecs).unwrap().contains("Fuel"));
-        rule(
-            &root,
-            &DEMO_RULE.replace("demo::ecs::Component", "demo::ecs::Other"),
-        );
+        assert!(written().contains("LootResource"));
+        rule(&root, &DEMO_RULE.replace("[\"Resource\"]", "[]"));
         run(&root, &data, None, false).unwrap();
-        let ecs = std::fs::read_to_string(&ecs).unwrap_or_default();
-        assert!(!ecs.contains("Fuel"), "{ecs}");
+        let api = written();
+        assert!(!api.contains("LootResource"), "{api}");
+        assert!(api.contains("Fuel"), "the other roles stay");
         std::fs::write(root.join(RELEVANCE), "roots = 1").unwrap();
         let error = format!("{:#}", run(&root, &data, None, false).unwrap_err());
         assert!(error.contains("relevant.toml"), "{error}");

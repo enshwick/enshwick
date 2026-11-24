@@ -475,6 +475,9 @@ fn demo_rule(suffixes: &str) -> Relevance {
 
 #[test]
 fn one_snapshot_of_every_type_covers_what_each_tree_s_own_rule_covers() {
+    fn named(catalogue: &Catalogue, role: Role) -> Vec<&str> {
+        catalogue.names(role).collect()
+    }
     let mut all = fixture();
     all.types.insert(
         "demo::LootResourceDb".to_owned(),
@@ -495,7 +498,6 @@ fn one_snapshot_of_every_type_covers_what_each_tree_s_own_rule_covers() {
     let snapshot = Catalogue::from_snapshot(&all.snapshot()).unwrap();
     let main = snapshot.clone().covered(&demo_rule("\"Resource\""));
     let branch = snapshot.covered(&demo_rule("\"Resource\", \"ResourceDb\""));
-    let named = |catalogue: &Catalogue, role| catalogue.names(role).collect::<Vec<_>>();
     assert_eq!(named(&main, Role::Resource), ["demo::LootResource"]);
     assert_eq!(
         named(&branch, Role::Resource),
