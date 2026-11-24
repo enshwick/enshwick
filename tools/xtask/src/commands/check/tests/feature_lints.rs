@@ -28,9 +28,42 @@ fn read(path: &str) -> Option<String> {
         ),
         "crates/api/content/src/plain.rs" => Some("pub fn plain() {}".to_owned()),
         "crates/api/content/src/broken.rs" => Some("fn f() { \"open".to_owned()),
+        "crates/api/content/src/lib.rs" => Some(
+            "#[cfg(feature = \"fake\")]\npub mod world;\n#[cfg(feature = \"typed\")] mod other;"
+                .to_owned(),
+        ),
+        "crates/api/content/src/world/mod.rs" => Some(
+            "#[cfg(feature = \"unstable\")]\n#[expect(dead_code)]\npub(crate) mod props;"
+                .to_owned(),
+        ),
+        "crates/api/content/src/world/props.rs" => Some("pub fn props() {}".to_owned()),
         _ => None,
     }
 }
+
+/// A change whose files read as `after` gives them now and as `before` at
+/// the merge base.
+struct Change {
+    before: fn(&str) -> Option<String>,
+    after: fn(&str) -> Option<String>,
+}
+
+impl affected::Texts for Change {
+    fn before(&self, path: &str) -> Option<String> {
+        (self.before)(path)
+    }
+
+    fn after(&self, path: &str) -> Option<String> {
+        (self.after)(path)
+    }
+}
+
+/// Files that read as [`read`] gives them and were not there at the merge
+/// base.
+const NEW: Change = Change {
+    before: |_| None,
+    after: read,
+};
 
 fn touched(entries: &[(&str, Option<&[&str]>)]) -> Alone {
     Alone::Touched(
@@ -50,11 +83,72 @@ fn a_changed_source_file_reaches_only_the_features_its_cfg_predicates_name_outsi
     let alone = Alone::of(
         &files(&["crates/api/content/src/fake.rs"]),
         &packages(),
-        read,
+        &NEW,
     );
     assert_eq!(
         alone,
         touched(&[("enshwick-content", Some(&["fake", "unstable"]))])
+    );
+}
+
+#[test]
+fn a_changed_file_reaches_the_features_on_the_mod_declarations_that_include_it() {
+    let alone = Alone::of(
+        &files(&["crates/api/content/src/world/props.rs"]),
+        &packages(),
+        &NEW,
+    );
+    assert_eq!(
+        alone,
+        touched(&[("enshwick-content", Some(&["fake", "unstable"]))])
+    );
+}
+
+#[test]
+fn a_gate_the_change_removed_still_reaches_its_feature() {
+    let removed = Change {
+        before: |path| {
+            (path == "crates/api/content/src/plain.rs")
+                .then(|| "#[cfg(feature = \"typed\")] pub fn plain() {}".to_owned())
+        },
+        after: read,
+    };
+    assert_eq!(
+        Alone::of(
+            &files(&["crates/api/content/src/plain.rs"]),
+            &packages(),
+            &removed
+        ),
+        touched(&[("enshwick-content", Some(&["typed"]))])
+    );
+}
+
+#[test]
+fn a_feature_that_turns_a_reached_one_on_is_reached_through_every_step() {
+    let [mut content, world] = packages();
+    content.feature_table = [
+        ("typed", vec!["unstable", "dep:enshwick-typed"]),
+        ("all", vec!["typed", "enshwick-world/fake"]),
+        ("fake", vec![]),
+    ]
+    .into_iter()
+    .map(|(name, on)| (name.to_owned(), on.into_iter().map(str::to_owned).collect()))
+    .collect();
+    let changed = files(&["crates/api/content/src/fake.rs"]);
+    assert_eq!(
+        Alone::of(&changed, &[content, world], &NEW),
+        touched(&[(
+            "enshwick-content",
+            Some(&["all", "fake", "typed", "unstable"])
+        )])
+    );
+}
+
+#[test]
+fn a_feature_named_by_a_raw_string_reads_as_its_plain_name() {
+    assert_eq!(
+        features::gated_features("#[cfg(feature = r#\"fake\"#)] fn f() {}"),
+        Some(["fake".to_owned()].into())
     );
 }
 
@@ -75,7 +169,7 @@ fn a_source_file_without_a_feature_gate_reaches_no_feature_and_a_test_or_a_file_
         "book/src/intro.md",
     ]);
     assert_eq!(
-        Alone::of(&changed, &packages(), read),
+        Alone::of(&changed, &packages(), &NEW),
         touched(&[("enshwick-content", Some(&[]))])
     );
 }
@@ -92,7 +186,7 @@ fn a_manifest_a_build_script_rust_outside_src_or_a_source_file_gone_or_unlexed_r
     ] {
         let changed = files(&["crates/api/content/src/fake.rs", file]);
         assert_eq!(
-            Alone::of(&changed, &packages(), read),
+            Alone::of(&changed, &packages(), &NEW),
             touched(&[("enshwick-content", None)]),
             "{file}"
         );
@@ -104,7 +198,7 @@ fn a_change_to_the_shared_manifest_or_lock_reaches_every_feature() {
     for file in ["Cargo.toml", "Cargo.lock"] {
         let changed = files(&["crates/api/content/src/plain.rs", file]);
         assert_eq!(
-            Alone::of(&changed, &packages(), read),
+            Alone::of(&changed, &packages(), &NEW),
             Alone::Every,
             "{file}"
         );

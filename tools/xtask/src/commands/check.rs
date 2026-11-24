@@ -157,18 +157,14 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
             return Ok(false);
         }
     }
+    let tree = merge_base.map(|merge_base| Tree {
+        merge_base,
+        root: &root,
+    });
     let scope = if args.all {
         Scope::All
-    } else if let (Some(files), Some(merge_base)) = (&changed, merge_base) {
-        affected::scope(
-            files,
-            &packages,
-            &Tree {
-                merge_base,
-                root: &root,
-            },
-            Lane::current(),
-        )
+    } else if let (Some(files), Some(tree)) = (&changed, &tree) {
+        affected::scope(files, &packages, tree, Lane::current())
     } else {
         say(&format!(
             "no merge base with {}; checking everything",
@@ -215,7 +211,8 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
             format!("the trybuild test is out of scope: the change does not reach {FACADE}")
         });
     }
-    let checked = check(&scope, &packages, args.all, &parts, changed.as_deref())
+    let alone = feature_lints(&scope, changed.as_deref(), tree.as_ref(), &packages);
+    let checked = check(&scope, &packages, args.all, &parts, &alone)
         && (!parts.contains(&Part::Semver) || semver(&args.semver));
     if !(checked && parts.contains(&Part::WindowsTests)) {
         return Ok(checked);
@@ -235,20 +232,18 @@ fn listed_parts(parts: &[Part], scope: &Scope, packages: &[Package], root: &Path
 }
 
 /// The features the feature lints build alone: in a local check of some
-/// packages, those the `changed` files under `root` reach
+/// packages, those the `changed` files of `tree` reach
 /// ([`features::Alone::of`]), leaving the rest to CI and the merge queue,
 /// which lint every one; otherwise every one.
 fn feature_lints(
     scope: &Scope,
     changed: Option<&[String]>,
+    tree: Option<&Tree<'_>>,
     packages: &[Package],
-    root: &Path,
 ) -> features::Alone {
-    match (scope, changed) {
-        (Scope::Some { .. }, Some(files)) if Lane::current() == Lane::Local => {
-            features::Alone::of(files, packages, |file| {
-                std::fs::read_to_string(root.join(file)).ok()
-            })
+    match (scope, changed, tree) {
+        (Scope::Some { .. }, Some(files), Some(tree)) if Lane::current() == Lane::Local => {
+            features::Alone::of(files, packages, tree)
         }
         _ => features::Alone::Every,
     }
@@ -771,14 +766,13 @@ fn check(
     packages: &[Package],
     full: bool,
     parts: &[Part],
-    changed: Option<&[String]>,
+    alone: &features::Alone,
 ) -> bool {
     // The source checks read every file in about a second without compiling,
     // so they run whatever changed: a change to a rule alone touches no package.
     if parts.contains(&Part::Host) && !source_checks() {
         return false;
     }
-    let alone = &feature_lints(scope, changed, packages, &workspace_root());
     let on_windows = cfg!(windows);
     let host_ok =
         |name: &String| on_windows || packages.iter().any(|p| &p.name == name && !p.windows_only);

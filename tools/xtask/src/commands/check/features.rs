@@ -42,23 +42,21 @@ const FEATURE_BUILD: [&str; 2] = ["Cargo.toml", "build.rs"];
 const UNLINTED_DIRS: [&str; 3] = ["tests/", "benches/", "examples/"];
 /// A package's source folder, the one the feature lints build.
 const SOURCE_DIR: &str = "src/";
+/// The modules of a package's crate roots under [`SOURCE_DIR`].
+const CRATE_ROOTS: [&str; 2] = ["lib", "main"];
 
 impl Alone {
     /// The features the changed `files` (relative to the root, `/`
-    /// separators) of `packages` reach, `read` giving a file's text now
-    /// (`None` when it is gone). The manifest, the build script and Rust
-    /// outside `src/` and the test, bench and example targets reach every
+    /// separators) of `packages` reach, `texts` giving a file's text at the
+    /// merge base and now. The manifest, the build script and Rust outside
+    /// `src/`, the test, bench and example targets left out, reach every
     /// feature, as does a source file that is gone or does not lex; a Rust
-    /// file under `src/` reaches the features its `cfg` predicates name
-    /// ([`gated_features`]), a test module none. Any other file (data a
-    /// source file includes, a snapshot, a header, docs) reaches none: it
-    /// moves no `cfg` gate, and the run without features and the
-    /// workspace's clippy build what reads it.
-    pub(super) fn of(
-        files: &[String],
-        packages: &[Package],
-        read: impl Fn(&str) -> Option<String>,
-    ) -> Self {
+    /// file under `src/` reaches the features it gates ([`source_gates`]),
+    /// a test module none. Any other file (data a source file includes, a
+    /// snapshot, a header, docs) reaches none: it moves no `cfg` gate, and
+    /// the run without features and the workspace's clippy build what reads
+    /// it. A feature that turns a reached one on is reached too.
+    pub(super) fn of(files: &[String], packages: &[Package], texts: &dyn affected::Texts) -> Self {
         let mut touched: BTreeMap<String, Option<BTreeSet<String>>> = BTreeMap::new();
         for file in files {
             let Some(package) = affected::owner(file, packages) else {
@@ -71,9 +69,7 @@ impl Alone {
             let rust = Path::new(own).extension().is_some_and(|ext| ext == "rs");
             let gated = match own.strip_prefix(SOURCE_DIR) {
                 _ if FEATURE_BUILD.contains(&own) => None,
-                Some(path) if rust && !is_test_module(path) => {
-                    read(file).and_then(|text| gated_features(&text))
-                }
+                Some(path) if rust && !is_test_module(path) => source_gates(file, path, texts),
                 None if rust && !UNLINTED_DIRS.iter().any(|dir| own.starts_with(dir)) => None,
                 _ => continue,
             };
@@ -84,6 +80,11 @@ impl Alone {
                 (Some(features), Some(gated)) => features.extend(gated),
                 (_, None) => *entry = None,
                 (None, Some(_)) => {}
+            }
+        }
+        for package in packages {
+            if let Some(Some(features)) = touched.get_mut(&package.name) {
+                add_turning_on(package, features);
             }
         }
         Self::Touched(touched)
@@ -97,6 +98,114 @@ impl Alone {
                 .get(&package.name)
                 .is_some_and(|gated| gated.as_ref().is_none_or(|gated| gated.contains(feature))),
         }
+    }
+}
+
+/// The features a change to the source file `file`, at `path` under its
+/// package's `src/`, reaches: those its text names at the merge base and
+/// now ([`gated_features`]), so a removed gate counts, and those on the
+/// `mod` declarations that include it ([`module_gates`]); `None`, every
+/// feature, when it is gone or a text does not lex.
+fn source_gates(file: &str, path: &str, texts: &dyn affected::Texts) -> Option<BTreeSet<String>> {
+    let mut features = gated_features(&texts.after(file)?)?;
+    if let Some(before) = texts.before(file) {
+        features.extend(gated_features(&before)?);
+    }
+    let src = &file[..file.len() - path.len()];
+    features.extend(module_gates(src, path, |parent| texts.after(parent))?);
+    Some(features)
+}
+
+/// The features the `cfg` attributes on the `mod` declarations of the
+/// module at `path` under `src` and of each module above it name, read
+/// from the current parent files (`a/b.rs` is `mod b;` in `a.rs` or
+/// `a/mod.rs`, `a.rs` is `mod a;` in `lib.rs` or `main.rs`); `None` when a
+/// parent does not lex. The walk stops at a parent it cannot find, such as
+/// one a `#[path]` names.
+fn module_gates(
+    src: &str,
+    path: &str,
+    read: impl Fn(&str) -> Option<String>,
+) -> Option<BTreeSet<String>> {
+    let module = path.strip_suffix(".rs").unwrap_or(path);
+    let mut names: Vec<&str> = module.split('/').collect();
+    // `a/mod.rs` is the module `a`.
+    if names.last() == Some(&"mod") {
+        names.pop();
+    }
+    let mut features = BTreeSet::new();
+    for depth in (0..names.len()).rev() {
+        let (above, name) = (&names[..depth], names[depth]);
+        let parents = if above.is_empty() {
+            if CRATE_ROOTS.contains(&name) {
+                break;
+            }
+            CRATE_ROOTS.map(|root| format!("{src}{root}.rs"))
+        } else {
+            let above = above.join("/");
+            [format!("{src}{above}.rs"), format!("{src}{above}/mod.rs")]
+        };
+        let Some(text) = parents.iter().find_map(|parent| read(parent)) else {
+            break;
+        };
+        features.extend(mod_gates(&text, name)?);
+    }
+    Some(features)
+}
+
+/// The features the attributes on `mod name` in `text` name; `None` when
+/// the text does not lex.
+fn mod_gates(text: &str, name: &str) -> Option<BTreeSet<String>> {
+    let mut features = BTreeSet::new();
+    let mut streams = vec![text.parse::<TokenStream>().ok()?];
+    while let Some(stream) = streams.pop() {
+        // The attributes since the last item ended.
+        let mut attributes = Vec::new();
+        let mut tokens = stream.into_iter().peekable();
+        while let Some(token) = tokens.next() {
+            match token {
+                TokenTree::Group(group) if group.delimiter() == Delimiter::Bracket => {
+                    attributes.push(group.stream());
+                }
+                TokenTree::Group(group) if group.delimiter() == Delimiter::Brace => {
+                    streams.push(group.stream());
+                    attributes.clear();
+                }
+                TokenTree::Ident(ident)
+                    if ident == "mod"
+                        && matches!(tokens.peek(), Some(TokenTree::Ident(next)) if next == name) =>
+                {
+                    for attribute in attributes.drain(..) {
+                        named_features(attribute, &mut features);
+                    }
+                }
+                TokenTree::Punct(punct) if punct.as_char() == ';' => attributes.clear(),
+                TokenTree::Group(_)
+                | TokenTree::Ident(_)
+                | TokenTree::Punct(_)
+                | TokenTree::Literal(_) => {}
+            }
+        }
+    }
+    Some(features)
+}
+
+/// Adds to `features` each feature of `package` whose `[features]` list
+/// turns one of them on, directly or through another.
+fn add_turning_on(package: &Package, features: &mut BTreeSet<String>) {
+    loop {
+        let more: Vec<String> = package
+            .feature_table
+            .iter()
+            .filter(|(name, list)| {
+                !features.contains(*name) && list.iter().any(|on| features.contains(on))
+            })
+            .map(|(name, _)| name.clone())
+            .collect();
+        if more.is_empty() {
+            return;
+        }
+        features.extend(more);
     }
 }
 
@@ -217,7 +326,10 @@ fn named_features(predicate: TokenStream, out: &mut BTreeSet<String>) {
                 {
                     tokens.next();
                     if let Some(TokenTree::Literal(name)) = tokens.next() {
-                        out.insert(name.to_string().trim_matches('"').to_owned());
+                        // A raw string (`r#"fake"#`) names the same feature.
+                        let name = name.to_string();
+                        let name = name.trim_start_matches('r').trim_matches('#');
+                        out.insert(name.trim_matches('"').to_owned());
                     }
                 }
             }
