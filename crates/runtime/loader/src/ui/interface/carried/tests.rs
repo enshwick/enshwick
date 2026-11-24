@@ -408,6 +408,20 @@ fn the_map_key_passes_only_under_a_window_with_a_map_and_no_typing() {
 }
 
 #[test]
+fn the_map_key_passes_only_in_a_frame_whose_windows_drew_and_where_nothing_types() {
+    assert!(map_wanted(true, true, false));
+    assert!(!map_wanted(false, true, false), "no carried draw asked");
+    assert!(
+        !map_wanted(true, false, false),
+        "the game's own popup is up"
+    );
+    assert!(
+        !map_wanted(true, true, true),
+        "a field of another window types"
+    );
+}
+
+#[test]
 fn a_map_draws_its_line_and_a_button_that_opens_the_map() {
     let paint = Recorder::default();
     let mut drawn = drawn();

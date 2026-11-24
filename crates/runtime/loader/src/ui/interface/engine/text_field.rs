@@ -280,6 +280,13 @@ pub(super) fn typed_last_frame() -> bool {
     CARET.get()[1]
 }
 
+/// Whether a field of any of the loader's windows had the caret in this
+/// frame or the last one, on the interface thread, so a letter typed there
+/// stays in the field.
+pub(in crate::ui::interface) fn caret_shown() -> bool {
+    CARET.get().contains(&true)
+}
+
 /// The navigation config's flags: the low byte 0 reads no move from the
 /// arrows and the stick (client 26430625).
 pub(super) const fn nav_flags(typed_last_frame: bool) -> u16 {

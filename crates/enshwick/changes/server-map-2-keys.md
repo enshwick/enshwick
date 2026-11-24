@@ -4,7 +4,6 @@
   that holds a map, with whatever key, mouse button or gamepad button the
   player bound to it. The loader adds the map's keys to the keys the game
   lets through its windows while such a window shows, and gives the game
-  its own keys back once the window closes, steps aside for the map or a
-  field of it has the caret. Other game keys stay held under the window.
-- Loader: a window from the server steps aside on the in-game menu's Map
-  tab as it does on the Map screen.
+  its own keys back once the window closes, steps aside for the map, the
+  game opens its own popup or a text field of any window has the caret.
+  Other game keys stay held under the window.

@@ -20,7 +20,8 @@ use crate::engine::loader::Loader;
 use crate::engine::memory;
 use crate::engine::pinned::{self, Constant, Symbol};
 
-/// The game's name of the action that opens and closes the map.
+/// The game's name of the action that opens and closes the map, the
+/// generated `GameplayAction::UiMap`'s (held by a test).
 const MAP_ACTION: &str = "UiMap";
 
 /// The most keys a list the loader hands the game holds: the game's own,
@@ -121,7 +122,7 @@ impl MapKeys {
         let actions = GameActions::new(info.enum_values().iter().map(|v| (v.name(), v.value())));
         let map = actions
             .number(MAP_ACTION)
-            .ok_or(Missing::Reflected(ty, catalogue::ids::GAMEPLAY_ACTION))?;
+            .ok_or(Missing::Reflected(ty, MAP_ACTION))?;
         let bindings = function(pinned::ui::PASS_BINDINGS)?;
         // SAFETY: `code_holds` found the builder at `bindings`, its route
         // having matched its code; the type is its signature from the game's
@@ -161,6 +162,9 @@ impl MapKeys {
     ///   thread, where the game's own list functions run.
     /// - `context` is the frame's non-zero interface context.
     pub(in crate::ui::interface) unsafe fn pass(&self, context: usize, wanted: bool) {
+        if !wanted && !self.passing.load(Ordering::Relaxed) {
+            return;
+        }
         let mut map = Keys::new();
         let len = if wanted {
             // SAFETY: this function's `# Safety`: inside the frame on its
@@ -196,11 +200,18 @@ impl MapKeys {
         // reads the interface context, live in the frame by this function's
         // `# Safety`.
         unsafe { (self.refresh)() };
+        self.passing.store(false, Ordering::Relaxed);
         // SAFETY: `holder` is the context's non-zero holder, read in this
         // frame on its thread; the rebuild rewrites its list, not the holder.
-        let base = unsafe { self.game_keys(holder, &mut game) }.unwrap_or_default();
+        let Some(base) = (unsafe { self.game_keys(holder, &mut game) }) else {
+            crate::log_once!(
+                WARN,
+                "interface: the game's list of keys its windows let through does not read; the map's stay out of it"
+            );
+            return;
+        };
         let mut joined = Keys::new();
-        let Some(total) = join(base, ours, &mut joined.0) else {
+        let Some(total) = join(base, ours, &mut joined.0[..MOST_KEYS * self.size]) else {
             crate::log_once!(
                 WARN,
                 "interface: the game's {} keys its windows let through leave no room for the map's",
@@ -308,6 +319,30 @@ mod tests {
         assert_eq!(out[..4], [1, 1, 2, 2]);
         assert_eq!(join(&[], &[2, 2], &mut out), Some(2));
         assert_eq!(join(&[1; 5], &[2, 2], &mut out), None);
+    }
+
+    #[test]
+    fn the_map_action_is_the_generated_gameplay_action_s_name() {
+        use enshwick_core::typed::Reflected;
+        use enshwick_core::typed::input_mapping::runtime::GameplayAction;
+        assert_eq!(
+            GameplayAction::UiMap.to_value(),
+            enshwick_base::resources::Value::Name(MAP_ACTION.to_owned())
+        );
+    }
+
+    #[test]
+    fn a_list_past_its_capacity_in_keys_is_refused_though_its_bytes_fit() {
+        const SIZE: usize = MOST_KEY_SIZE / 2;
+        let mut joined = Keys::new();
+        let base = [1u8; (MOST_KEYS - 1) * SIZE];
+        let ours = [2u8; 2 * SIZE];
+        assert!(MOST_KEYS * MOST_KEY_SIZE >= base.len() + ours.len());
+        assert_eq!(join(&base, &ours, &mut joined.0[..MOST_KEYS * SIZE]), None);
+        assert_eq!(
+            join(&base, &ours[..SIZE], &mut joined.0[..MOST_KEYS * SIZE]),
+            Some(MOST_KEYS * SIZE)
+        );
     }
 
     #[test]

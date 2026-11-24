@@ -977,5 +977,5 @@ pub(super) use popup::note_root;
 use popup::{NodeMap, PopupRoot};
 pub(super) use rows::{Row, SlotRow};
 pub(super) use scroll::Scroll;
-pub(super) use text_field::{CLICKED, TextBuffer, Typed, caret_next_frame};
+pub(super) use text_field::{CLICKED, TextBuffer, Typed, caret_next_frame, caret_shown};
 pub(super) use widgets::Takes;

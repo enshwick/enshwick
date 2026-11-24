@@ -473,6 +473,9 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
         crate::engine::memory::read::<u8>(state.expose_provenance(), engine.layout.popup_active)
     } != 0;
     if vanilla {
+        // SAFETY: inside the frame on the interface thread, `context`
+        // non-zero by the guard before it; no loader window draws.
+        unsafe { carried::pass_map(engine, context, false) };
         return;
     }
     STATE.ui_thread.store(
@@ -506,6 +509,9 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
             unsafe { (draw.run)(&drawn) };
         },
     );
+    // SAFETY: inside the frame on the interface thread, `context` non-zero
+    // by the guard before it, after every window of the frame drew.
+    unsafe { carried::pass_map(engine, context, true) };
 }
 
 /// This frame's screen, prompt and host reads, or none once they are off.
