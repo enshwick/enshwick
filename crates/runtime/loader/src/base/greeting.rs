@@ -26,7 +26,7 @@ pub(crate) fn of(loader: &crate::engine::loader::Loader) -> Vec<String> {
 #[cfg(windows)]
 pub(crate) fn joined(loader: &crate::engine::loader::Loader, key: u64) {
     for line in of(loader) {
-        let _sent = crate::actions::chat::send(key, &line);
+        let _sent = crate::base::tell::line(key, &line);
     }
 }
 

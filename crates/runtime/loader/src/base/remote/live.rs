@@ -1,16 +1,16 @@
 //! The messages in the running game: what a client heard, and how its server answers.
 
 use enshwick_base::Relock;
-use std::sync::Mutex;
-use std::time::Instant;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use enshwick_core::config::Schema;
 
 use enshwick_base::peer::Rated;
 
 use super::{AdmitEditError, EDIT_RATE, Gate, Message, Queries, admit, redacted, texts};
-use crate::actions::player_actions::player;
 use crate::engine::loader::Loader;
+use crate::engine::world::player_with_key as player;
 
 /// The server's rates of its clients' messages.
 struct Rates {
@@ -29,11 +29,26 @@ impl Rates {
     }
 }
 
+/// What takes a message of one kind a client heard from its server.
+pub(crate) type TakeOnClient = fn(Message);
+
+/// What answers a message of one kind the client of the player with an
+/// account key sent its server.
+pub(crate) type TakeOnServer = fn(&Loader, u64, Message);
+
+/// The message kinds a part may take, every kind [`Message::kind`] names
+/// below it.
+const KINDS: usize = 32;
+
 /// What the settings messages keep while a game runs.
 struct State {
     rates: Mutex<Rates>,
     /// What the client last heard from its server, for the Mods screen.
     heard: Mutex<Heard>,
+    /// What takes each kind a part above base owns on a client, by kind.
+    on_client: [OnceLock<TakeOnClient>; KINDS],
+    /// What answers each kind a part above base owns on a server, by kind.
+    on_server: [OnceLock<TakeOnServer>; KINDS],
 }
 
 impl State {
@@ -41,6 +56,8 @@ impl State {
         Self {
             rates: Mutex::new(Rates::new()),
             heard: Mutex::new(Heard::new()),
+            on_client: [const { OnceLock::new() }; KINDS],
+            on_server: [const { OnceLock::new() }; KINDS],
         }
     }
 
@@ -50,9 +67,75 @@ impl State {
     fn forget(&self) {
         *self.rates.relock() = Rates::new();
     }
+
+    /// Hands `message`, which a client heard, to the take its kind names.
+    fn take_on_client(&self, message: Message) {
+        let kind = message.kind();
+        match named(&self.on_client, kind) {
+            Some(take) => take(message),
+            None => untaken("message", kind),
+        }
+    }
+
+    /// Hands `message`, which the client of the player with account key
+    /// `key` sent, to the take that answers its kind.
+    fn take_on_server(&self, loader: &Loader, key: u64, message: Message) {
+        let kind = message.kind();
+        match named(&self.on_server, kind) {
+            Some(take) => take(loader, key, message),
+            None => untaken("message", kind),
+        }
+    }
 }
 
 static STATE: State = State::new();
+
+/// How often the log says again that a message arrived no part takes.
+const UNTAKEN_LOGGED_EVERY: Duration = Duration::from_secs(10);
+
+/// Names `take` as what takes the messages of `kind` a client hears from
+/// its server; the first one named stays.
+pub(crate) fn on_client(kind: u8, take: TakeOnClient) {
+    name(&STATE.on_client, kind, take);
+}
+
+/// Names `take` as what answers the messages of `kind` a client sends its
+/// server; the first one named stays.
+pub(crate) fn on_server(kind: u8, take: TakeOnServer) {
+    name(&STATE.on_server, kind, take);
+}
+
+/// Names `take` for `kind` in `takes`, where the first one named stays; a
+/// kind past them is a loader bug, which the log names.
+pub(crate) fn name<T, const N: usize>(takes: &[OnceLock<T>; N], kind: u8, take: T) {
+    if let Some(slot) = takes.get(usize::from(kind)) {
+        let _first = slot.set(take);
+    } else {
+        crate::log!(
+            ERROR,
+            "loader messages: a part named kind {kind}, past the {N} kinds a part may take"
+        );
+    }
+}
+
+/// The take named for `kind` in `takes`.
+pub(crate) fn named<T: Copy, const N: usize>(takes: &[OnceLock<T>; N], kind: u8) -> Option<T> {
+    takes
+        .get(usize::from(kind))
+        .and_then(OnceLock::get)
+        .copied()
+}
+
+/// Notes that a `what` of `kind` arrived that no part takes, so it was
+/// dropped: its part is off here, or it never named itself. A peer sends
+/// them, so the line is rated.
+pub(crate) fn untaken(what: &str, kind: u8) {
+    crate::log_every!(
+        INFO,
+        UNTAKEN_LOGGED_EVERY,
+        "loader messages: no part takes {what} kind {kind}, so it was dropped"
+    );
+}
 
 /// Forgets the players' rates when a client's hosted game ends.
 pub(crate) fn forget_game() {
@@ -152,26 +235,7 @@ pub(crate) fn client(message: Message) {
             heard.result = Some((ok, text));
             heard.news += 1;
         }
-        Message::Recipes { first, last, ids } => {
-            crate::content::recipes::received(first, last, &ids);
-        }
-        Message::Controls { id, name, controls } => {
-            crate::actions::controls::carry(&id, &name, &controls);
-        }
-        Message::Window {
-            id,
-            window,
-            open,
-            text,
-        } => crate::ui::interface::carried::heard(&id, &window, open, &text),
-        Message::WindowClose { id, window } => crate::ui::interface::carried::closed(&id, &window),
-        Message::FogUncover { at, radius } => {
-            let _queued = crate::world::fog::uncover_here(at, radius);
-        }
-        Message::Query { .. }
-        | Message::Edit { .. }
-        | Message::ActionsLanguage { .. }
-        | Message::ActionRun { .. } => {}
+        message => STATE.take_on_client(message),
     }
 }
 
@@ -233,22 +297,7 @@ fn answer(loader: &Loader, key: u64, message: Message) {
         Message::ActionsLanguage { language } => {
             crate::base::net::language_named(key, language);
         }
-        Message::ActionRun {
-            id,
-            action,
-            args,
-            target,
-        } => {
-            crate::actions::player_actions::run(loader, key, &id, &action, &args, target);
-        }
-        Message::WindowClose { id, window } => crate::ui::windows::closed(loader, key, &id, window),
-        Message::Sync { .. }
-        | Message::Snapshot { .. }
-        | Message::Result { .. }
-        | Message::Recipes { .. }
-        | Message::Controls { .. }
-        | Message::Window { .. }
-        | Message::FogUncover { .. } => {}
+        message => STATE.take_on_server(loader, key, message),
     }
 }
 
@@ -378,6 +427,40 @@ mod tests {
     use enshwick_base::peer::Admitted;
 
     #[test]
+    fn a_heard_message_reaches_the_take_its_kind_names_and_only_that_one() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        static UNCOVERED: AtomicU32 = AtomicU32::new(0);
+        let state = State::new();
+        let fog = |radius: f32| Message::FogUncover {
+            at: [1.0, 2.0],
+            radius,
+        };
+        state.take_on_client(fog(3.0));
+        name(&state.on_client, super::super::FOG_UNCOVER, |message| {
+            if let Message::FogUncover { radius, .. } = message {
+                UNCOVERED.store(radius.to_bits(), Ordering::Relaxed);
+            }
+        });
+        name(&state.on_client, super::super::FOG_UNCOVER, |_| {
+            panic!("the first take stays")
+        });
+        state.take_on_client(fog(5.0));
+        state.take_on_client(Message::Recipes {
+            first: true,
+            last: true,
+            ids: vec![7],
+        });
+        assert_eq!(f32::from_bits(UNCOVERED.load(Ordering::Relaxed)), 5.0);
+        assert!(
+            named(&state.on_server, super::super::FOG_UNCOVER).is_none(),
+            "a client's take answers nothing on a server"
+        );
+        name(&state.on_client, u8::MAX, |_| panic!("no such kind"));
+        assert!(named(&state.on_client, u8::MAX).is_none());
+    }
+
+    #[test]
     fn a_hosted_game_s_end_forgets_its_players_rates() {
         let state = State::new();
         let now = Instant::now();
@@ -393,6 +476,11 @@ mod tests {
     fn a_client_s_window_close_is_answered_by_letting_the_window_go_for_its_mod_to_hear() {
         use crate::ui::windows::harness::{KEY, MOD, Serving, WINDOW};
         let serving = Serving::new();
+        let windows = crate::ui::PARTS
+            .iter()
+            .find(|part| part.name == "windows")
+            .and_then(|part| part.seal);
+        (windows.unwrap())(serving.loader);
         serving.greet();
         serving.show();
         crate::ui::windows::after_step(serving.loader);

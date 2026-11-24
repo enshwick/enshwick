@@ -2,7 +2,7 @@
 source: crates/runtime/loader/src/parts.rs
 expression: phases()
 ---
-seal: services, points, calls, status, net, content, rate_links, altars, daytime, label, join_gate, bases, fog, containers, damage, item_actions, survivors, stats, item_data, knowledge, progress, quest rewards, vetoes, commands, chat, interactions, interaction_prompts, controls, player_actions, ui, windows
+seal: services, points, calls, status, net, recipes, content, rate_links, altars, daytime, label, join_gate, bases, fog, containers, damage, item_actions, survivors, stats, item_data, knowledge, progress, quest rewards, vetoes, commands, chat, interactions, interaction_prompts, controls, player_actions, ui, windows
 link: crash, world, events, game_events, saves, carrier, recipes, textures, rate_links, altars, daytime, weather, label, join_gate, bases, fog, voxels, terrain_pages, inventory, containers, damage, deaths, item_actions, survivors, item_data, drops, knowledge, progress, quest rewards, vetoes, chat, interactions, interaction_prompts, local_held, game_bindings, client_control, client_input, client_recipes, controls, ui, sound
 step, follow: altar steps, day steps, waypoint steps, game settings steps, weather steps, inventory deliveries, death steps, survivor steps, item data steps, stat steps, knowledge steps, quest event queries, level writes, knowledge change steps, interaction steps, control firings, carried controls, build refusals, carried windows
 step, input: join admission at the step, console lines, chat commands, chat sending
@@ -14,3 +14,10 @@ end: windows, progress, inventory
 forget: events, saves, net, lobby, remote, admission, recipes, altars, daytime, waypoints, game_settings, weather, bases, fog, transactions, voxels, terrain_pages, permissions, scene, deaths, item_actions, survivors, stats, item_data, spawns, knowledge, knowledge changes, console, commands, chat, interactions, controls, player_actions, build_reasons, ui
 world event: terrain materials at world events, data changes at world events, recipe rates at world events, game settings at world events, weather at world events, stats at world events, item data at world events, knowledge changes at world events, chat mutes at world events
 follows: data_changes, rate_links, weather, stats, item_data
+game events: item_actions, stats, vetoes
+settings: recipes
+settings poll: recipes
+status: content, knowledge
+shared: content
+server link: recipes, item_data, controls, player_actions, ui
+handover: recipes, item_data, controls

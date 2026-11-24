@@ -37,7 +37,9 @@ pub mod reply;
 pub(crate) mod vetoes;
 
 #[cfg(windows)]
-use crate::engine::parts::{Part, fused, part, step};
+use crate::base::remote::Message;
+#[cfg(windows)]
+use crate::engine::parts::{Part, ServerLink, fused, part, step};
 
 /// Why a reflected type or field fails when the build's reflection lacks
 /// it, where `ABSENT` names a missing table entry.
@@ -52,6 +54,7 @@ pub(crate) static PARTS: &[&Part] = &[
         table_ids: vetoes::TABLE_IDS,
         seal: Some(vetoes::seal),
         link: Some(vetoes::link),
+        game_events: Some(vetoes::FOLLOWER),
         ..part!("vetoes", vetoes)
     },
     &Part {
@@ -78,7 +81,13 @@ pub(crate) static PARTS: &[&Part] = &[
     // in the same step, before the step's output.
     &Part {
         table_ids: chat::TABLE_IDS,
-        seal: Some(|_| chat::seal()),
+        seal: Some(|_| {
+            chat::seal();
+            crate::base::tell::on_chat(crate::base::tell::Chat {
+                send: chat::send,
+                delivery: chat::delivery,
+            });
+        }),
         link: Some(chat::link),
         steps: &[step!(Input, "chat sending", |_| chat::drain())],
         forget: Some(|_| chat::forget()),
@@ -132,7 +141,14 @@ pub(crate) static PARTS: &[&Part] = &[
         ..part!("client_recipes", client_recipes)
     },
     &Part {
-        seal: Some(|_| controls::seal()),
+        seal: Some(|_| {
+            controls::seal();
+            crate::base::remote::on_client(crate::base::remote::CONTROLS, |message| {
+                if let Message::Controls { id, name, controls } = message {
+                    controls::carry(&id, &name, &controls);
+                }
+            });
+        }),
         link: Some(controls::link),
         steps: &[
             step!(Follow, "control firings", |s| controls::after_step(
@@ -151,12 +167,39 @@ pub(crate) static PARTS: &[&Part] = &[
         forget: Some(|_| {
             controls::forget();
         }),
+        server_link: Some(|link| {
+            if link == ServerLink::Forgotten {
+                controls::forget_carried();
+            }
+        }),
+        handover: Some(controls::hello),
         ..part!("controls", controls)
     },
     &Part {
-        seal: Some(|_| player_actions::seal()),
+        seal: Some(|_| {
+            player_actions::seal();
+            crate::base::remote::on_server(
+                crate::base::remote::ACTION_RUN,
+                |loader, key, message| {
+                    if let Message::ActionRun {
+                        id,
+                        action,
+                        args,
+                        target,
+                    } = message
+                    {
+                        player_actions::run(loader, key, &id, &action, &args, target);
+                    }
+                },
+            );
+        }),
         forget: Some(|_| {
             admission::forget();
+        }),
+        server_link: Some(|link| {
+            if link == ServerLink::Answered {
+                player_actions::joined();
+            }
         }),
         ..part!("player_actions", player_actions)
     },

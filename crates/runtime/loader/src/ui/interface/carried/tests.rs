@@ -486,6 +486,7 @@ fn the_server_s_close_takes_only_its_own_window() {
 fn a_lost_link_forgets_the_windows_so_none_draws_over_the_menu() {
     heard("you.admin", "panel", true, "W\tPanel\n");
     assert_eq!(held().len(), 1);
+    let _running = crate::engine::loader::install_for_test(crate::start::tests::bare_loader());
     crate::base::net::link_lost();
     assert!(STATE.held.load().is_none());
 }

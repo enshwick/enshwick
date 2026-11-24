@@ -243,7 +243,7 @@ pub(crate) fn forget() {
 pub(crate) fn after_step(loader: &Loader) {
     let refused = STATE.refused.take();
     for command in STATE.pending.take() {
-        let Some(player) = crate::actions::player_actions::player(loader, command.key) else {
+        let Some(player) = crate::engine::world::player_with_key(loader, command.key) else {
             continue;
         };
         let Some(reply) = crate::actions::player_actions::command(

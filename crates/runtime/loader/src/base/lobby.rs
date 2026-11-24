@@ -474,7 +474,7 @@ mod runtime {
             note = Some(note.map_or_else(|| text.clone(), |n| format!("{n}\n\n{text}")));
         }
         if let Some(text) = note {
-            crate::ui::interface::show("Enshwick", &text, "", 1 << UiDialog::OK, |_| {});
+            crate::base::dialogs::show("Enshwick", &text, "", 1 << UiDialog::OK, |_| {});
         }
     }
 

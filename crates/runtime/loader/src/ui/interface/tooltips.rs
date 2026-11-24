@@ -337,7 +337,7 @@ fn stat_lines(item: u32, pide: u32) -> Vec<Line> {
     let Some(loader) = crate::engine::loader::loader() else {
         return Vec::new();
     };
-    let language = crate::content::served::language();
+    let language = crate::engine::texts::game_language();
     crate::inventory::stats::item_line_texts(loader, pide, item, language)
         .into_iter()
         .map(|line| Line {

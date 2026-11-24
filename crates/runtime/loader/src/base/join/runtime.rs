@@ -493,7 +493,7 @@ fn check(layout: &super::Layout, target: &super::Target) -> bool {
         }
         if let Some(note) = plan.note(names) {
             // The join goes on, and the note shows over the game.
-            crate::ui::interface::show("Enshwick", &note, "", 1 << UiDialog::OK, |_| {});
+            crate::base::dialogs::show("Enshwick", &note, "", 1 << UiDialog::OK, |_| {});
         }
         return true;
     }
@@ -512,7 +512,7 @@ fn terrain_refused(text: &str) {
         crate::engine::errors::JOIN_TERRAIN,
         text.replace("\n\n", " ").replace('\n', ", ")
     );
-    crate::ui::interface::show("Enshwick", text, "", 1 << UiDialog::OK, |_| {});
+    crate::base::dialogs::show("Enshwick", text, "", 1 << UiDialog::OK, |_| {});
 }
 
 /// Tells the player which of the server's mods keep the client out, on the
@@ -547,7 +547,7 @@ fn refused(
             version: need.version.clone(),
         })
         .collect();
-    if crate::ui::interface::mismatch_screen_on() {
+    if crate::base::dialogs::mismatch_screen_on() {
         let off = crate::base::advertise::mod_list(&off);
         crate::base::join::client::show_difference(&super::difference(
             server_mods,
@@ -566,7 +566,7 @@ fn refused(
         super::refusal::dialog(missing, &super::refusal::Off { this_game: off_ids }, names);
     // The join is refused at once, so the game keeps drawing; the mods
     // hear of it once the player closes the dialog.
-    crate::ui::interface::show(
+    crate::base::dialogs::show(
         &dialog.title,
         &dialog.message,
         &dialog.detail,

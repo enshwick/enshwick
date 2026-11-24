@@ -36,7 +36,7 @@ mod players;
 use players::{Slots, guids};
 pub(crate) use players::{
     character_entities, character_in, character_of, characters, live_keys, machines, player,
-    player_entities, players,
+    player_entities, player_with_key, players,
 };
 
 /// The build table ids this part of the loader names.

@@ -736,7 +736,7 @@ mod tests {
 
     #[test]
     fn a_world_s_waiting_dialogs_close_on_the_next_frame_after_it_ends_however_it_ends() {
-        let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
+        let loader = crate::engine::loader::install_for_test(crate::start::tests::bare_loader());
         let ends: [(&str, &dyn Fn()); 3] = [
             ("a hosted game's end", &|| {
                 crate::engine::parts::Part::forget_in(crate::ui::PARTS, "ui", loader);

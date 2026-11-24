@@ -26,7 +26,7 @@ pub(crate) fn hello(key: u64) -> bool {
         return true;
     }
     with_rights(|rights| rights.hello(key));
-    let player = crate::actions::player_actions::player(loader, key);
+    let player = crate::engine::world::player_with_key(loader, key);
     send_carried(loader, declared, key, player.as_ref(), &Resend::All)
 }
 

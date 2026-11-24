@@ -374,7 +374,7 @@ unsafe fn push_rows(list: usize, group: StatGroup) {
     if list == 0 || kinds.is_empty() || !stored(unsafe { crate::engine::memory::read(list, 0) }) {
         return;
     }
-    let language = crate::content::served::language().0;
+    let language = crate::engine::texts::game_language().0;
     for &(kind, key) in kinds {
         let Some(value) = crate::inventory::stats::own_value(kind, key) else {
             continue;

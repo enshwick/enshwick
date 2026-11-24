@@ -1,0 +1,17 @@
+---
+source: crates/runtime/loader/src/base/status.rs
+expression: summary.render()
+---
+Enshwick  status at 00:00:00Z
+game: empty; a game server runs here; up 0s
+
+mods: 0 of 0 running
+
+content: 0 resources served (0 built, 0 failed), 0 texts
+code patches: 0 written, 0 left out (mod off), 0 skipped
+hooks: 0 functions armed
+  calls are not counted; set diagnostics = true in enshwick.toml
+
+Per-mod costs need diagnostics = true in enshwick.toml (hook links also diagnostics_timing = true); read at start.
+
+conflicts: none, no two mods share a hook, feature or resource

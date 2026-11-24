@@ -290,14 +290,6 @@ fn allowed_ids(answer: &str) -> Vec<String> {
         .collect()
 }
 
-/// The connected player with account key `key`.
-pub(crate) fn player(loader: &Loader, key: u64) -> Option<PlayerInfo> {
-    crate::engine::world::players(loader)
-        .ok()?
-        .into_iter()
-        .find(|p| p.key == enshwick_core::PlayerKey::new(key))
-}
-
 /// A client runs mod `id`'s action on the object `target` its client named,
 /// on the server's game thread: through the [admission](admission) of the
 /// interface, then the mod, and its answer back the one way replies go.
@@ -359,7 +351,7 @@ pub(crate) fn refuse(
     else {
         return;
     };
-    let caller = player(loader, key).unwrap_or_else(|| {
+    let caller = crate::engine::world::player_with_key(loader, key).unwrap_or_else(|| {
         PlayerInfo::without_character(enshwick_core::PlayerKey::new(key), 0, "")
     });
     let question = Question {
@@ -393,7 +385,7 @@ fn admitted_run(
         return Err(Refusal::Bounds);
     }
     // A player not in the world has no screen to answer on.
-    let Some(player) = player(loader, key) else {
+    let Some(player) = crate::engine::world::player_with_key(loader, key) else {
         return Ok(());
     };
     let registered = registered.ok_or(Refusal::Unavailable)?;
@@ -474,7 +466,7 @@ pub(crate) fn run_on_server(
 /// language.
 pub(crate) fn joined() {
     let _sent = crate::base::net::to_server(&Message::ActionsLanguage {
-        language: crate::content::served::language().0,
+        language: crate::engine::texts::game_language().0,
     });
 }
 

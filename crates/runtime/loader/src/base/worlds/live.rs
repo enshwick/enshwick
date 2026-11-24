@@ -202,7 +202,7 @@ pub(crate) fn load(loader: &Loader) {
     }
     crate::log!(INFO, "{}", enshwick_base::log_files::world_settings(&key));
     set_current(Some(key));
-    crate::content::recipes::world_changed(loader);
+    loader.parts.settings(loader);
     loader.emit(Event::SETTINGS_REPLACED, None, core::ptr::null());
 }
 
@@ -212,6 +212,6 @@ pub(crate) fn unload(loader: &Loader) {
         return;
     }
     set_current(None);
-    crate::content::recipes::world_changed(loader);
+    loader.parts.settings(loader);
     loader.emit(Event::SETTINGS_REPLACED, None, core::ptr::null());
 }

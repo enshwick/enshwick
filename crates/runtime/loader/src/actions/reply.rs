@@ -33,21 +33,14 @@ pub fn reply_by(text: &str, in_chat: bool) -> Reply<'_> {
 }
 
 #[cfg(windows)]
-pub(crate) use live::{answer, tell, tell_text};
+pub(crate) use live::{answer, tell_text};
 
 #[cfg(windows)]
 mod live {
     use super::{Reply, reply_by};
     use crate::actions::admission::Path;
+    use crate::base::tell::tell;
     use crate::engine::loader::Loader;
-
-    /// Tells player `key` `text` as a notice, or in chat to a client that
-    /// cannot show one.
-    pub(crate) fn tell(loader: &Loader, key: u64, text: &str) {
-        if crate::base::notices::send(loader, key, text).is_err() {
-            let _queued = crate::actions::chat::send(key, text);
-        }
-    }
 
     /// Tells player `key` the loader's text `text_key` in the language
     /// they read.

@@ -449,6 +449,13 @@ mod tests {
                 fused(|p| p.world_event.as_ref().map(|w| w.fuse.feature())),
             ),
             ("follows", named(|p| p.follows.is_some())),
+            ("game events", named(|p| p.game_events.is_some())),
+            ("settings", named(|p| p.settings.is_some())),
+            ("settings poll", named(|p| p.poll.is_some())),
+            ("status", named(|p| p.status.is_some())),
+            ("shared", named(|p| p.shared.is_some())),
+            ("server link", named(|p| p.server_link.is_some())),
+            ("handover", named(|p| p.handover.is_some())),
         ]
         .map(|(phase, calls)| format!("{phase}: {calls}"))
         .join("\n")
