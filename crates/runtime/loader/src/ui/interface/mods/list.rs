@@ -329,7 +329,7 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
             paint.separator();
         }
         let sent = record.server_values.relock().is_some();
-        let settings = shows_settings(record.settings_schema().as_ref(), sent);
+        let settings = shows_settings(crate::base::worlds::schema_of(record).as_ref(), sent);
         let here = mods_screen::gear(world, sent);
         let opens = has_gear(
             settings,

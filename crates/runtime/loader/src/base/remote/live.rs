@@ -263,12 +263,12 @@ fn answer(loader: &Loader, key: u64, message: Message) {
             for record in loader
                 .mods
                 .iter()
-                .filter(|m| !m.settings_files.relock().is_empty())
+                .filter(|m| !crate::base::worlds::settings_files(m).is_empty())
                 .filter(|m| admin || m.joins())
             {
                 text.push_str(&record.id);
                 text.push('\t');
-                text.push_str(&record.label());
+                text.push_str(&crate::base::manifest::label(record));
                 text.push('\n');
             }
             crate::base::net::to_player(
@@ -324,7 +324,7 @@ fn snapshot(loader: &Loader, key: u64, id: &str, admin: bool) {
     let Some((_, record)) = loader.find_mod(id) else {
         return;
     };
-    let Some(schema) = record.settings_schema() else {
+    let Some(schema) = crate::base::worlds::schema_of(record) else {
         return;
     };
     let text = redacted(&schema, &crate::base::worlds::show_text(record));

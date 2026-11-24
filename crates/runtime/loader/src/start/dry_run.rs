@@ -176,12 +176,11 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         subscriptions: Mutex::default(),
         delivery: OnceLock::new(),
         settings_problems: Vec::new(),
-        newer_release: OnceLock::new(),
         unofficial: std::sync::atomic::AtomicBool::new(false),
         offs: std::sync::atomic::AtomicU64::new(0),
         retry: crate::engine::retry::Retry::default(),
-        skipped: skipped(&libraries, &candidates, &plan, refused),
         parts: crate::parts::parts(),
+        facts: loader_facts(skipped(&libraries, &candidates, &plan, refused)),
     };
     let loader = crate::engine::loader::install(loader).ok_or(DryRunError::AlreadyRan)?;
     let order: Vec<&Library> = plan.order.iter().map(|&i| &libraries[i]).collect();

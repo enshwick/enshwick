@@ -382,7 +382,7 @@ fn requires(loader: &Loader, a: ModIndex, b: ModIndex) -> bool {
     let (Some(a), Some(b)) = (loader.mods.get(a.get()), loader.mods.get(b.get())) else {
         return false;
     };
-    a.requires(&b.id)
+    crate::base::manifest::requires(a, &b.id)
 }
 
 /// Reports each set another mod overrides in both mods' logs and the

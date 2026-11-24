@@ -7,6 +7,10 @@ pub use enshwick_core::schema_section::Kind;
 use semver::{Version, VersionReq};
 
 use crate::base::resolve::{self, Candidate};
+#[cfg(windows)]
+use crate::engine::loader::ModRecord;
+#[cfg(windows)]
+use enshwick_base::Relock;
 
 /// Where the fields every mod of this ABI major writes end.
 const REQUIRED: usize = <Manifest as enshwick_core::abi::Headed>::BORN;
@@ -415,6 +419,80 @@ pub unsafe fn meta(manifest: &Manifest) -> Meta {
             String::new()
         },
     }
+}
+
+/// What a mod's record keeps of its manifest for players: the
+/// [`Meta`] fact, made as the record is.
+#[cfg(windows)]
+pub(crate) fn fact(record: &ModRecord) -> Box<dyn crate::engine::facts::Fact> {
+    // SAFETY: a record's manifest is the loader's copy or a pack's manifest
+    // built for the process, its strings and lists readable and never
+    // written; a string `read` left in the DLL is read while the mod's DLL
+    // stays loaded, as a loaded mod's does for the process.
+    Box::new(unsafe { meta(record.manifest) })
+}
+
+/// What `record`'s manifest tells players about its mod; empty when no
+/// part made it.
+#[cfg(windows)]
+pub(crate) fn shown(record: &ModRecord) -> &Meta {
+    static NONE: Meta = Meta {
+        name: String::new(),
+        description: String::new(),
+        authors: Vec::new(),
+        license: String::new(),
+        homepage: String::new(),
+    };
+    record.fact().unwrap_or(&NONE)
+}
+
+/// The name players read of `record`'s mod, from its texts in their
+/// language, else from its manifest; empty when neither names it.
+#[cfg(windows)]
+pub(crate) fn name(record: &ModRecord) -> String {
+    shown(record).name_in(
+        record.texts.relock().as_ref(),
+        crate::engine::texts::language(),
+    )
+}
+
+/// The name players read of `record`'s mod, or its id when nothing names
+/// it.
+#[cfg(windows)]
+pub(crate) fn label(record: &ModRecord) -> String {
+    enshwick_core::mods::label(&name(record), &record.id)
+}
+
+/// What `record`'s mod does, from its texts in the player's language, else
+/// from its manifest.
+#[cfg(windows)]
+pub(crate) fn description(record: &ModRecord) -> String {
+    shown(record).description_in(
+        record.texts.relock().as_ref(),
+        crate::engine::texts::language(),
+    )
+}
+
+/// Whether `record`'s manifest requires the mod `id`.
+#[cfg(windows)]
+pub(crate) fn requires(record: &ModRecord, id: &str) -> bool {
+    // SAFETY: a record's manifest is the loader's copy, kept for the
+    // process with every string and slice in it.
+    unsafe { parse(record.manifest) }.is_ok_and(|candidate| {
+        candidate
+            .dependencies
+            .iter()
+            .any(|d| d.relation == Relation::REQUIRES && d.id == id)
+    })
+}
+
+/// What `record`'s manifest exports for other mods to use, each
+/// `<kind>:<local name>`.
+#[cfg(windows)]
+pub(crate) fn exported(record: &ModRecord) -> Vec<&str> {
+    // SAFETY: a record's manifest is the loader's copy, kept for the
+    // process with every string and slice in it.
+    unsafe { exports(record.manifest) }
 }
 
 /// # Safety

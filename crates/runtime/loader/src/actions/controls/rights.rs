@@ -139,7 +139,7 @@ fn carried_messages(
             .collect();
         messages.push(Message::Controls {
             id: record.id.clone(),
-            name: cut(&record.label(), MAX_CARRIED_TEXT).to_owned(),
+            name: cut(&crate::base::manifest::label(record), MAX_CARRIED_TEXT).to_owned(),
             controls,
         });
     }

@@ -318,7 +318,7 @@ fn reader_names(loader: &Loader) -> Names {
         .mods
         .iter()
         .filter(|m| m.joins())
-        .map(|m| (m.id.clone(), m.name()))
+        .map(|m| (m.id.clone(), crate::base::manifest::name(m)))
         .filter(|(_, name)| !name.is_empty())
         .collect()
 }

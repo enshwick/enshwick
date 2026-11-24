@@ -85,6 +85,18 @@ pub enum Skip {
     },
 }
 
+/// The mods that did not load, shown as off with their reason: a fact of
+/// the loader, which the start makes.
+#[cfg(windows)]
+#[derive(Debug, Default)]
+pub(crate) struct SkippedMods(pub(crate) Vec<Skipped>);
+
+/// The mods `loader` did not load; none before the start made them.
+#[cfg(windows)]
+pub(crate) fn skipped(loader: &crate::engine::loader::Loader) -> &[Skipped] {
+    loader.fact::<SkippedMods>().map_or(&[], |s| &s.0)
+}
+
 /// A mod that does not load, as the Mods screen and the chat line at world
 /// load name it.
 #[derive(Clone, Debug, PartialEq, Eq)]

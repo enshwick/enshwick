@@ -12,6 +12,7 @@ use enshwick_gamedata::reflect::{Fingerprint, Reflection};
 
 use crate::engine::builds::KnownBuild;
 use crate::engine::chains::{Chains, Link, Next};
+use crate::engine::facts::{Fact, Facts};
 use crate::engine::fuse::{Fuse, Off};
 use crate::engine::mid::Mids;
 use crate::engine::mod_index::ModIndex;
@@ -155,8 +156,6 @@ pub(crate) struct Loader {
     pub(crate) delivery: OnceLock<Box<[Subscription]>>,
     /// What was wrong in the loader settings file at start, a line each.
     pub(crate) settings_problems: Vec<String>,
-    /// A newer Enshwick release, once the release check found one.
-    pub(crate) newer_release: OnceLock<crate::base::releases::Release>,
     /// Set once the signature check finds a loader file without the release
     /// signature.
     pub(crate) unofficial: AtomicBool,
@@ -165,10 +164,11 @@ pub(crate) struct Loader {
     pub(crate) offs: AtomicU64,
     /// The code patches a thread kept out at arming, tried again later.
     pub(crate) retry: crate::engine::retry::Retry,
-    /// The mods that did not load, shown as off with their reason.
-    pub(crate) skipped: Vec<crate::base::resolve::Skipped>,
     /// Every part of the loader's layers, which the start hands down.
     pub(crate) parts: &'static crate::engine::parts::Parts,
+    /// What the layers above keep of the whole run, one fact per type, made
+    /// by the start.
+    pub(crate) facts: Facts,
 }
 
 /// Wires every armed chain of the running loader past the mods that are off
@@ -542,16 +542,9 @@ impl Loader {
             &record.id,
             &enshwick_base::log_files::off(&shown, crate::engine::errors::MOD_OFF),
         );
-        if record.pack {
-            crate::packs::data_packs::forget(&record.id);
-        }
         crate::engine::diag::turned_off(&record.id, &shown);
         self.rewire();
-        let faulted = |owner: ModIndex| self.passed(owner, false);
-        crate::base::points::rearm(faulted);
-        if record.joins_when_on() {
-            crate::base::advertise::wake();
-        }
+        self.parts.turned(self, record);
     }
 
     /// Turns a mod the loader turned off for a world back on: relinks its
@@ -567,8 +560,13 @@ impl Loader {
         *record.off_reason.relock() = None;
         crate::engine::log::write(Level::INFO, &record.id, "back on");
         self.rewire();
-        let off = |owner: ModIndex| self.passed(owner, false);
-        crate::base::points::rearm(off);
+        self.parts.turned(self, record);
+    }
+
+    /// What the layer that owns `T` keeps of the whole run; `None` when the
+    /// start made none.
+    pub(crate) fn fact<T: Fact>(&self) -> Option<&T> {
+        self.facts.get()
     }
 
     /// Ends subscribing: from now on events go to the subscriptions made so

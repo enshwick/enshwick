@@ -124,12 +124,11 @@ fn loader(mods: &[TestMod], developer_tools: bool) -> (Loader, Vec<Library>) {
         subscriptions: Mutex::default(),
         delivery: OnceLock::new(),
         settings_problems: Vec::new(),
-        newer_release: OnceLock::new(),
         unofficial: AtomicBool::new(false),
         offs: AtomicU64::new(0),
         retry: crate::engine::retry::Retry::default(),
-        skipped,
         parts: crate::parts::parts(),
+        facts: loader_facts(skipped),
     };
     (loader, order)
 }

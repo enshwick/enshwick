@@ -34,7 +34,7 @@ pub(super) fn link_join(loader: &Loader) {
     let names = loader
         .mods
         .iter()
-        .map(|m| (m.id.clone(), m.name()))
+        .map(|m| (m.id.clone(), crate::base::manifest::name(m)))
         .filter(|(_, name)| !name.is_empty())
         .collect();
     crate::base::join::set_names(names);

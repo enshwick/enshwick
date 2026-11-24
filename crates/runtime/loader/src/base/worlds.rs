@@ -390,6 +390,62 @@ pub fn part(view: &str, file: &str, others: &[&str]) -> String {
 #[cfg(windows)]
 pub(crate) use live::{changed, file_text, load, sent_view, show_text, unload, write_target};
 
+/// What a mod's record keeps of its settings: the files it declared, the
+/// texts handed to it, its checks and what a server sent for it.
+#[cfg(windows)]
+#[derive(Debug)]
+pub(crate) struct ModSettings {
+    /// The settings texts handed to the mod, kept for the process: the mod
+    /// may still read one on a thread of its own while another thread asks
+    /// for a newer one, and a file read over and over keeps one copy.
+    pub(crate) settings: Mutex<crate::engine::kept_text::KeptText>,
+    /// On a client in another's world, the settings its server sent for the
+    /// mod, every file seen as one.
+    pub(crate) server_values: Mutex<Option<String>>,
+    /// The settings files the mod declared, in the order it declared them.
+    pub(crate) files: Mutex<Vec<SettingsFile>>,
+    /// The mod's checks of new settings texts, by file: callback and pointer.
+    pub(crate) checks: Mutex<Vec<(String, enshwick_core::abi::ConfigCheckFn, usize)>>,
+}
+
+/// A mod's empty [`ModSettings`], made as its record is.
+#[cfg(windows)]
+pub(crate) fn fact(_: &crate::engine::loader::ModRecord) -> Box<dyn crate::engine::facts::Fact> {
+    Box::new(ModSettings {
+        settings: Mutex::new(crate::engine::kept_text::KeptText::new(usize::MAX)),
+        server_values: Mutex::new(None),
+        files: Mutex::new(Vec::new()),
+        checks: Mutex::new(Vec::new()),
+    })
+}
+
+/// What `record` keeps of its mod's settings; `None` when no part made it.
+#[cfg(windows)]
+pub(crate) fn settings_of(record: &crate::engine::loader::ModRecord) -> Option<&ModSettings> {
+    record.fact()
+}
+
+/// The settings files `record`'s mod declared, in the order it declared
+/// them.
+#[cfg(windows)]
+pub(crate) fn settings_files(record: &crate::engine::loader::ModRecord) -> Vec<SettingsFile> {
+    settings_of(record).map_or_else(Vec::new, |s| s.files.relock().clone())
+}
+
+/// On a client in another's world, the settings its server sent for
+/// `record`'s mod, every file seen as one.
+#[cfg(windows)]
+pub(crate) fn server_values(record: &crate::engine::loader::ModRecord) -> Option<String> {
+    settings_of(record)?.server_values.relock().clone()
+}
+
+/// `record`'s settings files seen as one, as the console and the Mods screen
+/// show them; `None` for a mod without settings.
+#[cfg(windows)]
+pub(crate) fn schema_of(record: &crate::engine::loader::ModRecord) -> Option<Schema> {
+    view_schema(&settings_of(record)?.files.relock())
+}
+
 #[cfg(windows)]
 mod live;
 

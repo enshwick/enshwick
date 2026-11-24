@@ -23,7 +23,7 @@ pub(super) fn page_rows(loader: &Loader, index: usize, place: mods_screen::Place
     let Some(record) = loader.mods.get(index) else {
         return Vec::new();
     };
-    let Some(schema) = record.settings_schema() else {
+    let Some(schema) = crate::base::worlds::schema_of(record) else {
         return Vec::new();
     };
     let texts = record.texts.relock().clone();
@@ -62,7 +62,7 @@ pub(super) fn settings(
             false,
         );
     }
-    let schema = record.settings_schema()?;
+    let schema = crate::base::worlds::schema_of(record)?;
     if world {
         paint.label(
             texts::text("mods.settings.world").as_bytes(),

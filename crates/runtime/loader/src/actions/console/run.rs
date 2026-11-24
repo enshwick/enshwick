@@ -178,7 +178,7 @@ fn mods(loader: &Loader) -> String {
 
 /// A mod's name and version, marked when it is off.
 fn name(record: &crate::engine::loader::ModRecord) -> String {
-    let label = record.label();
+    let label = crate::base::manifest::label(record);
     if record.off.load(Ordering::Acquire) {
         texts::fill(
             "mods.off",
@@ -192,11 +192,11 @@ fn name(record: &crate::engine::loader::ModRecord) -> String {
 /// What `record` is, for `enshwick <mod id>`.
 fn about(record: &crate::engine::loader::ModRecord) -> String {
     let mut lines = vec![name(record)];
-    let description = record.description();
+    let description = crate::base::manifest::description(record);
     if !description.is_empty() {
         lines.push(description);
     }
-    let credits = record.meta.credits();
+    let credits = crate::base::manifest::shown(record).credits();
     if !credits.is_empty() {
         lines.push(credits);
     }
@@ -258,7 +258,7 @@ fn config(loader: &Loader, args: &str) -> String {
             let with: Vec<&str> = loader
                 .mods
                 .iter()
-                .filter(|m| !m.settings_files.relock().is_empty())
+                .filter(|m| !crate::base::worlds::settings_files(m).is_empty())
                 .map(|m| m.id.as_str())
                 .collect();
             return if with.is_empty() {
@@ -273,7 +273,7 @@ fn config(loader: &Loader, args: &str) -> String {
         return texts::fill("config.unknown", &[("id", id)]);
     };
     let id = record.id.as_str();
-    let Some(schema) = record.settings_schema() else {
+    let Some(schema) = crate::base::worlds::schema_of(record) else {
         return texts::fill("remote.no-schema", &[("id", id)]);
     };
     let text = crate::base::worlds::show_text(record);

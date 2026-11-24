@@ -302,7 +302,7 @@ fn warn_long(loader: &Loader, held: &[(ModIndex, Duration)]) {
     let names = held
         .iter()
         .filter_map(|&(owner, _)| loader.mods.get(owner.get()))
-        .map(crate::engine::loader::ModRecord::label)
+        .map(crate::base::manifest::label)
         .collect::<Vec<_>>()
         .join(", ");
     tell_admins(loader, &names);
