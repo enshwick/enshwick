@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 23
+#define ENSHWICK_ABI_MINOR 24
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -1038,7 +1038,7 @@ typedef uint32_t EnshwickRecipeId;
 typedef struct EnshwickClientCommand {
   // Size and version of this struct.
   struct EnshwickHeader header;
-  // What to do: `EnshwickClientCommand_OPEN_SCREEN` to `EnshwickClientCommand_OPEN_MOD_SETTINGS`.
+  // What to do: `EnshwickClientCommand_OPEN_SCREEN` to `EnshwickClientCommand_WINDOW_TEXT`.
   uint32_t kind;
   // A move's hold in milliseconds, 1 to `EnshwickClientCommand_MAX_HOLD_MS`;
   // a press's, 1 to `EnshwickClientCommand_MAX_PRESS_MS`.
@@ -1090,6 +1090,17 @@ typedef struct EnshwickClientCommand {
   // 1 when `EnshwickClientCommand_HOST` opens the world to other players
   // online, 0 to play it offline. ABI 12.23.
   uint32_t online;
+  // The item of the carried window `target` (`mod:window`) that
+  // `EnshwickClientCommand_WINDOW_PRESS`, `EnshwickClientCommand_WINDOW_PICK` and
+  // `EnshwickClientCommand_WINDOW_TEXT` act on, by the id
+  // `EnshwickHostApi.client_windows` lists;
+  // borrowed for the call. ABI 12.24.
+  struct EnshwickStr item;
+  // The option `EnshwickClientCommand_WINDOW_PICK` picks, by the name the
+  // window shows, or the text `EnshwickClientCommand_WINDOW_TEXT` sets, at
+  // most `EnshwickClientCommand_MAX_TEXT` bytes; borrowed for the call.
+  // ABI 12.24.
+  struct EnshwickStr text;
 } EnshwickClientCommand;
 // Opens `target`, one of the screens the game opens from a key in the
 // world.
@@ -1135,6 +1146,17 @@ typedef struct EnshwickClientCommand {
 // Presses mod `target`'s settings gear on the Mods screen, by its id,
 // opening the screen first. ABI 12.23.
 #define EnshwickClientCommand_OPEN_MOD_SETTINGS 17
+// Presses `item` of the carried window `target`, as a click would: a
+// button, a list's switch or an on-or-off field. ABI 12.24.
+#define EnshwickClientCommand_WINDOW_PRESS 18
+// Picks the option named `text` in the list of `item` of the carried
+// window `target`. ABI 12.24.
+#define EnshwickClientCommand_WINDOW_PICK 19
+// Sets the text of `item`'s text field in the carried window `target`
+// to `text`, as typing would. ABI 12.24.
+#define EnshwickClientCommand_WINDOW_TEXT 20
+// The longest text, in bytes, a window's field takes. ABI 12.24.
+#define EnshwickClientCommand_MAX_TEXT 255
 // How many worlds and characters the main menu lists at most.
 // ABI 12.23.
 #define EnshwickClientCommand_MAX_SLOTS 16
@@ -1164,7 +1186,7 @@ typedef struct EnshwickClientCommandStatus {
   // `EnshwickClientCommandStatus_PENDING` to `EnshwickClientCommandStatus_UNAVAILABLE`.
   uint32_t state;
   // Why a cancelled command ended: `EnshwickClientCommandStatus_SESSION_CHANGED` to
-  // `EnshwickClientCommandStatus_MOD_OFF`; 0 otherwise.
+  // `EnshwickClientCommandStatus_ITEM_OFF`; 0 otherwise.
   uint32_t reason;
   // The command's kind.
   uint32_t kind;
@@ -1209,6 +1231,10 @@ typedef struct EnshwickClientCommandStatus {
 #define EnshwickClientCommandStatus_INPUT_BLOCKED 6
 // The mod or the feature turned off.
 #define EnshwickClientCommandStatus_MOD_OFF 7
+// The window shows the item off, as a Run button while a field is
+// empty or an action the player may not run now, or the item has no
+// option of that name or takes no such text. ABI 12.24.
+#define EnshwickClientCommandStatus_ITEM_OFF 8
 // The game ended a join or a host without reaching the world, for
 // `failure`.
 // ABI 12.11.
@@ -1355,6 +1381,73 @@ typedef struct EnshwickClientSnapshot {
 // The mods that differ from a server that refused this client show.
 // ABI 12.23.
 #define EnshwickClientSnapshot_MOD_MISMATCH 6
+
+// An item of a window a server's mod shows this client, as
+// `EnshwickHostApi.client_windows` lists it.
+//
+// A `EnshwickClientCommand_WINDOW_PRESS`, `EnshwickClientCommand_WINDOW_PICK` or
+// `EnshwickClientCommand_WINDOW_TEXT` names it by `window` and `item`. The
+// strings are borrowed for the call. ABI 12.24.
+typedef struct EnshwickClientWindowItem {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // `EnshwickClientWindowItem_BUTTON`, `EnshwickClientWindowItem_SWITCH` or
+  // `EnshwickClientWindowItem_FIELD`.
+  uint32_t kind;
+  // A field's argument: `EnshwickClientWindowItem_PLAYER` to
+  // `EnshwickClientWindowItem_TEMPLATE`; 0 for other kinds.
+  uint32_t field;
+  // `EnshwickClientWindowItem_SHOWN`, `EnshwickClientWindowItem_ON` and
+  // `EnshwickClientWindowItem_OFF`.
+  uint32_t flags;
+  // Zero.
+  uint32_t reserved;
+  // The window, as `mod:window`.
+  struct EnshwickStr window;
+  // The item's id in the window.
+  struct EnshwickStr item;
+  // What the item shows: a button's or a field's label, a switch's
+  // player.
+  struct EnshwickStr label;
+  // The line the item stands under: a row's text, a whole action's
+  // label; empty for none.
+  struct EnshwickStr line;
+} EnshwickClientWindowItem;
+// A button: a row's, an action's Run, a form's Cancel, the window's
+// Close or its map's.
+#define EnshwickClientWindowItem_BUTTON 1
+// A list's switch for one player.
+#define EnshwickClientWindowItem_SWITCH 2
+// A field of an action's argument.
+#define EnshwickClientWindowItem_FIELD 3
+// A field naming one of the server's players: a list to pick from and
+// a name to type.
+#define EnshwickClientWindowItem_PLAYER 1
+// A field of a few options to pick from.
+#define EnshwickClientWindowItem_CHOICE 2
+// A field of a number in a range.
+#define EnshwickClientWindowItem_NUMBER 3
+// An on-or-off field, which a press flips.
+#define EnshwickClientWindowItem_TOGGLE 4
+// A field of typed text.
+#define EnshwickClientWindowItem_TEXT 5
+// A field of one of the game's items: a search to type and a list of
+// what it finds to pick from.
+#define EnshwickClientWindowItem_ITEM 6
+// A field of one of the game's templates, as `EnshwickClientWindowItem_ITEM`.
+#define EnshwickClientWindowItem_TEMPLATE 7
+// The window shows and takes commands: the newest the client holds.
+// While it steps aside for the Map screen, or the game's own popup
+// covers it, a command waits until it draws again.
+#define EnshwickClientWindowItem_SHOWN 1
+// A switch is on.
+#define EnshwickClientWindowItem_ON 2
+// The window draws the item off: an action the player may not run now,
+// or the map's button on a build that cannot open the map. A Run is
+// also drawn off while one of its fields holds no value, which this
+// flag does not show; a press of it ends
+// `EnshwickClientCommandStatus_ITEM_OFF` as well.
+#define EnshwickClientWindowItem_OFF 4
 
 // A comfort provider in a base registering its comfort for its category,
 // as `EnshwickHostApi.comfort_filter` hands it on.
@@ -7525,6 +7618,20 @@ typedef struct EnshwickHostApi {
                                   EnshwickKnowledgeId id,
                                   uint32_t value,
                                   uint8_t notice);
+  // Up to `capacity` items of the windows the server's mods show this
+  // client, the newest window last, and how many there are, as every
+  // list answers. Entries are `entry_size` bytes apart, the caller's
+  // `sizeof(EnshwickClientWindowItem)`. Only the newest window shows and
+  // takes `EnshwickClientCommand_WINDOW_PRESS` and its kin; its items are the
+  // ones it draws now, a button's form's while one is open. The strings
+  // stay valid until the next call on this thread. Client only:
+  // `EnshwickStatus_UNAVAILABLE` on a server. Any thread; it runs no mod
+  // callback. ABI 12.24.
+  EnshwickStatus (*client_windows)(EnshwickModHandle me,
+                                   struct EnshwickClientWindowItem *out,
+                                   uint32_t entry_size,
+                                   uint32_t capacity,
+                                   uint32_t *count);
 } EnshwickHostApi;
 
 // The layout the loader was built with, from its golden layout file.
@@ -7765,7 +7872,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, header) == 0, "offset of Chun
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, x) == 8, "offset of ChunkData.x");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, z) == 12, "offset of ChunkData.z");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, size) == 16, "offset of ChunkData.size");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientCommand) == 136, "size of ClientCommand");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientCommand) == 168, "size of ClientCommand");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientCommand) == 8, "alignment of ClientCommand");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, header) == 0, "offset of ClientCommand.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, kind) == 8, "offset of ClientCommand.kind");
@@ -7783,6 +7890,8 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, position) == 104, "offset
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, world) == 128, "offset of ClientCommand.world");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, character) == 130, "offset of ClientCommand.character");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, online) == 132, "offset of ClientCommand.online");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, item) == 136, "offset of ClientCommand.item");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, text) == 152, "offset of ClientCommand.text");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientCommandStatus) == 40, "size of ClientCommandStatus");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientCommandStatus) == 8, "alignment of ClientCommandStatus");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, header) == 0, "offset of ClientCommandStatus.header");
@@ -7813,6 +7922,17 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, server) == 120, "offset 
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, loader_screen_mod) == 136, "offset of ClientSnapshot.loader_screen_mod");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, loader_screen) == 152, "offset of ClientSnapshot.loader_screen");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, reserved2) == 156, "offset of ClientSnapshot.reserved2");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientWindowItem) == 88, "size of ClientWindowItem");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientWindowItem) == 8, "alignment of ClientWindowItem");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientWindowItem, header) == 0, "offset of ClientWindowItem.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientWindowItem, kind) == 8, "offset of ClientWindowItem.kind");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientWindowItem, field) == 12, "offset of ClientWindowItem.field");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientWindowItem, flags) == 16, "offset of ClientWindowItem.flags");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientWindowItem, reserved) == 20, "offset of ClientWindowItem.reserved");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientWindowItem, window) == 24, "offset of ClientWindowItem.window");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientWindowItem, item) == 40, "offset of ClientWindowItem.item");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientWindowItem, label) == 56, "offset of ClientWindowItem.label");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientWindowItem, line) == 72, "offset of ClientWindowItem.line");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickComfort) == 40, "size of Comfort");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickComfort) == 8, "alignment of Comfort");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickComfort, header) == 0, "offset of Comfort.header");
@@ -7999,7 +8119,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, detour) == 16, "offset of Hook
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, next) == 24, "offset of HookSpec.next");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, priority) == 32, "offset of HookSpec.priority");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, flags) == 36, "offset of HookSpec.flags");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1864, "size of HostApi");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1872, "size of HostApi");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, header) == 0, "offset of HostApi.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, host_version) == 8, "offset of HostApi.host_version");
@@ -8233,6 +8353,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_binding) == 1832, "offset 
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_rebind) == 1840, "offset of HostApi.game_rebind");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, quest_reward_filter) == 1848, "offset of HostApi.quest_reward_filter");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, knowledge_set) == 1856, "offset of HostApi.knowledge_set");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_windows) == 1864, "offset of HostApi.client_windows");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 96, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");

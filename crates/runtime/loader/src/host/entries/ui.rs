@@ -39,6 +39,14 @@ entries! {
         out.put(status)
     }
 
+    fn client_windows(
+        loader as Caller,
+        [out, entry_size, capacity, count] as SizedListOut<api_frame::ClientWindowItem>,
+    ) -> Status {
+        on_client(loader)?;
+        crate::ui::interface::carried::listed(|items| out.put(items))
+    }
+
     fn sound_play(me as Mod, spec as Headed<api_frame::SoundPlay>, id as Out<u64>) -> Status {
         id.put(crate::ui::sound::play(me.loader, me.index, &spec)?)
     }

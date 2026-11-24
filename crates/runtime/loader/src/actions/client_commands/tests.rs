@@ -1,4 +1,5 @@
 use super::*;
+use enshwick_core::abi::Str;
 
 /// The frame's step while no command opens or closes a screen.
 fn next(command: &Command, seen: &Seen, progress: Option<Progress>, now: u64) -> Next {
@@ -614,6 +615,85 @@ fn a_control_held_before_the_first_fresh_read_is_not_a_press() {
         ..world()
     };
     assert_eq!(next(&unread, &holding, None, 150), Next::Apply);
+}
+
+#[test]
+fn a_window_command_needs_a_window_an_item_and_a_pick_s_option() {
+    let loader = crate::start::tests::bare_loader();
+    let spec = |kind, window: &'static str, item: &'static str, text: &'static str| Spec {
+        kind,
+        target: Str::new(window),
+        item: Str::new(item),
+        text: Str::new(text),
+        ..Spec::EMPTY
+    };
+    assert_eq!(
+        kind(
+            &loader,
+            &spec(Spec::WINDOW_PRESS, "you.admin:panel", "ban#0", "")
+        ),
+        Ok(Kind::Window(windows::Act::Press))
+    );
+    assert_eq!(
+        kind(
+            &loader,
+            &spec(Spec::WINDOW_TEXT, "you.admin:panel", "say/0", "hi")
+        ),
+        Ok(Kind::Window(windows::Act::Text))
+    );
+    for (of, window, item, text, why) in [
+        (Spec::WINDOW_PRESS, "panel", "ban#0", "", "no mod"),
+        (
+            Spec::WINDOW_PRESS,
+            "you.admin:panel",
+            "Ban",
+            "",
+            "no item id",
+        ),
+        (
+            Spec::WINDOW_PICK,
+            "you.admin:panel",
+            "ban/0",
+            "",
+            "no option",
+        ),
+    ] {
+        let read = window_ask(&spec(of, window, item, text), window);
+        assert_eq!(read, Err(CommandError::BadArgs), "{why}");
+    }
+    let long = "x".repeat(Spec::MAX_TEXT + 1);
+    let past = Spec {
+        text: Str::new(&long),
+        ..spec(Spec::WINDOW_TEXT, "you.admin:panel", "say/0", "")
+    };
+    assert_eq!(
+        kind(&loader, &past),
+        Err(CommandError::BadArgs),
+        "past MAX_TEXT"
+    );
+}
+
+#[test]
+fn a_handed_window_command_ends_as_the_carried_draw_answered() {
+    let _state = windows::tests::TEST_STATE.relock();
+    let ask = windows::Ask::new("you.admin:panel", "@close", windows::Act::Press, "")
+        .expect("ids a window can hold");
+    let press = Command {
+        id: 77,
+        expected: None,
+        ..command(Kind::Window(windows::Act::Press))
+    };
+    windows::register(|| true);
+    windows::park(press.id, ask);
+    let mut commands = kept(press);
+    run(&mut commands, Some(world()), None, 150, |_| Applied::Taken);
+    assert!(commands.kept[0].handed.is_some(), "handed to the draw");
+    assert_eq!(windows::asked().map(|(id, _)| id), Some(77));
+    assert!(windows::claim(77));
+    windows::answer(77, windows::Answer::Shown);
+    run(&mut commands, Some(world()), None, 160, |_| Applied::Taken);
+    assert_eq!(commands.kept[0].state, Status::OBSERVED);
+    assert_eq!(windows::asked(), None, "released at its end");
 }
 
 /// Commands of their own for a test, apart from the process's, holding
