@@ -5,7 +5,7 @@
 //! step, and only while a mod hears the event or a client holds a map;
 //! once neither does, it forgets what it saw, so its next look only notes.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick_base::__internal::waypoints::{self, Waypoints};
@@ -96,6 +96,12 @@ struct Watcher {
     /// When it last looked, in milliseconds since the system started; 0
     /// while it does not look.
     looked: AtomicU64,
+    /// Whether the client's commands want the map's frame, from a layer
+    /// above: set once a mod asks for the client's reads.
+    commands: AtomicBool,
+    /// When it last asked for the map's frame for client commands, in the
+    /// same milliseconds.
+    framed: AtomicU64,
     /// The waypoint's layout, once read; `None` for good on a build that
     /// lacks it.
     at: OnceLock<Option<WaypointAt>>,
@@ -105,8 +111,16 @@ static WATCHER: Watcher = Watcher {
     maps: OnceLock::new(),
     waypoints: Mutex::new(Waypoints::new()),
     looked: AtomicU64::new(0),
+    commands: AtomicBool::new(false),
+    framed: AtomicU64::new(0),
     at: OnceLock::new(),
 };
+
+/// Keeps a hosted world's map frame read for the client's commands, which
+/// refuse a waypoint or ping outside it; for good, from any thread.
+pub(crate) fn want_frame() {
+    WATCHER.commands.store(true, Ordering::Relaxed);
+}
 
 /// The waypoints: off on a build whose reflection lacks the
 /// `PlayerWaypoint` the loader reads.
@@ -152,6 +166,9 @@ pub(crate) fn after_step(loader: &Loader) {
     let heard = loader.hears(Event::WAYPOINT_CHANGED);
     let maps = wanted_maps();
     if idle(heard, maps) {
+        if WATCHER.commands.load(Ordering::Relaxed) {
+            frame_for_commands(loader);
+        }
         return;
     }
     // SAFETY: `GetTickCount64` takes no arguments and has no preconditions.
@@ -184,6 +201,27 @@ pub(crate) fn after_step(loader: &Loader) {
     hand_on(loader, &changes, heard, maps);
 }
 
+/// Asks for a hosted world's map frame at most every
+/// [`WAYPOINT_EVERY_MS`](waypoints::WAYPOINT_EVERY_MS), so the client's
+/// waypoint and ping commands refuse a position outside it whatever other
+/// mods watch; the read is cached for the scene. Called once they
+/// [`want_frame`], while the watcher idles.
+#[cold]
+fn frame_for_commands(loader: &Loader) {
+    if loader.side != enshwick_core::abi::Side::CLIENT {
+        return;
+    }
+    // SAFETY: `GetTickCount64` takes no arguments and has no preconditions.
+    let now = unsafe { GetTickCount64() }.max(1);
+    if !waypoints::due(WATCHER.framed.load(Ordering::Relaxed), now) {
+        return;
+    }
+    WATCHER.framed.store(now, Ordering::Relaxed);
+    if crate::engine::world::quiet_world(loader).is_ok() {
+        let _asked = crate::world::scene::frame_info(loader);
+    }
+}
+
 /// The maps of carried windows while they want changes.
 fn wanted_maps() -> Option<&'static Maps> {
     WATCHER.maps.get().filter(|maps| maps.wanted())
@@ -212,7 +250,7 @@ pub fn bench_waypoint_idle_step() -> impl FnMut() -> bool {
         idle(
             crate::engine::loader::handles(Event::WAYPOINT_CHANGED),
             wanted_maps(),
-        )
+        ) && !WATCHER.commands.load(Ordering::Relaxed)
     }
 }
 
@@ -260,6 +298,23 @@ mod tests {
                     && p.reason.starts_with(ids::PLAYER_WAYPOINT)),
             "the reason names what the build lacks: {listed:?}"
         );
+    }
+
+    #[test]
+    fn a_client_asks_for_the_map_frame_once_its_commands_want_it() {
+        let server = crate::start::tests::bare_loader();
+        let client = Loader {
+            side: enshwick_core::abi::Side::CLIENT,
+            ..crate::start::tests::bare_loader()
+        };
+        let framed = || WATCHER.framed.load(Ordering::Relaxed);
+        // Other tests of one process may want the frame already.
+        want_frame();
+        WATCHER.framed.store(0, Ordering::Relaxed);
+        after_step(&server);
+        assert_eq!(framed(), 0, "a dedicated server runs no client commands");
+        after_step(&client);
+        assert_ne!(framed(), 0, "whatever other mods watch");
     }
 
     #[test]

@@ -160,7 +160,8 @@ impl FakeHost {
     }
 
     /// A loaded mod `enshwick::mods::all()` lists, in order; the loader
-    /// itself comes first in the game.
+    /// itself comes first in the game. A client command opens the page only
+    /// of a mod listed here, as the loader opens only a loaded mod's.
     ///
     /// # Examples
     ///

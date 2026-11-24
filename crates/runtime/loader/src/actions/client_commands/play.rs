@@ -13,6 +13,16 @@
 //! `Play::BackToMenu` (`0x14087c220`, `0x14085e780`). Never posted: 4,
 //! which quits the game from the main menu.
 //!
+//! A host posts the character (0x11), the world (0x16), the session's
+//! kind (0x27, which also sets the session to a hosted one) and the play
+//! of the chosen world (0x28, which starts play as 0x26 does), then the
+//! start of play as a join does. The phases follow as for a join.
+//!
+//! The host's own assumptions, also static: a slot id's storage 0 is the
+//! one the main menu lists first, and a world or character slot the save
+//! system does not take leaves the menu's last choice, so play then starts
+//! with that one.
+//!
 //! Assumptions the in-game check settles (static reads of client
 //! 26430625): the poster reaches the main menu's queue from the interface
 //! frame, a joined target's bytes between its ports and its has-address
@@ -93,6 +103,32 @@ pub(crate) enum Post<'a> {
     StartPlay,
     /// Back (5): out of the start-play state, or out of play.
     Back,
+    /// The character to play as (0x11), by its slot id.
+    Character(u16),
+    /// The world to host (0x16), by its slot id.
+    World(u16),
+    /// A hosted session's kind (0x27): offline, or open online.
+    Session { online: bool },
+    /// The play of the chosen world (0x28), which starts play as the
+    /// join's address does.
+    PlayWorld,
+}
+
+/// What a host plays: a world and a character by their places in the
+/// main menu's lists, from 0, offline or open online.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Host {
+    pub(crate) world: u16,
+    pub(crate) character: u16,
+    pub(crate) online: bool,
+}
+
+/// The game's slot id of the list place `at`: the place plus 1 in its low
+/// byte, 0 being no slot, and the storage in its high byte, here 0 (client
+/// 26430625, `0x140ea52c0`, `0x140e92870`, `0x140e95ce0`). Which storage
+/// 0 is, local or cloud, is not read yet: the in-game check settles it.
+const fn slot(at: u16) -> u16 {
+    at + 1
 }
 
 /// A password held only until the interface frame posts it, wiped then.
@@ -134,6 +170,9 @@ enum Step {
         password: Option<Secret>,
         address: Box<[u8]>,
     },
+    /// A host: its menu commands go one after another at the menu, `posted`
+    /// of them taken so far.
+    Hosting { host: Host, posted: u8 },
     /// Posted: the start of play goes again until play starts.
     Starting { posted_ms: u64, last_ms: u64 },
     /// Play started: the phases follow the game's own pace.
@@ -302,6 +341,47 @@ pub(crate) fn join(id: u64, target: &str, password: &[u8], now: u64) -> Result<(
     Ok(())
 }
 
+/// Starts host `id` of `host` at `now`.
+///
+/// # Errors
+///
+/// [`StartError::NotNow`] off the main menu and while another join, host
+/// or leave runs.
+pub(crate) fn host(id: u64, host: Host, now: u64) -> Result<(), StartError> {
+    if stage(now) != Stage::Menu {
+        return Err(StartError::NotNow);
+    }
+    let mut play = STATE.play.relock();
+    if play.op.is_some() {
+        return Err(StartError::NotNow);
+    }
+    play.name(None);
+    play.answer = None;
+    play.op = Some(Op {
+        id,
+        step: Step::Hosting { host, posted: 0 },
+        started_ms: now,
+        info: None,
+        password_given: false,
+        refusals: crate::base::join::refusals(),
+        report: report(Progress::Waiting, Status::PHASE_MENU, 0),
+    });
+    STATE.running.store(true, Ordering::Release);
+    Ok(())
+}
+
+/// The menu commands a host posts, in order.
+const fn host_posts(host: Host) -> [Post<'static>; 4] {
+    [
+        Post::Character(slot(host.character)),
+        Post::World(slot(host.world)),
+        Post::Session {
+            online: host.online,
+        },
+        Post::PlayWorld,
+    ]
+}
+
 /// Asks `host`'s query port `port` for the join's target: its first IPv4,
 /// Steam id and game port.
 fn ask(layout: &Layout, host: &str, port: u16) -> Answer {
@@ -431,6 +511,13 @@ pub(crate) fn runs() -> bool {
 /// `room`; false without either.
 fn fits(room: Option<usize>, address_len: Option<usize>) -> bool {
     room.zip(address_len).is_some_and(|(room, len)| len <= room)
+}
+
+/// Whether the build has what a host posts: its own commands and the
+/// join's start of play and back.
+pub(crate) fn hosts_run() -> bool {
+    let groups = &crate::actions::client_control::GROUPS;
+    groups.host.get().is_some() && groups.menu.get().is_some()
 }
 
 /// The server the client joined through a join, while it is on its way or
@@ -573,6 +660,7 @@ fn step(op: &mut Op, seen: Seen, now: u64, post: &mut impl FnMut(Post<'_>) -> bo
             op.report = report(Progress::Taken, Status::PHASE_MENU, 0);
             false
         }
+        Step::Hosting { .. } => hosting(op, seen, now, post),
         Step::Starting { .. } => {
             if seen.stage.playing() {
                 op.step = Step::Playing;
@@ -621,6 +709,40 @@ fn step(op: &mut Op, seen: Seen, now: u64, post: &mut impl FnMut(Post<'_>) -> bo
         }
         Step::Backing { .. } => back(op, seen, now, post),
     }
+}
+
+/// Posts a host's menu commands for `op` at the menu, each once its queue
+/// takes the one before, then waits for play as a join; whether it ended,
+/// timed out.
+fn hosting(op: &mut Op, seen: Seen, now: u64, post: &mut impl FnMut(Post<'_>) -> bool) -> bool {
+    let Step::Hosting { host, posted } = &mut op.step else {
+        return false;
+    };
+    if now.saturating_sub(op.started_ms) > START_MS {
+        op.report = report(
+            Progress::Failed(Status::JOIN_TIMED_OUT),
+            Status::PHASE_MENU,
+            Status::JOIN_TIMED_OUT,
+        );
+        return true;
+    }
+    if seen.stage != Stage::Menu {
+        return false;
+    }
+    let posts = host_posts(*host);
+    while let Some(&next) = posts.get(usize::from(*posted)) {
+        if !post(next) {
+            return false;
+        }
+        *posted += 1;
+    }
+    // The host's 20 seconds run from its queue, its posts' time included.
+    op.step = Step::Starting {
+        posted_ms: op.started_ms,
+        last_ms: 0,
+    };
+    op.report = report(Progress::Taken, Status::PHASE_MENU, 0);
+    false
 }
 
 /// Posts the start of play for `op` at the menu until play starts; whether

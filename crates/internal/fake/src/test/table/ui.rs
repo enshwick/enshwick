@@ -760,8 +760,35 @@ entries! {
                 unsafe { id.write(spec.cancels) };
                 return Status::OK;
             }
-            if !(Spec::OPEN_SCREEN..=Spec::PRESS).contains(&spec.kind) || !spec.in_bounds() {
+            if !(Spec::OPEN_SCREEN..=Spec::OPEN_MOD_SETTINGS).contains(&spec.kind) || !spec.in_bounds() {
                 return Status::BAD_ARGS;
+            }
+            // As the loader: a waypoint or ping inside the map's frame, when
+            // the world has one.
+            let marks = |kind: u32| {
+                matches!(
+                    kind,
+                    Spec::SET_WAYPOINT | Spec::CLEAR_WAYPOINT | Spec::PING
+                )
+            };
+            if matches!(spec.kind, Spec::SET_WAYPOINT | Spec::PING)
+                && s.host.world.map_frame.is_some_and(|frame| {
+                    !enshwick_base::__internal::waypoints::inside(
+                        frame.origin,
+                        frame.size,
+                        spec.position,
+                    )
+                })
+            {
+                return Status::BAD_ARGS;
+            }
+            if marks(spec.kind)
+                && s.ui
+                    .client_commands
+                    .iter()
+                    .any(|(_, kind, _, status)| marks(*kind) && open(status))
+            {
+                return Status::REFUSED;
             }
             // SAFETY: the mod's spec, its target borrowed for the call; the
             // password is never read, kept or returned.
@@ -782,6 +809,25 @@ entries! {
                     return Status::UNAVAILABLE;
                 }
             }
+            // As the loader: a host starts at the main menu, which no HUD
+            // screen names.
+            // SAFETY: the mod's spec, its expected screen borrowed for the call.
+            let expects = unsafe { spec.expected_screen.as_str() }.is_some_and(|s| !s.is_empty());
+            // As the loader: a mod's page by the id of a mod the test
+            // loaded.
+            let names_mod = matches!(spec.kind, Spec::OPEN_MOD | Spec::OPEN_MOD_SETTINGS);
+            if names_mod
+                && !s.host.base.mods.iter().any(|loaded| {
+                    // SAFETY: the test's own mod info, its id text kept for
+                    // the fake's life.
+                    Some(target.as_str()) == unsafe { loaded.id.as_str() }
+                })
+            {
+                return Status::BAD_ARGS;
+            }
+            if spec.kind == Spec::HOST && expects {
+                return Status::BAD_ARGS;
+            }
             if !named_as_the_loader_takes(&spec) {
                 return Status::BAD_ARGS;
             }
@@ -801,14 +847,15 @@ entries! {
             }
             // One join or leave at a time; a join from the main menu, outside a
             // world, which the snapshot's session names, and a leave inside one.
-            let plays = |kind: u32| kind == Spec::JOIN || kind == Spec::LEAVE;
+            let plays = |kind: u32| matches!(kind, Spec::JOIN | Spec::LEAVE | Spec::HOST);
             if plays(spec.kind) {
                 let in_world = s.ui.client_snapshot.session != 0;
                 let running =
                     s.ui.client_commands
                         .iter()
                         .any(|(_, kind, _, status)| plays(*kind) && open(status));
-                if running || in_world == (spec.kind == Spec::JOIN) {
+                let from_menu = matches!(spec.kind, Spec::JOIN | Spec::HOST);
+                if running || in_world == from_menu {
                     return Status::REFUSED;
                 }
             }
@@ -823,6 +870,7 @@ entries! {
                     // answer, a leave starts in the world.
                     phase: match spec.kind {
                         Spec::JOIN => Raw::PHASE_QUEUED,
+                        Spec::HOST => Raw::PHASE_MENU,
                         Spec::LEAVE => Raw::PHASE_IN_WORLD,
                         _ => 0,
                     },

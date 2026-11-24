@@ -103,16 +103,19 @@ pub enum SnapshotPart {
     Player,
     /// The crafting menu's highlighted recipe.
     Recipe,
+    /// The page of the loader's own Mods screen that shows, and its mod.
+    LoaderScreen,
 }
 
 impl SnapshotPart {
     /// Every part, in the order the Luau API lists them.
-    const ALL: [Self; 5] = [
+    const ALL: [Self; 6] = [
         Self::Screens,
         Self::MenuTab,
         Self::Held,
         Self::Player,
         Self::Recipe,
+        Self::LoaderScreen,
     ];
 
     const fn bit(self) -> u32 {
@@ -122,6 +125,7 @@ impl SnapshotPart {
             Self::Held => Raw::HELD,
             Self::Player => Raw::PLAYER,
             Self::Recipe => Raw::RECIPE,
+            Self::LoaderScreen => Raw::LOADER_SCREEN,
         }
     }
 
@@ -132,6 +136,7 @@ impl SnapshotPart {
             Self::Held => "held",
             Self::Player => "player",
             Self::Recipe => "recipe",
+            Self::LoaderScreen => "loader_screen",
         }
     }
 }
@@ -355,6 +360,112 @@ impl ClientSnapshot {
         (self.reads(SnapshotPart::Recipe) && self.raw.highlighted_recipe.0 != 0)
             .then_some(self.raw.highlighted_recipe)
     }
+
+    /// The page of the loader's own Mods screen that shows; `None` while
+    /// the screen is closed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::input::{ClientSnapshot, LoaderPage};
+    ///
+    /// fn on_the_list(snapshot: &ClientSnapshot) -> bool {
+    ///     snapshot.loader_screen() == Some(LoaderPage::ModList)
+    /// }
+    /// ```
+    #[must_use]
+    pub fn loader_screen(&self) -> Option<LoaderPage> {
+        if !self.reads(SnapshotPart::LoaderScreen) {
+            return None;
+        }
+        LoaderPage::ALL
+            .iter()
+            .find(|(raw, ..)| *raw == self.raw.loader_screen)
+            .map(|(_, page, _)| *page)
+            .or_else(|| {
+                (self.raw.loader_screen != Raw::NO_LOADER_SCREEN)
+                    .then_some(LoaderPage::Other(self.raw.loader_screen))
+            })
+    }
+
+    /// The id of the mod whose page of the loader's Mods screen shows, when
+    /// this client loads it; `None` on a page of a mod only the server runs.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::input::ClientSnapshot;
+    ///
+    /// fn on_my_page(snapshot: &ClientSnapshot) -> bool {
+    ///     snapshot.loader_screen_mod() == Some("you.trail")
+    /// }
+    /// ```
+    #[must_use]
+    pub fn loader_screen_mod(&self) -> Option<&'static str> {
+        self.reads(SnapshotPart::LoaderScreen)
+            .then(|| named(self.raw.loader_screen_mod))
+            .flatten()
+    }
+}
+
+/// A page of the loader's own Mods screen, from
+/// [`ClientSnapshot::loader_screen`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::input::LoaderPage;
+///
+/// assert_eq!(LoaderPage::ModPage.name(), "mod_page");
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum LoaderPage {
+    /// The list of mods.
+    ModList,
+    /// A mod's page, with the settings this world gives it.
+    ModPage,
+    /// The joined server's settings of a mod.
+    ModServerSettings,
+    /// The joined server's list of mods with settings.
+    ServerModList,
+    /// The key bindings of a mod the joined server runs and this client
+    /// lacks.
+    ModBindings,
+    /// The mods that differ from a server that refused this client.
+    ModMismatch,
+    /// A page a newer loader shows that this build of the API does not
+    /// name, as its raw value.
+    Other(u32),
+}
+
+impl LoaderPage {
+    const ALL: [(u32, Self, &'static str); 6] = [
+        (Raw::MOD_LIST, Self::ModList, "mod_list"),
+        (Raw::MOD_PAGE, Self::ModPage, "mod_page"),
+        (
+            Raw::MOD_SERVER_SETTINGS,
+            Self::ModServerSettings,
+            "mod_server_settings",
+        ),
+        (Raw::SERVER_MOD_LIST, Self::ServerModList, "server_mod_list"),
+        (Raw::MOD_BINDINGS, Self::ModBindings, "mod_bindings"),
+        (Raw::MOD_MISMATCH, Self::ModMismatch, "mod_mismatch"),
+    ];
+
+    /// The page's name as the Luau API gives it; `"other"` for every
+    /// [`LoaderPage::Other`].
+    ///
+    /// # Examples
+    ///
+    /// See [`LoaderPage`].
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        Self::ALL
+            .iter()
+            .find(|(_, page, _)| *page == self)
+            .map_or("other", |(.., name)| name)
+    }
 }
 
 #[crate::script(client_snapshot)]
@@ -405,7 +516,7 @@ struct LuauSnapshot {
     /// The world's name.
     pub scene: Option<String>,
     /// The parts the build reads: `"screens"`, `"menu_tab"`, `"held"`,
-    /// `"player"` and `"recipe"`.
+    /// `"player"`, `"recipe"` and `"loader_screen"`.
     pub reads: Vec<String>,
     /// The open HUD screen.
     pub hud_screen: Option<String>,
@@ -423,6 +534,12 @@ struct LuauSnapshot {
     pub highlighted_recipe: Option<RecipeId>,
     /// The server a join of this loader joined, as `host:query_port`.
     pub server: Option<String>,
+    /// The page of the loader's Mods screen that shows: `"mod_list"`,
+    /// `"mod_page"`, `"mod_server_settings"`, `"server_mod_list"`,
+    /// `"mod_bindings"` or `"mod_mismatch"`; nil while none does.
+    pub loader_screen: Option<String>,
+    /// The id of the mod that page names.
+    pub loader_screen_mod: Option<String>,
 }
 
 impl From<ClientSnapshot> for LuauSnapshot {
@@ -448,6 +565,8 @@ impl From<ClientSnapshot> for LuauSnapshot {
             player: snapshot.player(),
             highlighted_recipe: snapshot.highlighted_recipe(),
             server: owned(snapshot.server()),
+            loader_screen: snapshot.loader_screen().map(|page| page.name().to_owned()),
+            loader_screen_mod: owned(snapshot.loader_screen_mod()),
         }
     }
 }

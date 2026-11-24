@@ -374,6 +374,20 @@ ids! {
     /// The id of its `u64` of the game controls held, a `Bitmask64` of
     /// `PlayerInputType`.
     CLIENT_PLAYER_INPUT_DIGITAL = "client_player_input.digital";
+    /// The id of the local player's waypoint request in its input, a
+    /// [`WAYPOINT_ACTION`] the server takes when its version changes.
+    CLIENT_PLAYER_INPUT_WAYPOINT = "client_player_input.waypoint";
+    /// The id of a waypoint request: set, clear or ping a position.
+    WAYPOINT_ACTION = "waypoint_action";
+    /// The id of its `WorldPosition`, three `i64` in 32.32 fixed point.
+    WAYPOINT_ACTION_POSITION = "waypoint_action.position";
+    /// The id of its `bool`, 1 to set the waypoint and 0 to clear it.
+    WAYPOINT_ACTION_ENABLE = "waypoint_action.enable";
+    /// The id of its `bool`, 1 for a ping of the position.
+    WAYPOINT_ACTION_IS_PING = "waypoint_action.is_ping";
+    /// The id of its `u32` version, which the server compares with the last
+    /// one it took.
+    WAYPOINT_ACTION_VERSION = "waypoint_action.version";
     /// The id of the client's look input per device, a float pair each.
     MULTI_DEVICE_DIRECTIONAL_INPUT = "multi_device_directional_input";
     /// The id of the server-only component of a player's targets, one

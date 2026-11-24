@@ -8,6 +8,10 @@ use crate::controls::GameAction;
 use crate::{RecipeId, WorldError};
 use enshwick_world::__internal::world_status;
 
+mod status;
+
+pub use status::{CancelReason, CommandState, CommandStatus, JoinFailure, JoinPhase};
+
 /// What a [`ClientCommand`] does.
 ///
 /// # Examples
@@ -72,12 +76,49 @@ pub enum CommandAction {
     /// [`GameAction::ContextualActionTap`]; a plain action such as
     /// [`GameAction::Jump`] or [`GameAction::Sprint`] acts on its own bit.
     /// Several presses hold at once, beside a look or a move.
+    ///
+    /// A screen the held action opens, as an interaction opens a chest, is
+    /// its effect: the press is observed then and stops holding. A screen
+    /// that a key of the player's or another command opens cancels it.
     Press {
         /// The action.
         action: GameAction,
         /// The hold in milliseconds.
         hold_ms: u32,
     },
+    /// Sets the local player's waypoint at a world position, x, y and z in
+    /// metres, or moves it there, as the map's own waypoint does.
+    SetWaypoint([f64; 3]),
+    /// Clears the local player's waypoint.
+    ClearWaypoint,
+    /// Pings a world position, x, y and z in metres, for the players of the
+    /// world, as the map's own ping does; the waypoint stays.
+    Ping([f64; 3]),
+    /// Hosts a world from the main menu, as its own Play does: the world
+    /// and the character by their places in the main menu's lists, from 0,
+    /// each below 16, offline or open to other players `online`. Its
+    /// [`CommandStatus::phase`] follows play as a join's does. Its
+    /// command's session is 0.
+    Host {
+        /// The world's place in the main menu's list.
+        world: u16,
+        /// The character's place in the main menu's list.
+        character: u16,
+        /// Whether other players may join it online.
+        online: bool,
+    },
+    /// Opens the loader's Mods screen at its list of mods, over the main
+    /// menu or the pause menu, whichever shows;
+    /// [`ClientSnapshot::loader_screen`](super::ClientSnapshot::loader_screen)
+    /// tells when it shows.
+    OpenMods,
+    /// Opens the page of the mod with this id on the Mods screen, opening
+    /// the screen first.
+    OpenMod(String),
+    /// Presses the settings gear of the mod with this id on the Mods
+    /// screen, opening the screen first: its page, or the joined server's
+    /// settings of a mod with nothing to set here.
+    OpenModSettings(String),
 }
 
 /// A server's password for [`CommandAction::Join`]: the loader hands it to
@@ -204,6 +245,34 @@ impl ClientCommand {
                 raw.target = Str::new(action.name());
                 raw.hold_ms = *hold_ms;
             }
+            CommandAction::SetWaypoint(at) => {
+                raw.kind = RawCommand::SET_WAYPOINT;
+                raw.position = *at;
+            }
+            CommandAction::ClearWaypoint => raw.kind = RawCommand::CLEAR_WAYPOINT,
+            CommandAction::Ping(at) => {
+                raw.kind = RawCommand::PING;
+                raw.position = *at;
+            }
+            CommandAction::Host {
+                world,
+                character,
+                online,
+            } => {
+                raw.kind = RawCommand::HOST;
+                raw.world = *world;
+                raw.character = *character;
+                raw.online = u32::from(*online);
+            }
+            CommandAction::OpenMods => raw.kind = RawCommand::OPEN_MODS,
+            CommandAction::OpenMod(id) => {
+                raw.kind = RawCommand::OPEN_MOD;
+                raw.target = Str::new(id);
+            }
+            CommandAction::OpenModSettings(id) => {
+                raw.kind = RawCommand::OPEN_MOD_SETTINGS;
+                raw.target = Str::new(id);
+            }
         }
         raw
     }
@@ -231,230 +300,20 @@ impl CommandId {
     pub const fn new(id: u64) -> Self {
         Self(id)
     }
-}
 
-/// Why a command ended without its effect.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::input::CancelReason;
-///
-/// assert_ne!(CancelReason::TimedOut, CancelReason::PlayerInput);
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum CancelReason {
-    /// The client's session changed.
-    SessionChanged,
-    /// Another screen than the expected one shows.
-    OtherScreen,
-    /// The player pressed a control or moved the stick or mouse.
-    PlayerInput,
-    /// The mod cancelled it.
-    ByMod,
-    /// Two seconds passed without its effect.
-    TimedOut,
-    /// The game blocks the player's input now.
-    InputBlocked,
-    /// The mod or the feature turned off.
-    ModOff,
-    /// A reason a newer loader gives that this build of the API does not
-    /// name, as its raw value.
-    Other(u32),
-}
-
-impl CancelReason {
-    const ALL: [(u32, Self, &'static str); 7] = [
-        (
-            Raw::SESSION_CHANGED,
-            Self::SessionChanged,
-            "session_changed",
-        ),
-        (Raw::OTHER_SCREEN, Self::OtherScreen, "other_screen"),
-        (Raw::PLAYER_INPUT, Self::PlayerInput, "player_input"),
-        (Raw::BY_MOD, Self::ByMod, "by_mod"),
-        (Raw::TIMED_OUT, Self::TimedOut, "timed_out"),
-        (Raw::INPUT_BLOCKED, Self::InputBlocked, "input_blocked"),
-        (Raw::MOD_OFF, Self::ModOff, "mod_off"),
-    ];
-
-    fn from_raw(reason: u32) -> Self {
-        Self::ALL
-            .iter()
-            .find(|(raw, ..)| *raw == reason)
-            .map_or(Self::Other(reason), |(_, reason, _)| *reason)
-    }
-
-    fn name(self) -> &'static str {
-        Self::ALL
-            .iter()
-            .find(|(_, reason, _)| *reason == self)
-            .map_or("other", |(.., name)| name)
-    }
-}
-
-/// Where a command stands, from [`Input::command_status`].
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::input::CommandState;
-///
-/// assert_ne!(CommandState::Applied, CommandState::Observed);
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum CommandState {
-    /// Queued; the game has not taken it yet.
-    Pending,
-    /// The game took it.
-    Applied,
-    /// The client's own state shows its effect.
-    Observed,
-    /// It ended without its effect.
-    Cancelled(CancelReason),
-    /// The running build lacks what it needs, or the target is not there.
-    Unavailable,
-    /// The game ended a join without reaching the world.
-    Failed(JoinFailure),
-}
-
-impl CommandState {
-    fn from_raw(raw: &Raw) -> Self {
-        match raw.state {
-            Raw::APPLIED => Self::Applied,
-            Raw::OBSERVED => Self::Observed,
-            Raw::CANCELLED => Self::Cancelled(CancelReason::from_raw(raw.reason)),
-            Raw::UNAVAILABLE => Self::Unavailable,
-            Raw::FAILED => Self::Failed(JoinFailure::from_raw(raw.failure)),
-            _ => Self::Pending,
-        }
-    }
-}
-
-/// Why a join failed, as far as the client can tell.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::input::JoinFailure;
-///
-/// assert_ne!(JoinFailure::Full, JoinFailure::Unknown);
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum JoinFailure {
-    /// The server refused the password, or asks for one and none was given.
-    WrongPassword,
-    /// The server is full.
-    Full,
-    /// The server was not found.
-    NotFound,
-    /// The server is reserved for others.
-    Reserved,
-    /// The server runs another game version.
-    VersionMismatch,
-    /// The loader's join check or the server refused the client.
-    Refused,
-    /// The game did not start or finish the join in time.
-    TimedOut,
-    /// The server's query port did not answer with its address.
-    Unreachable,
-    /// The client does not show why.
-    Unknown,
-    /// A failure a newer loader gives that this build of the API does not
-    /// name, as its raw value.
-    Other(u32),
-}
-
-impl JoinFailure {
-    const ALL: [(u32, Self, &'static str); 9] = [
-        (Raw::WRONG_PASSWORD, Self::WrongPassword, "wrong_password"),
-        (Raw::FULL, Self::Full, "full"),
-        (Raw::NOT_FOUND, Self::NotFound, "not_found"),
-        (Raw::RESERVED, Self::Reserved, "reserved"),
-        (
-            Raw::VERSION_MISMATCH,
-            Self::VersionMismatch,
-            "version_mismatch",
-        ),
-        (Raw::REFUSED, Self::Refused, "refused"),
-        (Raw::JOIN_TIMED_OUT, Self::TimedOut, "timed_out"),
-        (Raw::UNREACHABLE, Self::Unreachable, "unreachable"),
-        (Raw::UNKNOWN, Self::Unknown, "unknown"),
-    ];
-
-    fn from_raw(failure: u32) -> Self {
-        Self::ALL
-            .iter()
-            .find(|(raw, ..)| *raw == failure)
-            .map_or(Self::Other(failure), |(_, failure, _)| *failure)
-    }
-
-    fn name(self) -> &'static str {
-        Self::ALL
-            .iter()
-            .find(|(_, failure, _)| *failure == self)
-            .map_or("other", |(.., name)| name)
-    }
-}
-
-/// Where the client stands on a [`CommandAction::Join`] or
-/// [`CommandAction::Leave`].
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::input::JoinPhase;
-///
-/// assert_ne!(JoinPhase::Loading, JoinPhase::InWorld);
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum JoinPhase {
-    /// Waiting to start: the loader asks the server for its address.
-    Queued,
-    /// The main menu took the join and starts play.
-    Menu,
-    /// Play started; the client connects to the server.
-    Connecting,
-    /// Connected; the client loads the world.
-    Loading,
-    /// The client is in the server's world.
-    InWorld,
-    /// The client left play, back to the main menu.
-    Left,
-    /// A phase a newer loader gives that this build of the API does not
-    /// name, as its raw value.
-    Other(u32),
-}
-
-impl JoinPhase {
-    const ALL: [(u32, Self, &'static str); 6] = [
-        (Raw::PHASE_QUEUED, Self::Queued, "queued"),
-        (Raw::PHASE_MENU, Self::Menu, "menu"),
-        (Raw::PHASE_CONNECTING, Self::Connecting, "connecting"),
-        (Raw::PHASE_LOADING, Self::Loading, "loading"),
-        (Raw::PHASE_IN_WORLD, Self::InWorld, "in_world"),
-        (Raw::PHASE_LEFT, Self::Left, "left"),
-    ];
-
-    /// The phase of `raw`, `None` for 0: no join or leave.
-    fn from_raw(raw: u32) -> Option<Self> {
-        (raw != 0).then(|| {
-            Self::ALL
-                .iter()
-                .find(|(value, ..)| *value == raw)
-                .map_or(Self::Other(raw), |(_, phase, _)| *phase)
-        })
-    }
-
-    fn name(self) -> &'static str {
-        Self::ALL
-            .iter()
-            .find(|(_, phase, _)| *phase == self)
-            .map_or("other", |(.., name)| name)
+    /// The loader's number for the command, to log, store or hand on; the
+    /// Luau API gives the same number.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::input::CommandId;
+    ///
+    /// assert_eq!(CommandId::new(7).as_u64(), 7);
+    /// ```
+    #[must_use]
+    pub const fn as_u64(self) -> u64 {
+        self.0
     }
 }
 
@@ -464,13 +323,16 @@ impl JoinPhase {
 #[script(name = "ClientCommand")]
 struct LuauCommand {
     /// `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`,
-    /// `"move"`, `"highlight_recipe"`, `"join"`, `"leave"` or `"press"`.
+    /// `"move"`, `"highlight_recipe"`, `"join"`, `"leave"`, `"press"`,
+    /// `"set_waypoint"`, `"clear_waypoint"`, `"ping"`, `"host"`,
+    /// `"open_mods"`, `"open_mod"` or `"open_mod_settings"`.
     pub kind: String,
     /// The session, as `client_snapshot().session` gives it.
     pub session: u64,
     /// The HUD screen the client must show.
     pub expected_screen: Option<String>,
-    /// The screen to open, the tab to choose or the server to join.
+    /// The screen to open, the tab to choose, the server to join or the
+    /// mod whose page to open, by its id.
     pub target: Option<String>,
     /// A look's yaw and pitch in radians.
     pub look: Option<[f32; 2]>,
@@ -485,6 +347,15 @@ struct LuauCommand {
     /// The game action a press holds, by its game name, as a control's
     /// `link` names it.
     pub action: Option<String>,
+    /// The world position, x, y and z in metres, a waypoint or a ping
+    /// marks.
+    pub position: Option<[f64; 3]>,
+    /// A host's world, by its place in the main menu's list from 0.
+    pub world: Option<u16>,
+    /// A host's character, by its place in the main menu's list from 0.
+    pub character: Option<u16>,
+    /// Whether a host opens its world online; offline without it.
+    pub online: Option<bool>,
 }
 
 impl core::fmt::Debug for LuauCommand {
@@ -500,6 +371,10 @@ impl core::fmt::Debug for LuauCommand {
             .field("recipe", &self.recipe)
             .field("password", &self.password.as_ref().map(|_| "<secret>"))
             .field("action", &self.action)
+            .field("position", &self.position)
+            .field("world", &self.world)
+            .field("character", &self.character)
+            .field("online", &self.online)
             .finish()
     }
 }
@@ -546,6 +421,23 @@ impl TryFrom<LuauCommand> for ClientCommand {
                     hold_ms: luau.hold_ms.ok_or_else(|| missing("a hold"))?,
                 }
             }
+            "set_waypoint" => {
+                CommandAction::SetWaypoint(luau.position.ok_or_else(|| missing("a position"))?)
+            }
+            "clear_waypoint" => CommandAction::ClearWaypoint,
+            "ping" => CommandAction::Ping(luau.position.ok_or_else(|| missing("a position"))?),
+            "open_mods" => CommandAction::OpenMods,
+            "open_mod" => {
+                CommandAction::OpenMod(luau.target.clone().ok_or_else(|| missing("a target"))?)
+            }
+            "open_mod_settings" => CommandAction::OpenModSettings(
+                luau.target.clone().ok_or_else(|| missing("a target"))?,
+            ),
+            "host" => CommandAction::Host {
+                world: luau.world.ok_or_else(|| missing("a world"))?,
+                character: luau.character.ok_or_else(|| missing("a character"))?,
+                online: luau.online.unwrap_or(false),
+            },
             other => {
                 return Err(crate::script::Error::new(format!(
                     "no client command kind {other:?}"
@@ -567,71 +459,6 @@ impl crate::script::Typed for ClientCommand {
 impl crate::script::FromScript for ClientCommand {
     fn from_value(value: crate::script::Value) -> Result<Self, crate::script::Error> {
         LuauCommand::from_value(value)?.try_into()
-    }
-}
-
-/// [`CommandStatus`] as Luau sees it.
-#[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
-#[script(name = "CommandStatus")]
-struct LuauStatus {
-    /// `"pending"`, `"applied"`, `"observed"`, `"cancelled"`,
-    /// `"unavailable"` or `"failed"`.
-    pub state: String,
-    /// Why a cancelled command ended, such as `"timed_out"`, or why a
-    /// `"failed"` join failed, such as `"full"`; `"other"` for one a newer
-    /// loader gives.
-    pub reason: Option<String>,
-    /// Milliseconds since the command was queued.
-    pub age_ms: u64,
-    /// A join or leave's phase: `"queued"`, `"menu"`, `"connecting"`,
-    /// `"loading"`, `"in_world"` or `"left"`.
-    pub phase: Option<String>,
-}
-
-/// Where a command stands and how long ago it was queued, from
-/// [`Input::command_status`].
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::input::{CommandId, CommandState};
-///
-/// fn done(input: enshwick::input::Input, id: CommandId) -> bool {
-///     input.command_status(id).is_ok_and(|status| status.state == CommandState::Observed)
-/// }
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct CommandStatus {
-    /// Where it stands.
-    pub state: CommandState,
-    /// Milliseconds since it was queued.
-    pub age_ms: u64,
-    /// Where the client stands on a join or leave; `None` for other kinds.
-    pub phase: Option<JoinPhase>,
-}
-
-impl crate::script::Typed for CommandStatus {
-    const TY: &'static crate::script::Ty = <LuauStatus as crate::script::Typed>::TY;
-}
-
-impl crate::script::IntoScript for CommandStatus {
-    fn into_value(self) -> crate::script::Value {
-        let (state, reason) = match self.state {
-            CommandState::Pending => ("pending", None),
-            CommandState::Applied => ("applied", None),
-            CommandState::Observed => ("observed", None),
-            CommandState::Cancelled(reason) => ("cancelled", Some(reason.name().to_owned())),
-            CommandState::Unavailable => ("unavailable", None),
-            CommandState::Failed(failure) => ("failed", Some(failure.name().to_owned())),
-        };
-        LuauStatus {
-            state: state.to_owned(),
-            reason,
-            age_ms: self.age_ms,
-            phase: self.phase.map(|phase| phase.name().to_owned()),
-        }
-        .into_value()
     }
 }
 
@@ -764,6 +591,10 @@ mod tests {
             recipe: None,
             password: None,
             action: None,
+            position: None,
+            world: None,
+            character: None,
+            online: None,
         };
         assert!(ClientCommand::try_from(luau("open_screen", Some("Map"))).is_ok());
         assert!(ClientCommand::try_from(luau("open_screen", None)).is_err());
@@ -805,6 +636,10 @@ mod tests {
             recipe: None,
             password: None,
             action: action.map(str::to_owned),
+            position: None,
+            world: None,
+            character: None,
+            online: None,
         };
         assert!(
             ClientCommand::try_from(luau(Some("MainhandAction_Tap"), Some(16))).is_ok_and(|c| {
@@ -847,6 +682,10 @@ mod tests {
             recipe: None,
             password: Some("hunter2".to_owned()),
             action: None,
+            position: None,
+            world: None,
+            character: None,
+            online: None,
         };
         let shown = format!("{luau:?}");
         assert!(!shown.contains("hunter2"), "{shown}");

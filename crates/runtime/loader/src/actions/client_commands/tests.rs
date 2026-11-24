@@ -1,5 +1,10 @@
 use super::*;
 
+/// The frame's step while no command opens or closes a screen.
+fn next(command: &Command, seen: &Seen, progress: Option<Progress>, now: u64) -> Next {
+    super::next(command, seen, progress, now, false)
+}
+
 fn command(kind: Kind) -> Command {
     Command {
         id: 1,
@@ -20,11 +25,51 @@ fn command(kind: Kind) -> Command {
 fn seen(screen: u8, tab: TabRead) -> Seen {
     Seen {
         session: 3,
-        screen,
+        screen: Some(screen),
         tab,
         recipe: RecipeRead::Unread,
         held: Some(0),
+        host: 0,
+        loader: LoaderScreen::default(),
     }
+}
+
+#[test]
+fn a_mods_command_is_observed_once_the_screen_shows_its_page() {
+    let ask = |mod_index, gear| ModsAsk { mod_index, gear };
+    let shown = |page, mod_index| Seen {
+        loader: LoaderScreen { page, mod_index },
+        ..seen(0, TabRead::NoMenu)
+    };
+    let open = Command {
+        expected: None,
+        ..command(Kind::Mods(ask(None, false)))
+    };
+    assert_eq!(next(&open, &shown(0, None), None, 150), Next::Apply);
+    assert_eq!(
+        next(&open, &shown(Snapshot::MOD_LIST, None), None, 160),
+        Next::End(Status::OBSERVED, 0)
+    );
+    let page = ask(Some(2), false);
+    assert!(page.shows(LoaderScreen {
+        page: Snapshot::MOD_PAGE,
+        mod_index: Some(2)
+    }));
+    assert!(!page.shows(LoaderScreen {
+        page: Snapshot::MOD_SERVER_SETTINGS,
+        mod_index: Some(2)
+    }));
+    assert!(
+        ask(Some(2), true).shows(LoaderScreen {
+            page: Snapshot::MOD_SERVER_SETTINGS,
+            mod_index: Some(2)
+        }),
+        "a gear may open the joined server's settings"
+    );
+    assert!(!page.shows(LoaderScreen {
+        page: Snapshot::MOD_PAGE,
+        mod_index: Some(1)
+    }));
 }
 
 /// The world's own screen, 1 on client 26430625.
@@ -211,7 +256,7 @@ fn a_press_needs_a_game_action_a_bounded_hold_and_the_build_s_bit() {
         "a build that does not reflect the action"
     );
     assert_eq!(
-        expected_screen(Kind::Press(32, 16), "Backpack"),
+        expected_screen(Kind::Press(32, 16, false), "Backpack"),
         Err(CommandError::BadArgs),
         "a press runs only on the world's screen"
     );
@@ -219,9 +264,12 @@ fn a_press_needs_a_game_action_a_bounded_hold_and_the_build_s_bit() {
 
 #[test]
 fn a_mod_holds_one_press_per_action_beside_its_move() {
-    let (jump, sprint) = (Kind::Press(32, 16), Kind::Press(53, 2000));
+    let (jump, sprint) = (Kind::Press(32, 16, false), Kind::Press(53, 2000, false));
     assert!(jump.waits_beside(sprint));
-    assert!(!jump.waits_beside(Kind::Press(32, 500)), "the same action");
+    assert!(
+        !jump.waits_beside(Kind::Press(32, 500, false)),
+        "the same action"
+    );
     assert!(sprint.waits_beside(Kind::Move([0.0, 1.0], 250)));
     assert!(!Kind::Move([0.0, 1.0], 250).waits_beside(Kind::Move([1.0, 0.0], 10)));
 }
@@ -230,16 +278,16 @@ fn a_mod_holds_one_press_per_action_beside_its_move() {
 fn a_mod_holds_its_share_of_presses_and_leaves_the_other_slots_to_other_mods() {
     let (me, other) = (ModIndex::new(0), ModIndex::new(1));
     let mut kept: VecDeque<Command> = (0..rules::PRESSES_PER_MOD)
-        .map(|bit| command(Kind::Press(u8::try_from(bit).unwrap(), 2000)))
+        .map(|bit| command(Kind::Press(u8::try_from(bit).unwrap(), 2000, false)))
         .collect();
-    let next = Kind::Press(40, 16);
+    let next = Kind::Press(40, 16, false);
     assert!(!may_queue(&kept, me, next), "its share is held");
     assert!(may_queue(&kept, other, next), "another mod's presses");
     assert!(may_queue(&kept, me, Kind::Move([0.0, 1.0], 250)));
     kept[0].state = Status::OBSERVED;
     assert!(may_queue(&kept, me, next), "one ended");
     assert!(
-        !may_queue(&kept, me, Kind::Press(1, 16)),
+        !may_queue(&kept, me, Kind::Press(1, 16, false)),
         "one press of each action"
     );
 }
@@ -248,7 +296,7 @@ fn a_mod_holds_its_share_of_presses_and_leaves_the_other_slots_to_other_mods() {
 fn a_press_holds_until_done_and_ends_on_the_player_s_key_or_another_screen() {
     let press = Command {
         handed: Some(100),
-        ..command(Kind::Press(32, 2000))
+        ..command(Kind::Press(32, 2000, false))
     };
     assert_eq!(next(&press, &world(), None, 150), Next::Apply);
     assert_eq!(
@@ -269,13 +317,25 @@ fn a_press_holds_until_done_and_ends_on_the_player_s_key_or_another_screen() {
         cancelled(Status::PLAYER_INPUT)
     );
     assert_eq!(
-        next(
+        super::next(
             &pressing,
             &seen(4, TabRead::NoMenu),
             Some(Progress::Taken),
+            160,
+            true
+        ),
+        cancelled(Status::OTHER_SCREEN),
+        "a screen a command opened is not the press's"
+    );
+    assert_eq!(
+        next(
+            &press,
+            &seen(4, TabRead::NoMenu),
+            Some(Progress::Waiting),
             160
         ),
-        cancelled(Status::OTHER_SCREEN)
+        cancelled(Status::OTHER_SCREEN),
+        "a screen before the game took the press"
     );
     assert_eq!(
         next(
@@ -299,8 +359,79 @@ fn a_press_holds_until_done_and_ends_on_the_player_s_key_or_another_screen() {
 }
 
 #[test]
+fn a_press_whose_held_action_opens_a_screen_mid_hold_ends_observed() {
+    // An interaction held on a storage chest opens the chest's screen
+    // before its 50 ms hold ends (client 26430625).
+    let pressing = Command {
+        handed: Some(100),
+        state: Status::APPLIED,
+        ..command(Kind::Press(14, 50, true))
+    };
+    let chest = Seen {
+        host: 77,
+        ..seen(0x15, TabRead::NoMenu)
+    };
+    assert_eq!(
+        next(&pressing, &chest, Some(Progress::Taken), 110),
+        Next::End(Status::OBSERVED, 0)
+    );
+    let map = seen(4, TabRead::Shown(MenuTab::Map));
+    assert_eq!(
+        next(&pressing, &map, Some(Progress::Taken), 110),
+        Next::End(Status::CANCELLED, Status::OTHER_SCREEN),
+        "the player's map key, outside the input, opens a screen with no host"
+    );
+    let jumping = Command {
+        kind: Kind::Press(32, 2000, false),
+        ..pressing
+    };
+    assert_eq!(
+        next(&jumping, &chest, Some(Progress::Taken), 110),
+        Next::End(Status::CANCELLED, Status::OTHER_SCREEN),
+        "a jump opens no screen, so another's chest is not its effect"
+    );
+    let keyed = Seen {
+        held: Some(1 << 9),
+        ..chest
+    };
+    assert_eq!(
+        next(&pressing, &keyed, Some(Progress::Taken), 110),
+        Next::End(Status::CANCELLED, Status::PLAYER_INPUT),
+        "the player's own key opened it"
+    );
+    let walking = Command {
+        handed: Some(100),
+        state: Status::APPLIED,
+        ..command(Kind::Move([0.0, 1.0], 250))
+    };
+    assert_eq!(
+        next(&walking, &chest, Some(Progress::Taken), 110),
+        Next::End(Status::CANCELLED, Status::OTHER_SCREEN),
+        "a move opens no screen of its own"
+    );
+}
+
+#[test]
+fn a_frame_marks_a_screen_a_command_applied_as_commanded_for_the_presses() {
+    let mut commands = kept(Command {
+        state: Status::APPLIED,
+        expected: None,
+        ..command(Kind::Open(4))
+    });
+    commands.kept.push_back(Command {
+        id: 2,
+        handed: Some(100),
+        state: Status::APPLIED,
+        ..command(Kind::Press(14, 50, true))
+    });
+    assert!(commanded(&commands));
+    commands.kept[0].state = Status::OBSERVED;
+    assert!(!commanded(&commands), "only while the open runs");
+}
+
+#[test]
 fn a_press_that_waits_past_the_timeout_for_a_slot_ends_timed_out() {
-    let waiting = command(Kind::Press(53, 2000));
+    let waiting = command(Kind::Press(53, 2000, false));
     assert_eq!(
         next(&waiting, &world(), None, 100 + TIMEOUT_MS),
         Next::Apply,
@@ -318,7 +449,7 @@ fn a_press_handed_late_holds_its_whole_hold_from_its_handing() {
     let pressing = Command {
         handed: Some(handed_at),
         state: Status::APPLIED,
-        ..command(Kind::Press(53, 2000))
+        ..command(Kind::Press(53, 2000, false))
     };
     let held_out = handed_at + 16 + 2000;
     assert_eq!(
@@ -501,11 +632,11 @@ fn kept(command: Command) -> Commands {
 fn a_frame_that_reads_no_game_still_ends_a_command_past_its_timeout() {
     let mut commands = kept(command(Kind::Tab(MenuTab::Map)));
     assert!(
-        run(&mut commands, None, 150, |_| Applied::Taken),
+        run(&mut commands, None, None, 150, |_| Applied::Taken),
         "within its timeout"
     );
     let late = 100 + TIMEOUT_MS + 1;
-    assert!(!run(&mut commands, None, late, |_| Applied::Taken));
+    assert!(!run(&mut commands, None, None, late, |_| Applied::Taken));
     let ended = commands.kept[0];
     assert_eq!(
         (ended.state, ended.reason),
@@ -525,7 +656,7 @@ fn a_command_of_session_0_takes_the_session_and_held_baseline_of_its_first_frame
         held: Some(1 << 3),
         ..seen(1, TabRead::NoMenu)
     };
-    run(&mut commands, Some(shown), 150, |_| Applied::Taken);
+    run(&mut commands, Some(shown), None, 150, |_| Applied::Taken);
     let running = commands.kept[0];
     assert_eq!((running.session, running.held), (5, Some(1 << 3)));
     assert_eq!(running.state, Status::APPLIED, "not cancelled");
@@ -539,6 +670,21 @@ fn no_kind_runs_while_the_screen_reads_are_off() {
 }
 
 #[test]
+fn a_mods_screen_command_runs_only_while_the_registered_screen_can_open() {
+    // The registered check alone: other tests of one process turn the
+    // commands' fuses off, which `runs` reads first.
+    static OPENS: AtomicBool = AtomicBool::new(true);
+    assert!(!mods_screen_opens(), "no interface registered a screen");
+    register_mods_screen(|| OPENS.load(Ordering::Relaxed));
+    assert!(mods_screen_opens());
+    OPENS.store(false, Ordering::Relaxed);
+    assert!(
+        !mods_screen_opens(),
+        "queued as unavailable, not left to time out"
+    );
+}
+
+#[test]
 fn no_kind_runs_once_the_commands_panicked() {
     FUSE.blow("a test");
     assert!(!runs(Kind::Open(9)), "queueing answers unavailable");
@@ -546,15 +692,103 @@ fn no_kind_runs_once_the_commands_panicked() {
 
 #[test]
 fn the_frame_runs_nothing_while_no_command_is_open() {
-    let mut asked = false;
+    let asked = core::cell::Cell::new(false);
     frame(
         || {
-            asked = true;
+            asked.set(true);
             None
+        },
+        || {
+            asked.set(true);
+            Seen::menu(0, LoaderScreen::default())
         },
         |_| Applied::Taken,
     );
-    assert!(!asked);
+    assert!(!asked.get());
+}
+
+#[test]
+fn at_the_main_menu_a_mods_command_runs_on_the_loader_s_screen_alone() {
+    let open = Command {
+        expected: None,
+        ..command(Kind::Mods(ModsAsk {
+            mod_index: None,
+            gear: false,
+        }))
+    };
+    let mut commands = kept(open);
+    commands.kept.push_back(Command {
+        id: 2,
+        owner: ModIndex::LOADER,
+        expected: None,
+        ..command(Kind::Tab(MenuTab::Map))
+    });
+    let menu = |page| {
+        Seen::menu(
+            3,
+            LoaderScreen {
+                page,
+                mod_index: None,
+            },
+        )
+    };
+    let mut asked = Vec::new();
+    assert!(run(
+        &mut commands,
+        None,
+        Some(menu(Snapshot::NO_LOADER_SCREEN)),
+        150,
+        |change| {
+            asked.push(change);
+            Applied::Taken
+        }
+    ));
+    assert_eq!(
+        asked,
+        [ScreenChange::Mods(ModsAsk {
+            mod_index: None,
+            gear: false
+        })],
+        "the Mods screen only: no game screen reads at the menu"
+    );
+    assert_eq!(commands.kept[0].state, Status::APPLIED);
+    assert_eq!(commands.kept[1].state, Status::PENDING, "the tab waits");
+    run(
+        &mut commands,
+        None,
+        Some(menu(Snapshot::MOD_LIST)),
+        160,
+        |_| Applied::Taken,
+    );
+    assert_eq!(commands.kept[0].state, Status::OBSERVED);
+    let named = Command {
+        expected: Some(1),
+        ..open
+    };
+    assert_eq!(
+        next(&named, &menu(Snapshot::NO_LOADER_SCREEN), None, 150),
+        Next::End(Status::CANCELLED, Status::OTHER_SCREEN),
+        "a HUD screen named, which the menu is not"
+    );
+}
+
+#[test]
+fn a_waypoint_waiting_for_its_turn_is_not_cancelled_by_the_player_s_keys() {
+    let mark = Command {
+        expected: None,
+        ..command(Kind::Mark(Mark::Ping([1.0; 3])))
+    };
+    let sprinting = Seen {
+        held: Some(1 << 12),
+        ..world()
+    };
+    assert_eq!(next(&mark, &sprinting, None, 150), Next::Apply);
+    let open = command(Kind::Open(9));
+    assert_eq!(
+        next(&open, &sprinting, None, 150),
+        Next::End(Status::CANCELLED, Status::PLAYER_INPUT),
+        "other kinds still give way"
+    );
 }
 
 #[test]
@@ -605,5 +839,74 @@ fn a_leave_starts_only_in_play_and_only_one_at_a_time() {
         play::can_leave(20),
         Err(play::StartError::NotNow),
         "a leave runs"
+    );
+}
+
+#[test]
+fn a_waypoint_or_ping_needs_a_finite_position_and_clear_needs_none() {
+    let loader = crate::start::tests::bare_loader();
+    let spec = |kind, position| Spec {
+        kind,
+        position,
+        ..Spec::EMPTY
+    };
+    let at = [100.0, 20.0, -50.0];
+    assert_eq!(
+        kind(&loader, &spec(Spec::SET_WAYPOINT, at)),
+        Ok(Kind::Mark(Mark::Set(at)))
+    );
+    assert_eq!(
+        kind(&loader, &spec(Spec::PING, at)),
+        Ok(Kind::Mark(Mark::Ping(at)))
+    );
+    assert_eq!(
+        kind(&loader, &spec(Spec::CLEAR_WAYPOINT, [f64::NAN; 3])),
+        Ok(Kind::Mark(Mark::Clear))
+    );
+    for refused in [Spec::SET_WAYPOINT, Spec::PING] {
+        assert_eq!(
+            kind(&loader, &spec(refused, [f64::INFINITY, 0.0, 0.0])),
+            Err(CommandError::BadArgs)
+        );
+    }
+}
+
+#[test]
+fn a_position_outside_the_read_map_frame_is_refused_and_any_passes_without_one() {
+    let frame = enshwick_core::abi::MapFrameInfo {
+        origin: [0.0, 0.0],
+        size: [10240.0, 10240.0],
+        ..enshwick_core::abi::MapFrameInfo::EMPTY
+    };
+    assert!(inside_frame(Some(frame), [5000.0, 80.0, 5000.0]));
+    assert!(!inside_frame(Some(frame), [-1.0, 80.0, 5000.0]));
+    assert!(!inside_frame(Some(frame), [5000.0, 80.0, 10241.0]));
+    assert!(inside_frame(None, [-1.0, 0.0, -1.0]), "a joined client");
+}
+
+#[test]
+fn a_mod_marks_one_waypoint_or_ping_at_a_time_on_any_screen() {
+    let set = Kind::Mark(Mark::Set([1.0; 3]));
+    assert!(!set.waits_beside(Kind::Mark(Mark::Clear)));
+    assert!(set.waits_beside(Kind::Press(32, 16, false)));
+    assert!(set.handed() && !set.drives());
+    let mark = Command {
+        expected: None,
+        ..command(set)
+    };
+    let menu = seen(4, TabRead::NoMenu);
+    assert_eq!(next(&mark, &menu, None, 150), Next::Apply);
+    let handed = Command {
+        handed: Some(150),
+        ..mark
+    };
+    assert_eq!(
+        next(&handed, &menu, Some(Progress::Waiting), 160),
+        Next::Wait
+    );
+    assert_eq!(
+        next(&handed, &menu, Some(Progress::Done), 170),
+        Next::End(Status::OBSERVED, 0),
+        "observed once the step's input carries it"
     );
 }

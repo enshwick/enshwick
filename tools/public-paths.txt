@@ -665,9 +665,11 @@ abi::ClientCommand
 abi::ClientCommand::BORN
 abi::ClientCommand::CANCEL
 abi::ClientCommand::CHOOSE_TAB
+abi::ClientCommand::CLEAR_WAYPOINT
 abi::ClientCommand::CLOSE_SCREEN
 abi::ClientCommand::EMPTY
 abi::ClientCommand::HIGHLIGHT_RECIPE
+abi::ClientCommand::HOST
 abi::ClientCommand::JOIN
 abi::ClientCommand::LEAVE
 abi::ClientCommand::LOOK
@@ -675,10 +677,17 @@ abi::ClientCommand::MAX_HOLD_MS
 abi::ClientCommand::MAX_LOOK
 abi::ClientCommand::MAX_PASSWORD
 abi::ClientCommand::MAX_PRESS_MS
+abi::ClientCommand::MAX_SLOTS
 abi::ClientCommand::MOVE
+abi::ClientCommand::OPEN_MOD
+abi::ClientCommand::OPEN_MODS
+abi::ClientCommand::OPEN_MOD_SETTINGS
 abi::ClientCommand::OPEN_SCREEN
+abi::ClientCommand::PING
 abi::ClientCommand::PRESS
+abi::ClientCommand::SET_WAYPOINT
 abi::ClientCommand::cancels
+abi::ClientCommand::character
 abi::ClientCommand::direction
 abi::ClientCommand::expected_screen
 abi::ClientCommand::header
@@ -686,11 +695,14 @@ abi::ClientCommand::hold_ms
 abi::ClientCommand::in_bounds
 abi::ClientCommand::kind
 abi::ClientCommand::look
+abi::ClientCommand::online
 abi::ClientCommand::password
+abi::ClientCommand::position
 abi::ClientCommand::recipe
 abi::ClientCommand::reserved
 abi::ClientCommand::session
 abi::ClientCommand::target
+abi::ClientCommand::world
 abi::ClientCommandStatus
 abi::ClientCommandStatus::APPLIED
 abi::ClientCommandStatus::BORN
@@ -735,12 +747,20 @@ abi::ClientSnapshot::BORN
 abi::ClientSnapshot::EMPTY
 abi::ClientSnapshot::FRESH
 abi::ClientSnapshot::HELD
+abi::ClientSnapshot::LOADER_SCREEN
 abi::ClientSnapshot::MENU_TAB
+abi::ClientSnapshot::MOD_BINDINGS
+abi::ClientSnapshot::MOD_LIST
+abi::ClientSnapshot::MOD_MISMATCH
+abi::ClientSnapshot::MOD_PAGE
+abi::ClientSnapshot::MOD_SERVER_SETTINGS
 abi::ClientSnapshot::NEVER
+abi::ClientSnapshot::NO_LOADER_SCREEN
 abi::ClientSnapshot::OFF
 abi::ClientSnapshot::PLAYER
 abi::ClientSnapshot::RECIPE
 abi::ClientSnapshot::SCREENS
+abi::ClientSnapshot::SERVER_MOD_LIST
 abi::ClientSnapshot::STALE
 abi::ClientSnapshot::age_ms
 abi::ClientSnapshot::available
@@ -749,9 +769,12 @@ abi::ClientSnapshot::held
 abi::ClientSnapshot::highlighted_recipe
 abi::ClientSnapshot::host
 abi::ClientSnapshot::hud_screen
+abi::ClientSnapshot::loader_screen
+abi::ClientSnapshot::loader_screen_mod
 abi::ClientSnapshot::menu_tab
 abi::ClientSnapshot::player
 abi::ClientSnapshot::reserved
+abi::ClientSnapshot::reserved2
 abi::ClientSnapshot::return_screen
 abi::ClientSnapshot::scene
 abi::ClientSnapshot::server
@@ -5356,6 +5379,7 @@ input::CancelReason::OtherScreen unstable
 input::CancelReason::PlayerInput unstable
 input::CancelReason::SessionChanged unstable
 input::CancelReason::TimedOut unstable
+input::CancelReason::name unstable
 input::ClientCommand unstable
 input::ClientCommand::TY unstable
 input::ClientCommand::from_value unstable
@@ -5370,6 +5394,8 @@ input::ClientSnapshot::highlighted_recipe unstable
 input::ClientSnapshot::host unstable
 input::ClientSnapshot::hud_screen unstable
 input::ClientSnapshot::into_value unstable
+input::ClientSnapshot::loader_screen unstable
+input::ClientSnapshot::loader_screen_mod unstable
 input::ClientSnapshot::menu_tab unstable
 input::ClientSnapshot::player unstable
 input::ClientSnapshot::reads unstable
@@ -5380,16 +5406,24 @@ input::ClientSnapshot::session unstable
 input::ClientSnapshot::state unstable
 input::CommandAction unstable
 input::CommandAction::ChooseTab unstable
+input::CommandAction::ClearWaypoint unstable
 input::CommandAction::CloseScreen unstable
 input::CommandAction::HighlightRecipe unstable
+input::CommandAction::Host unstable
 input::CommandAction::Join unstable
 input::CommandAction::Leave unstable
 input::CommandAction::Look unstable
 input::CommandAction::Move unstable
+input::CommandAction::OpenMod unstable
+input::CommandAction::OpenModSettings unstable
+input::CommandAction::OpenMods unstable
 input::CommandAction::OpenScreen unstable
+input::CommandAction::Ping unstable
 input::CommandAction::Press unstable
+input::CommandAction::SetWaypoint unstable
 input::CommandId unstable
 input::CommandId::TY unstable
+input::CommandId::as_u64 unstable
 input::CommandId::from_value unstable
 input::CommandId::into_value unstable
 input::CommandId::new unstable
@@ -5439,6 +5473,7 @@ input::JoinFailure::Unknown unstable
 input::JoinFailure::Unreachable unstable
 input::JoinFailure::VersionMismatch unstable
 input::JoinFailure::WrongPassword unstable
+input::JoinFailure::name unstable
 input::JoinPhase unstable
 input::JoinPhase::Connecting unstable
 input::JoinPhase::InWorld unstable
@@ -5447,6 +5482,16 @@ input::JoinPhase::Loading unstable
 input::JoinPhase::Menu unstable
 input::JoinPhase::Other unstable
 input::JoinPhase::Queued unstable
+input::JoinPhase::name unstable
+input::LoaderPage unstable
+input::LoaderPage::ModBindings unstable
+input::LoaderPage::ModList unstable
+input::LoaderPage::ModMismatch unstable
+input::LoaderPage::ModPage unstable
+input::LoaderPage::ModServerSettings unstable
+input::LoaderPage::Other unstable
+input::LoaderPage::ServerModList unstable
+input::LoaderPage::name unstable
 input::LocalInputStatus unstable
 input::LocalInputStatus::TY unstable
 input::LocalInputStatus::age_ms unstable
@@ -5463,6 +5508,7 @@ input::Password::fmt unstable
 input::Password::new unstable
 input::SnapshotPart unstable
 input::SnapshotPart::Held unstable
+input::SnapshotPart::LoaderScreen unstable
 input::SnapshotPart::MenuTab unstable
 input::SnapshotPart::Player unstable
 input::SnapshotPart::Recipe unstable

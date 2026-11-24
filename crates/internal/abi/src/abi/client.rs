@@ -125,6 +125,16 @@ pub struct ClientSnapshot {
     /// world; empty in the menu and in a world the client hosts or joined
     /// another way. ABI 12.11.
     pub server: Str,
+    /// The mod whose page of the loader's own screen shows, by its id, empty
+    /// for none; group [`ClientSnapshot::LOADER_SCREEN`]. ABI 12.23.
+    pub loader_screen_mod: Str,
+    /// The page of the loader's own Mods screen that shows:
+    /// [`ClientSnapshot::NO_LOADER_SCREEN`] to
+    /// [`ClientSnapshot::MOD_MISMATCH`]; group
+    /// [`ClientSnapshot::LOADER_SCREEN`]. ABI 12.23.
+    pub loader_screen: u32,
+    /// Zero.
+    pub reserved2: u32,
 }
 
 impl_headed!(ClientSnapshot, born = 120);
@@ -149,6 +159,26 @@ impl ClientSnapshot {
     pub const PLAYER: u32 = 8;
     /// [`highlighted_recipe`](Self::highlighted_recipe).
     pub const RECIPE: u32 = 16;
+    /// [`loader_screen`](Self::loader_screen) and
+    /// [`loader_screen_mod`](Self::loader_screen_mod). ABI 12.23.
+    pub const LOADER_SCREEN: u32 = 32;
+    /// The loader's Mods screen does not show. ABI 12.23.
+    pub const NO_LOADER_SCREEN: u32 = 0;
+    /// The list of mods shows. ABI 12.23.
+    pub const MOD_LIST: u32 = 1;
+    /// A mod's page shows, with its settings this world gives it.
+    /// ABI 12.23.
+    pub const MOD_PAGE: u32 = 2;
+    /// The joined server's settings of a mod show. ABI 12.23.
+    pub const MOD_SERVER_SETTINGS: u32 = 3;
+    /// The joined server's list of mods with settings shows. ABI 12.23.
+    pub const SERVER_MOD_LIST: u32 = 4;
+    /// The key bindings of a mod the joined server runs and this client
+    /// lacks show. ABI 12.23.
+    pub const MOD_BINDINGS: u32 = 5;
+    /// The mods that differ from a server that refused this client show.
+    /// ABI 12.23.
+    pub const MOD_MISMATCH: u32 = 6;
     /// Nothing read, its header set.
     pub const EMPTY: Self = Self {
         header: Header::of::<Self>(),
@@ -166,6 +196,9 @@ impl ClientSnapshot {
         highlighted_recipe: RecipeId(0),
         reserved: 0,
         server: Str::EMPTY,
+        loader_screen_mod: Str::EMPTY,
+        loader_screen: Self::NO_LOADER_SCREEN,
+        reserved2: 0,
     };
 }
 
@@ -197,7 +230,7 @@ impl ClientSnapshot {
 pub struct ClientCommand {
     /// Size and version of this struct.
     pub header: Header,
-    /// What to do: [`ClientCommand::OPEN_SCREEN`] to [`ClientCommand::PRESS`].
+    /// What to do: [`ClientCommand::OPEN_SCREEN`] to [`ClientCommand::OPEN_MOD_SETTINGS`].
     pub kind: u32,
     /// A move's hold in milliseconds, 1 to [`ClientCommand::MAX_HOLD_MS`];
     /// a press's, 1 to [`ClientCommand::MAX_PRESS_MS`].
@@ -234,6 +267,21 @@ pub struct ClientCommand {
     /// the call. The loader hands it to the game's own join and never
     /// keeps, logs or returns it. ABI 12.11.
     pub password: Str,
+    /// The world position, x, y and z in metres, that
+    /// [`ClientCommand::SET_WAYPOINT`] and [`ClientCommand::PING`] mark.
+    /// ABI 12.23.
+    pub position: [f64; 3],
+    /// The world [`ClientCommand::HOST`] plays: its place in the main
+    /// menu's list of worlds, from 0, below [`ClientCommand::MAX_SLOTS`].
+    /// ABI 12.23.
+    pub world: u16,
+    /// The character [`ClientCommand::HOST`] plays as: its place in the
+    /// main menu's list of characters, from 0, below
+    /// [`ClientCommand::MAX_SLOTS`]. ABI 12.23.
+    pub character: u16,
+    /// 1 when [`ClientCommand::HOST`] opens the world to other players
+    /// online, 0 to play it offline. ABI 12.23.
+    pub online: u32,
 }
 
 impl_headed!(ClientCommand, born = 88);
@@ -263,6 +311,29 @@ impl ClientCommand {
     /// Holds the game action `target` in the local player's input for
     /// `hold_ms`, as its key would. ABI 12.21.
     pub const PRESS: u32 = 10;
+    /// Sets the local player's waypoint at `position`, or moves it there.
+    /// ABI 12.23.
+    pub const SET_WAYPOINT: u32 = 11;
+    /// Clears the local player's waypoint. ABI 12.23.
+    pub const CLEAR_WAYPOINT: u32 = 12;
+    /// Pings `position` for the players of the world. ABI 12.23.
+    pub const PING: u32 = 13;
+    /// Hosts `world` with `character` from the main menu, offline or
+    /// `online`; `session` is 0. Refused while a join, a host or a world
+    /// runs. ABI 12.23.
+    pub const HOST: u32 = 14;
+    /// Opens the loader's Mods screen over the main menu or the pause menu,
+    /// whichever shows, at its list of mods. ABI 12.23.
+    pub const OPEN_MODS: u32 = 15;
+    /// Opens mod `target`'s page on the Mods screen, by its id, opening
+    /// the screen first. ABI 12.23.
+    pub const OPEN_MOD: u32 = 16;
+    /// Presses mod `target`'s settings gear on the Mods screen, by its id,
+    /// opening the screen first. ABI 12.23.
+    pub const OPEN_MOD_SETTINGS: u32 = 17;
+    /// How many worlds and characters the main menu lists at most.
+    /// ABI 12.23.
+    pub const MAX_SLOTS: u16 = 16;
     /// The longest password, in bytes, the game's join takes.
     pub const MAX_PASSWORD: usize = 0x400;
     /// The longest move.
@@ -285,12 +356,18 @@ impl ClientCommand {
         reserved: 0,
         cancels: 0,
         password: Str::EMPTY,
+        position: [0.0; 3],
+        world: 0,
+        character: 0,
+        online: 0,
     };
 
     /// Whether the command's own bounds hold: a finite look of at most
     /// [`ClientCommand::MAX_LOOK`] each, a finite direction of length above 0 and
     /// at most 1 held 1 to [`ClientCommand::MAX_HOLD_MS`] ms, a press held 1
-    /// to [`ClientCommand::MAX_PRESS_MS`] ms, a non-zero recipe.
+    /// to [`ClientCommand::MAX_PRESS_MS`] ms, a non-zero recipe, a finite
+    /// position to mark, a host's world and character below
+    /// [`ClientCommand::MAX_SLOTS`].
     ///
     /// # Examples
     ///
@@ -319,6 +396,13 @@ impl ClientCommand {
             }
             Self::PRESS => (1..=Self::MAX_PRESS_MS).contains(&self.hold_ms),
             Self::HIGHLIGHT_RECIPE => self.recipe.0 != 0,
+            Self::SET_WAYPOINT | Self::PING => self.position.iter().all(|m| m.is_finite()),
+            Self::HOST => {
+                self.session == 0
+                    && self.world < Self::MAX_SLOTS
+                    && self.character < Self::MAX_SLOTS
+                    && self.online <= 1
+            }
             Self::JOIN => self.session == 0 && self.password.len() <= Self::MAX_PASSWORD,
             _ => true,
         }
@@ -361,8 +445,8 @@ pub struct ClientCommandStatus {
     pub reserved: u32,
     /// Milliseconds since the command was queued.
     pub age_ms: u64,
-    /// Where the client stands on a [`ClientCommand::JOIN`] or
-    /// [`ClientCommand::LEAVE`]: [`ClientCommandStatus::PHASE_QUEUED`] to
+    /// Where the client stands on a [`ClientCommand::JOIN`],
+    /// [`ClientCommand::HOST`] or [`ClientCommand::LEAVE`]: [`ClientCommandStatus::PHASE_QUEUED`] to
     /// [`ClientCommandStatus::PHASE_LEFT`]; 0 for other kinds. ABI 12.11.
     pub phase: u32,
     /// Why a [`ClientCommandStatus::FAILED`] join failed, as far as the
@@ -402,7 +486,8 @@ impl ClientCommandStatus {
     pub const INPUT_BLOCKED: u32 = 6;
     /// The mod or the feature turned off.
     pub const MOD_OFF: u32 = 7;
-    /// The game ended a join without reaching the world, for `failure`.
+    /// The game ended a join or a host without reaching the world, for
+    /// `failure`.
     /// ABI 12.11.
     pub const FAILED: u32 = 5;
     /// Waiting to start: the loader asks the server for its address.

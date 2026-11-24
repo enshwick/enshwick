@@ -460,6 +460,12 @@ pub(crate) fn frame_info(loader: &Loader) -> Result<MapFrameInfo, SceneError> {
     )
 }
 
+/// The map's frame the loader last read, on any thread; `None` before a
+/// hosted world's frame read, so a client joined to a server has none.
+pub(crate) fn last_frame() -> Option<MapFrameInfo> {
+    STATE.relock().frame.last()
+}
+
 /// The client's marker types, read from the game's archive at the first ask
 /// and kept; any thread. A dedicated server's archive has no registry. The
 /// first ask reads under the scene lock, a few milliseconds once, so two

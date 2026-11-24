@@ -8,9 +8,10 @@
 //! player's input is held here first
 //! ([`crate::engine::screens::holds_world`]), as the game holds it while it
 //! blocks the input. Until a mod hands one over and with no window, its
-//! detour adds four atomic loads.
+//! detour adds five atomic loads.
 
 mod presses;
+mod waypoints;
 
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
@@ -97,6 +98,13 @@ pub(crate) fn presses_run() -> bool {
 }
 
 pub(crate) use presses::{hand as press, progress as press_progress, release as unpress, written};
+pub(crate) use waypoints::{hand as mark, progress as mark_progress, release as unmark};
+
+/// Whether the build runs waypoint and ping commands: the builder's detour
+/// is linked and on, and the build reflects the request.
+pub(crate) fn marks_run() -> bool {
+    runs() && GROUPS.waypoint.get().is_some()
+}
 
 /// What a command hands the builder.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -323,6 +331,14 @@ crate::engine::chains::chain_detour! {
             // SAFETY: the builder's own non-null input record and mapping,
             // right after its pass on its thread.
             unsafe { presses::drive(layout, buttons, input, mapping, mode) };
+        }
+        if waypoints::pending()
+            && !input.is_null()
+            && let Some(waypoint) = GROUPS.waypoint.get()
+        {
+            // SAFETY: the builder's own non-null input record, right after
+            // its pass on its thread.
+            unsafe { waypoints::drive(waypoint, input, mode) };
         }
     }
 }

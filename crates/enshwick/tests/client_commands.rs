@@ -28,10 +28,12 @@ side = "both""#
     );
 
     fn input(side: Side) -> (enshwick::test::Installed, Input) {
-        let loader = enshwick::test::FakeHost::new()
-            .side(side)
-            .player_input()
-            .install();
+        started(enshwick::test::FakeHost::new().side(side).player_input())
+    }
+
+    /// The mod started on `host`, and the input it opened.
+    fn started(host: enshwick::test::FakeHost) -> (enshwick::test::Installed, Input) {
+        let loader = host.install();
         // SAFETY: these are this file's generated exports.
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
@@ -504,5 +506,174 @@ side = "both""#
             Some(JoinPhase::InWorld),
             "a leave has a phase from the queue on"
         );
+    }
+
+    fn host(world: u16, character: u16) -> ClientCommand {
+        let action = CommandAction::Host {
+            world,
+            character,
+            online: false,
+        };
+        ClientCommand::new(action, 0)
+    }
+
+    #[test]
+    fn a_host_follows_the_phases_of_play_into_the_world() {
+        let (loader, input) = input(Side::CLIENT);
+        let id = input.client_command(&host(2, 0)).unwrap();
+        assert_eq!(loader.client_commands(), [(1, Raw::HOST, String::new())]);
+        let queued = input.command_status(id).unwrap();
+        assert_eq!(
+            (queued.state, queued.phase),
+            (CommandState::Pending, Some(JoinPhase::Menu)),
+            "a host starts at the menu"
+        );
+        assert!(
+            matches!(input.client_command(&host(1, 0)), Err(WorldError::Refused)),
+            "one host at a time"
+        );
+        loader.set_command_phase(1, Status::PHASE_IN_WORLD, 0);
+        loader.set_command_status(1, Status::OBSERVED, 0);
+        let status = input.command_status(id).unwrap();
+        assert_eq!(
+            (status.state, status.phase),
+            (CommandState::Observed, Some(JoinPhase::InWorld))
+        );
+    }
+
+    #[test]
+    fn a_host_is_refused_past_the_menu_s_lists_in_a_session_or_in_a_world() {
+        let (loader, input) = input(Side::CLIENT);
+        for bad in [host(Raw::MAX_SLOTS, 0), host(0, Raw::MAX_SLOTS)] {
+            assert!(
+                matches!(input.client_command(&bad), Err(WorldError::Refused)),
+                "{bad:?}"
+            );
+        }
+        let in_a_session = ClientCommand::new(
+            CommandAction::Host {
+                world: 0,
+                character: 0,
+                online: true,
+            },
+            3,
+        );
+        assert!(matches!(
+            input.client_command(&in_a_session),
+            Err(WorldError::Refused)
+        ));
+        let on_a_screen = host(0, 0).on_screen("InGame");
+        assert!(matches!(
+            input.client_command(&on_a_screen),
+            Err(WorldError::Refused)
+        ));
+        loader.set_client_snapshot(enshwick::abi::ClientSnapshot {
+            session: 2,
+            ..enshwick::abi::ClientSnapshot::EMPTY
+        });
+        assert!(
+            matches!(input.client_command(&host(0, 0)), Err(WorldError::Refused)),
+            "in a world"
+        );
+    }
+
+    #[test]
+    fn the_mods_screen_and_a_mod_s_page_open_by_command_and_the_snapshot_names_them() {
+        use enshwick::abi::{Header, ModInfo, Str};
+        use enshwick::input::LoaderPage;
+        let (loader, input) = started(
+            enshwick::test::FakeHost::new()
+                .side(Side::CLIENT)
+                .player_input()
+                .loaded(ModInfo {
+                    header: Header::of::<ModInfo>(),
+                    id: Str::new("you.trail"),
+                    ..ModInfo::EMPTY
+                }),
+        );
+        let open = ClientCommand::new(CommandAction::OpenMods, 1);
+        let id = input.client_command(&open).unwrap();
+        let page = ClientCommand::new(CommandAction::OpenMod("you.trail".to_owned()), 1);
+        assert!(input.client_command(&page).is_ok(), "another kind");
+        for refused in [String::new(), "you.trial".to_owned()] {
+            let unknown = ClientCommand::new(CommandAction::OpenModSettings(refused.clone()), 1);
+            assert!(
+                matches!(input.client_command(&unknown), Err(WorldError::Refused)),
+                "{refused:?}: no loaded mod has it, as the loader refuses"
+            );
+        }
+        assert_eq!(
+            loader.client_commands(),
+            [
+                (1, Raw::OPEN_MODS, String::new()),
+                (2, Raw::OPEN_MOD, "you.trail".to_owned())
+            ]
+        );
+        loader.set_command_status(1, Status::OBSERVED, 0);
+        assert_eq!(
+            input.command_status(id).unwrap().state,
+            CommandState::Observed
+        );
+        loader.set_client_snapshot(enshwick::abi::ClientSnapshot {
+            available: enshwick::abi::ClientSnapshot::LOADER_SCREEN,
+            loader_screen: enshwick::abi::ClientSnapshot::MOD_PAGE,
+            loader_screen_mod: Str::new("you.trail"),
+            ..enshwick::abi::ClientSnapshot::EMPTY
+        });
+        let _asked = input.client_snapshot().unwrap();
+        let _drawn = loader.draw_frame();
+        let snapshot = input.client_snapshot().unwrap();
+        assert_eq!(snapshot.loader_screen(), Some(LoaderPage::ModPage));
+        assert_eq!(snapshot.loader_screen_mod(), Some("you.trail"));
+    }
+
+    #[test]
+    fn a_waypoint_and_a_ping_wait_one_at_a_time_and_end_observed() {
+        let (loader, input) = input(Side::CLIENT);
+        let set = ClientCommand::new(CommandAction::SetWaypoint([10.0, 5.0, 20.0]), 1);
+        let id = input.client_command(&set).unwrap();
+        assert_eq!(
+            loader.client_commands(),
+            [(1, Raw::SET_WAYPOINT, String::new())]
+        );
+        let ping = ClientCommand::new(CommandAction::Ping([10.0, 5.0, 20.0]), 1);
+        assert!(
+            matches!(input.client_command(&ping), Err(WorldError::Refused)),
+            "one waypoint or ping at a time"
+        );
+        loader.set_command_status(1, Status::OBSERVED, 0);
+        assert_eq!(
+            input.command_status(id).unwrap().state,
+            CommandState::Observed
+        );
+        assert!(input.client_command(&ping).is_ok());
+        assert_eq!(id.as_u64(), 1);
+    }
+
+    #[test]
+    fn a_waypoint_off_the_map_or_not_finite_is_refused_and_clear_needs_no_position() {
+        let loader = enshwick::test::FakeHost::new()
+            .side(Side::CLIENT)
+            .player_input()
+            .map_frame(enshwick::abi::MapFrameInfo {
+                size: [10240.0; 2],
+                metres_per_cell: 8.0,
+                ..enshwick::abi::MapFrameInfo::EMPTY
+            })
+            .install();
+        // SAFETY: these are this file's generated exports.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, enshwick::abi::Status::OK);
+        let input = INPUT.lock().unwrap().unwrap();
+        for refused in [[-1.0, 0.0, 100.0], [f64::NAN, 0.0, 100.0]] {
+            let set = ClientCommand::new(CommandAction::SetWaypoint(refused), 1);
+            assert!(
+                matches!(input.client_command(&set), Err(WorldError::Refused)),
+                "{refused:?}"
+            );
+        }
+        let clear = ClientCommand::new(CommandAction::ClearWaypoint, 1);
+        assert!(input.client_command(&clear).is_ok());
     }
 }

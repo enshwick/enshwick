@@ -16,6 +16,10 @@
 "ui.post_password" = { pattern = "48 89 5C 24 10 48 89 6C 24 18 48 89 74 24 20 57 48 83 EC 20 48 8B 81 ?? ?? ?? ?? 48 8B B8 ?? ?? ?? ?? 8B 47 10 48 3B 47 18 75 04 33 C0 EB 7C 8B 5F 40 8B C3 83 E0 0F 74 05 2B D8 83 C3 10 48 8B 77 30 33 D2 8B CB 41 B8 01 04 00 00 48 03 F1 48 8D 4E 01 E8 ?? ?? ?? ?? 33 C0 C6 06 25 66 89 86 02 04 00 00 8D 83 04 04 00 00" }
 "ui.post_start_play" = { pattern = "48 89 5C 24 10 57 48 83 EC 20 48 8B 81 ?? ?? ?? ?? 48 8B 98 ?? ?? ?? ?? 4C 8D 43 18 8B 43 10 49 3B 00 75 0F 33 FF 8B C7 48 8B 5C 24 38 48 83 C4 20 5F C3 8B 53 40 8B C2 83 E0 0F 74 05 2B D0 83 C2 10 48 8B 7B 30 8D 42 01 8B CA 48 03 F9 C6 07 29" }
 "ui.post_back" = { pattern = "48 89 5C 24 10 57 48 83 EC 20 48 8B 81 ?? ?? ?? ?? 48 8B 98 ?? ?? ?? ?? 4C 8D 43 18 8B 43 10 49 3B 00 75 0F 33 FF 8B C7 48 8B 5C 24 38 48 83 C4 20 5F C3 8B 53 40 8B C2 83 E0 0F 74 05 2B D0 83 C2 10 48 8B 7B 30 8D 42 01 8B CA 48 03 F9 C6 07 05" }
+"ui.post_character" = { pattern = "48 89 5C 24 10 57 48 83 EC 20 48 8B 81 ?? ?? ?? ?? 48 8B 98 ?? ?? ?? ?? 4C 8D 43 18 8B 43 10 49 3B 00 75 0F 33 FF 8B C7 48 8B 5C 24 38 48 83 C4 20 5F C3 8B 53 40 8B C2 83 E0 0F 74 05 2B D0 83 C2 10 48 8B 7B 30 33 C0 8B CA 48 03 F9 48 89 07 89 47 08 8D 42 0C C6 07 11" }
+"ui.post_world" = { pattern = "48 89 5C 24 10 57 48 83 EC 20 48 8B 81 ?? ?? ?? ?? 48 8B 98 ?? ?? ?? ?? 4C 8D 43 18 8B 43 10 49 3B 00 75 0F 33 FF 8B C7 48 8B 5C 24 38 48 83 C4 20 5F C3 8B 53 40 8B C2 83 E0 0F 74 05 2B D0 83 C2 10 48 8B 7B 30 8D 42 03 8B CA 48 03 F9 66 C7 07 16 00 C6 47 02 00" }
+"ui.post_session" = { pattern = "48 89 5C 24 10 57 48 83 EC 20 48 8B 81 ?? ?? ?? ?? 48 8B 98 ?? ?? ?? ?? 4C 8D 43 18 8B 43 10 49 3B 00 75 0F 33 FF 8B C7 48 8B 5C 24 38 48 83 C4 20 5F C3 8B 53 40 8B C2 83 E0 0F 74 05 2B D0 83 C2 10 48 8B 7B 30 8D 42 02 8B CA 48 03 F9 66 C7 07 27 00" }
+"ui.post_play_world" = { pattern = "48 89 5C 24 10 57 48 83 EC 20 48 8B 81 ?? ?? ?? ?? 48 8B 98 ?? ?? ?? ?? 4C 8D 43 18 8B 43 10 49 3B 00 75 0F 33 FF 8B C7 48 8B 5C 24 38 48 83 C4 20 5F C3 8B 53 40 8B C2 83 E0 0F 74 05 2B D0 83 C2 10 48 8B 7B 30 8D 42 01 8B CA 48 03 F9 C6 07 28" }
 "knowledge.query_player" = { pattern = "40 53 48 83 EC 30 48 8B 44 24 60 48 8B D9 48 89 44 24 28 44 89 4C 24 20 4D 8B C8 4C 8B 42 08 48 8B 52 10 E8" }
 "knowledge.query_world" = { pattern = "40 53 48 83 EC 20 4D 8B C8 48 8B D9 4C 8B 42 08 48 8B 52 10 E8" }
 
@@ -24,6 +28,9 @@
 "ui.post_password_len" = { value = 0x402, pattern = "8B C3 83 E0 0F 74 05 2B D8 83 C3 10 48 8B 77 30 33 D2 8B CB 41 B8 01 04 00 00 48 03 F1 48 8D 4E 01 E8 ?? ?? ?? ?? 33 C0 C6 06 25 66 89 86 02 04 00 00", fixed = true }
 "ui.post_join_area" = { value = 0x1, pattern = "C7 81 ?? ?? ?? ?? 03 00 00 00 0F 10 42 01 0F 11 81 ?? ?? ?? ?? 0F 10 4A 11", fixed = true }
 "ui.post_join_tail" = { value = 0x21, pattern = "0F 10 4A 11 0F 11 89 ?? ?? ?? ?? 0F B7 42 21", fixed = true }
+"ui.post_character_slot" = { value = 0x8, pattern = "44 0F B7 42 08 48 8B 91 ?? ?? ?? ?? 48 8D 8D ?? ?? ?? ?? E8 ?? ?? ?? ?? E9 ?? ?? ?? ?? 44 0F B7 42 08 48 8B 91 ?? ?? ?? ?? 48 8D 8D ?? ?? ?? ?? E8 ?? ?? ?? ?? E9 ?? ?? ?? ?? 44 0F B7 4A 08 48 8D 42 0A", fixed = true }
+"ui.post_world_slot" = { value = 0x1, pattern = "0F B7 52 01 48 8B 89 ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 0F 84 ?? ?? ?? ?? 0F B7 56 01 48 8B CF E8", fixed = true }
+"ui.post_session_kind" = { value = 0x1, pattern = "0F B6 42 01 84 C0 74 22 3C 02 0F 85 ?? ?? ?? ?? 48 8B 41 28 45 33 F6 C6 80 ?? ?? ?? ?? 03", fixed = true }
 "server.permission_entry_size" = { value = 0xa0, pattern = "3D ?? ?? ?? ?? 77 1D 4C 8D 0C 80 49 C1 E1 05 43 39 14 01", fixed = true }
 "inventory.view_replication" = { value = 0xf8, pattern = "48 8B 5D B0 4C 8B B5 18 01 00 00 48 8B BD 98 00 00 00 83 7B ?? 00 74 0B", fixed = true }
 "save.path_parts" = { value = 0x4, pattern = "4C 8B 81 40 08 00 00 48 8B D3 4C 03 81 48 08 00 00 0F 29 44 24 ?? E8 ?? ?? ?? ??", fixed = true }

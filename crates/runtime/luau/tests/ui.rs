@@ -466,6 +466,102 @@ mod tests {
     }
 
     #[test]
+    fn a_script_opens_a_mod_s_page_and_reads_it_from_the_snapshot() {
+        let trail = enshwick::abi::ModInfo {
+            header: enshwick::abi::Header::of::<enshwick::abi::ModInfo>(),
+            id: enshwick::abi::Str::new("you.trail"),
+            ..enshwick::abi::ModInfo::EMPTY
+        };
+        let loader = run(
+            FakeHost::new()
+                .side(Side::CLIENT)
+                .player_input()
+                .loaded(trail),
+            r#"
+            local id = enshwick.input.client_command({ kind = "open_mod", session = "1", target = "you.trail" })
+            local bare = pcall(enshwick.input.client_command, { kind = "open_mod", session = "1" })
+            enshwick.log.info(`queued {id} bare {bare}`)
+            enshwick.ui.on_frame(function()
+                local s = enshwick.input.client_snapshot()
+                enshwick.log.info(`page {s.loader_screen} of {s.loader_screen_mod}`)
+            end)
+            "#,
+        );
+        assert_eq!(
+            loader.client_commands(),
+            [(
+                1,
+                enshwick::abi::ClientCommand::OPEN_MOD,
+                "you.trail".to_owned()
+            )]
+        );
+        loader.set_client_snapshot(enshwick::abi::ClientSnapshot {
+            available: enshwick::abi::ClientSnapshot::LOADER_SCREEN,
+            loader_screen: enshwick::abi::ClientSnapshot::MOD_PAGE,
+            loader_screen_mod: enshwick::abi::Str::new("you.trail"),
+            ..enshwick::abi::ClientSnapshot::EMPTY
+        });
+        let _first = loader.draw_frame();
+        let _second = loader.draw_frame();
+        for line in ["queued 1 bare false", "page mod_page of you.trail"] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
+    }
+
+    #[test]
+    fn a_script_hosts_a_world_by_its_list_place_and_reads_the_phase() {
+        use enshwick::abi::ClientCommandStatus as Status;
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r#"
+            local id = enshwick.input.client_command({ kind = "host", session = "0", world = 2, character = 0 })
+            local bare = pcall(enshwick.input.client_command, { kind = "host", session = "0", world = 1 })
+            enshwick.log.info(`queued {id} bare {bare}`)
+            enshwick.ui.on_frame(function()
+                local s = enshwick.input.command_status(id)
+                enshwick.log.info(`host {s.state} {s.phase}`)
+            end)
+            "#,
+        );
+        assert_eq!(
+            loader.client_commands(),
+            [(1, enshwick::abi::ClientCommand::HOST, String::new())]
+        );
+        loader.set_command_phase(1, Status::PHASE_LOADING, 0);
+        let _drawn = loader.draw_frame();
+        for line in ["queued 1 bare false", "host pending loading"] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
+    }
+
+    #[test]
+    fn a_script_sets_its_waypoint_then_pings_once_the_waypoint_is_observed() {
+        use enshwick::abi::ClientCommandStatus as Status;
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r#"
+            local set = enshwick.input.client_command({ kind = "set_waypoint", session = "1", position = vector.create(10, 5, 20) })
+            local busy = pcall(enshwick.input.client_command, { kind = "ping", session = "1", position = vector.create(10, 5, 20) })
+            local bare = pcall(enshwick.input.client_command, { kind = "ping", session = "1" })
+            enshwick.log.info(`queued {set} busy {busy} bare {bare}`)
+            enshwick.ui.on_frame(function()
+                local s = enshwick.input.command_status(set)
+                enshwick.log.info(`waypoint {s.state}`)
+            end)
+            "#,
+        );
+        assert_eq!(
+            loader.client_commands(),
+            [(1, enshwick::abi::ClientCommand::SET_WAYPOINT, String::new())]
+        );
+        loader.set_command_status(1, Status::OBSERVED, 0);
+        let _drawn = loader.draw_frame();
+        for line in ["queued 1 busy false bare false", "waypoint observed"] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
+    }
+
+    #[test]
     fn a_script_joins_a_server_and_reads_the_join_s_phase_and_failure() {
         use enshwick::abi::ClientCommandStatus as Status;
         let loader = run(
