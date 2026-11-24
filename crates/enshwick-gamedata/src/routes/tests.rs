@@ -16,25 +16,29 @@ fn the_embedded_routes_read() {
     assert!(routes.ids().count() > 0);
 }
 
-/// Every type a `field` or `size` route names is in the typed catalogue of
-/// each table build of its side that has a snapshot, and each field holds
-/// the type of the step after it.
+/// Every type a `field` or `size` route names is in the reflection snapshot
+/// of each kept build of its side, and each field holds the type of the
+/// step after it; a kept build without its snapshot fails by name.
 #[test]
 #[cfg_attr(miri, ignore = "reads the typed snapshots from disk")]
-fn every_reflected_name_a_route_takes_is_in_the_typed_catalogue() {
+fn every_reflected_name_a_route_takes_is_in_each_kept_builds_snapshot() {
     let routes = Routes::embedded().unwrap();
     let mut checked = 0;
+    let mut missing = Vec::new();
     for (_, text) in kept().unwrap() {
         let table = Table::parse(&text).unwrap();
         let Some(file) = crate::typed::snapshot_path(&table.file_name()) else {
             continue;
         };
-        let Ok(snapshot) = std::fs::read_to_string(&file) else {
-            continue;
+        let snapshot = match std::fs::read_to_string(&file) {
+            Ok(snapshot) => snapshot,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                missing.push(crate::typed::build_name(&table));
+                continue;
+            }
+            Err(e) => panic!("{file:?}: {e}"),
         };
-        let catalogue = crate::typed::Catalogue::from_snapshot(&snapshot)
-            .unwrap()
-            .covered(&crate::typed::Relevance::committed());
+        let catalogue = crate::typed::Catalogue::from_snapshot(&snapshot).unwrap();
         for route in routes
             .routes
             .iter()
@@ -67,6 +71,11 @@ fn every_reflected_name_a_route_takes_is_in_the_typed_catalogue() {
             checked += 1;
         }
     }
+    assert!(
+        missing.is_empty(),
+        "no snapshot of {}: run cargo enshwick generate --from each one's executable",
+        missing.join(", ")
+    );
     assert!(
         checked > 0 || crate::data_dir().is_none(),
         "no reflected route met a snapshot"

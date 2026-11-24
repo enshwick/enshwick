@@ -153,11 +153,10 @@ pub fn write_snapshot(
 }
 
 /// Snapshots the executable `from` into the game data folder `data` when
-/// given, then writes the typed API.
+/// given, then writes the typed API from the newest server build's snapshot.
 ///
-/// It writes from that snapshot when `from` is the server's, else from the newest server build's snapshot there, or
-/// with `check` fails when the committed files differ from what it would
-/// write.
+/// So retaking an older build's snapshot leaves the API as it is. With
+/// `check` it writes nothing and fails when the committed files differ.
 ///
 /// # Errors
 ///
@@ -174,7 +173,6 @@ pub fn run(root: &Path, data: &Path, from: Option<&Path>, check: bool) -> anyhow
     }
     let tables = tables_of(data)?;
     let mut done = Vec::new();
-    let mut snapshotted = None;
     if let Some(exe) = from {
         let bytes = std::fs::read(exe).with_context(|| exe.display().to_string())?;
         let fingerprint = Image::parse(&bytes, Layout::File, None)?
@@ -192,21 +190,16 @@ pub fn run(root: &Path, data: &Path, from: Option<&Path>, check: bool) -> anyhow
         let catalogue = catalogue(&bytes).with_context(|| exe.display().to_string())?;
         let path = write_snapshot(data, &catalogue, side, fingerprint)?;
         done.push(format!("snapshot {}", path.display()));
-        snapshotted = (side == Side::Server).then_some(path);
     }
-    let newest = || {
-        newest_snapshot(data, &tables, Side::Server)
-            .with_context(|| data.join(SNAPSHOTS).display().to_string())
-    };
-    let path = match snapshotted {
-        Some(path) => path,
-        None => newest()?.ok_or_else(|| {
+    let snapshots = data.join(SNAPSHOTS);
+    let path = newest_snapshot(data, &tables, Side::Server)
+        .with_context(|| snapshots.display().to_string())?
+        .ok_or_else(|| {
             anyhow!(
                 "{}: no server build snapshot; run with --from the server's executable",
-                data.join(SNAPSHOTS).display()
+                snapshots.display()
             )
-        })?,
-    };
+        })?;
     let text = std::fs::read_to_string(&path).with_context(|| path.display().to_string())?;
     let all = Catalogue::from_snapshot(&text).with_context(|| path.display().to_string())?;
     let catalogue = covered(root, all)?;
@@ -416,6 +409,37 @@ mod tests {
         assert!(wrote.contains("wrote "), "{wrote}");
         let snapshots = std::fs::read_dir(data.join(SNAPSHOTS)).unwrap().count();
         assert_eq!(snapshots, 1, "one snapshot, of the server");
+        drop(std::fs::remove_dir_all(&root));
+    }
+
+    /// `--from` an executable whose kept table ranks below the newest only
+    /// adds its snapshot: the API stays the newest build's.
+    #[test]
+    #[cfg_attr(miri, ignore = "scans a game executable")]
+    fn from_an_older_build_snapshots_it_and_keeps_the_newest_builds_api() {
+        let Some(exe) = std::env::var_os("ENSH_SERVER_EXE").map(PathBuf::from) else {
+            return;
+        };
+        let root = repo("older");
+        let data = data(&root);
+        let bytes = std::fs::read(&exe).unwrap();
+        let fingerprint = Image::parse(&bytes, Layout::File, None)
+            .unwrap()
+            .fingerprint()
+            .unwrap();
+        let name = file_name(Side::Server, fingerprint);
+        let (guid, age) = name
+            .strip_prefix("server-")
+            .and_then(|rest| rest.strip_suffix(".toml"))
+            .and_then(|rest| rest.split_once('-'))
+            .unwrap();
+        let older = format!(
+            "name = \"older\"\nside = \"server\"\nguid = \"{guid}\"\nage = {age}\nsteam_build = 1\n"
+        );
+        std::fs::write(data.join("tables").join(&name), older).unwrap();
+        let wrote = run(&root, &data, Some(&exe), false).unwrap();
+        assert!(wrote.ends_with("from server build 2 (Steam 3)"), "{wrote}");
+        assert!(snapshot_in(&data, &name).is_file(), "{wrote}");
         drop(std::fs::remove_dir_all(&root));
     }
 }
