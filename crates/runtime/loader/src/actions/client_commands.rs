@@ -1,15 +1,18 @@
 //! Commands mods give the client's own interface and input: open or close
 //! a screen, choose the in-game menu's tab, turn the camera, hold a short
-//! move, press a game action and highlight a recipe, each with an id and an outcome the client's
-//! own state confirms.
+//! move, press a game action, highlight a recipe and act on an item of a
+//! carried window, each with an id and an outcome the client's own state
+//! confirms.
 //!
 //! A mod queues from any thread; the interface frame runs the commands,
-//! never inside a mod's callback, and hands a look, a move, a press or a
-//! recipe to highlight to the detour that writes it (see [`Handoff`]). Until a mod
-//! queues, each runs nothing but one atomic load.
+//! never inside a mod's callback, and hands a look, a move, a press, a
+//! recipe to highlight or a window's item to the code that acts on it (see
+//! [`Handoff`]). Until a mod queues, each runs nothing but one atomic load.
 
 mod handoff;
 mod play;
+mod spec;
+pub(crate) mod windows;
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,21 +20,22 @@ use std::sync::{Mutex, OnceLock};
 
 use enshwick_base::Relock;
 use enshwick_core::RecipeId;
+use enshwick_core::abi::Side;
 use enshwick_core::abi::{
     ClientCommand as Spec, ClientCommandStatus as Status, ClientSnapshot as Snapshot,
 };
-use enshwick_core::abi::{Side, Str};
 
 pub(crate) use self::handoff::Handoff;
 pub(crate) use self::play::{Host, Post, server_str};
+#[cfg(test)]
+use self::spec::inside_frame;
+use self::spec::{expected_screen, kind, text, window_ask};
 use crate::actions::client_control::{Mark, MenuTab};
 use crate::actions::client_input::{self, Ask};
 use crate::actions::client_recipes;
 use crate::actions::client_snapshot::{LoaderScreen, RecipeRead, TabRead};
 use crate::actions::local_held;
 use enshwick_core::__private::rules;
-use enshwick_core::controls::GameAction;
-use enshwick_gamedata::catalogue;
 
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
@@ -79,6 +83,9 @@ pub(crate) enum Kind {
     Host(Host),
     /// Shows a page of the loader's own Mods screen.
     Mods(ModsAsk),
+    /// Acts on an item of a carried window; its ask lives in [`windows`]
+    /// from the queue on.
+    Window(windows::Act),
 }
 
 impl Kind {
@@ -102,6 +109,9 @@ impl Kind {
             Self::Mark(Mark::Set(_)) => Spec::SET_WAYPOINT,
             Self::Mark(Mark::Clear) => Spec::CLEAR_WAYPOINT,
             Self::Mark(Mark::Ping(_)) => Spec::PING,
+            Self::Window(windows::Act::Press) => Spec::WINDOW_PRESS,
+            Self::Window(windows::Act::Pick) => Spec::WINDOW_PICK,
+            Self::Window(windows::Act::Text) => Spec::WINDOW_TEXT,
         }
     }
 
@@ -259,6 +269,7 @@ impl Command {
             Kind::Highlight(_) => client_recipes::progress(self.id),
             // A handed join or leave runs through `plays_next` instead.
             Kind::Mark(_) => client_input::mark_progress(self.id),
+            Kind::Window(_) => windows::progress(self.id),
             Kind::Join
             | Kind::Leave
             | Kind::Host(_)
@@ -282,6 +293,7 @@ impl Command {
             Kind::Highlight(recipe) => client_recipes::hand(self.id, recipe),
             Kind::Leave => play::leave(self.id, local_held::now_ms()).is_ok(),
             Kind::Mark(mark) => client_input::mark(self.id, self.owner, mark),
+            Kind::Window(_) => windows::hand(self.id),
             // A join and a host are handed when queued, a join with its
             // target and password.
             Kind::Join
@@ -296,6 +308,11 @@ impl Command {
     /// Takes it back from its detour once it ended; `by_mod` when its mod
     /// cancelled it, so a join the game took goes back to the menu.
     fn release(&self, by_mod: bool) {
+        if let Kind::Window(_) = self.kind {
+            // Its ask was parked at the queue, handed or not.
+            windows::release(self.id);
+            return;
+        }
         if self.handed.is_none() {
             return;
         }
@@ -307,6 +324,7 @@ impl Command {
                 play::release(self.id, local_held::now_ms(), by_mod);
             }
             Kind::Mark(_) => client_input::unmark(self.id),
+            Kind::Window(_) => {}
             Kind::Open(_) | Kind::Close(_) | Kind::Tab(_) | Kind::Mods(_) => {}
         }
     }
@@ -400,7 +418,8 @@ fn next(
         | Kind::Join
         | Kind::Leave
         | Kind::Host(_)
-        | Kind::Mark(_) => false,
+        | Kind::Mark(_)
+        | Kind::Window(_) => false,
     };
     if shows {
         return Next::End(Status::OBSERVED, 0);
@@ -455,7 +474,8 @@ fn next(
             | Kind::Join
             | Kind::Leave
             | Kind::Host(_)
-            | Kind::Mark(_) => true,
+            | Kind::Mark(_)
+            | Kind::Window(_) => true,
         };
         // One that waits for its detour, such as for a press's slot, times
         // out as one that waits for its effect.
@@ -566,131 +586,6 @@ impl From<play::StartError> for CommandError {
     }
 }
 
-/// The screen byte named `name` on this build.
-fn screen_byte(name: &str) -> Option<u8> {
-    crate::engine::screens::byte(name)
-}
-
-/// The text of a spec's name, empty for none, for the call: the command
-/// keeps only the screen bytes and tabs found from it.
-///
-/// # Safety
-///
-/// - `name` is empty or points at text valid for `'a`, as the mod's call
-///   borrows it.
-unsafe fn text<'a>(name: Str) -> Result<&'a str, CommandError> {
-    // SAFETY: the caller's contract.
-    unsafe { name.as_str() }.ok_or(CommandError::BadArgs)
-}
-
-/// `at` when it lies inside the map's frame the loader last read; with no
-/// frame read, as on a client joined to a server, any finite `at`, which
-/// the ABI's bounds checked.
-///
-/// # Errors
-///
-/// [`CommandError::BadArgs`] outside the frame.
-fn on_map(at: [f64; 3]) -> Result<[f64; 3], CommandError> {
-    inside_frame(crate::world::scene::last_frame(), at)
-        .then_some(at)
-        .ok_or(CommandError::BadArgs)
-}
-
-/// Whether `at` lies inside `frame`, or there is none to check.
-fn inside_frame(frame: Option<enshwick_core::abi::MapFrameInfo>, at: [f64; 3]) -> bool {
-    frame.is_none_or(|frame| {
-        enshwick_base::__internal::waypoints::inside(frame.origin, frame.size, at)
-    })
-}
-
-/// The kind `spec` asks for on `loader`'s build, its arguments checked.
-fn kind(loader: &Loader, spec: &Spec) -> Result<Kind, CommandError> {
-    // SAFETY: the mod's spec, its text borrowed for the call.
-    let target = unsafe { text(spec.target) }?;
-    match spec.kind {
-        Spec::OPEN_SCREEN => {
-            if !rules::CLIENT_OPENS.contains(&target) {
-                return Err(CommandError::BadArgs);
-            }
-            screen_byte(target)
-                .map(Kind::Open)
-                .ok_or(CommandError::Unavailable)
-        }
-        Spec::CLOSE_SCREEN => screen_byte(rules::WORLD_SCREEN)
-            .map(Kind::Close)
-            .ok_or(CommandError::Unavailable),
-        Spec::CHOOSE_TAB => MenuTab::ALL
-            .into_iter()
-            .find(|tab| tab.name() == target)
-            .map(Kind::Tab)
-            .ok_or(CommandError::BadArgs),
-        _ if !spec.in_bounds() => Err(CommandError::BadArgs),
-        Spec::LOOK => Ok(Kind::Look(spec.look)),
-        Spec::MOVE => Ok(Kind::Move(spec.direction, spec.hold_ms)),
-        Spec::HIGHLIGHT_RECIPE => Ok(Kind::Highlight(spec.recipe)),
-        Spec::JOIN => Ok(Kind::Join),
-        Spec::HOST => Ok(Kind::Host(Host {
-            world: spec.world,
-            character: spec.character,
-            online: spec.online != 0,
-        })),
-        Spec::LEAVE => Ok(Kind::Leave),
-        Spec::SET_WAYPOINT => on_map(spec.position).map(|at| Kind::Mark(Mark::Set(at))),
-        Spec::CLEAR_WAYPOINT => Ok(Kind::Mark(Mark::Clear)),
-        Spec::OPEN_MODS => Ok(Kind::Mods(ModsAsk {
-            mod_index: None,
-            gear: false,
-        })),
-        Spec::OPEN_MOD | Spec::OPEN_MOD_SETTINGS => loader
-            .mods
-            .iter()
-            .position(|m| m.id == target)
-            .map(|index| {
-                Kind::Mods(ModsAsk {
-                    mod_index: Some(index),
-                    gear: spec.kind == Spec::OPEN_MOD_SETTINGS,
-                })
-            })
-            .ok_or(CommandError::BadArgs),
-        Spec::PING => on_map(spec.position).map(|at| Kind::Mark(Mark::Ping(at))),
-        Spec::PRESS => press_bit(loader, target).map(|bit| {
-            let interacts = INTERACTS.iter().any(|action| action.name() == target);
-            Kind::Press(bit, spec.hold_ms, interacts)
-        }),
-        _ => Err(CommandError::BadArgs),
-    }
-}
-
-/// The forms of the interact key, whose press opens the screen of what the
-/// player faces, as a storage chest's (client 26430625).
-const INTERACTS: [GameAction; 3] = [
-    GameAction::ContextualAction,
-    GameAction::ContextualActionTap,
-    GameAction::ContextualActionHold,
-];
-
-/// The digital input's bit of the game action `name` on `loader`'s build:
-/// its `PlayerInputType` member's value.
-///
-/// # Errors
-///
-/// [`CommandError::BadArgs`] for a name no [`GameAction`] has,
-/// [`CommandError::Unavailable`] for one the build lacks or places past the
-/// mask.
-fn press_bit(loader: &Loader, name: &str) -> Result<u8, CommandError> {
-    if !GameAction::ALL.iter().any(|action| action.name() == name) {
-        return Err(CommandError::BadArgs);
-    }
-    let input_type = catalogue::type_name(catalogue::ids::PLAYER_INPUT_TYPE);
-    loader
-        .reflection
-        .enum_value(input_type, name)
-        .ok()
-        .and_then(|bit| u8::try_from(bit).ok())
-        .filter(|bit| u32::from(*bit) < u64::BITS)
-        .ok_or(CommandError::Unavailable)
-}
-
 /// Whether the build runs `kind`: the screen toggle for screens, the tab
 /// read for tabs, the builder's detour for looks and moves, the recipe
 /// browser's for recipes.
@@ -712,6 +607,7 @@ fn runs(kind: Kind) -> bool {
         // times out.
         Kind::Mods(_) => mods_screen_opens(),
         Kind::Mark(_) => client_input::marks_run(),
+        Kind::Window(_) => windows::runs(),
     }
 }
 
@@ -726,32 +622,6 @@ fn mods_screen_opens() -> bool {
 /// Mods screen command.
 pub(crate) fn register_mods_screen(opens: fn() -> bool) {
     let _first = STATE.mods_screen.set(opens);
-}
-
-/// The screen byte `name` names, `None` for empty: a look or a move runs
-/// only on the world's own screen.
-fn expected_screen(kind: Kind, name: &str) -> Result<Option<u8>, CommandError> {
-    if kind.drives() {
-        if !name.is_empty() && name != rules::WORLD_SCREEN {
-            return Err(CommandError::BadArgs);
-        }
-        return screen_byte(rules::WORLD_SCREEN)
-            .map(Some)
-            .ok_or(CommandError::Unavailable);
-    }
-    if matches!(kind, Kind::Join | Kind::Host(_)) {
-        // A join or a host starts at the main menu, which no HUD screen
-        // names.
-        return if name.is_empty() {
-            Ok(None)
-        } else {
-            Err(CommandError::BadArgs)
-        };
-    }
-    if name.is_empty() {
-        return Ok(None);
-    }
-    screen_byte(name).map(Some).ok_or(CommandError::BadArgs)
 }
 
 /// Queues mod `owner`'s command `spec`; its id.
@@ -798,6 +668,11 @@ pub(crate) fn queue(loader: &Loader, owner: ModIndex, spec: &Spec) -> Result<u64
         // module keeps a copy only until it is posted.
         let password = unsafe { text(spec.password) }?;
         play::join(id, target, password.as_bytes(), now)?;
+    }
+    if let Kind::Window(_) = kind {
+        // SAFETY: the mod's spec, its target borrowed for the call.
+        let window = unsafe { text(spec.target) }?;
+        windows::park(id, window_ask(spec, window)?);
     }
     commands.next_id += 1;
     commands.kept.push_back(Command {

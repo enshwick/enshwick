@@ -115,7 +115,7 @@ const PLATFORM_TEXTS: &str = r#"
 "#;
 
 /// The longest action id.
-pub const MAX_ID: usize = 32;
+pub const MAX_ID: usize = enshwick_base::rules::MAX_ACTION_ID;
 
 /// Players an action's list or a player argument shows at most.
 pub const MAX_PLAYERS: usize = 32;
@@ -952,11 +952,7 @@ impl LoadMethods for crate::BaseLoad {
 /// ```
 #[must_use]
 pub fn is_valid_id(id: &str) -> bool {
-    !id.is_empty()
-        && id.len() <= MAX_ID
-        && id
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+    enshwick_base::rules::is_action_id(id)
 }
 
 #[cfg(test)]

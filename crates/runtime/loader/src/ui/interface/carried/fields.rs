@@ -13,6 +13,7 @@ use enshwick_core::ui::MAX_OPTIONS;
 
 use super::super::engine::TextBuffer;
 use super::super::{Widgets, options};
+use crate::actions::client_commands::windows::Act;
 use crate::engine::texts;
 
 /// The most steps a number's slider takes.
@@ -136,6 +137,68 @@ pub(super) fn field(paint: &impl Widgets, arg: &ArgView, state: &mut Field) -> b
         _ => {}
     }
     is_set(arg, state)
+}
+
+/// Takes a client command's `act` into `state`, the field of `arg`, as the
+/// player's input would: a text into its text box (a text's, a player's
+/// name, an item's search), a pick of the option the field shows as
+/// `text`, a press that flips an on-or-off field. Whether the field now
+/// holds it; false for an act the field does not take or an option it
+/// lacks, which leaves `state` as it was.
+pub(super) fn take(arg: &ArgView, state: &mut Field, act: Act, text: &str) -> bool {
+    match (act, arg.kind) {
+        (Act::Text, ArgView::PLAYER | ArgView::TEXT | ArgView::ITEM | ArgView::TEMPLATE) => {
+            state.text.set(text);
+            state.text.text() == text
+        }
+        (Act::Pick, ArgView::CHOICE) => {
+            let Some(at) = arg.choices.iter().position(|choice| choice == text) else {
+                return false;
+            };
+            state.pick = u32::try_from(at).unwrap_or(NO_PICK);
+            true
+        }
+        (Act::Pick, ArgView::PLAYER) => {
+            let Some(at) = arg.players.iter().position(|(_, name)| name == text) else {
+                return false;
+            };
+            // As the dropdown's own pick: the typed name would win over it.
+            state.pick = u32::try_from(at).unwrap_or(NO_PICK);
+            state.picked = picked(arg, state.pick);
+            state.text.set("");
+            true
+        }
+        (Act::Pick, ArgView::ITEM) => pick_named(
+            state,
+            crate::inventory::item_names::items(texts::language()),
+            text,
+        ),
+        (Act::Pick, ArgView::TEMPLATE) => {
+            pick_named(state, crate::content::template_names::templates(), text)
+        }
+        (Act::Press, ArgView::TOGGLE) => {
+            state.on = !state.on;
+            true
+        }
+        _ => false,
+    }
+}
+
+/// Picks the row of `list` named `name` in an item or template field; the
+/// list of what its search finds keeps the pick at its next draw.
+fn pick_named(
+    state: &mut Field,
+    list: Option<std::sync::Arc<crate::content::names::List>>,
+    name: &str,
+) -> bool {
+    let Some(guid) =
+        list.and_then(|list| list.items.iter().find(|i| i.name == name).map(|i| i.guid))
+    else {
+        return false;
+    };
+    state.guid = Some(guid);
+    state.searched = None;
+    true
 }
 
 /// A field's value borrowed from its state, so a frame learns whether the

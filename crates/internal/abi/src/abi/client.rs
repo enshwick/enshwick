@@ -135,6 +135,20 @@ pub struct ClientSnapshot {
     pub loader_screen: u32,
     /// Zero.
     pub reserved2: u32,
+    /// The entity of the client's world that the shown interaction prompt
+    /// names, such as a storage chest, or 0 while none shows; group
+    /// [`ClientSnapshot::PROMPT`]. ABI 12.24.
+    pub prompt_target: Entity,
+    /// The game's `LocaTagId` of the shown prompt's verb, such as the one
+    /// for "Open", or 0 while none shows; group [`ClientSnapshot::PROMPT`].
+    /// ABI 12.24.
+    pub prompt_verb: u32,
+    /// The character the main menu has selected, as its place in the
+    /// menu's list from 0, or [`ClientSnapshot::NO_CHARACTER`]; group
+    /// [`ClientSnapshot::CHARACTER`]. ABI 12.24.
+    pub selected_character: u32,
+    /// Zero.
+    pub reserved3: u32,
 }
 
 impl_headed!(ClientSnapshot, born = 120);
@@ -179,6 +193,13 @@ impl ClientSnapshot {
     /// The mods that differ from a server that refused this client show.
     /// ABI 12.23.
     pub const MOD_MISMATCH: u32 = 6;
+    /// [`prompt_target`](Self::prompt_target) and
+    /// [`prompt_verb`](Self::prompt_verb). ABI 12.24.
+    pub const PROMPT: u32 = 64;
+    /// [`selected_character`](Self::selected_character). ABI 12.24.
+    pub const CHARACTER: u32 = 128;
+    /// No character selected, or not at the main menu. ABI 12.24.
+    pub const NO_CHARACTER: u32 = u32::MAX;
     /// Nothing read, its header set.
     pub const EMPTY: Self = Self {
         header: Header::of::<Self>(),
@@ -199,6 +220,10 @@ impl ClientSnapshot {
         loader_screen_mod: Str::EMPTY,
         loader_screen: Self::NO_LOADER_SCREEN,
         reserved2: 0,
+        prompt_target: Entity(0),
+        prompt_verb: 0,
+        selected_character: Self::NO_CHARACTER,
+        reserved3: 0,
     };
 }
 
@@ -230,7 +255,7 @@ impl ClientSnapshot {
 pub struct ClientCommand {
     /// Size and version of this struct.
     pub header: Header,
-    /// What to do: [`ClientCommand::OPEN_SCREEN`] to [`ClientCommand::OPEN_MOD_SETTINGS`].
+    /// What to do: [`ClientCommand::OPEN_SCREEN`] to [`ClientCommand::WINDOW_TEXT`].
     pub kind: u32,
     /// A move's hold in milliseconds, 1 to [`ClientCommand::MAX_HOLD_MS`];
     /// a press's, 1 to [`ClientCommand::MAX_PRESS_MS`].
@@ -282,6 +307,17 @@ pub struct ClientCommand {
     /// 1 when [`ClientCommand::HOST`] opens the world to other players
     /// online, 0 to play it offline. ABI 12.23.
     pub online: u32,
+    /// The item of the carried window `target` (`mod:window`) that
+    /// [`ClientCommand::WINDOW_PRESS`], [`ClientCommand::WINDOW_PICK`] and
+    /// [`ClientCommand::WINDOW_TEXT`] act on, by the id
+    /// [`HostApi::client_windows`](super::HostApi::client_windows) lists;
+    /// borrowed for the call. ABI 12.24.
+    pub item: Str,
+    /// The option [`ClientCommand::WINDOW_PICK`] picks, by the name the
+    /// window shows, or the text [`ClientCommand::WINDOW_TEXT`] sets, at
+    /// most [`ClientCommand::MAX_TEXT`] bytes; borrowed for the call.
+    /// ABI 12.24.
+    pub text: Str,
 }
 
 impl_headed!(ClientCommand, born = 88);
@@ -331,6 +367,17 @@ impl ClientCommand {
     /// Presses mod `target`'s settings gear on the Mods screen, by its id,
     /// opening the screen first. ABI 12.23.
     pub const OPEN_MOD_SETTINGS: u32 = 17;
+    /// Presses `item` of the carried window `target`, as a click would: a
+    /// button, a list's switch or an on-or-off field. ABI 12.24.
+    pub const WINDOW_PRESS: u32 = 18;
+    /// Picks the option named `text` in the list of `item` of the carried
+    /// window `target`. ABI 12.24.
+    pub const WINDOW_PICK: u32 = 19;
+    /// Sets the text of `item`'s text field in the carried window `target`
+    /// to `text`, as typing would. ABI 12.24.
+    pub const WINDOW_TEXT: u32 = 20;
+    /// The longest text, in bytes, a window's field takes. ABI 12.24.
+    pub const MAX_TEXT: usize = 255;
     /// How many worlds and characters the main menu lists at most.
     /// ABI 12.23.
     pub const MAX_SLOTS: u16 = 16;
@@ -360,6 +407,8 @@ impl ClientCommand {
         world: 0,
         character: 0,
         online: 0,
+        item: Str::EMPTY,
+        text: Str::EMPTY,
     };
 
     /// Whether the command's own bounds hold: a finite look of at most
@@ -404,6 +453,9 @@ impl ClientCommand {
                     && self.online <= 1
             }
             Self::JOIN => self.session == 0 && self.password.len() <= Self::MAX_PASSWORD,
+            Self::WINDOW_PRESS | Self::WINDOW_PICK | Self::WINDOW_TEXT => {
+                self.text.len() <= Self::MAX_TEXT
+            }
             _ => true,
         }
     }
@@ -437,7 +489,7 @@ pub struct ClientCommandStatus {
     /// [`ClientCommandStatus::PENDING`] to [`ClientCommandStatus::UNAVAILABLE`].
     pub state: u32,
     /// Why a cancelled command ended: [`ClientCommandStatus::SESSION_CHANGED`] to
-    /// [`ClientCommandStatus::MOD_OFF`]; 0 otherwise.
+    /// [`ClientCommandStatus::ITEM_OFF`]; 0 otherwise.
     pub reason: u32,
     /// The command's kind.
     pub kind: u32,
@@ -486,6 +538,10 @@ impl ClientCommandStatus {
     pub const INPUT_BLOCKED: u32 = 6;
     /// The mod or the feature turned off.
     pub const MOD_OFF: u32 = 7;
+    /// The window shows the item off, as a Run button while a field is
+    /// empty or an action the player may not run now, or the item has no
+    /// option of that name or takes no such text. ABI 12.24.
+    pub const ITEM_OFF: u32 = 8;
     /// The game ended a join or a host without reaching the world, for
     /// `failure`.
     /// ABI 12.11.
@@ -530,5 +586,95 @@ impl ClientCommandStatus {
         age_ms: 0,
         phase: 0,
         failure: 0,
+    };
+}
+
+/// An item of a window the server's mods show this client, one entry of
+/// [`HostApi::client_windows`](super::HostApi::client_windows), which a
+/// [`ClientCommand::WINDOW_PRESS`], [`ClientCommand::WINDOW_PICK`] or
+/// [`ClientCommand::WINDOW_TEXT`] names by `window` and `item`.
+///
+/// The strings are borrowed for the call. ABI 12.24.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::ClientWindowItem;
+///
+/// let item = ClientWindowItem::EMPTY;
+/// assert_eq!(item.flags & ClientWindowItem::SHOWN, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct ClientWindowItem {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// [`ClientWindowItem::BUTTON`], [`ClientWindowItem::SWITCH`] or
+    /// [`ClientWindowItem::FIELD`].
+    pub kind: u32,
+    /// A field's argument: [`ClientWindowItem::PLAYER`] to
+    /// [`ClientWindowItem::TEMPLATE`]; 0 for other kinds.
+    pub field: u32,
+    /// [`ClientWindowItem::SHOWN`], [`ClientWindowItem::ON`] and
+    /// [`ClientWindowItem::OFF`].
+    pub flags: u32,
+    /// Zero.
+    pub reserved: u32,
+    /// The window, as `mod:window`.
+    pub window: Str,
+    /// The item's id in the window.
+    pub item: Str,
+    /// What the item shows: a button's or a field's label, a switch's
+    /// player.
+    pub label: Str,
+    /// The line the item stands under: a row's text, a whole action's
+    /// label; empty for none.
+    pub line: Str,
+}
+
+impl_headed!(ClientWindowItem);
+
+impl ClientWindowItem {
+    /// A button: a row's, an action's Run, a form's Cancel, the window's
+    /// Close or its map's.
+    pub const BUTTON: u32 = 1;
+    /// A list's switch for one player.
+    pub const SWITCH: u32 = 2;
+    /// A field of an action's argument.
+    pub const FIELD: u32 = 3;
+    /// A field naming one of the server's players: a list to pick from and
+    /// a name to type.
+    pub const PLAYER: u32 = 1;
+    /// A field of a few options to pick from.
+    pub const CHOICE: u32 = 2;
+    /// A field of a number in a range.
+    pub const NUMBER: u32 = 3;
+    /// An on-or-off field, which a press flips.
+    pub const TOGGLE: u32 = 4;
+    /// A field of typed text.
+    pub const TEXT: u32 = 5;
+    /// A field of one of the game's items: a search to type and a list of
+    /// what it finds to pick from.
+    pub const ITEM: u32 = 6;
+    /// A field of one of the game's templates, as [`ClientWindowItem::ITEM`].
+    pub const TEMPLATE: u32 = 7;
+    /// The window shows and takes commands: the newest the client holds.
+    pub const SHOWN: u32 = 1;
+    /// A switch is on.
+    pub const ON: u32 = 2;
+    /// The window draws the item off, as an action the player may not run
+    /// now.
+    pub const OFF: u32 = 4;
+    /// No item, its header set.
+    pub const EMPTY: Self = Self {
+        header: Header::of::<Self>(),
+        kind: 0,
+        field: 0,
+        flags: 0,
+        reserved: 0,
+        window: Str::EMPTY,
+        item: Str::EMPTY,
+        label: Str::EMPTY,
+        line: Str::EMPTY,
     };
 }

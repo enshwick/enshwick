@@ -8,15 +8,15 @@ use crate::abi::{
     AltarInfo, AltarLimitFilterFn, AltarZoneFilterFn, BaseLimitInfo, BedCheckFn, BuffRequest,
     BuffTypeAdd, BuffTypeInfo, BuildFilterFn, BuildInfo, BuildRights, BuildingZoneFilterFn, CallFn,
     CallSpec, CallerFrame, ChangeId, ChangeOp, ChatFilterFn, ClientCommand, ClientCommandStatus,
-    ClientSnapshot, ComfortFilterFn, CommandInfo, ConfigCheckFn, ContainerRuleFn, ContentRename,
-    ControlFn, ControlSpec, CraftFilterFn, DamageFilterFn, DataChange, DaytimeInfo, DropRequest,
-    EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperienceFilterFn,
-    FogInfo, GameBinding, GameEventFn, Header, HookSpec, InteractionFilterFn, InteractionPrompt,
-    InventoryRequest, InventoryResultFn, ItemFilterFn, ItemLine, ItemTypeInfo, JoinRuleFn,
-    KnowledgeChange, KnowledgeInfo, KnowledgeInputFilterFn, Level, LoaderOff, LocalInputInfo,
-    LoopWaitFn, LoopWaitSites, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec,
-    ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
-    PointSpec, PointVerdict, PropPlacementInfo, QuestRewardFilterFn, RateId, RecipeKind,
+    ClientSnapshot, ClientWindowItem, ComfortFilterFn, CommandInfo, ConfigCheckFn, ContainerRuleFn,
+    ContentRename, ControlFn, ControlSpec, CraftFilterFn, DamageFilterFn, DataChange, DaytimeInfo,
+    DropRequest, EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo,
+    ExperienceFilterFn, FogInfo, GameBinding, GameEventFn, Header, HookSpec, InteractionFilterFn,
+    InteractionPrompt, InventoryRequest, InventoryResultFn, ItemFilterFn, ItemLine, ItemTypeInfo,
+    JoinRuleFn, KnowledgeChange, KnowledgeInfo, KnowledgeInputFilterFn, Level, LoaderOff,
+    LocalInputInfo, LoopWaitFn, LoopWaitSites, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo,
+    MidHookSpec, ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle,
+    PointLink, PointSpec, PointVerdict, PropPlacementInfo, QuestRewardFilterFn, RateId, RecipeKind,
     RecipeRuleKind, RenameFilterFn, ResourceKey, ResourcePatchFn, RespawnPointInfo, SaveInfo,
     ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SoundAudience, SoundInfo, SoundPlay,
     SoundSteer, SpawnRequest, StatChangeFn, StatModifier, StatModify, StatRef, StatSource,
@@ -2509,6 +2509,21 @@ pub struct HostApi {
         value: u32,
         notice: u8,
     ) -> Status,
+    /// Up to `capacity` items of the windows the server's mods show this
+    /// client, the newest window last, and how many there are, as every
+    /// list answers. Entries are `entry_size` bytes apart, the caller's
+    /// `size_of::<ClientWindowItem>()`. Only the newest window shows and
+    /// takes [`ClientCommand::WINDOW_PRESS`] and its kin; its items are the
+    /// ones it draws now, a button's form's while one is open. The strings
+    /// are borrowed for the call. Client only: [`Status::UNAVAILABLE`] on a
+    /// server. Any thread; it runs no mod callback. ABI 12.24.
+    pub client_windows: extern "system" fn(
+        me: ModHandle,
+        out: *mut ClientWindowItem,
+        entry_size: u32,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2749,5 +2764,6 @@ const _: () = {
     assert!(offset_of!(HostApi, game_rebind) == 24 + 227 * 8);
     assert!(offset_of!(HostApi, quest_reward_filter) == 24 + 228 * 8);
     assert!(offset_of!(HostApi, knowledge_set) == 24 + 229 * 8);
-    assert!(size_of::<HostApi>() == 24 + 230 * 8);
+    assert!(offset_of!(HostApi, client_windows) == 24 + 230 * 8);
+    assert!(size_of::<HostApi>() == 24 + 231 * 8);
 };

@@ -254,4 +254,5 @@ pub(crate) static API: HostApi = HostApi {
     game_rebind,
     quest_reward_filter,
     knowledge_set,
+    client_windows,
 };

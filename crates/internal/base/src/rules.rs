@@ -148,6 +148,118 @@ pub const PRESSES_PER_MOD: usize = 4;
 /// look, a move or a press may expect.
 pub const WORLD_SCREEN: &str = "InGame";
 
+/// The longest action id.
+pub const MAX_ACTION_ID: usize = 32;
+
+/// Whether `id` is an action id: 1 to [`MAX_ACTION_ID`] bytes of
+/// `[a-z0-9-]`.
+#[must_use]
+pub fn is_action_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= MAX_ACTION_ID
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+/// The id of a carried window's Close button.
+pub const WINDOW_CLOSE: &str = "@close";
+/// The id of a carried window's form's Cancel button.
+pub const WINDOW_CANCEL: &str = "@cancel";
+/// The id of a carried window's map button, which opens the game's map.
+pub const WINDOW_MAP: &str = "@map";
+
+/// An item of a carried window as its id names it, from the action ids
+/// its mod declared. Action ids hold only `[a-z0-9-]`, so the window's own
+/// buttons, which start with `@`, and the separators `/`, `@` and `#`
+/// never clash with one.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum WindowItem {
+    /// `<action>`: the button that runs the action, drawn whole or in its
+    /// form.
+    Run(String),
+    /// `<action>/<arg>`: the field of the action's argument, by its place
+    /// from 0.
+    Field(String, usize),
+    /// `<action>@<key>`: a list's switch for the player of this account.
+    Switch(String, crate::PlayerKey),
+    /// `<action>#<n>`: the window's `n`th row button that runs the action,
+    /// from 0.
+    RowButton(String, usize),
+    /// The window's Close, [`WINDOW_CLOSE`].
+    Close,
+    /// A form's Cancel, [`WINDOW_CANCEL`].
+    Cancel,
+    /// A map's button, [`WINDOW_MAP`].
+    Map,
+}
+
+impl WindowItem {
+    /// The item `id` names; `None` for one no window can hold.
+    #[must_use]
+    pub fn parse(id: &str) -> Option<Self> {
+        let action = |action: &str| is_action_id(action).then(|| action.to_owned());
+        let number = |text: &str| -> Option<u64> {
+            (!text.is_empty() && text.bytes().all(|b| b.is_ascii_digit()))
+                .then(|| text.parse().ok())
+                .flatten()
+        };
+        let place = |text: &str| number(text).and_then(|n| usize::try_from(n).ok());
+        match id {
+            WINDOW_CLOSE => return Some(Self::Close),
+            WINDOW_CANCEL => return Some(Self::Cancel),
+            WINDOW_MAP => return Some(Self::Map),
+            _ => {}
+        }
+        if let Some((name, arg)) = id.split_once('/') {
+            return Some(Self::Field(action(name)?, place(arg)?));
+        }
+        if let Some((name, key)) = id.split_once('@') {
+            return Some(Self::Switch(
+                action(name)?,
+                crate::PlayerKey::new(number(key)?),
+            ));
+        }
+        if let Some((name, n)) = id.split_once('#') {
+            return Some(Self::RowButton(action(name)?, place(n)?));
+        }
+        action(id).map(Self::Run)
+    }
+
+    /// The id that names this item.
+    #[must_use]
+    pub fn id(&self) -> String {
+        match self {
+            Self::Run(action) => action.clone(),
+            Self::Field(action, arg) => format!("{action}/{arg}"),
+            Self::Switch(action, key) => format!("{action}@{}", key.0),
+            Self::RowButton(action, n) => format!("{action}#{n}"),
+            Self::Close => WINDOW_CLOSE.to_owned(),
+            Self::Cancel => WINDOW_CANCEL.to_owned(),
+            Self::Map => WINDOW_MAP.to_owned(),
+        }
+    }
+}
+
+/// A carried window's `mod:window` name split into the mod's id and the
+/// window's; `None` without a mod or with a window id that is no action
+/// id's shape.
+#[must_use]
+pub fn window_name(window: &str) -> Option<(&str, &str)> {
+    let (mod_id, id) = window.rsplit_once(':')?;
+    (!mod_id.is_empty() && is_action_id(id)).then_some((mod_id, id))
+}
+
+/// Whether a window command of raw kind `kind` names a window, an item and
+/// a `text` the loader takes: a pick names its option.
+#[must_use]
+pub fn window_command_names(kind: u32, window: &str, item: &str, text: &str) -> bool {
+    use crate::abi::ClientCommand as Spec;
+    window_name(window).is_some()
+        && WindowItem::parse(item).is_some()
+        && (kind != Spec::WINDOW_PICK || !text.is_empty())
+}
+
 /// Whether a client command of raw kind `kind` names a `target` and an
 /// `expected` screen the loader takes.
 ///
@@ -196,6 +308,62 @@ mod tests {
             "127.0.0.1:15637",
             "InGame"
         ));
+    }
+
+    #[test]
+    fn every_window_item_id_reads_back_as_the_item_it_names() {
+        let items = [
+            WindowItem::Run("ban".into()),
+            WindowItem::Field("ban".into(), 1),
+            WindowItem::Switch("friends".into(), crate::PlayerKey::new(76_561_198)),
+            WindowItem::RowButton("ban".into(), 2),
+            WindowItem::Close,
+            WindowItem::Cancel,
+            WindowItem::Map,
+        ];
+        for item in items {
+            assert_eq!(WindowItem::parse(&item.id()), Some(item));
+        }
+    }
+
+    #[test]
+    fn an_id_no_action_can_have_names_no_window_item() {
+        for id in [
+            "", "Ban", "ban/", "ban/x", "ban#-1", "@open", "ban@", "a b", "ban/1/2",
+        ] {
+            assert_eq!(WindowItem::parse(id), None, "{id:?}");
+        }
+        assert_eq!(
+            WindowItem::parse(&"a".repeat(33)),
+            None,
+            "past MAX_ACTION_ID"
+        );
+    }
+
+    #[test]
+    fn a_window_is_named_by_its_mod_and_its_own_id() {
+        use crate::abi::ClientCommand as Spec;
+        assert_eq!(
+            window_name("you.windows-check:check"),
+            Some(("you.windows-check", "check"))
+        );
+        for bad in ["check", ":check", "m:Check", "m:"] {
+            assert_eq!(window_name(bad), None, "{bad}");
+        }
+        assert!(window_command_names(
+            Spec::WINDOW_PRESS,
+            "m:w",
+            "@close",
+            ""
+        ));
+        assert!(!window_command_names(Spec::WINDOW_PICK, "m:w", "ban/0", ""));
+        assert!(window_command_names(
+            Spec::WINDOW_PICK,
+            "m:w",
+            "ban/0",
+            "Bob"
+        ));
+        assert!(!window_command_names(Spec::WINDOW_TEXT, "m:w", "Ban", "x"));
     }
 
     #[test]

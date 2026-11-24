@@ -12,18 +12,27 @@
 //! loader's, and the windows step aside while the Map screen is open, so
 //! the player sees the map and sets the waypoint the server reads. The
 //! game's map key opens it under a window with a map, as does its button.
+//!
+//! A mod's client command presses an item of the newest window, picks an
+//! option or sets a text, by the ids [`items`] lists: a press makes that
+//! one widget answer as a click in the frame, and a field takes the pick
+//! or the text as the player's input would, so the window acts as it does
+//! for the player.
 
 use core::cell::{Cell, RefCell};
 use std::sync::{Arc, Mutex};
 
 use arc_swap::ArcSwapOption;
-use enshwick_core::abi::UiWidget;
+use enshwick_base::Relock;
+use enshwick_core::PlayerKey;
+use enshwick_core::abi::{ClientWindowItem, Str, UiWidget};
 use enshwick_core::actions::Value;
 use enshwick_core::actions::sheet::{ArgView, Entry, encode_args};
 use enshwick_core::actions::window::{ButtonView, ItemView, MapView, View, decode};
 
 use super::engine::{Engine, Scroll, Window};
 use super::{Painter, Widgets, copy};
+use crate::actions::client_commands::windows::{self, Act, Answer, Ask, Target};
 use crate::base::remote::Message;
 use crate::engine::texts;
 use crate::ui::windows::MAX_HELD;
@@ -32,6 +41,7 @@ use crate::ui::windows::MAX_HELD;
 const MAP_SCREEN: &str = "Map";
 
 mod fields;
+mod items;
 mod markers;
 
 use fields::{Field, field, value};
@@ -56,12 +66,59 @@ struct Carried {
     /// The map whose markers are on the game's map, `None` for none; locked
     /// while they are set, so the last change's markers stay.
     marked: Mutex<Option<MapView>>,
+    /// The form open in the window that shows, by its mod and window id,
+    /// for the listing of its items on any thread; set only when it opens
+    /// or closes.
+    form: Mutex<Option<(String, String, Form)>>,
 }
 
 static STATE: Carried = Carried {
     held: ArcSwapOption::const_empty(),
     marked: Mutex::new(None),
+    form: Mutex::new(None),
 };
+
+/// The items of every window the client holds, the newest window last and
+/// alone [`ClientWindowItem::SHOWN`], handed to `put` with their strings
+/// borrowed for the call.
+pub(crate) fn listed<R>(put: impl FnOnce(&[ClientWindowItem]) -> R) -> R {
+    let held = STATE.held.load();
+    let held = held.as_deref().map_or(&[][..], Vec::as_slice);
+    let form = STATE.form.relock().clone();
+    let mut owned = Vec::new();
+    for (at, window) in held.iter().enumerate() {
+        let shown = at + 1 == held.len();
+        let open = form
+            .as_ref()
+            .filter(|(id, name, _)| shown && *id == window.mod_id && *name == window.window)
+            .map(|(.., form)| form);
+        let name = format!("{}:{}", window.mod_id, window.window);
+        for item in items::list(&window.view, open) {
+            let flags = item.flags | if shown { ClientWindowItem::SHOWN } else { 0 };
+            owned.push((name.clone(), item.target.id(), item, flags));
+        }
+    }
+    let raw: Vec<ClientWindowItem> = owned
+        .iter()
+        .map(|(window, id, item, flags)| ClientWindowItem {
+            kind: item.kind,
+            field: item.field,
+            flags: *flags,
+            window: Str::new(window),
+            item: Str::new(id),
+            label: Str::new(&item.label),
+            line: Str::new(&item.line),
+            ..ClientWindowItem::EMPTY
+        })
+        .collect();
+    put(&raw)
+}
+
+/// Whether the carried windows draw on this build: the interface linked
+/// and their draw is not fused off.
+pub(super) fn draws() -> bool {
+    !super::CARRIED_FUSE.is_off()
+}
 
 /// Changes the windows the client holds with `change`, which may run more
 /// than once, then their markers on the map.
@@ -145,6 +202,8 @@ struct Drawn {
     /// The tries left for a map open the interface refused, such as on a
     /// full queue; `None` while none waits.
     map_tries: Option<u8>,
+    /// The item a client command presses in this frame's draw.
+    pressing: Option<Target>,
 }
 
 /// How many frames a refused map open is tried again, about a second.
@@ -152,6 +211,7 @@ const MAP_OPEN_TRIES: u8 = 60;
 
 impl Drawn {
     fn new(key: (String, String)) -> Self {
+        *STATE.form.relock() = None;
         Self {
             key,
             window: Window::new(),
@@ -161,7 +221,50 @@ impl Drawn {
             map_screen: crate::engine::screens::byte(MAP_SCREEN),
             map_opens: None,
             map_tries: None,
+            pressing: None,
         }
+    }
+
+    /// Whether a command presses `target`, one of the window's own buttons.
+    fn presses(&self, target: &Target) -> bool {
+        self.pressing.as_ref() == Some(target)
+    }
+
+    /// Whether a command presses the button that runs `action`.
+    fn presses_run(&self, action: &str) -> bool {
+        matches!(&self.pressing, Some(Target::Run(a)) if a == action)
+    }
+
+    /// Whether a command presses the switch of `key` in `action`'s list.
+    fn presses_switch(&self, action: &str, key: PlayerKey) -> bool {
+        matches!(&self.pressing, Some(Target::Switch(a, k)) if a == action && *k == key)
+    }
+
+    /// Takes in a client command `ask` on the window that shows, `view`, as
+    /// the player's input would: a field takes its pick, text or flip at
+    /// once, and a press of a button or a switch is left for the draw.
+    /// The answer, `None` for a press the draw makes.
+    fn take(&mut self, view: &View, ask: &Ask) -> Option<Answer> {
+        let listed = items::list(view, self.form.as_ref());
+        let Some(item) = listed.iter().find(|item| item.target == ask.target) else {
+            return Some(Answer::Missing);
+        };
+        if let Target::Field(action, index) = &ask.target {
+            let arg = view
+                .entries
+                .iter()
+                .find(|e| e.id == *action)
+                .and_then(|entry| entry.args.get(*index));
+            let taken = arg.is_some_and(|arg| {
+                fields::take(arg, self.field(action, *index, arg), ask.act, &ask.text)
+            });
+            return Some(if taken { Answer::Shown } else { Answer::Off });
+        }
+        if ask.act != Act::Press || item.flags & ClientWindowItem::OFF != 0 {
+            return Some(Answer::Off);
+        }
+        self.pressing = Some(ask.target.clone());
+        None
     }
 
     /// Takes in whether the build can open a screen this frame, since the
@@ -251,6 +354,8 @@ impl Drawn {
         };
         if self.form != form {
             self.scroll.start_over();
+            let (id, window) = self.key.clone();
+            *STATE.form.relock() = form.clone().map(|form| (id, window, form));
         }
         self.form = form;
         self.fields.retain(|((of, _), _)| *of != action);
@@ -306,8 +411,12 @@ enum Click {
 /// - No other window is open.
 pub(super) unsafe fn draw(engine: &Engine, context: usize, screen: Option<u8>) {
     let held = STATE.held.load();
+    let asked = windows::asked();
     let Some(top) = held.as_deref().and_then(|held| held.last()) else {
         DRAWN.set(None);
+        if let Some((id, _)) = asked {
+            windows::answer(id, Answer::Missing);
+        }
         return;
     };
     let click = DRAWN.with_borrow_mut(|slot| {
@@ -330,10 +439,30 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize, screen: Option<u8>) {
                 .get()
                 .is_some(),
         );
+        // Only the window that shows takes a command, as only it takes clicks.
+        let pressed = asked.and_then(|(id, ask)| {
+            let answer = if ask.mod_id == top.mod_id && ask.window == top.window {
+                drawn.take(&top.view, &ask)
+            } else {
+                Some(Answer::Missing)
+            };
+            match answer {
+                Some(answer) => {
+                    windows::answer(id, answer);
+                    None
+                }
+                None => Some(id),
+            }
+        });
         // SAFETY: this function's `# Safety` gives the frame, its thread, its
         // `context` and no other open window; `drawn` stays in the
         // thread-local `DRAWN`, borrowed and unmoved for the call.
         let click = unsafe { window(engine, context, &top.view, drawn) };
+        if let Some(id) = pressed.filter(|_| drawn.pressing.take().is_some()) {
+            // A pressed widget the window draws off makes no click.
+            let clicked = click != Click::Nothing;
+            windows::answer(id, if clicked { Answer::Shown } else { Answer::Off });
+        }
         drawn.after(&click);
         drawn.retry(click)
     });
@@ -446,7 +575,8 @@ unsafe fn window(engine: &Engine, context: usize, view: &View, drawn: &mut Drawn
     // they open.
     unsafe { engine.scroll_end(&mut drawn.scroll) };
     paint.set_scrolled(false);
-    if paint.button(texts::text("actions.close").as_bytes(), true) {
+    if paint.button(texts::text("actions.close").as_bytes(), true) || drawn.presses(&Target::Close)
+    {
         click = Click::Close;
     } else if stepped != Click::Nothing {
         click = stepped;
@@ -462,6 +592,12 @@ unsafe fn window(engine: &Engine, context: usize, view: &View, drawn: &mut Drawn
 fn items(paint: &impl Widgets, view: &View, drawn: &mut Drawn) -> Click {
     let mut click = Click::Nothing;
     let mut group = "";
+    // The row button a command presses, counted down to among the buttons
+    // that run its action.
+    let mut row_press = match &drawn.pressing {
+        Some(Target::RowButton(action, n)) => Some((action.clone(), *n)),
+        _ => None,
+    };
     for item in &view.items {
         let entry = match item {
             ItemView::Action(id) => view.entries.iter().find(|e| e.id == *id),
@@ -484,7 +620,15 @@ fn items(paint: &impl Widgets, view: &View, drawn: &mut Drawn) -> Click {
                 paint.label(text.as_bytes(), UiWidget::STYLE_BODY, true, false);
                 let mut pressed = Click::Nothing;
                 for button in buttons {
-                    if paint.button(button.label.as_bytes(), true) {
+                    let commanded = match &mut row_press {
+                        Some((action, n)) if *action == button.action => {
+                            let now = *n == 0;
+                            *n = n.wrapping_sub(1);
+                            now
+                        }
+                        _ => false,
+                    };
+                    if paint.button(button.label.as_bytes(), true) || commanded {
                         pressed = press(view, button);
                     }
                 }
@@ -497,7 +641,9 @@ fn items(paint: &impl Widgets, view: &View, drawn: &mut Drawn) -> Click {
                 let line = texts::text("windows.map");
                 paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
                 let open = texts::text("windows.map.open");
-                let pressed = paint.button(open.as_bytes(), drawn.map_opens.is_some());
+                let on = drawn.map_opens.is_some();
+                let pressed =
+                    paint.button(open.as_bytes(), on) || (on && drawn.presses(&Target::Map));
                 drawn
                     .map_opens
                     .filter(|_| pressed)
@@ -556,7 +702,10 @@ fn action(paint: &impl Widgets, entry: &Entry, drawn: &mut Drawn) -> Click {
     if entry.per_player {
         let mut click = Click::Nothing;
         for (key, name, on) in &entry.players {
-            if let Some(now) = paint.toggle(name.as_bytes(), *on, !entry.offered) {
+            let drawn_now = paint.toggle(name.as_bytes(), *on, !entry.offered);
+            let commanded =
+                (entry.offered && drawn.presses_switch(&entry.id, *key)).then_some(!*on);
+            if let Some(now) = drawn_now.or(commanded) {
                 let who = Value::Player {
                     key: *key,
                     name: String::new(),
@@ -574,7 +723,8 @@ fn action(paint: &impl Widgets, entry: &Entry, drawn: &mut Drawn) -> Click {
         texts::text("windows.run")
     };
     // Drawn while a field is not set too, off, so the rows under it stay.
-    if !paint.button(label.as_bytes(), entry.offered && set) {
+    let on = entry.offered && set;
+    if !(paint.button(label.as_bytes(), on) || (on && drawn.presses_run(&entry.id))) {
         return Click::Nothing;
     }
     values(&entry.id, &entry.args, 0, drawn).map_or(Click::Nothing, |values| {
@@ -591,8 +741,12 @@ fn form_widgets(paint: &impl Widgets, view: &View, form: &Form, drawn: &mut Draw
     paint.label(form.label.as_bytes(), UiWidget::STYLE_H2, true, false);
     let from = form.given.len();
     let set = fields(paint, &entry.id, &entry.args, from, drawn);
-    let run = paint.button(texts::text("windows.run").as_bytes(), entry.offered && set);
-    if paint.button(texts::text("windows.cancel").as_bytes(), true) {
+    let on = entry.offered && set;
+    let run = paint.button(texts::text("windows.run").as_bytes(), on)
+        || (on && drawn.presses_run(&entry.id));
+    if paint.button(texts::text("windows.cancel").as_bytes(), true)
+        || drawn.presses(&Target::Cancel)
+    {
         return Click::Cancel;
     }
     if !run {
