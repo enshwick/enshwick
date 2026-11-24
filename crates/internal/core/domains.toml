@@ -74,13 +74,8 @@ entries = "host/entries"
 # modules; a new one fails, and so does one that is gone.
 upward = [
     "actions::controls -> ui::interface",
-    "actions::player_actions -> ui::windows",
-    "content::rate_links -> inventory::loot_slot",
     "content::rate_links -> inventory::transactions",
     "content::served -> ui::interface",
     "inventory::item_actions -> actions::interactions",
-    "world::entities -> inventory::spawns",
-    "world::transactions -> actions::interactions",
-    "world::transactions -> inventory::spawns",
     "world::transactions -> inventory::transactions",
 ]

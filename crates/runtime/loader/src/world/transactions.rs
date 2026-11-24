@@ -102,6 +102,9 @@ struct Transactions {
     /// What the last look at the waits saw, so a step looks again only
     /// once something is new.
     look: Look,
+    /// Whether the interaction filter that keeps players from held props is
+    /// off, named by the interactions when they seal.
+    filter_off: std::sync::OnceLock<fn() -> bool>,
 }
 
 impl Transactions {
@@ -114,6 +117,7 @@ impl Transactions {
             waiting: AtomicBool::new(false),
             waits: Mutex::new(Waits::new()),
             look: Look::new(),
+            filter_off: std::sync::OnceLock::new(),
         }
     }
 
@@ -232,6 +236,18 @@ static STATE: Transactions = Transactions::new();
 /// The props the running world's transactions keep players from.
 pub(crate) fn holds() -> &'static crate::world::prop_holds::PropHolds {
     &STATE.holds
+}
+
+/// Names `off`, which tells whether the interaction filter that keeps
+/// players from held props is off; the first one named stays.
+pub(crate) fn on_filter_off(off: fn() -> bool) {
+    let _first = STATE.filter_off.set(off);
+}
+
+/// Whether the interaction filter that keeps players from held props is
+/// off; on until the interactions name it.
+pub(crate) fn filter_off() -> bool {
+    STATE.filter_off.get().is_some_and(|off| off())
 }
 
 /// Runs a step's `work` behind the feature's fuse. A panic turns the

@@ -16,13 +16,6 @@ pub(crate) mod item_data;
 #[cfg(windows)]
 pub(crate) mod item_names;
 pub mod item_records;
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "only the Windows build links the loot rate")
-)]
-pub(crate) mod loot_slot;
-#[cfg(windows)]
-pub(crate) mod spawns;
 #[cfg(windows)]
 pub(crate) mod stacks;
 #[cfg(windows)]
@@ -173,12 +166,5 @@ pub(crate) static PARTS: &[&Part] = &[
             drops::start(loader);
         }),
         ..part!("drops", drops)
-    },
-    &Part {
-        table_ids: spawns::TABLE_IDS,
-        forget: Some(|_| {
-            spawns::forget();
-        }),
-        ..part!("spawns", spawns)
     },
 ];

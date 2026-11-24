@@ -169,7 +169,7 @@ pub(super) fn spawn(loader: &Loader, prop: &Prop, actor: u32) -> Result<u32, Tra
         lifetime_ns: 0,
         flags: 0,
     };
-    Ok(crate::inventory::spawns::spawn_with(
+    Ok(crate::world::spawns::spawn_with(
         loader,
         &request,
         vec![(used_item, item), (no_loot, tag)],
@@ -380,7 +380,7 @@ pub(super) fn hold(loader: &Loader, entity: u32) -> Result<(), TransactionError>
         None
     };
     let holds = crate::world::transactions::holds();
-    holds.hold(entity, crate::actions::interactions::filter_off())?;
+    holds.hold(entity, crate::world::transactions::filter_off())?;
     if let Some(before) = before {
         holds.note_deposit(entity, before);
         set_deposit(loader, entity, STASH_OFF);

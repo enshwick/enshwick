@@ -6,7 +6,8 @@ use enshwick_core::{Entity, abi as api_frame};
 
 use crate::engine::conflicts::Mode;
 use crate::host::layer::{
-    Callback, Caller, HeadedInOut, HeadedOut, In, ListOut, Mod, Out, SizedListOut, Text, entries,
+    Callback, Caller, Headed, HeadedInOut, HeadedOut, In, ListOut, Mod, Out, SizedListOut, Text,
+    entries,
 };
 
 pub(crate) mod altars;
@@ -189,5 +190,13 @@ entries! {
         let account = account(key)?;
         crate::world::permissions::change(me.loader, me.index, account, deny, grant)?;
         Ok(())
+    }
+
+    fn spawn(
+        loader as Caller,
+        request as Headed<enshwick_core::abi::SpawnRequest>,
+        out as Out<Entity>,
+    ) -> Status {
+        out.put(Entity(crate::world::spawns::spawn(loader, &request)?))
     }
 }

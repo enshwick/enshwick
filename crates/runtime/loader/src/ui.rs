@@ -77,6 +77,7 @@ pub(crate) static PARTS: &[&Part] = &[
                 changed: windows::waypoint_changed,
                 fuse: &windows::MAP_RUNS,
             });
+            crate::actions::player_actions::on_ran(windows::ran);
             crate::base::remote::on_server(
                 crate::base::remote::WINDOW_CLOSE,
                 |loader, key, message| {

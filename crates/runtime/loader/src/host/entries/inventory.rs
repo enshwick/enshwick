@@ -250,13 +250,6 @@ entries! {
         Ok(())
     }
 
-    fn spawn(
-        loader as Caller,
-        request as Headed<enshwick_core::abi::SpawnRequest>,
-        out as Out<Entity>,
-    ) -> Status {
-        out.put(Entity(crate::inventory::spawns::spawn(loader, &request)?))
-    }
 
     fn define_item_data(me as Mod, id as Text, out as Out<u32>) -> Status {
         out.put(crate::inventory::item_data::open(me.loader, me.index, id)?)

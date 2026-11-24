@@ -9,6 +9,7 @@ use std::sync::OnceLock;
 use enshwick_core::abi::{Event, HookFlags, RateId, Status};
 use enshwick_core::content::recipes::RecipeLayout;
 
+use crate::content::loot_slot::SlotFields;
 use crate::content::rates::{
     LINKS, RATES, experience_rates, scale_points, scale_stack, scale_whole, workshop_duration,
 };
@@ -16,7 +17,6 @@ use crate::engine::chains::Next;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned::{self, Symbol};
-use crate::inventory::loot_slot::SlotFields;
 
 /// The build table ids this part of the loader names; the comfort rate
 /// shares the comfort link of [`crate::knowledge::progress`].

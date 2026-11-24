@@ -95,7 +95,10 @@ pub(crate) static PARTS: &[&Part] = &[
     },
     &Part {
         table_ids: interactions::TABLE_IDS,
-        seal: Some(|_| interactions::seal()),
+        seal: Some(|_| {
+            interactions::seal();
+            crate::world::transactions::on_filter_off(interactions::filter_off);
+        }),
         link: Some(interactions::link),
         steps: &[step!(Follow, "interaction steps", |s| {
             interactions::after_step(s.loader, s.step);

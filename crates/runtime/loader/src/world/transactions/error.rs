@@ -89,7 +89,7 @@ pub(crate) enum TransactionError {
     /// The prop's spawn, as the server answered.
     #[cfg(windows)]
     #[error(transparent)]
-    Spawn(#[from] crate::inventory::spawns::SpawnError),
+    Spawn(#[from] crate::world::spawns::SpawnError),
     /// The prop's entity, as the entity list or call answered.
     #[cfg(windows)]
     #[error(transparent)]

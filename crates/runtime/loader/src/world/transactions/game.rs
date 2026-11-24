@@ -130,7 +130,7 @@ impl Voxels for Game<'_> {
     }
 
     fn placed(&mut self, entity: u32, prop: &Prop) {
-        crate::inventory::spawns::note(self.loader, entity, prop.template);
+        crate::world::spawns::note(self.loader, entity, prop.template);
     }
 
     fn read_prop(&mut self, entity: u32) -> Result<(Prop, u32), TransactionError> {
@@ -146,7 +146,7 @@ impl Voxels for Game<'_> {
     }
 
     fn still_held(&mut self, entity: u32) -> Result<(), TransactionError> {
-        if super::holds().still_held(entity, crate::actions::interactions::filter_off()) {
+        if super::holds().still_held(entity, crate::world::transactions::filter_off()) {
             Ok(())
         } else {
             Err(TransactionError::Gone)
