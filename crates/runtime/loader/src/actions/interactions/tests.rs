@@ -93,10 +93,9 @@ fn a_build_without_the_layout_lists_the_filters_actions_and_holds_off() {
 
 #[test]
 fn props_open_to_players_name_the_link_that_is_off_without_a_build_code() {
-    let turn = crate::engine::log::capture_turn();
+    crate::engine::log::capture();
     holds_off(&ACTIONS_FUSE);
     let lines = crate::engine::log::captured();
-    drop(turn);
     assert!(
         lines.iter().any(
             |(_, _, line)| line == "prop removal by transactions off: inventory actions is off"

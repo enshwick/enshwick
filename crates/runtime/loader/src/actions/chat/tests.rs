@@ -114,10 +114,9 @@ fn a_build_without_the_chat_layout_lists_the_chat_lines_off_and_refuses_mods_lin
 fn a_line_for_one_player_that_reached_others_lists_those_lines_off_with_no_fault_code() {
     let state = State::new();
     assert!(to_one_player());
-    let turn = crate::engine::log::capture_turn();
+    crate::engine::log::capture();
     state.strayed(2);
     let lines = crate::engine::log::captured();
-    drop(turn);
     let line = lines
         .iter()
         .map(|(_, _, line)| line.as_str())

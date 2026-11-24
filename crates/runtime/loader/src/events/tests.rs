@@ -125,7 +125,7 @@ fn a_panic_in_an_event_s_work_leaves_the_link_that_carries_the_engine_s_work_wir
 
 #[test]
 fn the_server_s_lifetime_work_runs_again_at_the_next_change_after_a_panic() {
-    let _turn = crate::engine::log::capture_turn();
+    crate::engine::log::capture();
     let ran = core::cell::Cell::new(0);
     for _ in 0..2 {
         each_change("a test's state link", || {

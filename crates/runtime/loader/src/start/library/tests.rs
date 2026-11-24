@@ -480,13 +480,12 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
         log_level: Level::INFO,
         ..crate::engine::settings::Settings::default()
     });
-    let turn = crate::engine::log::capture_turn();
+    crate::engine::log::capture();
     let mut mapped = Vec::new();
     let all = libraries(&mods, Run::Dry, &mut |file, range| {
         mapped.push((file.to_owned(), range));
     });
     let lines = loader_lines();
-    drop(turn);
 
     assert_only_unloadable_files_unmapped(&mapped, &lines);
     assert_not_loaded(&mods.join("bad-id").join("bad-id.dll"));
@@ -572,10 +571,9 @@ fn each_file_of_the_layout_before_mod_folders_gets_one_line() {
     std::fs::write(mods.join("lanterns.dll"), "").unwrap();
     std::fs::write(mods.join("enshwick/mods.toml"), "").unwrap();
     std::fs::create_dir_all(dir.join("mod-configs")).unwrap();
-    let turn = crate::engine::log::capture_turn();
+    crate::engine::log::capture();
     super::note_old_layout(&mods);
     let lines = loader_lines();
-    drop(turn);
     let old: Vec<&str> = lines
         .iter()
         .filter(|(level, _)| *level == Level::WARN)
