@@ -36,6 +36,7 @@ super::id_table! {
     "FishingEffectResource" => "keen::FishingEffectResource",
     "FogVoxelMappingResource" => "keen::FogVoxelMappingResource",
     "GameKnowledgeQueryResource" => "keen::GameKnowledgeQueryResource",
+    "GameKnowledgeQueryResourceDb" => "keen::GameKnowledgeQueryResourceDb",
     "GameKnowledgeQueryTriggerResource" => "keen::GameKnowledgeQueryTriggerResource",
     "GameKnowledgeResource" => "keen::GameKnowledgeResource",
     "GameRuntimeQueryResource" => "keen::GameRuntimeQueryResource",

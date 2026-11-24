@@ -62,11 +62,11 @@ mod tests {
                 )
             })?;
             let met = KnowledgeQuery::game(GameQuery::new(77));
-            let unmet = KnowledgeQuery::game(GameQuery::new(78)).not().unwrap();
+            let answered = KnowledgeQuery::game(GameQuery::new(78));
             load.add_quest(NewQuest::new(
                 MET,
                 tag("met.name"),
-                vec![QuestStep::new(tag("m"), tag("m.text"), met, unmet)],
+                vec![QuestStep::new(tag("m"), tag("m.text"), met, answered)],
             ))?;
             let _ = ENTRIES.set((given, wood));
             let quests = load.quests();
@@ -221,15 +221,15 @@ mod tests {
         let met = KnowledgeId::from_guid(MET.guid());
         let step = &quests.quest(met).unwrap().steps[0];
         assert_eq!(step.shown_when.map(|q| q.test), Some(KnowledgeTest::Holds));
-        assert_eq!(step.done_when.map(|q| q.test), Some(KnowledgeTest::Fails));
+        assert_eq!(step.done_when.map(|q| q.test), Some(KnowledgeTest::Holds));
         loader.set_game_queries(&[
             (Some(PLAYER), GameQuery::new(77), true),
-            (Some(PLAYER), GameQuery::new(78), false),
+            (Some(PLAYER), GameQuery::new(78), true),
             (None, GameQuery::new(77), false),
         ]);
         let state = quests.state(PLAYER, met).unwrap();
         assert_eq!(state.steps[0].shown, Some(true));
-        assert_eq!(state.steps[0].done, Some(true), "78 does not hold");
+        assert_eq!(state.steps[0].done, Some(true), "78 holds");
         assert!(state.started && state.done, "{state:?}");
         let world = quests.world_state(met).unwrap();
         assert_eq!(world.steps[0].shown, Some(false));

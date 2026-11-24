@@ -263,7 +263,7 @@ impl Role {
 #[serde(deny_unknown_fields)]
 struct Relevance {
     roots: BTreeMap<Role, String>,
-    suffixes: BTreeMap<Role, String>,
+    suffixes: BTreeMap<Role, Vec<String>>,
     left_out: LeftOut,
 }
 
@@ -467,10 +467,11 @@ impl Catalogue {
                             .roots
                             .get(role)
                             .is_some_and(|root| self.derives_from(ty, root))
-                            || relevance
-                                .suffixes
-                                .get(role)
-                                .is_some_and(|suffix| name.ends_with(suffix.as_str()))
+                            || relevance.suffixes.get(role).is_some_and(|suffixes| {
+                                suffixes
+                                    .iter()
+                                    .any(|suffix| name.ends_with(suffix.as_str()))
+                            })
                     })
                     .collect();
                 (name.clone(), roles)

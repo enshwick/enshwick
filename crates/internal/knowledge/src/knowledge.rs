@@ -60,10 +60,15 @@ use crate::abi::{Header, KnowledgeChange, KnowledgeInfo, Status};
 use crate::{Entity, Host, PlayerKey};
 use enshwick_world::__internal::world_status;
 
+#[cfg(feature = "typed")]
+pub(crate) mod rules;
 #[cfg(feature = "unstable")]
 pub(crate) mod script;
+
 #[cfg(feature = "typed")]
 use enshwick_world::__load::*;
+#[cfg(feature = "typed")]
+pub use rules::{NewRule, RuleChange, RuleGrant, RuleId, RuleInfo};
 
 pub use enshwick_content::knowledge::{KnowledgeType, Scope};
 

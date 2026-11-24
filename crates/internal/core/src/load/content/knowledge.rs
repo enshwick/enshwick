@@ -71,4 +71,55 @@ impl Load<'_> {
     /// ```
     #[script]
     pub fn add_experience(&mut self, new: NewExperience) -> Result<ExperienceValue, Off>;
+
+    /// Adds a query to the game's query database beside its own named
+    /// queries, on the server and the client alike, and returns its id for
+    /// [`KnowledgeQuery::game`](crate::content::knowledge::KnowledgeQuery::game):
+    /// its parts joined by its form, inverted when it asks, evaluated by the
+    /// game as it evaluates its own. A quest step, a lore entry or an item
+    /// set that asks it reads the game's answer. A part may name a
+    /// game query, the game's or one a mod added before it. One patch of the
+    /// database serves all of a mod's queries; a query whose id another
+    /// mod's holds, or whose part names a query the database lacks when the
+    /// game first reads it, is logged and left out.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for a query without parts, one of other than two parts, a
+    /// count query from 0, an id the game's database holds, an id the
+    /// loader refuses (see [`Load::declare`]), and on the first call a
+    /// database that is not reflected, not one resource or does not read.
+    ///
+    /// # Examples
+    ///
+    /// See [`NewQuery`](crate::content::knowledge::NewQuery).
+    #[script]
+    pub fn add_query(
+        &mut self,
+        new: crate::content::knowledge::NewQuery,
+    ) -> Result<crate::content::knowledge::GameQuery, Off>;
+
+    /// The game's named query `name`, as its database names it, for a mod
+    /// to ask where the game asks it: `ItemSetCompleted_Grassland` is the
+    /// query of a full Grassland collection (server 26430253).
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for a name no query of the game's database holds, and on the
+    /// first call a database that is not reflected, not one resource or
+    /// does not read.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::knowledge::KnowledgeQuery;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let grassland = load.game_query("ItemSetCompleted_Grassland")?;
+    ///     let _done_when = KnowledgeQuery::game(grassland);
+    ///     Ok(())
+    /// }
+    /// ```
+    #[script]
+    pub fn game_query(&mut self, name: &str) -> Result<crate::content::knowledge::GameQuery, Off>;
 }

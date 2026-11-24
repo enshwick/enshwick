@@ -72,14 +72,17 @@ Load::add_experience unstable
 Load::add_flame_altar
 Load::add_icon
 Load::add_item
+Load::add_item_set unstable
 Load::add_journal_page unstable
 Load::add_knowledge unstable
+Load::add_knowledge_rule unstable
 Load::add_loot
 Load::add_loot_affixes unstable
 Load::add_music unstable
 Load::add_pack
 Load::add_perk unstable
 Load::add_prop
+Load::add_query unstable
 Load::add_quest unstable
 Load::add_recipe unstable
 Load::add_recipe_with unstable
@@ -106,7 +109,10 @@ Load::caller unstable
 Load::cap_task_workers
 Load::change
 Load::change_arsenal unstable
+Load::change_item_set unstable
 Load::change_items unstable
+Load::change_journal_page unstable
+Load::change_knowledge_rule unstable
 Load::change_quest unstable
 Load::change_recipes
 Load::change_sound
@@ -146,6 +152,7 @@ Load::find_code
 Load::fog_of_war unstable
 Load::game_event_type
 Load::game_event_types
+Load::game_query unstable
 Load::game_settings
 Load::hash
 Load::hook
@@ -156,6 +163,7 @@ Load::interaction_targets unstable
 Load::inventories
 Load::item_data unstable
 Load::knowledge
+Load::knowledge_rules unstable
 Load::limit_altar_level unstable
 Load::map unstable
 Load::mod_dir
@@ -219,7 +227,11 @@ Load::raise_base_limit
 Load::rate unstable
 Load::rekey_item unstable
 Load::remove_item unstable
+Load::remove_item_set unstable
+Load::remove_journal_page unstable
+Load::remove_knowledge_rule unstable
 Load::remove_loot_table unstable
+Load::remove_quest unstable
 Load::remove_workshop unstable
 Load::rename_content
 Load::replace_sound unstable
@@ -3613,6 +3625,53 @@ content::journal::CraftTarget::Recipe unstable
 content::journal::CraftTarget::TY unstable
 content::journal::CraftTarget::from_value unstable
 content::journal::CraftTarget::into_value unstable
+content::journal::EntryId unstable
+content::journal::EntryId::TY unstable
+content::journal::EntryId::from_value unstable
+content::journal::EntryId::get unstable
+content::journal::EntryId::into_value unstable
+content::journal::EntryId::new unstable
+content::journal::ItemSetCategory unstable
+content::journal::ItemSetCategory::TY unstable
+content::journal::ItemSetCategory::from_value unstable
+content::journal::ItemSetCategory::get unstable
+content::journal::ItemSetCategory::into_value unstable
+content::journal::ItemSetCategory::new unstable
+content::journal::ItemSetChange unstable
+content::journal::ItemSetChange::TY unstable
+content::journal::ItemSetChange::done_when unstable
+content::journal::ItemSetChange::entries unstable
+content::journal::ItemSetChange::experience unstable
+content::journal::ItemSetChange::from_value unstable
+content::journal::ItemSetChange::into_value unstable
+content::journal::ItemSetChange::name unstable
+content::journal::ItemSetChange::recipe_rewards unstable
+content::journal::ItemSetChange::shown_when unstable
+content::journal::ItemSetEntry unstable
+content::journal::ItemSetEntry::TY unstable
+content::journal::ItemSetEntry::done_when unstable
+content::journal::ItemSetEntry::from_value unstable
+content::journal::ItemSetEntry::hints unstable
+content::journal::ItemSetEntry::into_value unstable
+content::journal::ItemSetEntry::item unstable
+content::journal::ItemSetEntry::new unstable
+content::journal::ItemSetEntry::recipe unstable
+content::journal::ItemSetHint unstable
+content::journal::ItemSetHint::TY unstable
+content::journal::ItemSetHint::done_when unstable
+content::journal::ItemSetHint::from_value unstable
+content::journal::ItemSetHint::into_value unstable
+content::journal::ItemSetHint::level unstable
+content::journal::ItemSetHint::marker unstable
+content::journal::ItemSetHint::objective unstable
+content::journal::ItemSetHint::shown_when unstable
+content::journal::ItemSetHint::text unstable
+content::journal::ItemSetId unstable
+content::journal::ItemSetId::TY unstable
+content::journal::ItemSetId::from_value unstable
+content::journal::ItemSetId::get unstable
+content::journal::ItemSetId::into_value unstable
+content::journal::ItemSetId::new unstable
 content::journal::JOURNAL_REGISTRY unstable
 content::journal::KillTarget unstable
 content::journal::KillTarget::Faction unstable
@@ -3620,6 +3679,18 @@ content::journal::KillTarget::TY unstable
 content::journal::KillTarget::Template unstable
 content::journal::KillTarget::from_value unstable
 content::journal::KillTarget::into_value unstable
+content::journal::NewItemSet unstable
+content::journal::NewItemSet::TY unstable
+content::journal::NewItemSet::category unstable
+content::journal::NewItemSet::entries unstable
+content::journal::NewItemSet::experience unstable
+content::journal::NewItemSet::from_value unstable
+content::journal::NewItemSet::id unstable
+content::journal::NewItemSet::into_value unstable
+content::journal::NewItemSet::name unstable
+content::journal::NewItemSet::new unstable
+content::journal::NewItemSet::recipe_rewards unstable
+content::journal::NewItemSet::shown_when unstable
 content::journal::NewJournalPage unstable
 content::journal::NewJournalPage::TY unstable
 content::journal::NewJournalPage::category unstable
@@ -3630,6 +3701,7 @@ content::journal::NewJournalPage::into_value unstable
 content::journal::NewJournalPage::name unstable
 content::journal::NewQuest unstable
 content::journal::NewQuest::TY unstable
+content::journal::NewQuest::document unstable
 content::journal::NewQuest::for_all_players unstable
 content::journal::NewQuest::from_value unstable
 content::journal::NewQuest::id unstable
@@ -3638,9 +3710,11 @@ content::journal::NewQuest::kind unstable
 content::journal::NewQuest::main unstable
 content::journal::NewQuest::name unstable
 content::journal::NewQuest::new unstable
+content::journal::NewQuest::priority unstable
 content::journal::NewQuest::rewards unstable
 content::journal::NewQuest::source unstable
 content::journal::NewQuest::steps unstable
+content::journal::NewQuest::tutorial unstable
 content::journal::Objective unstable
 content::journal::Objective::Build unstable
 content::journal::Objective::Collect unstable
@@ -3652,6 +3726,16 @@ content::journal::Objective::TY unstable
 content::journal::Objective::count unstable
 content::journal::Objective::from_value unstable
 content::journal::Objective::into_value unstable
+content::journal::PageChange unstable
+content::journal::PageChange::TY unstable
+content::journal::PageChange::category unstable
+content::journal::PageChange::document unstable
+content::journal::PageChange::entries unstable
+content::journal::PageChange::from_value unstable
+content::journal::PageChange::into_value unstable
+content::journal::PageChange::name unstable
+content::journal::PageChange::priority unstable
+content::journal::PageChange::tutorial unstable
 content::journal::PageEntry unstable
 content::journal::PageEntry::TY unstable
 content::journal::PageEntry::from_value unstable
@@ -3662,11 +3746,18 @@ content::journal::PageEntry::text unstable
 content::journal::QuestChange unstable
 content::journal::QuestChange::TY unstable
 content::journal::QuestChange::add_rewards unstable
+content::journal::QuestChange::document unstable
 content::journal::QuestChange::for_all_players unstable
 content::journal::QuestChange::from_value unstable
 content::journal::QuestChange::into_value unstable
+content::journal::QuestChange::kind unstable
+content::journal::QuestChange::main unstable
+content::journal::QuestChange::name unstable
+content::journal::QuestChange::priority unstable
 content::journal::QuestChange::rewards unstable
+content::journal::QuestChange::source unstable
 content::journal::QuestChange::steps unstable
+content::journal::QuestChange::tutorial unstable
 content::journal::QuestReward unstable
 content::journal::QuestReward::Experience unstable
 content::journal::QuestReward::Item unstable
@@ -3680,6 +3771,7 @@ content::journal::QuestStep::from_value unstable
 content::journal::QuestStep::icon unstable
 content::journal::QuestStep::into_value unstable
 content::journal::QuestStep::level unstable
+content::journal::QuestStep::marker unstable
 content::journal::QuestStep::name unstable
 content::journal::QuestStep::new unstable
 content::journal::QuestStep::objectives unstable
@@ -3687,13 +3779,63 @@ content::journal::QuestStep::owned unstable
 content::journal::QuestStep::progress unstable
 content::journal::QuestStep::shown_when unstable
 content::journal::QuestStep::text unstable
+content::journal::QuestStep::voiceover unstable
 content::journal::StepChange unstable
 content::journal::StepChange::TY unstable
 content::journal::StepChange::done_when unstable
 content::journal::StepChange::from_value unstable
+content::journal::StepChange::icon unstable
 content::journal::StepChange::into_value unstable
+content::journal::StepChange::level unstable
+content::journal::StepChange::marker unstable
+content::journal::StepChange::name unstable
+content::journal::StepChange::progress unstable
 content::journal::StepChange::shown_when unstable
 content::journal::StepChange::step unstable
+content::journal::StepChange::text unstable
+content::journal::StepChange::voiceover unstable
+content::journal::StepEdit unstable
+content::journal::StepEdit::Change unstable
+content::journal::StepEdit::Insert unstable
+content::journal::StepEdit::Move unstable
+content::journal::StepEdit::Remove unstable
+content::journal::StepEdit::TY unstable
+content::journal::StepEdit::from_value unstable
+content::journal::StepEdit::into_value unstable
+content::journal::StepInsert unstable
+content::journal::StepInsert::TY unstable
+content::journal::StepInsert::at unstable
+content::journal::StepInsert::from_value unstable
+content::journal::StepInsert::into_value unstable
+content::journal::StepInsert::step unstable
+content::journal::StepMove unstable
+content::journal::StepMove::TY unstable
+content::journal::StepMove::from unstable
+content::journal::StepMove::from_value unstable
+content::journal::StepMove::into_value unstable
+content::journal::StepMove::to unstable
+content::journal::item_set_category unstable
+content::journal::item_set_category::ALL unstable
+content::journal::item_set_category::ANIMALS_AND_PETS unstable
+content::journal::item_set_category::BUILDING_BLOCKS unstable
+content::journal::item_set_category::CLOTHES_ALBANEVE_SUMMITS unstable
+content::journal::item_set_category::CLOTHES_CINDERS_CRADLE unstable
+content::journal::item_set_category::CLOTHES_KINDLEWASTES unstable
+content::journal::item_set_category::CLOTHES_MISCELLANEOUS unstable
+content::journal::item_set_category::CLOTHES_NOMAD_HIGHLANDS unstable
+content::journal::item_set_category::CLOTHES_REVELWOOD unstable
+content::journal::item_set_category::CLOTHES_SPRINGLANDS unstable
+content::journal::item_set_category::CLOTHES_VEILWATER_BASIN unstable
+content::journal::item_set_category::COLLECTIONS unstable
+content::journal::item_set_category::COLOR_PALETTES unstable
+content::journal::item_set_category::COOKED_FOODS_AND_DISHES unstable
+content::journal::item_set_category::ENEMY_TROPHIES unstable
+content::journal::item_set_category::MUSIC unstable
+content::journal::item_set_category::PLAYER_CUSTOMIZATION unstable
+content::journal::item_set_category::TERRAIN_MATERIALS unstable
+content::journal::item_set_category::UNCOOKED_FOOD_AND_HERBS unstable
+content::journal::item_set_category::UNIQUE_EQUIPMENT unstable
+content::journal::item_set_category::WEAPON_GEMS unstable
 content::journal::lore_category unstable
 content::journal::lore_category::ABOUT_SCAVENGERS unstable
 content::journal::lore_category::ALL unstable
@@ -3738,7 +3880,6 @@ content::knowledge::KnowledgeTest unstable
 content::knowledge::KnowledgeTest::AtLeast unstable
 content::knowledge::KnowledgeTest::Below unstable
 content::knowledge::KnowledgeTest::Equals unstable
-content::knowledge::KnowledgeTest::Fails unstable
 content::knowledge::KnowledgeTest::HasFlag unstable
 content::knowledge::KnowledgeTest::Holds unstable
 content::knowledge::KnowledgeTest::IsSet unstable
@@ -3765,6 +3906,23 @@ content::knowledge::NewKnowledge::kind unstable
 content::knowledge::NewKnowledge::new unstable
 content::knowledge::NewKnowledge::scope unstable
 content::knowledge::NewKnowledge::skill_points unstable
+content::knowledge::NewQuery unstable
+content::knowledge::NewQuery::TY unstable
+content::knowledge::NewQuery::form unstable
+content::knowledge::NewQuery::from_value unstable
+content::knowledge::NewQuery::id unstable
+content::knowledge::NewQuery::into_value unstable
+content::knowledge::NewQuery::invert unstable
+content::knowledge::NewQuery::new unstable
+content::knowledge::NewQuery::parts unstable
+content::knowledge::NewQuery::scope unstable
+content::knowledge::QueryForm unstable
+content::knowledge::QueryForm::All unstable
+content::knowledge::QueryForm::Any unstable
+content::knowledge::QueryForm::OneOf unstable
+content::knowledge::QueryForm::TY unstable
+content::knowledge::QueryForm::from_value unstable
+content::knowledge::QueryForm::into_value unstable
 content::loot_tables
 content::loot_tables::FillTableLayout
 content::loot_tables::FillTableLayout::components
@@ -5663,6 +5821,14 @@ knowledge::Known::is_set
 knowledge::Known::r#type
 knowledge::Known::scope
 knowledge::Known::value
+knowledge::NewRule unstable
+knowledge::NewRule::TY unstable
+knowledge::NewRule::from_value unstable
+knowledge::NewRule::grant unstable
+knowledge::NewRule::id unstable
+knowledge::NewRule::into_value unstable
+knowledge::NewRule::scope unstable
+knowledge::NewRule::when unstable
 knowledge::Refusal unstable
 knowledge::Refusal::Counter unstable
 knowledge::Refusal::Experience unstable
@@ -5683,6 +5849,32 @@ knowledge::Revoke::TY unstable
 knowledge::Revoke::Unflag unstable
 knowledge::Revoke::from_value unstable
 knowledge::Revoke::into_value unstable
+knowledge::RuleChange unstable
+knowledge::RuleChange::TY unstable
+knowledge::RuleChange::from_value unstable
+knowledge::RuleChange::grant unstable
+knowledge::RuleChange::into_value unstable
+knowledge::RuleChange::when unstable
+knowledge::RuleGrant unstable
+knowledge::RuleGrant::TY unstable
+knowledge::RuleGrant::from_value unstable
+knowledge::RuleGrant::grant unstable
+knowledge::RuleGrant::id unstable
+knowledge::RuleGrant::into_value unstable
+knowledge::RuleId unstable
+knowledge::RuleId::TY unstable
+knowledge::RuleId::from_value unstable
+knowledge::RuleId::index unstable
+knowledge::RuleId::into_value unstable
+knowledge::RuleId::scope unstable
+knowledge::RuleInfo unstable
+knowledge::RuleInfo::TY unstable
+knowledge::RuleInfo::from_value unstable
+knowledge::RuleInfo::grant unstable
+knowledge::RuleInfo::id unstable
+knowledge::RuleInfo::into_value unstable
+knowledge::RuleInfo::on_event unstable
+knowledge::RuleInfo::when unstable
 knowledge::Scope
 knowledge::Scope::Player
 knowledge::Scope::TY
@@ -6264,6 +6456,39 @@ quests::Holder::TY unstable
 quests::Holder::World unstable
 quests::Holder::from_value unstable
 quests::Holder::into_value unstable
+quests::ItemSetEntryInfo unstable
+quests::ItemSetEntryInfo::TY unstable
+quests::ItemSetEntryInfo::done_when unstable
+quests::ItemSetEntryInfo::entry unstable
+quests::ItemSetEntryInfo::from_value unstable
+quests::ItemSetEntryInfo::hints unstable
+quests::ItemSetEntryInfo::into_value unstable
+quests::ItemSetEntryInfo::item unstable
+quests::ItemSetEntryInfo::quest unstable
+quests::ItemSetEntryInfo::recipe unstable
+quests::ItemSetHintInfo unstable
+quests::ItemSetHintInfo::TY unstable
+quests::ItemSetHintInfo::done_when unstable
+quests::ItemSetHintInfo::from_value unstable
+quests::ItemSetHintInfo::into_value unstable
+quests::ItemSetHintInfo::level unstable
+quests::ItemSetHintInfo::marker unstable
+quests::ItemSetHintInfo::objective unstable
+quests::ItemSetHintInfo::shown_when unstable
+quests::ItemSetHintInfo::text unstable
+quests::ItemSetInfo unstable
+quests::ItemSetInfo::TY unstable
+quests::ItemSetInfo::category unstable
+quests::ItemSetInfo::done_when unstable
+quests::ItemSetInfo::entries unstable
+quests::ItemSetInfo::experience unstable
+quests::ItemSetInfo::from_value unstable
+quests::ItemSetInfo::id unstable
+quests::ItemSetInfo::into_value unstable
+quests::ItemSetInfo::name unstable
+quests::ItemSetInfo::recipe_rewards unstable
+quests::ItemSetInfo::rewarded unstable
+quests::ItemSetInfo::shown_when unstable
 quests::MoveQuestError unstable
 quests::MoveQuestError::NoQuest unstable
 quests::MoveQuestError::Unwritable unstable
@@ -6308,6 +6533,7 @@ quests::Quests::advance unstable
 quests::Quests::all unstable
 quests::Quests::complete unstable
 quests::Quests::functions unstable
+quests::Quests::item_sets unstable
 quests::Quests::pages unstable
 quests::Quests::quest unstable
 quests::Quests::reset unstable
@@ -9883,6 +10109,22 @@ typed::GameKnowledgeQueryResourceBase::query_id unstable
 typed::GameKnowledgeQueryResourceBase::query_index unstable
 typed::GameKnowledgeQueryResourceBase::r#type unstable
 typed::GameKnowledgeQueryResourceBase::to_value unstable
+typed::GameKnowledgeQueryResourceDb unstable
+typed::GameKnowledgeQueryResourceDb::ID unstable
+typed::GameKnowledgeQueryResourceDb::ROLES unstable
+typed::GameKnowledgeQueryResourceDb::SHAPE unstable
+typed::GameKnowledgeQueryResourceDb::TY unstable
+typed::GameKnowledgeQueryResourceDb::demo_knowledge_id unstable
+typed::GameKnowledgeQueryResourceDb::from_value unstable
+typed::GameKnowledgeQueryResourceDb::into_value unstable
+typed::GameKnowledgeQueryResourceDb::npc_query_count unstable
+typed::GameKnowledgeQueryResourceDb::player_query_start_index unstable
+typed::GameKnowledgeQueryResourceDb::queried_items unstable
+typed::GameKnowledgeQueryResourceDb::queries unstable
+typed::GameKnowledgeQueryResourceDb::runtime_player_query_start_index unstable
+typed::GameKnowledgeQueryResourceDb::runtime_queries unstable
+typed::GameKnowledgeQueryResourceDb::runtime_query_hash unstable
+typed::GameKnowledgeQueryResourceDb::to_value unstable
 typed::GameKnowledgeQueryTrigger unstable
 typed::GameKnowledgeQueryTrigger::SHAPE unstable
 typed::GameKnowledgeQueryTrigger::TY unstable

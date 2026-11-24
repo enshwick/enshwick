@@ -126,6 +126,10 @@ mod item_arguments;
 mod item_changes;
 #[cfg(feature = "unstable")]
 mod item_data;
+#[cfg(feature = "typed")]
+mod item_sets;
+#[cfg(feature = "typed")]
+mod item_sets_refused;
 #[cfg(feature = "unstable")]
 mod item_slots;
 #[cfg(feature = "unstable")]
@@ -136,13 +140,21 @@ mod items;
 mod join_rules;
 #[cfg(feature = "typed")]
 mod journal;
+#[cfg(feature = "typed")]
+mod journal_edits;
+#[cfg(feature = "typed")]
+mod journal_removal;
 mod knowledge;
 #[cfg(feature = "typed")]
 mod knowledge_content;
 #[cfg(feature = "typed")]
 mod knowledge_many;
+#[cfg(feature = "typed")]
+mod knowledge_queries;
 #[cfg(feature = "unstable")]
 mod knowledge_revokes;
+#[cfg(feature = "typed")]
+mod knowledge_rules;
 #[cfg(feature = "unstable")]
 mod labels_and_renames;
 mod language;
@@ -206,6 +218,8 @@ mod private_replies;
 mod props;
 mod props_server;
 mod published_texts;
+#[cfg(feature = "typed")]
+mod query_names;
 #[cfg(feature = "typed")]
 mod quest_objective_kinds;
 #[cfg(feature = "typed")]
