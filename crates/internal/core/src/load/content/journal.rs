@@ -120,9 +120,10 @@ impl Load<'_> {
     /// a save that holds its progress still opens. Mods change and remove a
     /// quest in load order. A removal is logged and left out when the
     /// journal first builds while a step of another mod's quest earlier in
-    /// load order asks for the quest's id itself; a step that asks through a
-    /// game query, such as one of [`Load::add_query`], is not followed and
-    /// then waits on a quest that is gone, with no log line.
+    /// load order asks for the quest's or one of its steps' id, itself or
+    /// through a game query that reads it, such as one of
+    /// [`Load::add_query`], with the queries it names in turn; while the
+    /// game's queries do not read, every game query counts.
     ///
     /// # Errors
     ///

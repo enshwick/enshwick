@@ -243,3 +243,20 @@ fn a_query_reads_its_own_knowledge_and_that_of_the_queries_it_names() {
     );
     assert!(knowledge_read(&Value::Struct(Vec::new())).is_empty());
 }
+
+#[test]
+fn a_query_s_world_and_player_twins_read_as_one_query() {
+    let db = Value::Struct(vec![(
+        QUERIES.into(),
+        Value::List(vec![
+            query("t", 5, false, vec![action(0x50, None)]),
+            query("t", 5, true, vec![action(0x51, None)]),
+            query("n", 6, false, vec![action(5, Some((0, 1)))]),
+        ]),
+    )]);
+    assert_eq!(
+        knowledge_read(&db),
+        vec![(5, vec![0x50, 0x51]), (6, vec![0x50, 0x51])],
+        "both twins' parts count, for the query and one naming it"
+    );
+}

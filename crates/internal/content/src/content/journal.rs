@@ -35,11 +35,13 @@
 //! ```
 
 use crate::__load::*;
+use std::cell::LazyCell;
 use std::sync::{Arc, Mutex};
 
 use crate::abi::Level;
 use crate::content::knowledge::{
     ExperienceValue, KnowledgeQuery, NewKnowledge, hash_key, key_of_hash, serve_list,
+    served_knowledge_read,
 };
 use crate::knowledge::{KnowledgeId, KnowledgeType, Scope};
 use crate::locks::Relock as _;
@@ -60,7 +62,7 @@ pub mod lore_category;
 pub(crate) mod objectives;
 
 pub use change::{PageChange, QuestChange, StepChange, StepEdit, StepInsert, StepMove};
-use change::{change_page_in, change_quest_in, remove_page_in, remove_quest_in};
+use change::{Reads, change_page_in, change_quest_in, remove_page_in, remove_quest_in};
 pub use item_sets::{
     ItemSetCategory, ItemSetChange, ItemSetEntry, ItemSetHint, ItemSetId, NewItemSet,
 };
@@ -87,6 +89,8 @@ const FOR_ALL: &str = "unlockForAllPlayers";
 const SHOWN: &str = "knowledgeRequirement";
 const DONE: &str = "completionRequirement";
 const PROGRESS: &str = "progressStepsRequirement";
+const TYPE: &str = "type";
+const QUERY_ID: &str = "knowledgeOrQueryId";
 
 /// The priority the journal sorts a mod's quests and pages by, the most
 /// common of the game's own quests (server 387).
@@ -137,10 +141,10 @@ fn text_key(tag: Guid) -> u32 {
 /// (server 387).
 fn never() -> Value {
     Value::Struct(vec![
-        ("knowledgeOrQueryId".into(), hash_key(0)),
+        (QUERY_ID.into(), hash_key(0)),
         ("compareValue".into(), Value::Uint(0)),
         ("compareOperator".into(), Value::Name("GreaterThan".into())),
-        ("type".into(), Value::Name("Extern".into())),
+        (TYPE.into(), Value::Name("Extern".into())),
         ("isExplicitPlayerKnowledgeQuery".into(), Value::Bool(false)),
     ])
 }
@@ -604,7 +608,7 @@ pub(crate) fn quest_value(new: &NewQuest, document: Value) -> Result<Value, Off>
     }
     fields.extend([
         ("source".into(), new.source.to_value()),
-        ("type".into(), new.kind.to_value()),
+        (TYPE.into(), new.kind.to_value()),
         ("isMainQuest".into(), Value::Bool(new.main)),
         (FOR_ALL.into(), Value::Bool(new.for_all_players)),
         (
@@ -725,8 +729,14 @@ impl Edit {
     }
 
     /// Makes the change in `registry`, which is left as it was on an error;
-    /// `own` holds the quest ids of the mod's own quests.
-    fn apply(&self, registry: &mut Value, own: &[u32]) -> Result<(), Off> {
+    /// `own` holds the quest ids of the mod's own quests and `reads` the
+    /// knowledge each game query reads, read only when a removal needs it.
+    fn apply(
+        &self,
+        registry: &mut Value,
+        own: &[u32],
+        reads: &LazyCell<Reads, impl FnOnce() -> Reads>,
+    ) -> Result<(), Off> {
         match self {
             Self::Quest(new) => add_quest_to(registry, new),
             #[cfg(feature = "unstable")]
@@ -736,7 +746,7 @@ impl Edit {
             Self::ChangePage(page, category, change) => {
                 change_page_in(registry, *page, *category, change)
             }
-            Self::Remove(quest, vanilla) => remove_quest_in(registry, *quest, vanilla, own),
+            Self::Remove(quest, vanilla) => remove_quest_in(registry, *quest, vanilla, own, reads),
             #[cfg(feature = "unstable")]
             Self::RemovePage(page) => remove_page_in(registry, *page),
             Self::ItemSet(edit) => edit.apply(registry),
@@ -772,8 +782,17 @@ impl AddedJournal {
     fn serve(host: Host, key: crate::abi::ResourceKey) -> Result<Self, Off> {
         let edits = serve_list(host, key, move |mut registry, edits: &[Edit]| {
             let own: Vec<u32> = edits.iter().filter_map(Edit::own_quest).collect();
+            let reads = LazyCell::new(|| {
+                served_knowledge_read(host)
+                    .inspect_err(|off| {
+                        let why =
+                            "a removal keeps a quest another mod asks for through any game query";
+                        host.log(Level::WARN, &format!("journal: {why}: {off}"));
+                    })
+                    .ok()
+            });
             for edit in edits {
-                if let Err(off) = edit.apply(&mut registry, &own) {
+                if let Err(off) = edit.apply(&mut registry, &own, &reads) {
                     host.log(Level::WARN, &off.to_string());
                 }
             }

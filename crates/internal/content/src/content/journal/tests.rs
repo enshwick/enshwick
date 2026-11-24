@@ -7,6 +7,17 @@ fn query(id: u32) -> KnowledgeQuery {
     KnowledgeQuery::is_set(KnowledgeId::new(id), Scope::Player)
 }
 
+/// The query database read as `list`.
+fn reads(list: Vec<(u32, Vec<u32>)>) -> LazyCell<Reads, impl FnOnce() -> Reads> {
+    LazyCell::new(move || Some(list))
+}
+
+/// A query database a removal must leave unread: no step of another mod
+/// asks through a game query.
+fn unread() -> LazyCell<Reads, impl FnOnce() -> Reads> {
+    LazyCell::new(|| panic!("the query database was read"))
+}
+
 fn registry() -> Value {
     let mut vanilla = NewQuest::new(
         Id::new("demo.vanilla:q"),
@@ -434,12 +445,12 @@ fn a_quest_another_mod_chains_on_stays_and_one_only_the_game_or_the_mod_chains_o
     add_quest_to(&mut held, &other).unwrap();
     let vanilla_ids = [id.get()];
     let before = held.clone();
-    let off = remove_quest_in(&mut held, id, &vanilla_ids, &[]).unwrap_err();
+    let off = remove_quest_in(&mut held, id, &vanilla_ids, &[], &unread()).unwrap_err();
     assert!(off.to_string().contains("of another mod"), "{off}");
     assert_eq!(held, before);
 
     let own = [KnowledgeId::from_guid(other.id.guid()).get()];
-    remove_quest_in(&mut held, id, &vanilla_ids, &own).unwrap();
+    remove_quest_in(&mut held, id, &vanilla_ids, &own, &unread()).unwrap();
     assert_eq!(quests(&held).len(), 1);
     assert!(!holds(&held, id.get()));
     for step in step_ids(Id::new("demo.vanilla:q"), 1) {
@@ -449,8 +460,74 @@ fn a_quest_another_mod_chains_on_stays_and_one_only_the_game_or_the_mod_chains_o
         );
     }
     assert!(
-        remove_quest_in(&mut held, id, &vanilla_ids, &own).is_err(),
+        remove_quest_in(&mut held, id, &vanilla_ids, &own, &unread()).is_err(),
         "gone"
+    );
+}
+
+#[test]
+fn a_quest_whose_step_another_mod_asks_for_stays() {
+    let id = vanilla();
+    let step = step_ids(Id::new("demo.vanilla:q"), 1)[0];
+    let other = NewQuest::new(
+        Id::new("other.mod:step"),
+        Guid([5; 16]),
+        vec![QuestStep::new(
+            Guid([6; 16]),
+            Guid([7; 16]),
+            query(4),
+            query(step),
+        )],
+    );
+    let mut held = registry();
+    add_quest_to(&mut held, &other).unwrap();
+    let before = held.clone();
+    let off = remove_quest_in(&mut held, id, &[id.get()], &[], &unread()).unwrap_err();
+    assert!(off.to_string().contains("of another mod"), "{off}");
+    assert_eq!(held, before);
+}
+
+#[test]
+fn a_quest_another_mod_asks_for_through_a_game_query_stays() {
+    use crate::content::knowledge::GameQuery;
+
+    let id = vanilla();
+    let (asking, unrelated) = (0x0000_0a01, 0x0000_0a02);
+    let through = |game: u32| {
+        NewQuest::new(
+            Id::new("other.mod:through"),
+            Guid([5; 16]),
+            vec![QuestStep::new(
+                Guid([6; 16]),
+                Guid([7; 16]),
+                KnowledgeQuery::game(GameQuery::new(game)),
+                query(4),
+            )],
+        )
+    };
+    let db = || reads(vec![(asking, vec![id.get()]), (unrelated, vec![1, 2])]);
+    let vanilla_ids = [id.get()];
+
+    let mut held = registry();
+    add_quest_to(&mut held, &through(asking)).unwrap();
+    let before = held.clone();
+    let off = remove_quest_in(&mut held, id, &vanilla_ids, &[], &db()).unwrap_err();
+    assert!(off.to_string().contains("of another mod"), "{off}");
+    assert_eq!(held, before);
+
+    let mut held = registry();
+    add_quest_to(&mut held, &through(unrelated)).unwrap();
+    let before = held.clone();
+    let off = remove_quest_in(&mut held, id, &vanilla_ids, &[], &LazyCell::new(|| None));
+    assert!(
+        off.is_err(),
+        "a database that does not read keeps the quest"
+    );
+    assert_eq!(held, before);
+    remove_quest_in(&mut held, id, &vanilla_ids, &[], &db()).unwrap();
+    assert!(
+        !holds(&held, id.get()),
+        "a query that reads other knowledge"
     );
 }
 
