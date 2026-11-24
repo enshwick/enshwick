@@ -29,7 +29,11 @@ fn a_struct_and_callback_in_a_domain_folder_reach_the_header_with_their_asserts(
     let root = Scratch::new("header-test-nested").unwrap();
     let files = [
         (ABI_SOURCE, "mod events;\npub use events::*;\n"),
-        (VALUES_ABI_SOURCE, ""),
+        (VALUES_ABI_SOURCE, "mod events;\npub use events::*;\n"),
+        (
+            "crates/internal/values/src/abi/events.rs",
+            "/// A value's part.\n#[repr(C)]\npub struct Amount {\n    pub count: u32,\n}\n",
+        ),
         (
             "crates/internal/abi/src/abi/events.rs",
             "mod knowledge;\npub use knowledge::*;\n",
@@ -41,7 +45,8 @@ fn a_struct_and_callback_in_a_domain_folder_reach_the_header_with_their_asserts(
         ),
         (
             LAYOUT,
-            "abi 1.0\nDeep size 4 align 4\n    value at 0 size 4 type u32\n",
+            "abi 1.0\nAmount size 4 align 4\n    count at 0 size 4 type u32\n\
+             Deep size 4 align 4\n    value at 0 size 4 type u32\n",
         ),
         (
             CONFIG,
@@ -53,6 +58,10 @@ fn a_struct_and_callback_in_a_domain_folder_reach_the_header_with_their_asserts(
     drop(root);
     let header = header.unwrap();
     assert!(header.contains("typedef struct EnshwickDeep {"), "{header}");
+    assert!(
+        header.contains("typedef struct EnshwickAmount {"),
+        "{header}"
+    );
     assert!(
         header.contains("(*EnshwickDeepFn)(uint32_t value)"),
         "{header}"
@@ -109,7 +118,7 @@ fn a_failed_copy_names_the_scratch_path_it_could_not_write() {
     let taken = root.join("taken");
     std::fs::write(&taken, "").unwrap();
     let error = copy_abi(&root, &taken).unwrap_err();
-    let into = taken.join("lib.rs").display().to_string();
+    let into = taken.join(ABI_COPY).display().to_string();
     assert!(error.starts_with(&into), "{error}");
 }
 

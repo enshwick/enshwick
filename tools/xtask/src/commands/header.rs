@@ -19,8 +19,11 @@ const ABI_SOURCE: &str = "crates/internal/abi/src/abi.rs";
 /// The ABI types the ABI module re-exports from the crate of the value
 /// types, which cbindgen parses beside it.
 const VALUES_ABI_SOURCE: &str = "crates/internal/values/src/abi.rs";
-/// The name of that file's copy beside the ABI module's.
-const VALUES_ABI_COPY: &str = "values_abi.rs";
+/// The ABI module's copy, the root of the crate cbindgen parses.
+const ABI_COPY: &str = "lib.rs";
+/// That file's copy, in a folder of its own so its submodules sit apart from
+/// the ABI module's.
+const VALUES_ABI_COPY: &str = "values/lib.rs";
 /// The golden layout file.
 pub(crate) const LAYOUT: &str = "crates/internal/abi/src/abi/layout.txt";
 /// cbindgen's settings.
@@ -106,7 +109,7 @@ fn generate(root: &Path) -> Result<String, String> {
     let mut builder = cbindgen::Builder::new()
         .with_config(config)
         .with_item_prefix(PREFIX)
-        .with_src(crate_root.join("lib.rs"))
+        .with_src(crate_root.join(ABI_COPY))
         .with_src(crate_root.join(VALUES_ABI_COPY));
     for shape in &shapes {
         builder = builder.include_item(&shape.name);
@@ -204,18 +207,16 @@ fn tidy(header: &str) -> String {
     text
 }
 
-/// The folder of the ABI module's submodules.
-fn abi_modules(root: &Path) -> PathBuf {
-    root.join(ABI_SOURCE).with_extension("")
-}
-
-/// The files of the ABI module's submodules, parsed, a domain's folder
-/// (`events/knowledge.rs`) included: the modules rustc builds outside tests,
-/// which are the ones cbindgen reads.
-fn abi_files(root: &Path) -> Result<Vec<(PathBuf, syn::File)>, String> {
+/// The files of the submodules of the module at `source`, parsed, a
+/// domain's folder (`events/knowledge.rs`) included: the modules rustc
+/// builds outside tests, which are the ones cbindgen reads.
+fn module_files(source: &Path) -> Result<Vec<(PathBuf, syn::File)>, String> {
     let mut files = Vec::new();
-    let source = parse_source(&root.join(ABI_SOURCE))?;
-    submodules(&source, &abi_modules(root), &mut files)?;
+    submodules(
+        &parse_source(source)?,
+        &source.with_extension(""),
+        &mut files,
+    )?;
     Ok(files)
 }
 
@@ -264,7 +265,7 @@ fn is_test(attrs: &[syn::Attribute]) -> bool {
 /// `type <Name>Fn`.
 fn callback_types(root: &Path) -> Result<Vec<String>, String> {
     let mut found = Vec::new();
-    for (_, file) in abi_files(root)? {
+    for (_, file) in module_files(&root.join(ABI_SOURCE))? {
         callbacks(&file.items, &mut found);
     }
     found.sort();
@@ -609,10 +610,10 @@ fn cbindgen_annotations(source: &str) -> String {
 }
 
 /// Copies the ABI module into `to` as a crate of its own, `abi.rs` as
-/// `lib.rs` beside the value types' ABI file and its submodules, each at its
-/// path in the module's folder: cbindgen looks for the submodules of a
-/// single source file next to it, and those of `events.rs` in `events/`,
-/// and the rest of the API crate stays out of the header.
+/// [`ABI_COPY`] and the value types' ABI file as [`VALUES_ABI_COPY`], each
+/// with its submodules at their paths in its folder: cbindgen looks for the
+/// submodules of a source file next to it, and those of `events.rs` in
+/// `events/`, and the rest of the API crate stays out of the header.
 fn copy_abi(root: &Path, to: &Path) -> Result<(), String> {
     let copy = |from: &Path, name: &Path| {
         let text = std::fs::read_to_string(from)
@@ -623,14 +624,18 @@ fn copy_abi(root: &Path, to: &Path) -> Result<(), String> {
             .and_then(|()| std::fs::write(&into, cbindgen_annotations(&text)))
             .map_err(|error| format!("{}: {error}", into.display()))
     };
-    copy(&root.join(ABI_SOURCE), Path::new("lib.rs"))?;
-    copy(&root.join(VALUES_ABI_SOURCE), Path::new(VALUES_ABI_COPY))?;
-    let modules = abi_modules(root);
-    for (path, _) in abi_files(root)? {
-        let name = path
-            .strip_prefix(&modules)
-            .map_err(|error| format!("{}: {error}", path.display()))?;
-        copy(&path, name)?;
+    for (source, copied) in [(ABI_SOURCE, ABI_COPY), (VALUES_ABI_SOURCE, VALUES_ABI_COPY)] {
+        let source = root.join(source);
+        let copied = Path::new(copied);
+        copy(&source, copied)?;
+        let modules = source.with_extension("");
+        let folder = copied.parent().unwrap_or(Path::new(""));
+        for (path, _) in module_files(&source)? {
+            let name = path
+                .strip_prefix(&modules)
+                .map_err(|error| format!("{}: {error}", path.display()))?;
+            copy(&path, &folder.join(name))?;
+        }
     }
     Ok(())
 }
