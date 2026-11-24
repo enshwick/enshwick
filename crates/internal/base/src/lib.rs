@@ -33,7 +33,6 @@ pub mod config;
 pub use enshwick_values::content;
 #[doc(hidden)]
 pub mod declare;
-pub mod dialog;
 pub mod ecs;
 #[doc(hidden)]
 pub mod engine_enum;
@@ -63,6 +62,7 @@ pub mod near;
 pub mod net;
 pub mod pacing;
 pub mod points;
+pub mod ui;
 #[doc(inline)]
 pub use enshwick_abi::raw;
 pub mod resources;

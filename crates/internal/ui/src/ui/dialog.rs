@@ -4,7 +4,7 @@ use core::ffi::c_void;
 
 use crate::abi::{Header, Str, UiDialog};
 
-pub use enshwick_base::dialog::Response;
+pub use enshwick_base::ui::Response;
 
 /// A dialog in the game's own style: a title, a message, smaller detail text
 /// and buttons the game labels in the player's language.

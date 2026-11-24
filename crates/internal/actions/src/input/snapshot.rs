@@ -4,7 +4,7 @@
 use super::{Input, InputMask};
 use crate::abi::{ClientSnapshot as Raw, Str};
 use crate::{Entity, RecipeId, WorldError};
-use enshwick_base::dialog::Response;
+use enshwick_base::ui::Response;
 use enshwick_world::__internal::world_status;
 
 /// How old the interface's reads in a [`ClientSnapshot`] are.

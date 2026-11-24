@@ -6,7 +6,7 @@ use super::Input;
 use crate::abi::{ClientCommand as RawCommand, ClientCommandStatus as Raw, Status, Str};
 use crate::controls::GameAction;
 use crate::{RecipeId, WorldError};
-use enshwick_base::dialog::Response;
+use enshwick_base::ui::Response;
 use enshwick_world::__internal::world_status;
 
 mod status;

@@ -1,5 +1,5 @@
-//! The answers a dialog of the loader's offers, shared by the interface that
-//! shows dialogs and the client commands that answer them.
+//! The part of the API's `ui` the layers below the interface share: the
+//! answers a dialog offers, which a client command answers it by.
 
 use crate::abi::UiDialog;
 
