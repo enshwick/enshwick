@@ -821,8 +821,8 @@ end
 
 ## Answering the loader's dialog
 
-`CommandAction::AnswerDialog(response)` answers the loader's dialog that
-shows on the client, as a click on its button would. That is a mod's dialog
+`CommandAction::AnswerDialog { dialog, response }` answers the loader's
+dialog that shows on the client, as a click on its button would. That is a mod's dialog
 from [`ui.dialog` or `ui.ask`](interface.md#dialogs), or one of the loader's own,
 such as a warning. It runs at the main menu and in a world.
 
@@ -830,10 +830,14 @@ such as a warning. It runs at the main menu and in a world.
 | --- | --- |
 | `dialog_buttons()` | the responses of the dialog's buttons, empty while none shows, `None` where dialogs do not show in game |
 | `dialog_mod()` | the id of the mod whose dialog shows, `None` for the loader's own |
+| `dialog()` | the number of the dialog that shows, 0 while none shows |
 
-The command is `Observed` once the dialog closes with that answer, and the
-dialog's mod hears it as from the player. While no dialog shows, the
-command returns `WorldError::Unavailable`. A response the dialog has no
+The command names the dialog by the snapshot's number, so an answer never
+reaches a dialog that showed after the snapshot. It is `Observed` once the
+dialog closes with that answer, and the dialog's mod hears it as from the
+player. While the named dialog does not show, the command returns
+`WorldError::Unavailable`, and it ends `Unavailable` when that dialog
+closes before the answer lands. A response the dialog has no
 button for returns `WorldError::Refused`. A dialog the loader shows as a
 system message box, where dialogs do not show in game, takes no command.
 
@@ -846,7 +850,10 @@ fn accept(input: Input) -> Option<()> {
     if !snapshot.dialog_buttons()?.contains(&Response::Ok) {
         return None;
     }
-    let ok = CommandAction::AnswerDialog(Response::Ok);
+    let ok = CommandAction::AnswerDialog {
+        dialog: snapshot.dialog(),
+        response: Response::Ok,
+    };
     input.client_command(&ClientCommand::new(ok, snapshot.session())).ok()?;
     Some(())
 }
@@ -858,6 +865,7 @@ if snapshot.dialog_buttons and table.find(snapshot.dialog_buttons, "Ok") then
     enshwick.input.client_command({
         kind = "answer_dialog",
         session = snapshot.session,
+        dialog = snapshot.dialog,
         answer = "Ok",
     })
 end

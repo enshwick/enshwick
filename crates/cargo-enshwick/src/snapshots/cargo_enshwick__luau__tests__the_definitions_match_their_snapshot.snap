@@ -575,6 +575,8 @@ export type ClientCommand = {
 	text: string?,
 	--- The response a dialog's answer gives.
 	answer: Response?,
+	--- The dialog an answer answers, as `client_snapshot().dialog` numbers it.
+	dialog: number?,
 }
 
 --- The client's state in one copy, as `Input.client_snapshot` gives it to Luau.
@@ -613,6 +615,8 @@ export type ClientSnapshot = {
 	dialog_buttons: {Response}?,
 	--- The id of the mod whose dialog shows; nil for the loader's own.
 	dialog_mod: string?,
+	--- The number of the dialog that shows, which `answer_dialog` names; 0 while none does.
+	dialog: number,
 }
 
 --- `ClientWindowItem` as Luau gives it.
@@ -4563,7 +4567,7 @@ declare enshwick: {
 		--- Changes the vanilla quest `quest` in memory, on the server and the client alike: its rewards, whether it unlocks for every player, and its steps' knowledge. Mods that change one quest change it in load order, each on the one before's result; `Knowledge.quests` lists the quest ids. The game gives an added reward's experience and only draws an added item, which the mod gives on `QuestCompleted`, as for its own quest (see `QuestReward`). `Knowledge.quests`: crate.knowledge.Knowledge.quests
 		--- Only while the mod starts, at the top level of main.luau.
 		change_quest: (quest: number, change: QuestChange) -> (),
-		--- Removes the vanilla quest `quest` from the journal in memory, on the server and the client alike, with its steps; its knowledge stays, so a save that holds its progress still opens. Mods change and remove a quest in load order. A removal is logged and left out when the journal first builds while anything a mod earlier in load order put in the journal asks for the quest's or one of its steps' id: a step of its own quest, a step it inserted into a vanilla quest or whose queries it changed, an entry of a lore page, or an item set. It asks by the id itself or through a game query that reads it, such as one of `Load.add_query`, with the queries it names in turn; while the game's queries do not read, every game query counts. The game's own steps, entries and sets never hold a quest.
+		--- Removes the vanilla quest `quest` from the journal in memory, on the server and the client alike, with its steps; its knowledge stays, so a save that holds its progress still opens. Mods change and remove a quest in load order. A removal is logged and left out when the journal first builds while anything a mod earlier in load order put in the journal asks for the quest's or one of its steps' id: a step of its own quest, a step it inserted into a vanilla quest or a query it put in a vanilla step, an entry of a lore page, or an item set. It asks by the id itself or through a game query that reads it, such as one of `Load.add_query`, with the queries it names in turn; while the game's queries do not read, every game query counts. The game's own queries never hold a quest, even in a step another mod changed.
 		--- Only while the mod starts, at the top level of main.luau.
 		remove_quest: (quest: number) -> (),
 		--- Changes the vanilla lore page `page` in memory, on the server and the client alike: its category, title, priority, tutorial mark, document and entries. Mods that change one page change it in load order.

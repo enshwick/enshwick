@@ -1105,8 +1105,10 @@ typedef struct EnshwickClientCommand {
   // `EnshwickUiDialog_OK`: a button of the dialog that
   // shows. ABI 12.25.
   uint32_t answer;
-  // Zero.
-  uint32_t reserved2;
+  // The dialog `EnshwickClientCommand_ANSWER_DIALOG` answers, by the number
+  // `EnshwickClientSnapshot.dialog` gives it; a command for a dialog that no
+  // longer shows ends unavailable. ABI 12.25.
+  uint32_t dialog;
 } EnshwickClientCommand;
 // Opens `target`, one of the screens the game opens from a key in the
 // world.
@@ -1357,8 +1359,10 @@ typedef struct EnshwickClientSnapshot {
   // `EnshwickUiDialog.buttons` holds them, 0 while
   // none shows; group `EnshwickClientSnapshot_DIALOG`. ABI 12.25.
   uint32_t dialog_buttons;
-  // Zero.
-  uint32_t reserved3;
+  // The number of the dialog that shows, 1 to 65,535 counted round as
+  // dialogs show, 0 while none shows; an answer names it in
+  // `EnshwickClientCommand.dialog`. Group `EnshwickClientSnapshot_DIALOG`. ABI 12.25.
+  uint32_t dialog;
 } EnshwickClientSnapshot;
 // No interface read yet.
 #define EnshwickClientSnapshot_NEVER 0
@@ -7915,7 +7919,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, online) == 132, "offset o
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, item) == 136, "offset of ClientCommand.item");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, text) == 152, "offset of ClientCommand.text");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, answer) == 168, "offset of ClientCommand.answer");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, reserved2) == 172, "offset of ClientCommand.reserved2");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, dialog) == 172, "offset of ClientCommand.dialog");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientCommandStatus) == 40, "size of ClientCommandStatus");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientCommandStatus) == 8, "alignment of ClientCommandStatus");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, header) == 0, "offset of ClientCommandStatus.header");
@@ -7948,7 +7952,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, loader_screen) == 152, "
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, reserved2) == 156, "offset of ClientSnapshot.reserved2");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, dialog_mod) == 160, "offset of ClientSnapshot.dialog_mod");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, dialog_buttons) == 176, "offset of ClientSnapshot.dialog_buttons");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, reserved3) == 180, "offset of ClientSnapshot.reserved3");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, dialog) == 180, "offset of ClientSnapshot.dialog");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientWindowItem) == 88, "size of ClientWindowItem");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientWindowItem) == 8, "alignment of ClientWindowItem");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientWindowItem, header) == 0, "offset of ClientWindowItem.header");

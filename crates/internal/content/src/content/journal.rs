@@ -780,7 +780,10 @@ impl AddedJournal {
             let found: Found = edits
                 .iter()
                 .any(|edit| matches!(edit, Edit::Remove(_)))
-                .then(|| (registry.clone(), host.game_value(key)));
+                .then(|| {
+                    host.game_value(key)
+                        .map(|game| Others::new(&registry, &game))
+                });
             let reads = LazyCell::new(|| {
                 served_knowledge_read(host)
                     .inspect_err(|off| {

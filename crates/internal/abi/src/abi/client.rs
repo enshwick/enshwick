@@ -146,8 +146,10 @@ pub struct ClientSnapshot {
     /// [`UiDialog::buttons`](super::UiDialog::buttons) holds them, 0 while
     /// none shows; group [`ClientSnapshot::DIALOG`]. ABI 12.25.
     pub dialog_buttons: u32,
-    /// Zero.
-    pub reserved3: u32,
+    /// The number of the dialog that shows, 1 to 65,535 counted round as
+    /// dialogs show, 0 while none shows; an answer names it in
+    /// [`ClientCommand::dialog`]. Group [`ClientSnapshot::DIALOG`]. ABI 12.25.
+    pub dialog: u32,
 }
 
 impl_headed!(ClientSnapshot, born = 120);
@@ -218,7 +220,7 @@ impl ClientSnapshot {
         reserved2: 0,
         dialog_mod: Str::EMPTY,
         dialog_buttons: 0,
-        reserved3: 0,
+        dialog: 0,
     };
 }
 
@@ -317,8 +319,10 @@ pub struct ClientCommand {
     /// [`UiDialog::OK`](super::UiDialog::OK): a button of the dialog that
     /// shows. ABI 12.25.
     pub answer: u32,
-    /// Zero.
-    pub reserved2: u32,
+    /// The dialog [`ClientCommand::ANSWER_DIALOG`] answers, by the number
+    /// [`ClientSnapshot::dialog`] gives it; a command for a dialog that no
+    /// longer shows ends unavailable. ABI 12.25.
+    pub dialog: u32,
 }
 
 impl_headed!(ClientCommand, born = 88);
@@ -414,7 +418,7 @@ impl ClientCommand {
         item: Str::EMPTY,
         text: Str::EMPTY,
         answer: 0,
-        reserved2: 0,
+        dialog: 0,
     };
 
     /// Whether the command's own bounds hold: a finite look of at most
@@ -424,7 +428,7 @@ impl ClientCommand {
     /// mark whose metres are finite and below 2^31 (2,147,483,648) on each
     /// axis, the range of the engine's 32.32 fixed point, a host's world and
     /// character below [`ClientCommand::MAX_SLOTS`], an answer a dialog's
-    /// button can give.
+    /// button can give to a dialog named by its number.
     ///
     /// # Examples
     ///
@@ -463,9 +467,12 @@ impl ClientCommand {
                     && self.online <= 1
             }
             Self::JOIN => self.session == 0 && self.password.len() <= Self::MAX_PASSWORD,
-            Self::ANSWER_DIALOG => 1u32
-                .checked_shl(self.answer)
-                .is_some_and(|bit| bit & super::UiDialog::BUTTONS != 0),
+            Self::ANSWER_DIALOG => {
+                self.dialog != 0
+                    && 1u32
+                        .checked_shl(self.answer)
+                        .is_some_and(|bit| bit & super::UiDialog::BUTTONS != 0)
+            }
             Self::WINDOW_PRESS | Self::WINDOW_PICK | Self::WINDOW_TEXT => {
                 self.text.len() <= Self::MAX_TEXT
             }
@@ -728,5 +735,24 @@ mod tests {
                 assert!(!at(refused).in_bounds(), "{kind} {refused:?}");
             }
         }
+    }
+
+    #[test]
+    fn an_answer_names_its_dialog_and_a_button_a_dialog_can_have() {
+        let answer = |dialog, answer| ClientCommand {
+            kind: ClientCommand::ANSWER_DIALOG,
+            dialog,
+            answer,
+            ..ClientCommand::EMPTY
+        };
+        assert!(answer(1, crate::abi::UiDialog::OK).in_bounds());
+        assert!(
+            !answer(0, crate::abi::UiDialog::OK).in_bounds(),
+            "no dialog named"
+        );
+        assert!(
+            !answer(1, crate::abi::UiDialog::CLOSED).in_bounds(),
+            "no button"
+        );
     }
 }

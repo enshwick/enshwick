@@ -228,7 +228,7 @@ ClientCommand size 176 align 8 born 88
     item at 136 size 16 type Str
     text at 152 size 16 type Str
     answer at 168 size 4 type u32
-    reserved2 at 172 size 4 type u32
+    dialog at 172 size 4 type u32
 ClientCommandStatus size 40 align 8 born 32
     header at 0 size 8 type Header
     state at 8 size 4 type u32
@@ -259,7 +259,7 @@ ClientSnapshot size 184 align 8 born 120
     reserved2 at 156 size 4 type u32
     dialog_mod at 160 size 16 type Str
     dialog_buttons at 176 size 4 type u32
-    reserved3 at 180 size 4 type u32
+    dialog at 180 size 4 type u32
 ClientWindowItem size 88 align 8 born 88
     header at 0 size 8 type Header
     kind at 8 size 4 type u32

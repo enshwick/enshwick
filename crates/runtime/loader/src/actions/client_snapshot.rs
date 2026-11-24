@@ -246,10 +246,12 @@ pub(crate) fn snapshot(loader: &Loader, scene: Option<&'static str>) -> ClientSn
         server: crate::actions::client_commands::server_str(),
         ..snapshot
     };
-    if let Some((buttons, owner)) = crate::actions::client_commands::dialogs::shown() {
+    if let Some(shown) = crate::actions::client_commands::dialogs::shown() {
         snapshot.available |= ClientSnapshot::DIALOG;
-        snapshot.dialog_buttons = buttons;
-        snapshot.dialog_mod = owner
+        snapshot.dialog = shown.number;
+        snapshot.dialog_buttons = shown.buttons;
+        snapshot.dialog_mod = shown
+            .owner
             .and_then(|index| loader.mods.get(index))
             .map_or(Str::EMPTY, |m| Str::new(&m.id));
     }

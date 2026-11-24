@@ -452,6 +452,29 @@ impl ClientSnapshot {
             .then(|| named(self.raw.dialog_mod))
             .flatten()
     }
+
+    /// The number of the loader's dialog that shows, which
+    /// [`CommandAction::AnswerDialog`](super::CommandAction::AnswerDialog)
+    /// names, so an answer never reaches a dialog that showed after this
+    /// snapshot; 0 while none shows or where dialogs do not show in game.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::input::ClientSnapshot;
+    ///
+    /// fn same_dialog(before: &ClientSnapshot, now: &ClientSnapshot) -> bool {
+    ///     before.dialog() != 0 && before.dialog() == now.dialog()
+    /// }
+    /// ```
+    #[must_use]
+    pub const fn dialog(&self) -> u32 {
+        if self.reads(SnapshotPart::Dialog) {
+            self.raw.dialog
+        } else {
+            0
+        }
+    }
 }
 
 /// A page of the loader's own Mods screen, from
@@ -591,6 +614,9 @@ struct LuauSnapshot {
     pub dialog_buttons: Option<Vec<Response>>,
     /// The id of the mod whose dialog shows; nil for the loader's own.
     pub dialog_mod: Option<String>,
+    /// The number of the dialog that shows, which `answer_dialog` names; 0
+    /// while none does.
+    pub dialog: u32,
 }
 
 impl From<ClientSnapshot> for LuauSnapshot {
@@ -620,6 +646,7 @@ impl From<ClientSnapshot> for LuauSnapshot {
             loader_screen_mod: owned(snapshot.loader_screen_mod()),
             dialog_buttons: snapshot.dialog_buttons(),
             dialog_mod: owned(snapshot.dialog_mod()),
+            dialog: snapshot.dialog(),
         }
     }
 }

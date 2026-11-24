@@ -370,11 +370,6 @@ pub(super) fn sets(registry: &Value) -> impl Iterator<Item = (u32, &Value)> {
         .filter_map(|set| Some((key(set, SET_ID)?, set)))
 }
 
-/// The set of id `set` in `registry`.
-pub(super) fn set_in(registry: &Value, set: u32) -> Option<&Value> {
-    sets(registry).find_map(|(id, held)| (id == set).then_some(held))
-}
-
 /// The key a `HashKey32` field `name` of `value` holds.
 fn key(value: &Value, name: &str) -> Option<u32> {
     value.field(name).and_then(key_of_hash)

@@ -159,10 +159,17 @@ pub enum CommandAction {
     /// (`Ui::ask`) or the loader's own, with a
     /// response one of its buttons gives, as a click would, on any screen.
     /// Observed once the dialog closes with that answer;
-    /// [`WorldError::Unavailable`] while no dialog shows in game, which
+    /// [`WorldError::Unavailable`] while the dialog `dialog` names does not
+    /// show, which
     /// [`ClientSnapshot::dialog_buttons`](super::ClientSnapshot::dialog_buttons)
     /// tells, and refused for a response the dialog has no button for.
-    AnswerDialog(Response),
+    AnswerDialog {
+        /// The dialog, as [`ClientSnapshot::dialog`](super::ClientSnapshot::dialog)
+        /// numbers it.
+        dialog: u32,
+        /// The answer.
+        response: Response,
+    },
 }
 
 /// A server's password for [`CommandAction::Join`]: the loader hands it to
@@ -338,8 +345,9 @@ impl ClientCommand {
                 raw.item = Str::new(item);
                 raw.text = Str::new(text);
             }
-            CommandAction::AnswerDialog(response) => {
+            CommandAction::AnswerDialog { dialog, response } => {
                 raw.kind = RawCommand::ANSWER_DIALOG;
+                raw.dialog = *dialog;
                 raw.answer = response.to_raw();
             }
         }
@@ -435,6 +443,9 @@ struct LuauCommand {
     pub text: Option<String>,
     /// The response a dialog's answer gives.
     pub answer: Option<Response>,
+    /// The dialog an answer answers, as `client_snapshot().dialog` numbers
+    /// it.
+    pub dialog: Option<u32>,
 }
 
 impl core::fmt::Debug for LuauCommand {
@@ -458,6 +469,7 @@ impl core::fmt::Debug for LuauCommand {
             .field("item", &self.item)
             .field("text", &self.text)
             .field("answer", &self.answer)
+            .field("dialog", &self.dialog)
             .finish()
     }
 }
@@ -535,9 +547,10 @@ impl TryFrom<LuauCommand> for ClientCommand {
                 item: luau.item.clone().ok_or_else(|| missing("an item"))?,
                 text: luau.text.clone().ok_or_else(|| missing("a text"))?,
             },
-            "answer_dialog" => {
-                CommandAction::AnswerDialog(luau.answer.ok_or_else(|| missing("an answer"))?)
-            }
+            "answer_dialog" => CommandAction::AnswerDialog {
+                dialog: luau.dialog.ok_or_else(|| missing("a dialog"))?,
+                response: luau.answer.ok_or_else(|| missing("an answer"))?,
+            },
             other => {
                 return Err(crate::script::Error::new(format!(
                     "no client command kind {other:?}"
@@ -699,6 +712,7 @@ mod tests {
             item: None,
             text: None,
             answer: None,
+            dialog: None,
         };
         assert!(ClientCommand::try_from(luau("open_screen", Some("Map"))).is_ok());
         assert!(ClientCommand::try_from(luau("open_screen", None)).is_err());
@@ -706,6 +720,21 @@ mod tests {
         assert!(
             ClientCommand::try_from(luau("answer_dialog", None)).is_err(),
             "an answer needs its response"
+        );
+        let answer = |dialog| LuauCommand {
+            answer: Some(Response::Ok),
+            dialog,
+            ..luau("answer_dialog", None)
+        };
+        assert!(
+            ClientCommand::try_from(answer(None)).is_err(),
+            "an answer needs its dialog"
+        );
+        let command = ClientCommand::try_from(answer(Some(4))).expect("a whole answer");
+        let raw = command.raw();
+        assert_eq!(
+            (raw.kind, raw.dialog, raw.answer),
+            (RawCommand::ANSWER_DIALOG, 4, Response::Ok.to_raw())
         );
         assert!(
             ClientCommand::try_from(luau("close_screen", None))
@@ -752,6 +781,7 @@ mod tests {
             item: None,
             text: None,
             answer: None,
+            dialog: None,
         };
         assert!(
             ClientCommand::try_from(luau(Some("MainhandAction_Tap"), Some(16))).is_ok_and(|c| {
@@ -802,6 +832,7 @@ mod tests {
             item: None,
             text: None,
             answer: None,
+            dialog: None,
         };
         let shown = format!("{luau:?}");
         assert!(!shown.contains("hunter2"), "{shown}");

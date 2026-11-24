@@ -680,27 +680,30 @@ side = "both""#
     }
 
     #[test]
-    fn a_dialog_answer_goes_to_the_dialog_that_shows_by_a_button_it_has() {
+    fn a_dialog_answer_goes_to_the_dialog_it_names_by_a_button_it_has() {
         use enshwick::ui::{Dialog, Response};
 
         let (loader, input) = input(Side::CLIENT);
-        let answer = |response| ClientCommand::new(CommandAction::AnswerDialog(response), 1);
-        assert!(
-            matches!(
-                input.client_command(&answer(Response::Ok)),
-                Err(WorldError::Unavailable)
-            ),
-            "no dialog shows"
-        );
+        let answer = |dialog, response| {
+            ClientCommand::new(CommandAction::AnswerDialog { dialog, response }, 1)
+        };
+        let unavailable = |command: &ClientCommand| {
+            matches!(input.client_command(command), Err(WorldError::Unavailable))
+        };
+        assert!(unavailable(&answer(1, Response::Ok)), "no dialog shows");
+        let snapshot = input.client_snapshot().unwrap();
         assert_eq!(
-            input.client_snapshot().unwrap().dialog_buttons(),
-            Some(vec![])
+            (snapshot.dialog_buttons(), snapshot.dialog()),
+            (Some(vec![]), 0)
         );
         let ui = UI.lock().unwrap().unwrap();
         let ask =
             Dialog::new("Reset", "Reset the world?").buttons(&[Response::Ok, Response::Cancel]);
         ui.dialog(&ask, |_| {}).unwrap();
+        ui.dialog(&ask, |_| {}).unwrap();
         let snapshot = input.client_snapshot().unwrap();
+        let first = snapshot.dialog();
+        assert_ne!(first, 0);
         assert_eq!(
             snapshot.dialog_buttons(),
             Some(vec![Response::Cancel, Response::Ok])
@@ -708,12 +711,12 @@ side = "both""#
         assert_eq!(snapshot.dialog_mod(), Some("you.client-commands"));
         assert!(
             matches!(
-                input.client_command(&answer(Response::Retry)),
+                input.client_command(&answer(first, Response::Retry)),
                 Err(WorldError::Refused)
             ),
             "the dialog has no Retry"
         );
-        let id = input.client_command(&answer(Response::Ok)).unwrap();
+        let id = input.client_command(&answer(first, Response::Ok)).unwrap();
         assert_eq!(
             loader.client_commands(),
             [(1, Raw::ANSWER_DIALOG, String::new())]
@@ -723,6 +726,36 @@ side = "both""#
         assert_eq!(
             input.command_status(id).unwrap().state,
             CommandState::Observed
+        );
+        let next = input.client_snapshot().unwrap().dialog();
+        assert_ne!(next, first, "the next dialog has a number of its own");
+        assert!(
+            unavailable(&answer(first, Response::Ok)),
+            "an answer from an old snapshot never reaches the next dialog"
+        );
+    }
+
+    #[test]
+    fn dialogs_do_not_show_in_game_before_the_mod_s_init_returned() {
+        use enshwick::abi::{ClientSnapshot, Header};
+
+        let loader = enshwick::test::FakeHost::new()
+            .side(Side::CLIENT)
+            .player_input()
+            .install();
+        let mut snapshot = ClientSnapshot {
+            header: Header::of::<ClientSnapshot>(),
+            ..ClientSnapshot::EMPTY
+        };
+        // SAFETY: the fake's table is a static; `snapshot` is writable and
+        // headed for the call.
+        let status =
+            unsafe { ((*loader.api()).client_snapshot)(loader.handle(), &raw mut snapshot) };
+        assert_eq!(status, enshwick::abi::Status::OK);
+        assert_eq!(
+            snapshot.available & ClientSnapshot::DIALOG,
+            0,
+            "as the loader before arming"
         );
     }
 

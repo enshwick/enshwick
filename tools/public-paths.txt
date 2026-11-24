@@ -694,6 +694,7 @@ abi::ClientCommand::WINDOW_TEXT
 abi::ClientCommand::answer
 abi::ClientCommand::cancels
 abi::ClientCommand::character
+abi::ClientCommand::dialog
 abi::ClientCommand::direction
 abi::ClientCommand::expected_screen
 abi::ClientCommand::header
@@ -707,7 +708,6 @@ abi::ClientCommand::password
 abi::ClientCommand::position
 abi::ClientCommand::recipe
 abi::ClientCommand::reserved
-abi::ClientCommand::reserved2
 abi::ClientCommand::session
 abi::ClientCommand::target
 abi::ClientCommand::text
@@ -775,6 +775,7 @@ abi::ClientSnapshot::SERVER_MOD_LIST
 abi::ClientSnapshot::STALE
 abi::ClientSnapshot::age_ms
 abi::ClientSnapshot::available
+abi::ClientSnapshot::dialog
 abi::ClientSnapshot::dialog_buttons
 abi::ClientSnapshot::dialog_mod
 abi::ClientSnapshot::header
@@ -788,7 +789,6 @@ abi::ClientSnapshot::menu_tab
 abi::ClientSnapshot::player
 abi::ClientSnapshot::reserved
 abi::ClientSnapshot::reserved2
-abi::ClientSnapshot::reserved3
 abi::ClientSnapshot::return_screen
 abi::ClientSnapshot::scene
 abi::ClientSnapshot::server
@@ -5430,6 +5430,7 @@ input::ClientCommand::try_from unstable
 input::ClientSnapshot unstable
 input::ClientSnapshot::TY unstable
 input::ClientSnapshot::age_ms unstable
+input::ClientSnapshot::dialog unstable
 input::ClientSnapshot::dialog_buttons unstable
 input::ClientSnapshot::dialog_mod unstable
 input::ClientSnapshot::held unstable

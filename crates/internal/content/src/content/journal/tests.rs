@@ -445,12 +445,12 @@ fn a_quest_another_mod_chains_on_stays_and_one_only_the_game_or_the_mod_chains_o
     let other = chained("other.mod:after");
     add_quest_to(&mut held, &other).unwrap();
     let before = held.clone();
-    let off = remove_quest_in(&mut held, id, found(&before, &game), &unread()).unwrap_err();
+    let off = remove_quest_in(&mut held, id, &found(&before, &game), &unread()).unwrap_err();
     assert!(off.to_string().contains("another mod's step"), "{off}");
     assert_eq!(held, before);
 
     let own = found(&game, &game);
-    remove_quest_in(&mut held, id, own, &unread()).unwrap();
+    remove_quest_in(&mut held, id, &own, &unread()).unwrap();
     assert_eq!(quests(&held).len(), 1);
     assert!(!holds(&held, id.get()));
     for step in step_ids(Id::new("demo.vanilla:q"), 1) {
@@ -460,14 +460,15 @@ fn a_quest_another_mod_chains_on_stays_and_one_only_the_game_or_the_mod_chains_o
         );
     }
     assert!(
-        remove_quest_in(&mut held, id, own, &unread()).is_err(),
+        remove_quest_in(&mut held, id, &own, &unread()).is_err(),
         "gone"
     );
 }
 
-/// The journal a patch found, `found`, against the game's, `game`.
-const fn found<'a>(found: &'a Value, game: &'a Value) -> Others<'a> {
-    Others { found, game }
+/// What the journal a patch found, `found`, asks that the game's, `game`,
+/// does not.
+fn found(found: &Value, game: &Value) -> Others {
+    Others::new(found, game)
 }
 
 /// [`registry`] with a second vanilla quest, whose one step asks for
@@ -512,7 +513,7 @@ fn a_step_another_mod_put_in_or_changed_in_a_vanilla_quest_holds_the_quest_and_t
         let mut held = game.clone();
         change_quest_in(&mut held, second, &edit).unwrap();
         let before = held.clone();
-        let off = remove_quest_in(&mut held, id, found(&before, &game), &unread()).unwrap_err();
+        let off = remove_quest_in(&mut held, id, &found(&before, &game), &unread()).unwrap_err();
         assert!(
             off.to_string()
                 .contains(&format!("another mod's step in the quest {second}")),
@@ -520,12 +521,12 @@ fn a_step_another_mod_put_in_or_changed_in_a_vanilla_quest_holds_the_quest_and_t
         );
         assert_eq!(held, before);
         let mut own = before.clone();
-        remove_quest_in(&mut own, id, found(&game, &game), &unread()).unwrap();
+        remove_quest_in(&mut own, id, &found(&game, &game), &unread()).unwrap();
     }
 
     let (game, _) = with_second(id.get(), 5);
     let mut held = game.clone();
-    remove_quest_in(&mut held, id, found(&game, &game), &unread()).unwrap();
+    remove_quest_in(&mut held, id, &found(&game, &game), &unread()).unwrap();
     assert!(!holds(&held, id.get()), "the game's own step asks for it");
     let renamed = QuestChange {
         name: Some(Guid([25; 16])),
@@ -535,10 +536,47 @@ fn a_step_another_mod_put_in_or_changed_in_a_vanilla_quest_holds_the_quest_and_t
     let mut held = game.clone();
     change_quest_in(&mut held, second, &renamed).unwrap();
     let before = held.clone();
-    remove_quest_in(&mut held, id, found(&before, &game), &unread()).unwrap();
+    remove_quest_in(&mut held, id, &found(&before, &game), &unread()).unwrap();
     assert!(
         !holds(&held, id.get()),
         "another mod's change of a field that asks nothing"
+    );
+}
+
+#[test]
+fn another_mod_s_change_of_one_query_of_a_vanilla_step_leaves_the_game_s_other_query_out() {
+    let id = vanilla();
+    let (game, second) = with_second(4, id.get());
+    let shown_elsewhere = QuestChange {
+        steps: vec![StepEdit::Change(StepChange {
+            step: 0,
+            shown_when: Some(query(9)),
+            ..StepChange::default()
+        })],
+        ..QuestChange::default()
+    };
+    let mut held = game.clone();
+    change_quest_in(&mut held, second, &shown_elsewhere).unwrap();
+    let before = held.clone();
+    remove_quest_in(&mut held, id, &found(&before, &game), &unread()).unwrap();
+    assert!(
+        !holds(&held, id.get()),
+        "only the game's own query of the step asks for it"
+    );
+    let asking = QuestChange {
+        steps: vec![StepEdit::Change(StepChange {
+            step: 0,
+            shown_when: Some(query(id.get())),
+            ..StepChange::default()
+        })],
+        ..QuestChange::default()
+    };
+    let mut held = game.clone();
+    change_quest_in(&mut held, second, &asking).unwrap();
+    let before = held.clone();
+    assert!(
+        remove_quest_in(&mut held, id, &found(&before, &game), &unread()).is_err(),
+        "the query the other mod put in asks for it"
     );
 }
 
@@ -564,7 +602,7 @@ fn a_page_entry_another_mod_put_in_asks_through_a_game_query_and_holds_the_quest
     change_page_in(&mut held, EntryId::new(7), None, &change).unwrap();
     let before = held.clone();
     let db = || reads(vec![(asking, vec![id.get()])]);
-    let off = remove_quest_in(&mut held, id, found(&before, &game), &db()).unwrap_err();
+    let off = remove_quest_in(&mut held, id, &found(&before, &game), &db()).unwrap_err();
     assert!(
         off.to_string()
             .contains("another mod's entry in the journal page 7"),
@@ -572,7 +610,7 @@ fn a_page_entry_another_mod_put_in_asks_through_a_game_query_and_holds_the_quest
     );
     assert_eq!(held, before);
     let other = || reads(vec![(asking, vec![1])]);
-    remove_quest_in(&mut held, id, found(&before, &game), &other()).unwrap();
+    remove_quest_in(&mut held, id, &found(&before, &game), &other()).unwrap();
 }
 
 /// `journal` with one item set category holding `sets`.
@@ -607,14 +645,14 @@ fn an_item_set_another_mod_put_in_holds_the_quest_and_the_game_s_own_does_not() 
         vec![item_set(70, id.get()), item_set(71, id.get())],
     );
     let mut held = before.clone();
-    let off = remove_quest_in(&mut held, id, found(&before, &game), &unread()).unwrap_err();
+    let off = remove_quest_in(&mut held, id, &found(&before, &game), &unread()).unwrap_err();
     assert!(
         off.to_string().contains("another mod's item set 71"),
         "{off}"
     );
     assert_eq!(held, before);
     let mut held = game.clone();
-    remove_quest_in(&mut held, id, found(&game, &game), &unread()).unwrap();
+    remove_quest_in(&mut held, id, &found(&game, &game), &unread()).unwrap();
     assert!(!holds(&held, id.get()), "the game's own set asks for it");
 }
 
@@ -636,7 +674,7 @@ fn a_quest_whose_step_another_mod_asks_for_stays() {
     let mut held = registry();
     add_quest_to(&mut held, &other).unwrap();
     let before = held.clone();
-    let off = remove_quest_in(&mut held, id, found(&before, &game), &unread()).unwrap_err();
+    let off = remove_quest_in(&mut held, id, &found(&before, &game), &unread()).unwrap_err();
     assert!(off.to_string().contains("another mod's step"), "{off}");
     assert_eq!(held, before);
 }
@@ -665,7 +703,7 @@ fn a_quest_another_mod_asks_for_through_a_game_query_stays() {
     let mut held = registry();
     add_quest_to(&mut held, &through(asking)).unwrap();
     let before = held.clone();
-    let off = remove_quest_in(&mut held, id, found(&before, &game), &db()).unwrap_err();
+    let off = remove_quest_in(&mut held, id, &found(&before, &game), &db()).unwrap_err();
     assert!(off.to_string().contains("another mod's step"), "{off}");
     assert_eq!(held, before);
 
@@ -675,7 +713,7 @@ fn a_quest_another_mod_asks_for_through_a_game_query_stays() {
     let off = remove_quest_in(
         &mut held,
         id,
-        found(&before, &game),
+        &found(&before, &game),
         &LazyCell::new(|| None),
     );
     assert!(
@@ -683,7 +721,7 @@ fn a_quest_another_mod_asks_for_through_a_game_query_stays() {
         "a database that does not read keeps the quest"
     );
     assert_eq!(held, before);
-    remove_quest_in(&mut held, id, found(&before, &game), &db()).unwrap();
+    remove_quest_in(&mut held, id, &found(&before, &game), &db()).unwrap();
     assert!(
         !holds(&held, id.get()),
         "a query that reads other knowledge"

@@ -87,9 +87,9 @@ pub(crate) enum Kind {
     /// Acts on an item of a carried window; its ask lives in [`windows`]
     /// from the queue on.
     Window(windows::Act),
-    /// Answers the loader's dialog on screen with the raw answer, through
-    /// [`dialogs`].
-    Answer(u32),
+    /// Answers the loader's dialog of one number with the raw answer,
+    /// through [`dialogs`].
+    Answer(dialogs::Ask),
 }
 
 impl Kind {
@@ -599,8 +599,11 @@ impl From<play::StartError> for CommandError {
 /// read for tabs, the builder's detour for looks and moves, the recipe
 /// browser's for recipes.
 fn runs(kind: Kind) -> bool {
-    // Every kind checks itself against the frame's screen reads.
-    if FUSE.is_off() || crate::engine::screens::READS_FUSE.is_off() {
+    // Every kind but the dialog's answer, which reads no screen, checks
+    // itself against the frame's screen reads.
+    if FUSE.is_off()
+        || (!matches!(kind, Kind::Answer(_)) && crate::engine::screens::READS_FUSE.is_off())
+    {
         return false;
     }
     let groups = &crate::actions::client_control::GROUPS;
@@ -659,10 +662,8 @@ pub(crate) fn queue(loader: &Loader, owner: ModIndex, spec: &Spec) -> Result<u64
     if !runs(kind) {
         return Err(CommandError::Unavailable);
     }
-    if let Kind::Answer(answer) = kind
-        && !dialogs::takes(answer)
-    {
-        return Err(CommandError::BadArgs);
+    if let Kind::Answer(ask) = kind {
+        dialogs::check(ask)?;
     }
     // SAFETY: the mod's spec, its text borrowed for the call.
     let expected = expected_screen(kind, unsafe { text(spec.expected_screen) }?)?;
