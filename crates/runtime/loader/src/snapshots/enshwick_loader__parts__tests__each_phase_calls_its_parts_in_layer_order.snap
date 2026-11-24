@@ -21,3 +21,6 @@ status: content, knowledge
 shared: content
 server link: recipes, item_data, controls, player_actions, ui
 handover: recipes, item_data, controls
+facts: manifest, worlds
+turned: points, advertise, data_packs
+patches: bases

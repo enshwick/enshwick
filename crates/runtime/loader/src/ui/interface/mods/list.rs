@@ -317,12 +317,7 @@ pub(super) fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> L
     let away = mods
         .iter()
         .any(|m| crate::base::worlds::server_values(m).is_some());
-    if !world
-        && !away
-        && mods
-            .iter()
-            .any(|m| !crate::base::worlds::settings_files(m).is_empty())
-    {
+    if !world && !away && mods.iter().any(crate::base::worlds::has_settings) {
         paint.label(
             texts::text("mods.settings.in-world").as_bytes(),
             UiWidget::STYLE_SECONDARY,

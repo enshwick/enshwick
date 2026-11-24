@@ -456,6 +456,9 @@ mod tests {
             ("shared", named(|p| p.shared.is_some())),
             ("server link", named(|p| p.server_link.is_some())),
             ("handover", named(|p| p.handover.is_some())),
+            ("facts", named(|p| p.facts.is_some())),
+            ("turned", named(|p| p.turned.is_some())),
+            ("patches", named(|p| p.patches.is_some())),
         ]
         .map(|(phase, calls)| format!("{phase}: {calls}"))
         .join("\n")

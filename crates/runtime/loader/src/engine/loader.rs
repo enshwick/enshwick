@@ -544,7 +544,7 @@ impl Loader {
         );
         crate::engine::diag::turned_off(&record.id, &shown);
         self.rewire();
-        self.parts.turned(self, record);
+        self.parts.turned(self, record, true);
     }
 
     /// Turns a mod the loader turned off for a world back on: relinks its
@@ -560,7 +560,7 @@ impl Loader {
         *record.off_reason.relock() = None;
         crate::engine::log::write(Level::INFO, &record.id, "back on");
         self.rewire();
-        self.parts.turned(self, record);
+        self.parts.turned(self, record, false);
     }
 
     /// What the layer that owns `T` keeps of the whole run; `None` when the

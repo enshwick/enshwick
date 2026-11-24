@@ -84,8 +84,9 @@ pub(crate) struct Part {
     /// What the part keeps of each mod, made with the mod's record at the
     /// start and read through [`ModRecord::fact`].
     pub(crate) facts: Option<MakeFact>,
-    /// A mod turned off, or back on: the part follows what it keeps of it.
-    pub(crate) turned: Option<fn(&Loader, &ModRecord)>,
+    /// A mod turned off (`true`) or back on (`false`): the part follows
+    /// what it keeps of it.
+    pub(crate) turned: Option<fn(&Loader, &ModRecord, bool)>,
     /// What the part rests on code patches for, settled at each arming.
     pub(crate) patches: Option<Patches>,
     /// The part as a whole, named after it: its hosting, end and forget run
@@ -541,14 +542,14 @@ impl Parts {
         )
     }
 
-    /// Tells every part that `record`'s mod turned off or back on, lowest
-    /// layer first, each under the part's fuse.
-    pub(crate) fn turned(&self, loader: &Loader, record: &ModRecord) {
-        for part in self.running() {
+    /// Tells every part that `record`'s mod turned `off` or back on, lowest
+    /// layer first, each under the part's fuse and still once it is off, as
+    /// [`Part::clearing`] runs it: an off mod's runtime and links go even
+    /// when its part panicked before.
+    pub(crate) fn turned(&self, loader: &Loader, record: &ModRecord, off: bool) {
+        for part in self.iter() {
             if let Some(turned) = part.turned {
-                let _ran = part.fuse.run("a mod turned off or on", || {
-                    turned(loader, record);
-                });
+                part.clearing("a mod turned off or on", || turned(loader, record, off));
             }
         }
     }
@@ -836,6 +837,35 @@ mod tests {
             0,
             "an answer is no drop, so the off part does not hear it"
         );
+    }
+
+    #[test]
+    fn a_part_hears_each_turn_off_and_on_with_its_direction_even_after_it_panicked() {
+        use std::sync::Mutex;
+
+        use enshwick_base::Relock as _;
+
+        static HEARD: Mutex<Vec<bool>> = Mutex::new(Vec::new());
+        static TURNS: &[&Part] = &[&Part {
+            turned: Some(|_, _, off| {
+                let first = {
+                    let mut heard = HEARD.relock();
+                    heard.push(off);
+                    heard.len() == 1
+                };
+                assert!(!first, "broken once");
+            }),
+            ..part!("turns", turns)
+        }];
+        static WITH_TURNS: &[(&str, &[&Part])] = &[("turns", TURNS)];
+        let mut loader = crate::start::tests::loader_running(&["you.lanterns"]);
+        loader.parts = Box::leak(Box::new(Parts::new(WITH_TURNS)));
+        let index = ModIndex::new(0);
+        loader.turn_off(index, "turned off by the test");
+        assert!(!TURNS[0].runs(), "its first call panicked");
+        loader.turn_back_on(index);
+        loader.turn_off(index, "turned off again");
+        assert_eq!(*HEARD.relock(), [true, false, true]);
     }
 
     #[test]

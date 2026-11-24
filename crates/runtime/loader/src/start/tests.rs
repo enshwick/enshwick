@@ -366,6 +366,13 @@ fn a_developer_mod_is_off_before_its_init_without_developer_tools() {
 }
 
 #[test]
+fn every_initialise_names_the_host_table_packs_run_on_so_a_dry_run_runs_packs_as_themselves() {
+    let (loader, order) = loader(&[TestMod::plain("you.lanterns")], false);
+    initialise(&loader, &order.iter().collect::<Vec<_>>(), None);
+    assert!(crate::engine::profile::host_named());
+}
+
+#[test]
 fn a_developer_mod_gets_its_init_with_developer_tools_on() {
     let (loader, order) = loader(&[DEVELOPER], true);
     initialise(&loader, &order.iter().collect::<Vec<_>>(), None);

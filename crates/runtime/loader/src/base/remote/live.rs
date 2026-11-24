@@ -263,7 +263,7 @@ fn answer(loader: &Loader, key: u64, message: Message) {
             for record in loader
                 .mods
                 .iter()
-                .filter(|m| !crate::base::worlds::settings_files(m).is_empty())
+                .filter(|m| crate::base::worlds::has_settings(m))
                 .filter(|m| admin || m.joins())
             {
                 text.push_str(&record.id);

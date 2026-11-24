@@ -165,3 +165,13 @@ proptest! {
         prop_assert_eq!(again, Synced::default());
     }
 }
+
+#[cfg(windows)]
+#[test]
+fn a_mod_has_settings_once_it_declared_a_file() {
+    let loader = crate::start::tests::loader_running(&["you.lockers"]);
+    let record = &loader.mods[0];
+    assert!(!has_settings(record));
+    settings_of(record).unwrap().files.relock().extend(files());
+    assert!(has_settings(record));
+}

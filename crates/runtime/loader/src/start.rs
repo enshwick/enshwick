@@ -167,7 +167,6 @@ pub(crate) fn start(missing_forwards: u32, release: extern "system" fn() -> u32)
     unsafe {
         enshwick_base::__internal::install_host(&raw const host::API, host::LOADER_HANDLE);
     }
-    crate::engine::profile::on_host(&host::API);
     attribute_crashes(loader, &order);
     initialise(loader, &order, watching.as_mut());
     seal(loader);
@@ -372,6 +371,8 @@ fn arm_watched(loader: &Loader, frame: Option<FrameSlot>, watching: Option<&mut 
 /// Calls the `init` of every mod still on in load order, putting game code each one
 /// changes outside the API down to it.
 fn initialise(loader: &Loader, order: &[&Library], mut watching: Option<&mut Watching>) {
+    // A dry run initialises too, so the host is named here, not in `start` alone.
+    crate::engine::profile::on_host(&host::API);
     for (index, library) in order.iter().enumerate() {
         let record = &loader.mods[index];
         if record.off.load(Ordering::Acquire) {

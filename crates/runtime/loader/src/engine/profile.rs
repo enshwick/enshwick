@@ -346,6 +346,12 @@ pub(crate) fn on_host(api: &'static enshwick_core::abi::HostApi) {
     let _first = STATE.host.set(api);
 }
 
+/// Whether a host table is named for data packs' code.
+#[cfg(all(windows, test))]
+pub(crate) fn host_named() -> bool {
+    STATE.host.get().is_some()
+}
+
 /// Keeps the time-stamp counter's rate, measured off the game thread, for
 /// [`nanos`].
 pub fn keep_tsc_hz(hz: f64) {

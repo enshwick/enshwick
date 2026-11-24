@@ -14,8 +14,8 @@ pub(crate) mod data_packs;
 #[cfg(windows)]
 pub(crate) static PARTS: &[&crate::engine::parts::Part] = &[&crate::engine::parts::Part {
     seal: Some(|_| crate::base::join::client::on_pack_hash(data_packs::hash_of)),
-    turned: Some(|_, record| {
-        if record.pack && record.off.load(core::sync::atomic::Ordering::Acquire) {
+    turned: Some(|_, record, off| {
+        if off && record.pack {
             data_packs::forget(&record.id);
         }
     }),

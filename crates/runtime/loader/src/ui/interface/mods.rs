@@ -813,8 +813,7 @@ fn place(from: u8, joined: bool) -> mods_screen::Place {
 /// settings on a page of its own, which its administrators change.
 fn server_id(loader: &Loader, index: usize, place: mods_screen::Place) -> Option<String> {
     let record = loader.mods.get(index)?;
-    (place.joined && !crate::base::worlds::settings_files(record).is_empty())
-        .then(|| record.id.clone())
+    (place.joined && crate::base::worlds::has_settings(record)).then(|| record.id.clone())
 }
 
 /// Frames between two looks at whether the joined server takes messages,

@@ -106,12 +106,12 @@ pub(crate) static PARTS: &[&Part] = &[
     },
     &Part {
         seal: Some(points::seal),
-        turned: Some(|loader, _| points::rearm(|owner| loader.passed(owner, false))),
+        turned: Some(|loader, _, _| points::rearm(|owner| loader.passed(owner, false))),
         ..part!("points", points)
     },
     &Part {
-        turned: Some(|_, record| {
-            if record.off.load(core::sync::atomic::Ordering::Acquire) && record.joins_when_on() {
+        turned: Some(|_, record, off| {
+            if off && record.joins_when_on() {
                 advertise::wake();
             }
         }),

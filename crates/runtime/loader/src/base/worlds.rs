@@ -432,6 +432,13 @@ pub(crate) fn settings_files(record: &crate::engine::loader::ModRecord) -> Vec<S
     settings_of(record).map_or_else(Vec::new, |s| s.files.relock().clone())
 }
 
+/// Whether `record`'s mod declared a settings file, read without copying
+/// them, as the Mods screen asks each frame.
+#[cfg(windows)]
+pub(crate) fn has_settings(record: &crate::engine::loader::ModRecord) -> bool {
+    settings_of(record).is_some_and(|s| !s.files.relock().is_empty())
+}
+
 /// On a client in another's world, the settings its server sent for
 /// `record`'s mod, every file seen as one.
 #[cfg(windows)]

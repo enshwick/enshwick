@@ -257,7 +257,7 @@ fn config(loader: &Loader, args: &str) -> String {
             let with: Vec<&str> = loader
                 .mods
                 .iter()
-                .filter(|m| !crate::base::worlds::settings_files(m).is_empty())
+                .filter(|m| crate::base::worlds::has_settings(m))
                 .map(|m| m.id.as_str())
                 .collect();
             return if with.is_empty() {
