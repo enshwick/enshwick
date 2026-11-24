@@ -158,8 +158,13 @@ format_push_string = "deny"
 [profile.dev]
 debug = "line-tables-only"
 
+# Dependencies build optimised: the tests that read the game's executables
+# spend their time in decoders and the disassembler, and the pin tests took
+# 40 to 70 s each at opt-level 0, 3 s at 2 (2026-11-24). Only a cold build
+# pays for it; the workspace's own crates stay at 0 and rebuild as fast.
 [profile.dev.package."*"]
 debug = false
+opt-level = 2
 
 # `cargo bench` inherits this profile, fat LTO included, so hot-path numbers
 # are the shipped build's: thin LTO moved hot-path benches by far more than

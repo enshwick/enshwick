@@ -25,15 +25,16 @@ use std::io::Write as _;
 use std::path::Path;
 use std::process::Command;
 use std::thread;
-use std::time::Instant;
 
 use crate::affected::{self, Lane, Package, Scope, WIDE_PACKAGES};
 use crate::commands::{fuzz, header, public_paths, wine};
-use crate::{FACADE, cargo, packages, say, tool_path, workspace_root};
+use crate::{FACADE, packages, say, workspace_root};
 use part::{
     Part, due_parts, facade_code_reached, stable_api_due, stable_api_out_of_scope,
     stable_examples_left_to_ci, trybuild_due, windows_features_due,
 };
+
+pub(crate) use step::Step;
 
 pub(crate) const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 macro_rules! facade_features {
@@ -393,101 +394,6 @@ pub(crate) fn git(args: &[&str]) -> Option<String> {
         .status
         .success()
         .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
-}
-
-/// One command line: cargo, or another tool of the checks.
-#[derive(Debug)]
-pub(crate) struct Step {
-    program: Option<String>,
-    args: Vec<String>,
-    env: Vec<(&'static str, String)>,
-}
-
-impl Step {
-    pub(crate) fn new(words: &[&str]) -> Self {
-        Self {
-            program: None,
-            args: words.iter().map(|w| (*w).to_owned()).collect(),
-            env: Vec::new(),
-        }
-    }
-
-    /// A step that runs `program` instead of cargo.
-    pub(crate) fn tool(program: &'static str, words: &[&str]) -> Self {
-        Self {
-            program: Some(program.to_owned()),
-            ..Self::new(words)
-        }
-    }
-
-    /// A step that runs this xtask binary again, without a cargo start and
-    /// its rebuild check of the binary that runs.
-    fn xtask(words: &[&str]) -> Self {
-        match std::env::current_exe() {
-            Ok(exe) => Self {
-                program: Some(exe.display().to_string()),
-                ..Self::new(words)
-            },
-            Err(_) => Self::new(&["xtask"]).then(words),
-        }
-    }
-
-    fn then_owned(mut self, words: &[String]) -> Self {
-        self.args.extend_from_slice(words);
-        self
-    }
-
-    pub(crate) fn then(mut self, words: &[&str]) -> Self {
-        self.args.extend(words.iter().map(|w| (*w).to_owned()));
-        self
-    }
-
-    pub(crate) fn env(mut self, name: &'static str, value: impl Into<String>) -> Self {
-        self.env.push((name, value.into()));
-        self
-    }
-
-    fn line(&self) -> String {
-        format!(
-            "{} {}",
-            self.program.as_deref().unwrap_or("cargo"),
-            self.args.join(" ")
-        )
-    }
-
-    /// Runs the step with its output shown, or captured when `quiet` (for a
-    /// step running beside others) and shown only when it fails.
-    pub(crate) fn run(&self, quiet: bool) -> bool {
-        let started = Instant::now();
-        let mut command = Command::new(self.program.clone().unwrap_or_else(cargo));
-        command
-            .args(&self.args)
-            .env("PATH", tool_path())
-            .envs(self.env.iter().map(|(name, value)| (name, value)));
-        let (ok, output) = if quiet {
-            match command.output() {
-                Ok(output) => (
-                    output.status.success(),
-                    [output.stdout, output.stderr].concat(),
-                ),
-                Err(error) => (false, error.to_string().into_bytes()),
-            }
-        } else {
-            say(&format!("> {}", self.line()));
-            match command.status() {
-                Ok(status) => (status.success(), Vec::new()),
-                Err(error) => (false, error.to_string().into_bytes()),
-            }
-        };
-        let seconds = started.elapsed().as_secs_f32();
-        if ok {
-            say(&format!("ok in {seconds:.1} s: {}", self.line()));
-        } else {
-            let _shown = std::io::stderr().write_all(&output);
-            say(&format!("FAILED in {seconds:.1} s: {}", self.line()));
-        }
-        ok
-    }
 }
 
 /// The libtest filters that pick the examples of `names` out of a workspace
@@ -948,6 +854,7 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
 mod features;
 mod in_process;
 mod part;
+mod step;
 #[cfg(test)]
 mod tests;
 mod windows_lint;
