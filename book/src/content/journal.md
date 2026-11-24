@@ -267,8 +267,7 @@ fn init(load: &mut enshwick::Load<'_>, shells: [ItemId; 2]) -> Result<(), enshwi
 
 The journal holds a category as the key of its title text.
 `journal::item_set_category` names the game's 20 categories in English,
-from client 426's texts: `BUILDING_BLOCKS`, `COLLECTIONS`, `ENEMY_TROPHIES`,
-`MUSIC` and the rest. Luau passes the key, such as `3331860567` for
+from client 426's texts, such as `COLLECTIONS`. Luau passes the key, such as `3331860567` for
 "Collections", and `quests.item_sets()` gives each set's key.
 
 An entry's `done_when` left `None` is done once a player first picks its
