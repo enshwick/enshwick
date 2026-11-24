@@ -528,6 +528,191 @@ fn the_server_s_close_takes_only_its_own_window() {
     assert!(STATE.held.load().is_none(), "nothing held");
 }
 
+/// A window with a Ban row per player, whose action takes a reason past the
+/// player its button gives, and the Announce action drawn whole.
+fn ban_and_say() -> View {
+    let row = |key: u64, name: &str| ItemView::Row {
+        text: name.into(),
+        buttons: vec![ButtonView {
+            label: "Ban".into(),
+            action: "ban".into(),
+            args: vec![Value::Player {
+                key: PlayerKey::new(key),
+                name: String::new(),
+            }],
+        }],
+    };
+    let reason = ArgView {
+        kind: ArgView::TEXT,
+        label: "Reason".into(),
+        max: 64.0,
+        ..ArgView::default()
+    };
+    let player = ArgView {
+        kind: ArgView::PLAYER,
+        label: "Player".into(),
+        ..ArgView::default()
+    };
+    View {
+        title: "Check".into(),
+        items: vec![row(7, "Ann"), row(8, "Bob"), ItemView::Action("say".into())],
+        entries: vec![
+            Entry {
+                id: "ban".into(),
+                label: "Ban".into(),
+                offered: true,
+                args: vec![player, reason],
+                ..Entry::default()
+            },
+            say(),
+        ],
+    }
+}
+
+fn ask(item: &str, act: Act, text: &str) -> Ask {
+    Ask::new("you.admin:panel", item, act, text).expect("ids a window can hold")
+}
+
+#[test]
+fn a_commanded_text_fills_the_field_and_a_commanded_run_sends_it() {
+    let view = ban_and_say();
+    let mut drawn = drawn();
+    let typed = drawn.take(&view, &ask("say/0", Act::Text, "Restart soon"));
+    assert_eq!(typed, Some(windows::Answer::Shown));
+    assert_eq!(
+        drawn.take(&view, &ask("say", Act::Press, "")),
+        None,
+        "the draw presses"
+    );
+    assert_eq!(
+        items(&Recorder::default(), &view, &mut drawn),
+        Click::Run("say".into(), vec![Value::Text("Restart soon".into())])
+    );
+}
+
+#[test]
+fn a_commanded_row_press_opens_the_form_of_that_row_s_player() {
+    let view = ban_and_say();
+    let mut drawn = drawn();
+    assert_eq!(drawn.take(&view, &ask("ban#1", Act::Press, "")), None);
+    let Click::Form(form) = items(&Recorder::default(), &view, &mut drawn) else {
+        panic!("a Ban with a reason still to give opens its form");
+    };
+    let bob = Value::Player {
+        key: PlayerKey::new(8),
+        name: String::new(),
+    };
+    assert_eq!(form.given, [bob]);
+}
+
+#[test]
+fn a_command_on_an_item_the_window_lacks_or_draws_off_says_so() {
+    let view = ban_and_say();
+    let mut drawn = drawn();
+    let missing = drawn.take(&view, &ask("kick#0", Act::Press, ""));
+    assert_eq!(missing, Some(windows::Answer::Missing));
+    let text_on_button = drawn.take(&view, &ask("ban#0", Act::Text, "x"));
+    assert_eq!(
+        text_on_button,
+        Some(windows::Answer::Off),
+        "a button takes no text"
+    );
+    // Announce's Run is drawn off while its field is empty: the press makes
+    // no click.
+    assert_eq!(drawn.take(&view, &ask("say", Act::Press, "")), None);
+    assert_eq!(
+        items(&Recorder::default(), &view, &mut drawn),
+        Click::Nothing
+    );
+    let mut refused = ban_and_say();
+    refused.entries[1].offered = false;
+    let off = drawn.take(&refused, &ask("say", Act::Press, ""));
+    assert_eq!(
+        off,
+        Some(windows::Answer::Off),
+        "an action the player may not run"
+    );
+}
+
+#[test]
+fn a_commanded_pick_takes_the_option_by_the_name_the_window_shows() {
+    let kind = ArgView {
+        kind: ArgView::CHOICE,
+        label: "Kind".into(),
+        choices: vec!["Basic".into(), "Pro".into()],
+        ..ArgView::default()
+    };
+    let mut view = ban_and_say();
+    view.entries[1].args = vec![kind];
+    let mut drawn = drawn();
+    let pro = drawn.take(&view, &ask("say/0", Act::Pick, "Pro"));
+    assert_eq!(pro, Some(windows::Answer::Shown));
+    let none = drawn.take(&view, &ask("say/0", Act::Pick, "Gold"));
+    assert_eq!(none, Some(windows::Answer::Off), "no option of that name");
+    assert_eq!(drawn.take(&view, &ask("say", Act::Press, "")), None);
+    assert_eq!(
+        items(&Recorder::default(), &view, &mut drawn),
+        Click::Run("say".into(), vec![Value::Choice(1)])
+    );
+}
+
+#[test]
+fn a_commanded_switch_flips_that_player_s_switch() {
+    let list = Entry {
+        id: "allowed".into(),
+        label: "Allowed".into(),
+        per_player: true,
+        offered: true,
+        players: vec![(PlayerKey::new(7), "Ann".into(), false)],
+        ..Entry::default()
+    };
+    let view = View {
+        title: "List".into(),
+        items: vec![ItemView::Action("allowed".into())],
+        entries: vec![list],
+    };
+    let mut drawn = drawn();
+    assert_eq!(drawn.take(&view, &ask("allowed@7", Act::Press, "")), None);
+    let ann = Value::Player {
+        key: PlayerKey::new(7),
+        name: String::new(),
+    };
+    assert_eq!(
+        items(&Recorder::default(), &view, &mut drawn),
+        Click::Run("allowed".into(), vec![ann, Value::Toggle(true)])
+    );
+}
+
+#[test]
+fn a_commanded_cancel_leaves_the_open_form_and_lists_follow_it() {
+    let view = ban_and_say();
+    let mut drawn = drawn();
+    let form = Form {
+        label: "Ban".into(),
+        action: "ban".into(),
+        given: vec![Value::Player {
+            key: PlayerKey::new(7),
+            name: String::new(),
+        }],
+    };
+    drawn.after(&Click::Form(form.clone()));
+    let open: Vec<String> = items::list(&view, drawn.form.as_ref())
+        .iter()
+        .map(|item| item.target.id())
+        .collect();
+    assert_eq!(open, ["ban/1", "ban", "@cancel", "@close"]);
+    assert_eq!(drawn.take(&view, &ask("@cancel", Act::Press, "")), None);
+    assert_eq!(
+        form_widgets(&Recorder::default(), &view, &form, &mut drawn),
+        Click::Cancel
+    );
+    assert_eq!(
+        drawn.take(&view, &ask("say", Act::Press, "")),
+        Some(windows::Answer::Missing),
+        "the form hides the window's own items"
+    );
+}
+
 #[test]
 fn a_lost_link_forgets_the_windows_so_none_draws_over_the_menu() {
     heard("you.admin", "panel", true, "W\tPanel\n");

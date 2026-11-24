@@ -8,13 +8,13 @@ mod client;
 mod sound;
 
 use crate::test::table::{Registered, State, text, with};
-#[cfg(feature = "unstable")]
 pub(crate) use client::{client_command, client_command_status, client_snapshot, client_windows};
 use enshwick_core::__fake::SCREENS;
 use enshwick_core::abi::{
     FogInfo, MapMarkerTypeInfo, ModHandle, Side, Status, UiAnswerFn, UiDialog, UiExtension,
     UiFrameFn, UiMarker, UiTooltipFn, UiTooltipItem, UiWidget,
 };
+#[cfg(feature = "unstable")]
 pub(crate) use sound::hear;
 pub(crate) use sound::{sound_play, sound_play_for, sound_state, sound_steer, sound_steer_for};
 
