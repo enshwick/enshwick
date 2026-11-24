@@ -11,13 +11,13 @@ thread_local! {
 }
 
 /// How many zeroed bytes a [`Buffer`] of `len` bytes keeps after them: a
-/// page, or a sixteenth of `len` where that is more. The game reads some
-/// served resources past their end, harmlessly in its own archive pool; past
-/// an exactly sized block it faults on a page the heap has not committed. On
-/// client 26430625 its box copy (0x1410af160) sweeps a 548 x 244
-/// `VoxelTemperatureResource` part of 83 layers and 7,280 bytes in 4 x 4 x 1
-/// boxes through the whole 84th layer, 126,432 bytes past the end; a
-/// sixteenth covers a whole layer of any volume of 16 layers or more.
+/// page, or a sixteenth of `len` where that is more. The game's own copy of
+/// a resource lies in its unpacked archive with the next resources after
+/// it, so a read past its end never faults there; past an exactly sized
+/// block it faults on a page the heap has not committed. Its box copy
+/// (0x1410af160, client 26430625) checks no bound, and how far it reads
+/// past the end of a large volume is not measured, so the margin grows with
+/// `len`.
 pub(super) fn tail(len: usize) -> usize {
     (len / 16).max(PAGE)
 }

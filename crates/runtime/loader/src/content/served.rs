@@ -726,8 +726,12 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
         // The base is not resident yet; the game asks again.
         return None;
     }
+    let mut copy = Vec::new();
+    let (data, len) = whole(&entry.base, data, len, &mut copy);
     // SAFETY: the game resolved its base to `len` resident bytes at `data`,
-    // non-zero by the check before it, unchanged for the call.
+    // non-zero by the check before it, unchanged for the call; `whole` gives
+    // those, or a longer whole length in read-only pages there or in `copy`,
+    // which lives past the call.
     let (current, current_len) = unsafe { patches::build_first(entry, &mut state, data, len) }?;
     let result = (current, current_len);
     if entry.key.type_hash == crate::engine::catalogue::types::ITEM_INFO {
@@ -762,6 +766,43 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
         );
     }
     Some(result)
+}
+
+/// Where and how long the bytes of `base` read, which the game resolved to
+/// `len` bytes at `data`: all of them where the game's map stores its
+/// length cut to 24 bits, as `VoxelTemperatureResource` part 3 on client
+/// 26430625 resolves to 0xa9748c of its 0x2a9748c bytes. The game reads
+/// such a resource by its own header, so a copy of only `len` bytes faults
+/// it.
+fn whole(base: &ResourceKey, data: usize, len: usize, copy: &mut Vec<u8>) -> (usize, usize) {
+    let whole = crate::engine::archive::game().map_or(len, |archive| archive.uncut_len(base, len));
+    held(base, (data, len), whole, copy)
+}
+
+/// The `whole` bytes at `data` where read-only pages hold them, else a copy
+/// of them in `copy` where all of them read, else the `len` bytes at `data`
+/// with a warning naming `base`.
+fn held(
+    base: &ResourceKey,
+    (data, len): (usize, usize),
+    whole: usize,
+    copy: &mut Vec<u8>,
+) -> (usize, usize) {
+    if whole == len || crate::engine::pages::read_only(data, whole) == whole {
+        return (data, whole);
+    }
+    if copy.try_reserve_exact(whole).is_ok() {
+        copy.resize(whole, 0);
+        if crate::engine::pages::copy_into(data, copy) {
+            return (copy.as_ptr().expose_provenance(), whole);
+        }
+    }
+    crate::log!(
+        WARN,
+        "served {} builds from {len} of its {whole} bytes: the rest of the game's copy does not read, so the game may read past the served copy",
+        key_name(base)
+    );
+    (data, len)
 }
 
 fn record_item(data: u64, len: u64) {

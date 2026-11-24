@@ -46,6 +46,14 @@ const ZSTD: [u8; 4] = [0x28, 0xb5, 0x2f, 0xfd];
 /// The most a zstd block unpacks to; each block takes at least three bytes
 /// of header, which bounds what a packed chunk can unpack to.
 const ZSTD_BLOCK: usize = 128 * 1024;
+/// What the map keeps of a resource's length: its low 24 bits. On client
+/// 26430625 and its server, `VoxelTemperatureResource`
+/// dbea9f50604c5f429c7cdeeefd9b6920 part 3 holds 0x2a9748c bytes, its
+/// volume header's own size, and the map stores 0xa9748c.
+const CUT: u32 = 1 << 24;
+/// What the archive aligns each resource's offset to: a resource ends fewer
+/// than this many bytes before the next one's offset.
+const ALIGN: u32 = 16;
 
 /// A resource's place in the unpacked resource bytes.
 #[derive(Clone, Copy, Debug)]
@@ -153,6 +161,21 @@ fn open_at(path: &Path, at: u32, len: usize) -> Option<File> {
     Some(file)
 }
 
+/// `len`, a length the map stores, with the multiples of [`CUT`] it lost put
+/// back where they fill `room`, the bytes from the resource's offset to the
+/// next one's, to within its [`ALIGN`] padding; any other `len` stays, such
+/// as that of a part sharing its offset with a longer one or followed by a
+/// gap.
+fn uncut(len: u32, room: u32) -> u32 {
+    let Some(lost) = room.checked_sub(len) else {
+        return len;
+    };
+    if len >= CUT || lost % CUT >= ALIGN {
+        return len;
+    }
+    len + lost / CUT * CUT
+}
+
 /// A location in the header: where it points and its count.
 fn location(header: &[u8], field: usize) -> Option<(usize, usize)> {
     let offset = usize::try_from(word(header, field)?).ok()?;
@@ -242,6 +265,20 @@ impl Archive {
                 })
             })
             .collect::<Option<Box<[Chunk]>>>()?;
+        let end = chunks
+            .iter()
+            .map(|c| c.at.saturating_add(c.len))
+            .max()
+            .unwrap_or(0);
+        let mut starts: Vec<u32> = resources.values().map(|p| p.at).collect();
+        starts.sort_unstable();
+        starts.dedup();
+        for place in resources.values_mut() {
+            let next = starts
+                .get(starts.partition_point(|&s| s <= place.at))
+                .map_or(end, |&next| next);
+            place.len = uncut(place.len, next.saturating_sub(place.at));
+        }
         Some(Self {
             store,
             header,
@@ -267,8 +304,38 @@ impl Archive {
             .contains_key(&(key.guid.0, key.type_hash, key.part))
     }
 
+    /// The whole length of resource `key`, given `len`, the length the
+    /// game's own map gives it: the archive's length when `len` is that cut
+    /// to its low 24 bits, as the map stores it, else `len`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_gamedata::archive::Archive;
+    ///
+    /// if let Some(archive) = Archive::open(std::path::Path::new("game"), "enshrouded")
+    ///     && let Some(key) = archive.keys().first()
+    ///     && let Some(bytes) = archive.resource(key)
+    /// {
+    ///     assert_eq!(archive.uncut_len(key, bytes.len()), bytes.len());
+    /// }
+    /// ```
+    #[must_use]
+    pub fn uncut_len(&self, key: &ResourceKey, len: usize) -> usize {
+        let whole = || {
+            let whole = self
+                .resources
+                .get(&(key.guid.0, key.type_hash, key.part))?
+                .len;
+            let cut = u32::try_from(len).ok()?;
+            (whole > cut && whole % CUT == cut).then_some(usize::try_from(whole).ok()?)
+        };
+        whole().unwrap_or(len)
+    }
+
     /// The bytes of resource `key`, as the game reads them before it
-    /// resolves their references; `None` for a key the archive lacks.
+    /// resolves their references, whole even where the map stores its
+    /// length cut; `None` for a key the archive lacks.
     #[must_use]
     pub fn resource(&self, key: &ResourceKey) -> Option<Vec<u8>> {
         let place = *self.resources.get(&(key.guid.0, key.type_hash, key.part))?;
@@ -648,6 +715,115 @@ mod tests {
         header[..4].copy_from_slice(b"KFC2");
         assert!(Archive::from_bytes(header, Vec::new(), []).is_none());
         assert!(Archive::from_bytes(Vec::new(), Vec::new(), []).is_none());
+    }
+
+    #[test]
+    fn a_stored_length_gets_back_the_multiples_of_2_24_that_fit_before_the_next_resource() {
+        assert_eq!(
+            uncut(0xa9_748c, 0x2a9_7490),
+            0x2a9_748c,
+            "the temperature part"
+        );
+        assert_eq!(uncut(0xa9_748c, 0xa9_7490), 0xa9_748c, "padded to 16 bytes");
+        assert_eq!(uncut(0xa9_748c, 0xa9_748c + CUT - 1), 0xa9_748c);
+        assert_eq!(uncut(0xa9_748c, 0xa9_748c + CUT), 0xa9_748c + CUT);
+        assert_eq!(uncut(16, 4), 16, "overlapping the next resource");
+        assert_eq!(uncut(CUT, u32::MAX), CUT, "not cut");
+        assert_eq!(uncut(0, CUT + 8), CUT, "exactly 2^24, stored as 0");
+    }
+
+    #[test]
+    fn a_stored_length_stays_where_the_room_after_it_is_not_its_own() {
+        assert_eq!(
+            uncut(0, 0x2a9_7490),
+            0,
+            "a part sharing the temperature part's offset"
+        );
+        assert_eq!(uncut(0x100, 0x100 + CUT + 0x1000), 0x100, "a gap after it");
+        assert_eq!(uncut(0x100, 0x100 + CUT + ALIGN), 0x100, "past the padding");
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore = "reads 16 MiB, which takes minutes under Miri")]
+    fn a_resource_whose_length_the_map_cuts_reads_whole() {
+        let whole = CUT + 16;
+        let mut h = vec![0u8; 0x100];
+        put(&mut h, 0, MAGIC);
+        locate(&mut h, RESOURCE_KEYS, 0x90, 2);
+        locate(&mut h, RESOURCE_VALUES, 0xd0, 2);
+        h[0x90..0xa0].copy_from_slice(&[7; 16]);
+        put(&mut h, 0xa0, 0xabcd);
+        h[0xb0..0xc0].copy_from_slice(&[8; 16]);
+        put(&mut h, 0xc0, 0xabcd);
+        // The first resource holds `whole` bytes; the map keeps 16 of them.
+        put(&mut h, 0xd0, 0);
+        put(&mut h, 0xd4, 16);
+        put(&mut h, 0xd8, whole);
+        put(&mut h, 0xdc, 4);
+        locate(&mut h, CHUNKS, 0xe0, 1);
+        for (at, value) in [(0xe4, whole + 4), (0xe8, whole + 4), (0xf0, whole + 4)] {
+            put(&mut h, at, value);
+        }
+        let whole = whole as usize;
+        let mut resources = vec![0u8; whole + 4];
+        resources[whole - 1] = 1;
+        resources[whole..].copy_from_slice(&[2, 3, 4, 5]);
+        let archive = Archive::from_bytes(h, resources, []).unwrap();
+        let first = archive.resource(&key(7, 0)).unwrap();
+        assert_eq!((first.len(), first.last()), (whole, Some(&1)));
+        assert_eq!(archive.resource(&key(8, 0)), Some(vec![2, 3, 4, 5]));
+        assert_eq!(
+            archive.uncut_len(&key(7, 0), 16),
+            whole,
+            "the game's cut length"
+        );
+        assert_eq!(archive.uncut_len(&key(7, 0), whole), whole);
+        assert_eq!(archive.uncut_len(&key(7, 0), 17), 17, "another length");
+        assert_eq!(archive.uncut_len(&key(8, 0), 4), 4);
+        assert_eq!(
+            archive.uncut_len(&key(8, 1), 4),
+            4,
+            "a key the archive lacks"
+        );
+    }
+
+    /// The installed client's archive, when `ENSHWICK_CLIENT_DIR` names its
+    /// folder and it holds the volume: the temperature volume, whose length
+    /// the map of client 26430625 stores cut to 24 bits, reads as long as
+    /// its own header says it is.
+    #[test]
+    #[cfg_attr(miri, ignore = "unpacking archive chunks takes minutes under Miri")]
+    fn the_client_s_temperature_volume_reads_as_long_as_its_header_says() {
+        use enshwick::typed::{Named, VoxelTemperatureResource};
+
+        /// Where the volume header keeps its data's offset, relative to the
+        /// field, and the data's length in bytes.
+        const DATA: usize = 0x24;
+        const DATA_LEN: usize = 0x28;
+        let Ok(dir) = std::env::var("ENSHWICK_CLIENT_DIR") else {
+            return;
+        };
+        let archive = Archive::open(Path::new(&dir), "enshrouded").unwrap();
+        let name = crate::catalogue::type_name(VoxelTemperatureResource::ID);
+        let key = ResourceKey {
+            guid: Guid([
+                0xdb, 0xea, 0x9f, 0x50, 0x60, 0x4c, 0x5f, 0x42, 0x9c, 0x7c, 0xde, 0xee, 0xfd, 0x9b,
+                0x69, 0x20,
+            ]),
+            type_hash: crate::reflect::fnv1a32(name.as_bytes()),
+            part: 3,
+        };
+        let Some(volume) = archive.resource(&key) else {
+            return;
+        };
+        let data = DATA + word(&volume, DATA).unwrap() as usize;
+        let data_len = word(&volume, DATA_LEN).unwrap() as usize;
+        assert_eq!(volume.len(), data + data_len, "the header's own length");
+        assert_eq!(
+            archive.uncut_len(&key, volume.len() % CUT as usize),
+            volume.len(),
+            "from the map's cut length"
+        );
     }
 
     /// The installed client's archive, when `ENSHWICK_CLIENT_DIR` names its
