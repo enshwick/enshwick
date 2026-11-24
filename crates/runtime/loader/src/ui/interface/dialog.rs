@@ -238,6 +238,10 @@ struct State {
     /// The count of `ended` whose waiting dialogs the interface thread
     /// closed.
     closed: AtomicU64,
+    /// The dialog on screen after the last draw: its buttons in the low
+    /// word, its mod's load-order index plus 1 above, 0 for the loader's
+    /// own; 0 while none shows.
+    on_screen: AtomicU64,
 }
 
 static STATE: State = State {
@@ -248,6 +252,7 @@ static STATE: State = State {
     in_world: AtomicBool::new(false),
     ended: AtomicU64::new(0),
     closed: AtomicU64::new(0),
+    on_screen: AtomicU64::new(0),
 };
 
 thread_local! {
@@ -472,10 +477,26 @@ pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
             }
             *current = take_next(&layout, engine.layout.popup_active);
         }
-        let Some(shown) = current.as_mut() else {
+        let commanded = crate::actions::client_commands::dialogs::take();
+        let Some(buttons) = current.as_ref().map(|shown| shown.buttons) else {
+            if let Some((id, _)) = commanded {
+                crate::actions::client_commands::dialogs::answered(id, false);
+            }
             return;
         };
         DRAWN.set(Some(super::tick()));
+        if let Some((id, answer)) = commanded {
+            // A client command's answer, as the button would give it.
+            let has = buttons & 1 << answer != 0;
+            crate::actions::client_commands::dialogs::answered(id, has);
+            if has && let Some(done) = current.take() {
+                done.answerer.answer(answer);
+                return;
+            }
+        }
+        let Some(shown) = current.as_mut() else {
+            return;
+        };
         // SAFETY: `host` is non-zero, checked by the guard before it, and is
         // the interface host read from the frame's live context; its answer
         // flag sits at the table's `ui.host_answered`, and only this thread,
@@ -536,6 +557,35 @@ pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
             done.answerer.answer(u32::from(index));
         }
     });
+    CURRENT.with_borrow(|current| {
+        let word = current.as_ref().map_or(0, |shown| {
+            let owner = match &shown.answerer {
+                Answerer::Mod(registered) => {
+                    u64::try_from(registered.owner.get()).map_or(0, |i| i + 1)
+                }
+                Answerer::Loader(_) => 0,
+            };
+            u64::from(shown.buttons) | owner << 32
+        });
+        STATE.on_screen.store(word, Ordering::Release);
+    });
+}
+
+/// The dialog on screen for a client command and the snapshot: its buttons,
+/// 0 for none, and its mod's load-order index, `None` for the loader's own;
+/// `None` while dialogs do not show in game. From any thread.
+pub(super) fn on_screen() -> Option<crate::actions::client_commands::dialogs::Shown> {
+    if STATE.mode.load(Ordering::Acquire) != IN_GAME {
+        return None;
+    }
+    let word = STATE.on_screen.load(Ordering::Acquire);
+    let owner = (word >> 32)
+        .checked_sub(1)
+        .and_then(|i| usize::try_from(i).ok());
+    Some((
+        u32::try_from(word & u64::from(u32::MAX)).unwrap_or(0),
+        owner,
+    ))
 }
 
 fn take_next(layout: &DialogLayout, active: usize) -> Option<Current> {

@@ -317,6 +317,7 @@ pub(crate) fn link(loader: &'static Loader) {
     if let Some(engine) = ENGINE.get() {
         mods::link(loader, engine);
         crate::actions::client_commands::windows::register(carried::draws);
+        crate::actions::client_commands::dialogs::register(dialog::on_screen);
         menu_line::link(loader, engine);
         hold::link(loader);
         item_slots::link(loader, extensions::hosts_asked(count + hud_count > 0));

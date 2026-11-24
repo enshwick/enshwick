@@ -6,6 +6,7 @@ use super::Input;
 use crate::abi::{ClientCommand as RawCommand, ClientCommandStatus as Raw, Status, Str};
 use crate::controls::GameAction;
 use crate::{RecipeId, WorldError};
+use enshwick_base::dialog::Response;
 use enshwick_world::__internal::world_status;
 
 mod status;
@@ -154,6 +155,14 @@ pub enum CommandAction {
         /// The text.
         text: String,
     },
+    /// Answers the loader's dialog that shows, a mod's
+    /// ([`Ui::ask`](crate::ui::Ui::ask)) or the loader's own, with a
+    /// response one of its buttons gives, as a click would, on any screen.
+    /// Observed once the dialog closes with that answer;
+    /// [`WorldError::Unavailable`] while no dialog shows in game, which
+    /// [`ClientSnapshot::dialog_buttons`](super::ClientSnapshot::dialog_buttons)
+    /// tells, and refused for a response the dialog has no button for.
+    AnswerDialog(Response),
 }
 
 /// A server's password for [`CommandAction::Join`]: the loader hands it to
@@ -329,6 +338,10 @@ impl ClientCommand {
                 raw.item = Str::new(item);
                 raw.text = Str::new(text);
             }
+            CommandAction::AnswerDialog(response) => {
+                raw.kind = RawCommand::ANSWER_DIALOG;
+                raw.answer = response.to_raw();
+            }
         }
         raw
     }
@@ -382,7 +395,8 @@ struct LuauCommand {
     /// `"move"`, `"highlight_recipe"`, `"join"`, `"leave"`, `"press"`,
     /// `"set_waypoint"`, `"clear_waypoint"`, `"ping"`, `"host"`,
     /// `"open_mods"`, `"open_mod"`, `"open_mod_settings"`,
-    /// `"press_window_item"`, `"pick_window_item"` or `"set_window_text"`.
+    /// `"press_window_item"`, `"pick_window_item"`, `"set_window_text"` or
+    /// `"answer_dialog"`.
     pub kind: String,
     /// The session, as `client_snapshot().session` gives it.
     pub session: u64,
@@ -419,6 +433,8 @@ struct LuauCommand {
     pub item: Option<String>,
     /// The option a pick picks or the text a window's field takes.
     pub text: Option<String>,
+    /// The response a dialog's answer gives.
+    pub answer: Option<Response>,
 }
 
 impl core::fmt::Debug for LuauCommand {
@@ -441,6 +457,7 @@ impl core::fmt::Debug for LuauCommand {
             .field("window", &self.window)
             .field("item", &self.item)
             .field("text", &self.text)
+            .field("answer", &self.answer)
             .finish()
     }
 }
@@ -518,6 +535,9 @@ impl TryFrom<LuauCommand> for ClientCommand {
                 item: luau.item.clone().ok_or_else(|| missing("an item"))?,
                 text: luau.text.clone().ok_or_else(|| missing("a text"))?,
             },
+            "answer_dialog" => {
+                CommandAction::AnswerDialog(luau.answer.ok_or_else(|| missing("an answer"))?)
+            }
             other => {
                 return Err(crate::script::Error::new(format!(
                     "no client command kind {other:?}"
@@ -678,6 +698,7 @@ mod tests {
             window: None,
             item: None,
             text: None,
+            answer: None,
         };
         assert!(ClientCommand::try_from(luau("open_screen", Some("Map"))).is_ok());
         assert!(ClientCommand::try_from(luau("open_screen", None)).is_err());
@@ -726,6 +747,7 @@ mod tests {
             window: None,
             item: None,
             text: None,
+            answer: None,
         };
         assert!(
             ClientCommand::try_from(luau(Some("MainhandAction_Tap"), Some(16))).is_ok_and(|c| {
@@ -775,6 +797,7 @@ mod tests {
             window: None,
             item: None,
             text: None,
+            answer: None,
         };
         let shown = format!("{luau:?}");
         assert!(!shown.contains("hunter2"), "{shown}");

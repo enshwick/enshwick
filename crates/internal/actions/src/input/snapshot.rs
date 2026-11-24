@@ -4,6 +4,7 @@
 use super::{Input, InputMask};
 use crate::abi::{ClientSnapshot as Raw, Str};
 use crate::{Entity, RecipeId, WorldError};
+use enshwick_base::dialog::Response;
 use enshwick_world::__internal::world_status;
 
 /// How old the interface's reads in a [`ClientSnapshot`] are.
@@ -105,17 +106,20 @@ pub enum SnapshotPart {
     Recipe,
     /// The page of the loader's own Mods screen that shows, and its mod.
     LoaderScreen,
+    /// The loader's dialog that shows, its mod and its buttons.
+    Dialog,
 }
 
 impl SnapshotPart {
     /// Every part, in the order the Luau API lists them.
-    const ALL: [Self; 6] = [
+    const ALL: [Self; 7] = [
         Self::Screens,
         Self::MenuTab,
         Self::Held,
         Self::Player,
         Self::Recipe,
         Self::LoaderScreen,
+        Self::Dialog,
     ];
 
     const fn bit(self) -> u32 {
@@ -126,6 +130,7 @@ impl SnapshotPart {
             Self::Player => Raw::PLAYER,
             Self::Recipe => Raw::RECIPE,
             Self::LoaderScreen => Raw::LOADER_SCREEN,
+            Self::Dialog => Raw::DIALOG,
         }
     }
 
@@ -137,6 +142,7 @@ impl SnapshotPart {
             Self::Player => "player",
             Self::Recipe => "recipe",
             Self::LoaderScreen => "loader_screen",
+            Self::Dialog => "dialog",
         }
     }
 }
@@ -406,6 +412,46 @@ impl ClientSnapshot {
             .then(|| named(self.raw.loader_screen_mod))
             .flatten()
     }
+
+    /// The responses of the buttons of the loader's dialog that shows,
+    /// which [`CommandAction::AnswerDialog`](super::CommandAction::AnswerDialog)
+    /// gives; empty while none shows, `None` where dialogs do not show in
+    /// game.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::input::ClientSnapshot;
+    /// use enshwick::ui::Response;
+    ///
+    /// fn asks_ok(snapshot: &ClientSnapshot) -> bool {
+    ///     snapshot.dialog_buttons().is_some_and(|buttons| buttons.contains(&Response::Ok))
+    /// }
+    /// ```
+    #[must_use]
+    pub fn dialog_buttons(&self) -> Option<Vec<Response>> {
+        self.reads(SnapshotPart::Dialog)
+            .then(|| Response::of_buttons(self.raw.dialog_buttons))
+    }
+
+    /// The id of the mod whose dialog shows; `None` while none does or for
+    /// the loader's own.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::input::ClientSnapshot;
+    ///
+    /// fn mine_shows(snapshot: &ClientSnapshot) -> bool {
+    ///     snapshot.dialog_mod() == Some("you.trail")
+    /// }
+    /// ```
+    #[must_use]
+    pub fn dialog_mod(&self) -> Option<&'static str> {
+        self.reads(SnapshotPart::Dialog)
+            .then(|| named(self.raw.dialog_mod))
+            .flatten()
+    }
 }
 
 /// A page of the loader's own Mods screen, from
@@ -516,7 +562,7 @@ struct LuauSnapshot {
     /// The world's name.
     pub scene: Option<String>,
     /// The parts the build reads: `"screens"`, `"menu_tab"`, `"held"`,
-    /// `"player"`, `"recipe"` and `"loader_screen"`.
+    /// `"player"`, `"recipe"`, `"loader_screen"` and `"dialog"`.
     pub reads: Vec<String>,
     /// The open HUD screen.
     pub hud_screen: Option<String>,
@@ -540,6 +586,11 @@ struct LuauSnapshot {
     pub loader_screen: Option<String>,
     /// The id of the mod that page names.
     pub loader_screen_mod: Option<String>,
+    /// The responses of the buttons of the loader's dialog that shows;
+    /// empty while none does, nil where dialogs do not show in game.
+    pub dialog_buttons: Option<Vec<Response>>,
+    /// The id of the mod whose dialog shows; nil for the loader's own.
+    pub dialog_mod: Option<String>,
 }
 
 impl From<ClientSnapshot> for LuauSnapshot {
@@ -567,6 +618,8 @@ impl From<ClientSnapshot> for LuauSnapshot {
             server: owned(snapshot.server()),
             loader_screen: snapshot.loader_screen().map(|page| page.name().to_owned()),
             loader_screen_mod: owned(snapshot.loader_screen_mod()),
+            dialog_buttons: snapshot.dialog_buttons(),
+            dialog_mod: owned(snapshot.dialog_mod()),
         }
     }
 }

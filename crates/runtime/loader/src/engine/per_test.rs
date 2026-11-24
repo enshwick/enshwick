@@ -7,7 +7,7 @@
 //! loader keeps one process-wide state and [`carried`] is the work itself.
 
 #[cfg(test)]
-pub(crate) use scope::{CapturedLine, with, with_lines};
+pub(crate) use scope::{with, with_lines};
 
 /// `work`, to run on another thread as part of the calling test: in the
 /// loader's tests that thread sees and turns off what the test does.

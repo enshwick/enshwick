@@ -73,6 +73,7 @@ pub(super) fn kind(loader: &Loader, spec: &Spec) -> Result<Kind, CommandError> {
         Spec::LOOK => Ok(Kind::Look(spec.look)),
         Spec::MOVE => Ok(Kind::Move(spec.direction, spec.hold_ms)),
         Spec::HIGHLIGHT_RECIPE => Ok(Kind::Highlight(spec.recipe)),
+        Spec::ANSWER_DIALOG => Ok(Kind::Answer(spec.answer)),
         Spec::JOIN => Ok(Kind::Join),
         Spec::HOST => Ok(Kind::Host(Host {
             world: spec.world,

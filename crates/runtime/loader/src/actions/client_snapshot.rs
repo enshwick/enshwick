@@ -242,10 +242,18 @@ pub(crate) fn snapshot(loader: &Loader, scene: Option<&'static str>) -> ClientSn
         // The records live as long as the loader, the process.
         |index| loader.mods.get(index).map(|m| Str::new(&m.id)),
     );
-    ClientSnapshot {
+    let mut snapshot = ClientSnapshot {
         server: crate::actions::client_commands::server_str(),
         ..snapshot
+    };
+    if let Some((buttons, owner)) = crate::actions::client_commands::dialogs::shown() {
+        snapshot.available |= ClientSnapshot::DIALOG;
+        snapshot.dialog_buttons = buttons;
+        snapshot.dialog_mod = owner
+            .and_then(|index| loader.mods.get(index))
+            .map_or(Str::EMPTY, |m| Str::new(&m.id));
     }
+    snapshot
 }
 
 /// What a snapshot is made of: the frame's last whole copy, the loader's
