@@ -59,7 +59,7 @@ pub use commands::{
     CancelReason, ClientCommand, CommandAction, CommandId, CommandState, CommandStatus,
     JoinFailure, JoinPhase, Password,
 };
-pub use snapshot::{ClientSnapshot, SnapshotPart, SnapshotState};
+pub use snapshot::{ClientSnapshot, LoaderPage, SnapshotPart, SnapshotState};
 
 /// The bits of the game's `PlayerDigitalInput`, a `Bitmask64`.
 const BITS: usize = 64;

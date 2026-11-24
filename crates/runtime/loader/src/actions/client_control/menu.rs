@@ -1,5 +1,7 @@
-//! The interface's own menu commands a join and a leave post, found by
-//! their patterns on the running build.
+//! The interface's own menu commands a join, a host and a leave post,
+//! found by their patterns on the running build. Never posted: 0x12 and
+//! 0x17, which mark a character's or a world's slot as the game deletes it
+//! (client 26430625, `0x140ddc3f0`, `0x140ddcc80`).
 
 use super::{address, offset};
 use crate::engine::loader::Loader;
@@ -25,26 +27,138 @@ pub(crate) struct MenuPosts {
     join_tail: usize,
 }
 
+/// The interface's posters of the menu commands a host uses, beside the
+/// join's: a build without them still joins (client 26430625).
+#[derive(Debug)]
+pub(crate) struct HostPosts {
+    character: PostFn,
+    world: PostFn,
+    session: PostFn,
+    play_world: PostFn,
+    /// Where the character command (0x11) holds its slot id, a `u16`.
+    character_slot: usize,
+    /// Where the world command (0x16) holds its slot id, a `u16`.
+    world_slot: usize,
+    /// Where the session command (0x27) holds its kind byte.
+    session_kind: usize,
+}
+
 /// A poster: the UI context in, its command or null out.
 type PostFn = unsafe extern "system" fn(context: usize) -> *mut u8;
+
+/// The session command's kind byte for an offline world and for one open
+/// online (`0x140873710` case 0x27, client 26430625).
+const SESSION_OFFLINE: u8 = 0;
+const SESSION_ONLINE: u8 = 2;
+
+/// The poster `id` on `loader`'s build, when its pattern matched once.
+fn poster(loader: &Loader, id: pinned::Symbol) -> Result<PostFn, &'static str> {
+    // Called, not hooked: only a pattern that matched once counts.
+    if !loader.code_holds(id) {
+        return Err(id.id());
+    }
+    let at = usize::try_from(address(loader, id)?).map_err(|_| id.id())?;
+    // SAFETY: `code_holds` found the poster at `at`, its pattern matched
+    // once from its first instruction; every poster has this signature on
+    // client 26430625 (one UI context in, the command out).
+    Ok(unsafe { core::mem::transmute::<usize, PostFn>(at) })
+}
+
+/// Posts `post` through the group that has its poster; whether the
+/// interface's queue took it, false on a build without that group.
+///
+/// # Safety
+///
+/// - Called inside the interface frame on its thread, with `context` the
+///   frame's own live UI context, which the global holds only then.
+pub(crate) unsafe fn post(context: usize, post: crate::actions::client_commands::Post<'_>) -> bool {
+    use crate::actions::client_commands::Post;
+    let groups = &super::GROUPS;
+    match post {
+        Post::Character(_) | Post::World(_) | Post::Session { .. } | Post::PlayWorld => {
+            // SAFETY: the caller's contract.
+            groups
+                .host
+                .get()
+                .is_some_and(|host| unsafe { host.post(context, post) })
+        }
+        Post::Password(_) | Post::Join(_) | Post::StartPlay | Post::Back => {
+            // SAFETY: the caller's contract.
+            groups
+                .menu
+                .get()
+                .is_some_and(|menu| unsafe { menu.post(context, post) })
+        }
+    }
+}
+
+impl HostPosts {
+    pub(super) fn resolve(loader: &Loader) -> Result<Self, &'static str> {
+        Ok(Self {
+            character: poster(loader, pinned::ui::POST_CHARACTER)?,
+            world: poster(loader, pinned::ui::POST_WORLD)?,
+            session: poster(loader, pinned::ui::POST_SESSION)?,
+            play_world: poster(loader, pinned::ui::POST_PLAY_WORLD)?,
+            character_slot: offset(loader, pinned::ui::POST_CHARACTER_SLOT)?,
+            world_slot: offset(loader, pinned::ui::POST_WORLD_SLOT)?,
+            session_kind: offset(loader, pinned::ui::POST_SESSION_KIND)?,
+        })
+    }
+
+    /// Posts a host's `post` to the interface's queue; whether it took it.
+    ///
+    /// # Safety
+    ///
+    /// - As for [`post`].
+    unsafe fn post(&self, context: usize, post: crate::actions::client_commands::Post<'_>) -> bool {
+        use crate::actions::client_commands::Post;
+        let poster = match post {
+            Post::Character(_) => self.character,
+            Post::World(_) => self.world,
+            Post::Session { .. } => self.session,
+            Post::PlayWorld => self.play_world,
+            Post::Password(_) | Post::Join(_) | Post::StartPlay | Post::Back => return false,
+        };
+        // SAFETY: the matched poster of its type; the caller's contract
+        // gives the live context on the interface thread.
+        let command = unsafe { poster(context) };
+        if command.is_null() {
+            return false;
+        }
+        match post {
+            // SAFETY: the character command (0x11) is 12 bytes its poster
+            // zeroes; the main menu reads its slot as a `u16` at
+            // `character_slot`.
+            Post::Character(slot) => unsafe {
+                enshwick_core::raw::write_at(command, self.character_slot, slot);
+            },
+            // SAFETY: the world command (0x16) is 3 bytes; the main menu
+            // reads its slot as a `u16` at `world_slot`.
+            Post::World(slot) => unsafe {
+                enshwick_core::raw::write_at(command, self.world_slot, slot);
+            },
+            Post::Session { online } => {
+                let kind = if online {
+                    SESSION_ONLINE
+                } else {
+                    SESSION_OFFLINE
+                };
+                // SAFETY: the session command (0x27) is 2 bytes; the main
+                // menu reads its kind byte at `session_kind`.
+                unsafe { enshwick_core::raw::write_at(command, self.session_kind, kind) };
+            }
+            Post::PlayWorld | Post::Password(_) | Post::Join(_) | Post::StartPlay | Post::Back => {}
+        }
+        true
+    }
+}
 
 /// The area byte of an online join (`0x140873710` case 0x2a).
 const AREA_ONLINE: u8 = 3;
 
 impl MenuPosts {
     pub(super) fn resolve(loader: &Loader) -> Result<Self, &'static str> {
-        let poster = |id: pinned::Symbol| {
-            // Called, not hooked: only a pattern that matched once counts.
-            if !loader.code_holds(id) {
-                return Err(id.id());
-            }
-            let at = usize::try_from(address(loader, id)?).map_err(|_| id.id())?;
-            // SAFETY: `code_holds` found the poster at `at`, its pattern
-            // matched once from its first instruction; the type is its
-            // signature on client 26430625 (one UI context in, the command
-            // out).
-            Ok(unsafe { core::mem::transmute::<usize, PostFn>(at) })
-        };
+        let poster = |id| poster(loader, id);
         let password_text = offset(loader, pinned::ui::POST_PASSWORD_TEXT)?;
         let password_len = offset(loader, pinned::ui::POST_PASSWORD_LEN)?;
         // The text's room holds the longest password the game takes.
@@ -82,11 +196,7 @@ impl MenuPosts {
     ///
     /// - Called inside the interface frame on its thread, with `context` the
     ///   frame's own live UI context, which the global holds only then.
-    pub(crate) unsafe fn post(
-        &self,
-        context: usize,
-        post: crate::actions::client_commands::Post<'_>,
-    ) -> bool {
+    unsafe fn post(&self, context: usize, post: crate::actions::client_commands::Post<'_>) -> bool {
         use crate::actions::client_commands::Post;
         let len = match post {
             Post::Password(text) => text.len(),
@@ -96,6 +206,8 @@ impl MenuPosts {
             Post::Password(_) => len <= enshwick_core::abi::ClientCommand::MAX_PASSWORD,
             Post::Join(target) => target.len() <= self.join_room(),
             Post::StartPlay | Post::Back => true,
+            // A host's, which `HostPosts` posts.
+            Post::Character(_) | Post::World(_) | Post::Session { .. } | Post::PlayWorld => false,
         };
         // The game's room keeps a password's length in its `u16`.
         let Ok(len) = u16::try_from(len) else {
@@ -109,6 +221,9 @@ impl MenuPosts {
             Post::Join(_) => self.join,
             Post::StartPlay => self.start_play,
             Post::Back => self.back,
+            Post::Character(_) | Post::World(_) | Post::Session { .. } | Post::PlayWorld => {
+                return false;
+            }
         };
         // SAFETY: the routed poster of its type; the caller's contract gives
         // the live context on the interface thread.
@@ -135,7 +250,12 @@ impl MenuPosts {
                 // the area byte and the address's end.
                 unsafe { enshwick_core::raw::write_bytes_at(command, self.join_target(), target) };
             }
-            Post::StartPlay | Post::Back => {}
+            Post::StartPlay
+            | Post::Back
+            | Post::Character(_)
+            | Post::World(_)
+            | Post::Session { .. }
+            | Post::PlayWorld => {}
         }
         true
     }

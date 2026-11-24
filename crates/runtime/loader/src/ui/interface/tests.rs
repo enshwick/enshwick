@@ -75,6 +75,47 @@ fn the_mods_screen_shows_only_while_the_interface_its_entry_and_itself_are_on() 
 }
 
 #[test]
+fn a_command_opens_the_mods_screen_only_while_it_and_one_menu_entry_are_on() {
+    let fuses = || ["interface", "main", "pause", "screen"].map(Fuse::new);
+    let opens = |[interface, main, pause, screen]: &[Fuse; 4]| {
+        mods::opens_with(interface, [main, pause], screen)
+    };
+    let all = fuses();
+    assert!(opens(&all));
+    all[1].blow("a test");
+    assert!(opens(&all), "over the pause menu");
+    all[2].blow("a test");
+    assert!(!opens(&all), "neither menu's entry");
+    for off in [0, 3] {
+        let all = fuses();
+        all[off].blow("a test");
+        assert!(!opens(&all), "{off} off");
+    }
+}
+
+#[test]
+fn a_command_s_page_opens_only_over_a_menu_of_this_frame_and_only_in_its_frame() {
+    use crate::actions::client_commands::ModsAsk;
+    // The menu's hook ran in this frame, before the draw counts it.
+    assert!(mods::drew_before_draw(40, 40));
+    assert!(
+        !mods::drew_before_draw(39, 40),
+        "the pause menu closed this frame: its draw closes the screen"
+    );
+    assert!(!mods::drew_before_draw(0, 0), "no menu ever drew");
+    let ask = ModsAsk {
+        mod_index: Some(2),
+        gear: true,
+    };
+    assert_eq!(mods::asked_in(Some((ask, 40)), 41), Some(ask));
+    assert_eq!(
+        mods::asked_in(Some((ask, 40)), 90),
+        None,
+        "an ask whose frame did not draw the screen never opens it later"
+    );
+}
+
+#[test]
 fn dialogs_draw_in_game_only_while_the_interface_and_its_dialogs_are_on() {
     let (interface, dialogs) = (Fuse::new("test interface"), Fuse::new("test dialogs"));
     assert!(off::both_on(&interface, &dialogs));

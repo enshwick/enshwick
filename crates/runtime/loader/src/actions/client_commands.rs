@@ -12,20 +12,22 @@ mod handoff;
 mod play;
 
 use std::collections::VecDeque;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick_base::Relock;
 use enshwick_core::RecipeId;
-use enshwick_core::abi::{ClientCommand as Spec, ClientCommandStatus as Status};
+use enshwick_core::abi::{
+    ClientCommand as Spec, ClientCommandStatus as Status, ClientSnapshot as Snapshot,
+};
 use enshwick_core::abi::{Side, Str};
 
 pub(crate) use self::handoff::Handoff;
-pub(crate) use self::play::{Post, server_str};
-use crate::actions::client_control::MenuTab;
+pub(crate) use self::play::{Host, Post, server_str};
+use crate::actions::client_control::{Mark, MenuTab};
 use crate::actions::client_input::{self, Ask};
 use crate::actions::client_recipes;
-use crate::actions::client_snapshot::{RecipeRead, TabRead};
+use crate::actions::client_snapshot::{LoaderScreen, RecipeRead, TabRead};
 use crate::actions::local_held;
 use enshwick_core::__private::rules;
 use enshwick_core::controls::GameAction;
@@ -66,8 +68,17 @@ pub(crate) enum Kind {
     /// Leaves play back to the main menu.
     Leave,
     /// Holds the game action of the digital input's bit for the
-    /// milliseconds.
-    Press(u8, u32),
+    /// milliseconds; `true` for a form of the interact key, whose screen of
+    /// what the player faces is the press's own effect.
+    Press(u8, u32, bool),
+    /// Sets, moves or clears the local player's waypoint, or pings a
+    /// position, through its input's waypoint request.
+    Mark(Mark),
+    /// Hosts a world from the main menu; [`play`] runs it from the queue
+    /// on, as a join.
+    Host(Host),
+    /// Shows a page of the loader's own Mods screen.
+    Mods(ModsAsk),
 }
 
 impl Kind {
@@ -80,16 +91,27 @@ impl Kind {
             Self::Move(..) => Spec::MOVE,
             Self::Highlight(_) => Spec::HIGHLIGHT_RECIPE,
             Self::Join => Spec::JOIN,
+            Self::Host(_) => Spec::HOST,
+            Self::Mods(ModsAsk {
+                mod_index: None, ..
+            }) => Spec::OPEN_MODS,
+            Self::Mods(ModsAsk { gear: false, .. }) => Spec::OPEN_MOD,
+            Self::Mods(ModsAsk { gear: true, .. }) => Spec::OPEN_MOD_SETTINGS,
             Self::Leave => Spec::LEAVE,
             Self::Press(..) => Spec::PRESS,
+            Self::Mark(Mark::Set(_)) => Spec::SET_WAYPOINT,
+            Self::Mark(Mark::Clear) => Spec::CLEAR_WAYPOINT,
+            Self::Mark(Mark::Ping(_)) => Spec::PING,
         }
     }
 
     /// Whether a command of this kind waits beside one of `other` from the
-    /// same mod: one of each kind, and one press of each action.
+    /// same mod: one of each kind, one press of each action, and one
+    /// waypoint or ping.
     fn waits_beside(self, other: Self) -> bool {
         match (self, other) {
-            (Self::Press(bit, _), Self::Press(other, _)) => bit != other,
+            (Self::Press(bit, ..), Self::Press(other, ..)) => bit != other,
+            (Self::Mark(_), Self::Mark(_)) => false,
             _ => self.raw() != other.raw(),
         }
     }
@@ -110,24 +132,28 @@ impl Kind {
         matches!(self, Self::Look(_) | Self::Move(..) | Self::Press(..))
     }
 
+    /// The screen change the interface frame applies for it; `None` for a
+    /// kind a detour of the game's own code runs through a [`Handoff`].
+    const fn screen_change(self) -> Option<ScreenChange> {
+        match self {
+            Self::Open(screen) => Some(ScreenChange::Open(screen)),
+            Self::Close(screen) => Some(ScreenChange::Close(screen)),
+            Self::Tab(tab) => Some(ScreenChange::Tab(tab)),
+            Self::Mods(ask) => Some(ScreenChange::Mods(ask)),
+            _ => None,
+        }
+    }
+
     /// Whether a detour of the game's own code runs it, through a
     /// [`Handoff`], rather than the interface frame.
     const fn handed(self) -> bool {
-        matches!(
-            self,
-            Self::Look(_)
-                | Self::Move(..)
-                | Self::Press(..)
-                | Self::Highlight(_)
-                | Self::Join
-                | Self::Leave
-        )
+        self.screen_change().is_none()
     }
 
     /// Whether it joins or leaves play, at the game's own pace once handed:
     /// no session, screen or two-second check ends it then.
     const fn plays(self) -> bool {
-        matches!(self, Self::Join | Self::Leave)
+        matches!(self, Self::Join | Self::Leave | Self::Host(_))
     }
 
     /// Its phase when queued: a join waits for the server's answer, a leave
@@ -135,9 +161,45 @@ impl Kind {
     const fn queued_phase(self) -> u32 {
         match self {
             Self::Join => Status::PHASE_QUEUED,
+            Self::Host(_) => Status::PHASE_MENU,
             Self::Leave => Status::PHASE_IN_WORLD,
             _ => 0,
         }
+    }
+}
+
+/// What the interface frame applies for a command, the only kinds it runs
+/// itself; every other kind runs in a detour.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ScreenChange {
+    /// Opens the screen byte.
+    Open(u8),
+    /// Closes the open screen, to the world's screen byte.
+    Close(u8),
+    /// Shows the tab.
+    Tab(MenuTab),
+    /// Shows a page of the loader's own Mods screen.
+    Mods(ModsAsk),
+}
+
+/// A page of the loader's Mods screen a command asks for: the list, or a
+/// mod's page by its load-order index, through its gear (`gear`) or not.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ModsAsk {
+    pub(crate) mod_index: Option<usize>,
+    pub(crate) gear: bool,
+}
+
+impl ModsAsk {
+    /// Whether the screen `shown` is what this asks for: a gear may open
+    /// the joined server's settings of the mod instead of its page.
+    fn shows(self, shown: LoaderScreen) -> bool {
+        let Some(index) = self.mod_index else {
+            return shown.page == Snapshot::MOD_LIST;
+        };
+        let page = shown.page == Snapshot::MOD_PAGE
+            || (self.gear && shown.page == Snapshot::MOD_SERVER_SETTINGS);
+        page && shown.mod_index == Some(index)
     }
 }
 
@@ -196,7 +258,14 @@ impl Command {
             Kind::Press(..) => client_input::press_progress(self.id),
             Kind::Highlight(_) => client_recipes::progress(self.id),
             // A handed join or leave runs through `plays_next` instead.
-            Kind::Join | Kind::Leave | Kind::Open(_) | Kind::Close(_) | Kind::Tab(_) => None,
+            Kind::Mark(_) => client_input::mark_progress(self.id),
+            Kind::Join
+            | Kind::Leave
+            | Kind::Host(_)
+            | Kind::Open(_)
+            | Kind::Close(_)
+            | Kind::Tab(_)
+            | Kind::Mods(_) => None,
         };
         Some(progress.unwrap_or(Progress::Waiting))
     }
@@ -209,11 +278,18 @@ impl Command {
             Kind::Move(direction, hold) => {
                 client_input::hand(self.id, self.owner, Ask::Move(direction, hold))
             }
-            Kind::Press(bit, hold) => client_input::press(self.id, self.owner, bit, hold),
+            Kind::Press(bit, hold, _) => client_input::press(self.id, self.owner, bit, hold),
             Kind::Highlight(recipe) => client_recipes::hand(self.id, recipe),
             Kind::Leave => play::leave(self.id, local_held::now_ms()).is_ok(),
-            // Handed when queued, with its target and password.
-            Kind::Join | Kind::Open(_) | Kind::Close(_) | Kind::Tab(_) => false,
+            Kind::Mark(mark) => client_input::mark(self.id, self.owner, mark),
+            // A join and a host are handed when queued, a join with its
+            // target and password.
+            Kind::Join
+            | Kind::Host(_)
+            | Kind::Open(_)
+            | Kind::Close(_)
+            | Kind::Tab(_)
+            | Kind::Mods(_) => false,
         }
     }
 
@@ -227,8 +303,11 @@ impl Command {
             Kind::Look(_) | Kind::Move(..) => client_input::release(self.id),
             Kind::Press(..) => client_input::unpress(self.id),
             Kind::Highlight(_) => client_recipes::release(self.id),
-            Kind::Join | Kind::Leave => play::release(self.id, local_held::now_ms(), by_mod),
-            Kind::Open(_) | Kind::Close(_) | Kind::Tab(_) => {}
+            Kind::Join | Kind::Leave | Kind::Host(_) => {
+                play::release(self.id, local_held::now_ms(), by_mod);
+            }
+            Kind::Mark(_) => client_input::unmark(self.id),
+            Kind::Open(_) | Kind::Close(_) | Kind::Tab(_) | Kind::Mods(_) => {}
         }
     }
 }
@@ -237,13 +316,35 @@ impl Command {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Seen {
     pub(crate) session: u64,
-    pub(crate) screen: u8,
+    /// The HUD screen byte; `None` outside a game, as at the main menu.
+    pub(crate) screen: Option<u8>,
     pub(crate) tab: TabRead,
     /// The crafting menu's highlighted recipe.
     pub(crate) recipe: RecipeRead,
     /// The player's own held controls of a fresh read, without the bits
     /// presses set; `None` without one.
     pub(crate) held: Option<u64>,
+    /// The open screen's host entity, 0 for none.
+    pub(crate) host: u32,
+    /// What the loader's own Mods screen shows.
+    pub(crate) loader: LoaderScreen,
+}
+
+impl Seen {
+    /// What a frame outside a game shows in `session`: none of the game's
+    /// screens, only the loader's own Mods screen, `loader`, which the main
+    /// menu opens too.
+    pub(crate) const fn menu(session: u64, loader: LoaderScreen) -> Self {
+        Self {
+            session,
+            screen: None,
+            tab: TabRead::NoMenu,
+            recipe: RecipeRead::Unread,
+            held: None,
+            host: 0,
+            loader,
+        }
+    }
 }
 
 /// What the game answered a command it was handed.
@@ -269,8 +370,16 @@ enum Next {
 }
 
 /// What the frame does with `command` now, given what it `seen` at `now`
-/// and where its detour stands, `progress`, once it is handed.
-fn next(command: &Command, seen: &Seen, progress: Option<Progress>, now: u64) -> Next {
+/// and where its detour stands, `progress`, once it is handed; `commanded`
+/// while a command opens or closes a screen, so a screen a held press finds
+/// is not its own.
+fn next(
+    command: &Command,
+    seen: &Seen,
+    progress: Option<Progress>,
+    now: u64,
+    commanded: bool,
+) -> Next {
     let cancel = |reason| Next::End(Status::CANCELLED, reason);
     if let Some(end) = progress.and_then(ended) {
         return end;
@@ -281,18 +390,25 @@ fn next(command: &Command, seen: &Seen, progress: Option<Progress>, now: u64) ->
     // Its effect showing already, applied or not: an open of the screen
     // shown is not toggled shut.
     let shows = match command.kind {
-        Kind::Open(screen) | Kind::Close(screen) => seen.screen == screen,
+        Kind::Open(screen) | Kind::Close(screen) => seen.screen == Some(screen),
         Kind::Tab(tab) => seen.tab == TabRead::Shown(tab),
+        Kind::Mods(ask) => ask.shows(seen.loader),
         Kind::Highlight(recipe) => seen.recipe == RecipeRead::Shown(Some(recipe)),
-        Kind::Look(_) | Kind::Move(..) | Kind::Press(..) | Kind::Join | Kind::Leave => false,
+        Kind::Look(_)
+        | Kind::Move(..)
+        | Kind::Press(..)
+        | Kind::Join
+        | Kind::Leave
+        | Kind::Host(_)
+        | Kind::Mark(_) => false,
     };
     if shows {
         return Next::End(Status::OBSERVED, 0);
     }
     let drives = command.kind.drives();
-    if drives && command.expected.is_some_and(|screen| screen != seen.screen) {
-        return cancel(Status::OTHER_SCREEN);
-    }
+    let elsewhere = command
+        .expected
+        .is_some_and(|screen| seen.screen != Some(screen));
     let pressed = match (command.held, seen.held) {
         (Some(queued), Some(now)) => now & !queued != 0,
         _ => false,
@@ -302,14 +418,28 @@ fn next(command: &Command, seen: &Seen, progress: Option<Progress>, now: u64) ->
         if drives && pressed {
             return cancel(Status::PLAYER_INPUT);
         }
+        if drives && elsewhere {
+            // A held interact key opens the screen of what it faces, as a
+            // chest's, which has a host: that screen is the press's effect.
+            // The map or the pause menu, which keys outside the input open,
+            // has none.
+            let own =
+                matches!(command.kind, Kind::Press(_, _, true)) && seen.host != 0 && !commanded;
+            return if own {
+                Next::End(Status::OBSERVED, 0)
+            } else {
+                cancel(Status::OTHER_SCREEN)
+            };
+        }
         if command.state == Status::PENDING {
             return Next::Applied;
         }
     } else {
-        if command.expected.is_some_and(|screen| screen != seen.screen) {
+        if elsewhere {
             return cancel(Status::OTHER_SCREEN);
         }
-        if pressed {
+        // A waypoint or ping drives none of the player's input to give way.
+        if pressed && !matches!(command.kind, Kind::Mark(_)) {
             return cancel(Status::PLAYER_INPUT);
         }
         let ready = match command.kind {
@@ -318,11 +448,14 @@ fn next(command: &Command, seen: &Seen, progress: Option<Progress>, now: u64) ->
             Kind::Highlight(_) => matches!(seen.recipe, RecipeRead::Shown(_)),
             Kind::Open(_)
             | Kind::Close(_)
+            | Kind::Mods(_)
             | Kind::Look(_)
             | Kind::Move(..)
             | Kind::Press(..)
             | Kind::Join
-            | Kind::Leave => true,
+            | Kind::Leave
+            | Kind::Host(_)
+            | Kind::Mark(_) => true,
         };
         // One that waits for its detour, such as for a press's slot, times
         // out as one that waits for its effect.
@@ -389,6 +522,9 @@ struct State {
     /// Whether a command is open: the frame's one check while none is.
     open: AtomicBool,
     commands: Mutex<Commands>,
+    /// Whether the loader's Mods screen can open now, once its interface
+    /// registered it.
+    mods_screen: OnceLock<fn() -> bool>,
 }
 
 static STATE: State = State {
@@ -397,6 +533,7 @@ static STATE: State = State {
         next_id: 1,
         kept: VecDeque::new(),
     }),
+    mods_screen: OnceLock::new(),
 };
 
 /// Why a command was not queued.
@@ -446,6 +583,26 @@ unsafe fn text<'a>(name: Str) -> Result<&'a str, CommandError> {
     unsafe { name.as_str() }.ok_or(CommandError::BadArgs)
 }
 
+/// `at` when it lies inside the map's frame the loader last read; with no
+/// frame read, as on a client joined to a server, any finite `at`, which
+/// the ABI's bounds checked.
+///
+/// # Errors
+///
+/// [`CommandError::BadArgs`] outside the frame.
+fn on_map(at: [f64; 3]) -> Result<[f64; 3], CommandError> {
+    inside_frame(crate::world::scene::last_frame(), at)
+        .then_some(at)
+        .ok_or(CommandError::BadArgs)
+}
+
+/// Whether `at` lies inside `frame`, or there is none to check.
+fn inside_frame(frame: Option<enshwick_core::abi::MapFrameInfo>, at: [f64; 3]) -> bool {
+    frame.is_none_or(|frame| {
+        enshwick_base::__internal::waypoints::inside(frame.origin, frame.size, at)
+    })
+}
+
 /// The kind `spec` asks for on `loader`'s build, its arguments checked.
 fn kind(loader: &Loader, spec: &Spec) -> Result<Kind, CommandError> {
     // SAFETY: the mod's spec, its text borrowed for the call.
@@ -472,11 +629,45 @@ fn kind(loader: &Loader, spec: &Spec) -> Result<Kind, CommandError> {
         Spec::MOVE => Ok(Kind::Move(spec.direction, spec.hold_ms)),
         Spec::HIGHLIGHT_RECIPE => Ok(Kind::Highlight(spec.recipe)),
         Spec::JOIN => Ok(Kind::Join),
+        Spec::HOST => Ok(Kind::Host(Host {
+            world: spec.world,
+            character: spec.character,
+            online: spec.online != 0,
+        })),
         Spec::LEAVE => Ok(Kind::Leave),
-        Spec::PRESS => press_bit(loader, target).map(|bit| Kind::Press(bit, spec.hold_ms)),
+        Spec::SET_WAYPOINT => on_map(spec.position).map(|at| Kind::Mark(Mark::Set(at))),
+        Spec::CLEAR_WAYPOINT => Ok(Kind::Mark(Mark::Clear)),
+        Spec::OPEN_MODS => Ok(Kind::Mods(ModsAsk {
+            mod_index: None,
+            gear: false,
+        })),
+        Spec::OPEN_MOD | Spec::OPEN_MOD_SETTINGS => loader
+            .mods
+            .iter()
+            .position(|m| m.id == target)
+            .map(|index| {
+                Kind::Mods(ModsAsk {
+                    mod_index: Some(index),
+                    gear: spec.kind == Spec::OPEN_MOD_SETTINGS,
+                })
+            })
+            .ok_or(CommandError::BadArgs),
+        Spec::PING => on_map(spec.position).map(|at| Kind::Mark(Mark::Ping(at))),
+        Spec::PRESS => press_bit(loader, target).map(|bit| {
+            let interacts = INTERACTS.iter().any(|action| action.name() == target);
+            Kind::Press(bit, spec.hold_ms, interacts)
+        }),
         _ => Err(CommandError::BadArgs),
     }
 }
+
+/// The forms of the interact key, whose press opens the screen of what the
+/// player faces, as a storage chest's (client 26430625).
+const INTERACTS: [GameAction; 3] = [
+    GameAction::ContextualAction,
+    GameAction::ContextualActionTap,
+    GameAction::ContextualActionHold,
+];
 
 /// The digital input's bit of the game action `name` on `loader`'s build:
 /// its `PlayerInputType` member's value.
@@ -516,7 +707,19 @@ fn runs(kind: Kind) -> bool {
         Kind::Press(..) => client_input::presses_run(),
         Kind::Highlight(_) => client_recipes::runs(),
         Kind::Join | Kind::Leave => play::runs(),
+        Kind::Host(_) => play::hosts_run(),
+        // The screen draws only while its menu shows: an ask no menu takes
+        // times out.
+        Kind::Mods(_) => STATE.mods_screen.get().is_some_and(|opens| opens()),
+        Kind::Mark(_) => client_input::marks_run(),
     }
+}
+
+/// Registers whether the loader's Mods screen can open for a command, from
+/// the interface that draws it, a layer above; a build without one runs no
+/// Mods screen command.
+pub(crate) fn register_mods_screen(opens: fn() -> bool) {
+    let _first = STATE.mods_screen.set(opens);
 }
 
 /// The screen byte `name` names, `None` for empty: a look or a move runs
@@ -530,8 +733,9 @@ fn expected_screen(kind: Kind, name: &str) -> Result<Option<u8>, CommandError> {
             .map(Some)
             .ok_or(CommandError::Unavailable);
     }
-    if kind == Kind::Join {
-        // A join starts at the main menu, which no HUD screen names.
+    if matches!(kind, Kind::Join | Kind::Host(_)) {
+        // A join or a host starts at the main menu, which no HUD screen
+        // names.
         return if name.is_empty() {
             Ok(None)
         } else {
@@ -577,6 +781,9 @@ pub(crate) fn queue(loader: &Loader, owner: ModIndex, spec: &Spec) -> Result<u64
         // could not start, as the fake host refuses it.
         play::can_leave(now)?;
     }
+    if let Kind::Host(host) = kind {
+        play::host(id, host, now)?;
+    }
     if kind == Kind::Join {
         // SAFETY: the mod's spec, its target borrowed for the call; the play
         // module copies it.
@@ -597,7 +804,7 @@ pub(crate) fn queue(loader: &Loader, owner: ModIndex, spec: &Spec) -> Result<u64
         queued_ms: now,
         state: Status::PENDING,
         reason: 0,
-        handed: (kind == Kind::Join).then_some(now),
+        handed: matches!(kind, Kind::Join | Kind::Host(_)).then_some(now),
         phase: kind.queued_phase(),
         failure: 0,
     });
@@ -651,18 +858,25 @@ pub(crate) fn status(owner: ModIndex, id: u64) -> Option<Status> {
     })
 }
 
-/// Runs the open commands in the interface frame with what it `seen`:
-/// `apply` hands one to the game. One atomic load while none is open.
-/// A frame that reads no game, outside a world or without the screen
-/// reads, only ends the commands that waited too long.
+/// Runs the open commands in the interface frame with what it read of the
+/// `game`: `apply` hands one to the game. One atomic load while none is
+/// open. A frame that reads no game, outside a world or without the screen
+/// reads, runs the Mods screen's commands with the `menu` read and only
+/// ends the others that waited too long.
 /// A panic in it turns off only the commands, never the interface frame.
-pub(crate) fn frame(seen: impl FnOnce() -> Option<Seen>, apply: impl FnMut(Kind) -> Applied) {
+pub(crate) fn frame(
+    game: impl FnOnce() -> Option<Seen>,
+    menu: impl FnOnce() -> Seen,
+    apply: impl FnMut(ScreenChange) -> Applied,
+) {
     if !STATE.open.load(Ordering::Acquire) {
         return;
     }
     let _ran = FUSE.run(FEATURE, || {
         let mut commands = STATE.commands.relock();
-        let open = run(&mut commands, seen(), local_held::now_ms(), apply);
+        let game = game();
+        let menu = game.is_none().then(menu);
+        let open = run(&mut commands, game, menu, local_held::now_ms(), apply);
         STATE.open.store(open, Ordering::Release);
     });
 }
@@ -690,22 +904,29 @@ pub(crate) fn play_frame(
     });
 }
 
-/// Runs the open `commands` at `now` with what the frame `seen`; whether
-/// one is still open.
+/// Runs the open `commands` at `now` with what the frame read of the
+/// `game`, or outside one of the `menu`, which only the Mods screen's
+/// commands read; whether one is still open.
 fn run(
     commands: &mut Commands,
-    seen: Option<Seen>,
+    game: Option<Seen>,
+    menu: Option<Seen>,
     now: u64,
-    mut apply: impl FnMut(Kind) -> Applied,
+    mut apply: impl FnMut(ScreenChange) -> Applied,
 ) -> bool {
+    let commanded = commanded(commands);
     for command in commands.kept.iter_mut().filter(|c| c.open()) {
         let off = crate::engine::loader::is_off(command.owner)
             || (command.kind.handed() && !runs(command.kind));
+        let seen = game.as_ref().or_else(|| {
+            menu.as_ref()
+                .filter(|_| matches!(command.kind, Kind::Mods(_)))
+        });
         let next = if off {
             Next::End(Status::CANCELLED, Status::MOD_OFF)
         } else if command.kind.plays() && command.handed.is_some() {
             plays_next(command)
-        } else if let Some(seen) = &seen {
+        } else if let Some(seen) = seen {
             // Session 0, before the client read a game, is the one this
             // frame counts; the first fresh read is the held baseline.
             if command.session == 0 {
@@ -714,7 +935,7 @@ fn run(
             if command.held.is_none() {
                 command.held = seen.held;
             }
-            next(command, seen, command.progress(), now)
+            next(command, seen, command.progress(), now, commanded)
         } else if timed_out(command, now) {
             Next::End(Status::CANCELLED, Status::TIMED_OUT)
         } else {
@@ -722,11 +943,13 @@ fn run(
         };
         match next {
             Next::Wait => {}
-            Next::Apply if command.kind.handed() => command.handed = command.hand().then_some(now),
-            Next::Apply => match apply(command.kind) {
-                Applied::Taken => command.state = Status::APPLIED,
-                Applied::Busy => {}
-                Applied::Unavailable => command.state = Status::UNAVAILABLE,
+            Next::Apply => match command.kind.screen_change() {
+                None => command.handed = command.hand().then_some(now),
+                Some(change) => match apply(change) {
+                    Applied::Taken => command.state = Status::APPLIED,
+                    Applied::Busy => {}
+                    Applied::Unavailable => command.state = Status::UNAVAILABLE,
+                },
             },
             Next::Applied => command.state = Status::APPLIED,
             Next::End(state, reason) => {
@@ -737,6 +960,15 @@ fn run(
         }
     }
     commands.kept.iter().any(Command::open)
+}
+
+/// Whether a command the game took opens or closes a screen, before the
+/// frame ends it.
+fn commanded(commands: &Commands) -> bool {
+    commands
+        .kept
+        .iter()
+        .any(|c| c.state == Status::APPLIED && matches!(c.kind, Kind::Open(_) | Kind::Close(_)))
 }
 
 #[cfg(test)]

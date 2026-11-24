@@ -1328,6 +1328,33 @@ pub const FACTS: &[(&str, Fact)] = &[
         },
     ),
     (
+        ids::CLIENT_PLAYER_INPUT_WAYPOINT,
+        Fact::Path {
+            steps: &[
+                ("keen::ecs::ClientPlayerInput", "data"),
+                ("keen::ecs::ClientPlayerInputData", "waypointAction"),
+            ],
+            holds: WAYPOINT_ACTION,
+        },
+    ),
+    (ids::WAYPOINT_ACTION, Fact::Type(WAYPOINT_ACTION)),
+    (
+        ids::WAYPOINT_ACTION_POSITION,
+        offset(WAYPOINT_ACTION, "position", WORLD_POSITION),
+    ),
+    (
+        ids::WAYPOINT_ACTION_ENABLE,
+        offset(WAYPOINT_ACTION, "enable", BOOL),
+    ),
+    (
+        ids::WAYPOINT_ACTION_IS_PING,
+        offset(WAYPOINT_ACTION, "isPing", BOOL),
+    ),
+    (
+        ids::WAYPOINT_ACTION_VERSION,
+        offset(WAYPOINT_ACTION, "versionData", "keen::VersionedData"),
+    ),
+    (
         ids::SELECTED_TARGETS,
         Fact::Type("keen::ecs::SelectedTargets"),
     ),
@@ -2757,6 +2784,7 @@ const WORLD_TRANSFORM: &str = "keen::WorldTransform";
 
 /// A position in the world.
 const WORLD_POSITION: &str = "keen::WorldPosition";
+const WAYPOINT_ACTION: &str = "keen::ecs::WaypointAction";
 
 /// The material a building piece is made of, as its feedback names it.
 const MATERIAL_FEEDBACK_ID: &str = "keen::MaterialFeedbackId";

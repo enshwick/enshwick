@@ -14,6 +14,7 @@ use crate::actions::client_control::MenuTab;
 use crate::actions::local_held::{self, Sample};
 use crate::engine::copied::Copied;
 use crate::engine::fuse::Fuse;
+use crate::engine::loader::Loader;
 
 /// The feature's name in the log and on the Mods screen.
 const FEATURE: &str = "the client snapshot";
@@ -35,6 +36,41 @@ pub(crate) struct FrameRead {
     pub(crate) tab: TabRead,
     /// The crafting menu's highlighted recipe.
     pub(crate) recipe: RecipeRead,
+}
+
+/// What the loader's own Mods screen shows: its page, as
+/// [`ClientSnapshot::loader_screen`] numbers it, and the mod the page names
+/// by its load-order index.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct LoaderScreen {
+    pub(crate) page: u32,
+    pub(crate) mod_index: Option<usize>,
+}
+
+impl LoaderScreen {
+    /// The bit of a word a frame wrote, which no page number reaches.
+    const READ: u64 = 1 << 31;
+
+    /// The screen in one word: the page with [`Self::READ`], then the mod's
+    /// index plus 1.
+    fn pack(self) -> u64 {
+        let index = self
+            .mod_index
+            .map_or(0, |i| u64::try_from(i).map_or(0, |i| i + 1));
+        u64::from(self.page) | Self::READ | index << 32
+    }
+
+    /// The screen a frame wrote into `word`; `None` before one did.
+    fn unpack(word: u64) -> Option<Self> {
+        if word & Self::READ == 0 {
+            return None;
+        }
+        let index = word >> 32;
+        Some(Self {
+            page: u32::try_from(word & (Self::READ - 1)).unwrap_or(0),
+            mod_index: (index != 0).then(|| usize::try_from(index - 1).unwrap_or(usize::MAX)),
+        })
+    }
 }
 
 /// What a frame read of the crafting menu's highlighted recipe.
@@ -73,6 +109,9 @@ struct State {
     /// The session, the screens' packed word, the highlighted recipe's
     /// word and the frame's time as [`local_held::now_ms`] counts.
     copy: Copied<4>,
+    /// The loader's own screen, packed: it reads in every frame, at the
+    /// main menu too, apart from the game's reads.
+    loader: AtomicU64,
     /// The play data, the local player and the world count the session was
     /// counted on.
     play: AtomicU64,
@@ -84,6 +123,7 @@ struct State {
 static STATE: State = State {
     asked: AtomicBool::new(false),
     copy: Copied::new(),
+    loader: AtomicU64::new(0),
     play: AtomicU64::new(0),
     player: AtomicU32::new(0),
     worlds: AtomicU64::new(0),
@@ -122,13 +162,18 @@ fn next_session(last: (u64, u32, u64, u64), now: (u64, u32, u64)) -> (u64, u32) 
     }
 }
 
-/// Keeps the frame's `read` once a mod asked; on the interface thread,
-/// inside its frame. `read` runs only then.
-pub(crate) fn frame(read: impl FnOnce() -> Option<FrameRead>) {
+/// Keeps the frame's `read` of the game and the `loader`'s own screen once
+/// a mod asked; on the interface thread, inside its frame. Both run only
+/// then.
+pub(crate) fn frame(
+    read: impl FnOnce() -> Option<FrameRead>,
+    loader: impl FnOnce() -> LoaderScreen,
+) {
     if !STATE.asked.load(Ordering::Relaxed) {
         return;
     }
     let _kept = FUSE.run(FEATURE, || {
+        STATE.loader.store(loader().pack(), Ordering::Relaxed);
         let Some(read) = read() else {
             return;
         };
@@ -159,9 +204,12 @@ pub(crate) fn frame(read: impl FnOnce() -> Option<FrameRead>) {
     });
 }
 
-/// Starts the frame's reads, which a client command checks itself against.
+/// Starts the frame's reads, which a client command checks itself against,
+/// and a hosted world's map frame read, which a waypoint or ping does.
 pub(crate) fn ask() {
     STATE.asked.store(true, Ordering::Relaxed);
+    #[cfg(windows)]
+    crate::world::waypoints::want_frame();
 }
 
 /// Whether a mod asked for the frame's reads.
@@ -175,13 +223,15 @@ pub(crate) fn session() -> u64 {
     STATE.session.load(Ordering::Relaxed)
 }
 
-/// The client's state now; asking starts the reads.
-pub(crate) fn snapshot(scene: Option<&'static str>) -> ClientSnapshot {
+/// The client's state now on `loader`, whose mods the loader's screen
+/// names; asking starts the reads.
+pub(crate) fn snapshot(loader: &Loader, scene: Option<&'static str>) -> ClientSnapshot {
     ask();
     let off = FUSE.is_off() || crate::engine::screens::READS_FUSE.is_off();
     let snapshot = compose(
         Kept {
             words: STATE.copy.load(),
+            loader: STATE.loader.load(Ordering::Relaxed),
             off,
             held: local_held::sample(),
             player: local_held::player(),
@@ -189,6 +239,8 @@ pub(crate) fn snapshot(scene: Option<&'static str>) -> ClientSnapshot {
         },
         local_held::now_ms(),
         crate::engine::screens::name,
+        // The records live as long as the loader, the process.
+        |index| loader.mods.get(index).map(|m| Str::new(&m.id)),
     );
     ClientSnapshot {
         server: crate::actions::client_commands::server_str(),
@@ -196,20 +248,27 @@ pub(crate) fn snapshot(scene: Option<&'static str>) -> ClientSnapshot {
     }
 }
 
-/// What a snapshot is made of: the frame's last whole copy, whether the
-/// reads are off, the held controls' sample, the local player and the
-/// world's name.
+/// What a snapshot is made of: the frame's last whole copy, the loader's
+/// screen word, whether the reads are off, the held controls' sample, the
+/// local player and the world's name.
 #[derive(Clone, Copy, Debug)]
 struct Kept {
     words: Option<[u64; 4]>,
+    loader: u64,
     off: bool,
     held: Sample,
     player: Option<Entity>,
     scene: Option<&'static str>,
 }
 
-/// The snapshot of `kept` at `now`, naming screen bytes with `name`.
-fn compose(kept: Kept, now: u64, name: impl Fn(u8) -> &'static str) -> ClientSnapshot {
+/// The snapshot of `kept` at `now`, naming screen bytes with `name` and
+/// mods by their load-order index with `mod_id`.
+fn compose(
+    kept: Kept,
+    now: u64,
+    name: impl Fn(u8) -> &'static str,
+    mod_id: impl Fn(usize) -> Option<Str>,
+) -> ClientSnapshot {
     let mut snapshot = ClientSnapshot {
         scene: kept.scene.map_or(Str::EMPTY, Str::new),
         ..ClientSnapshot::EMPTY
@@ -221,6 +280,14 @@ fn compose(kept: Kept, now: u64, name: impl Fn(u8) -> &'static str) -> ClientSna
             snapshot.player = player;
             snapshot.available |= ClientSnapshot::PLAYER;
         }
+    }
+    // The loader's own screen reads at the main menu too, before any game.
+    if !kept.off
+        && let Some(screen) = LoaderScreen::unpack(kept.loader)
+    {
+        snapshot.available |= ClientSnapshot::LOADER_SCREEN;
+        snapshot.loader_screen = screen.page;
+        snapshot.loader_screen_mod = screen.mod_index.and_then(mod_id).unwrap_or(Str::EMPTY);
     }
     // A copy mid-write through every try keeps the screens out of this one.
     let [session, screens, recipe, read] = kept.words.unwrap_or_default();
@@ -284,9 +351,15 @@ mod tests {
         }
     }
 
+    /// The snapshot of `kept` at `now`, with no mod to name.
+    fn compose(kept: Kept, now: u64, name: impl Fn(u8) -> &'static str) -> ClientSnapshot {
+        super::compose(kept, now, name, |_| None)
+    }
+
     fn kept(words: Option<[u64; 4]>) -> Kept {
         Kept {
             words,
+            loader: 0,
             off: false,
             held: Sample::Never { miss: None },
             player: None,
@@ -303,6 +376,51 @@ mod tests {
             tab,
             recipe: RecipeRead::Unread,
         }
+    }
+
+    #[test]
+    fn the_loader_s_screen_names_its_page_and_its_mod_by_id() {
+        let page = LoaderScreen {
+            page: ClientSnapshot::MOD_PAGE,
+            mod_index: Some(2),
+        };
+        let kept = Kept {
+            loader: page.pack(),
+            ..kept(Some([1, 1, 0, 100]))
+        };
+        let snapshot = super::compose(kept, 150, name, |index| {
+            (index == 2).then(|| Str::new("you.trail"))
+        });
+        assert_ne!(snapshot.available & ClientSnapshot::LOADER_SCREEN, 0);
+        assert_eq!(snapshot.loader_screen, ClientSnapshot::MOD_PAGE);
+        assert_eq!(text(snapshot.loader_screen_mod), Some("you.trail"));
+        let none = LoaderScreen::unpack(LoaderScreen::default().pack());
+        assert_eq!(none, Some(LoaderScreen::default()), "no page, no mod");
+        assert_eq!(LoaderScreen::unpack(0), None, "no frame wrote it");
+    }
+
+    #[test]
+    fn the_loader_s_screen_reads_at_the_main_menu_before_any_game() {
+        let list = LoaderScreen {
+            page: ClientSnapshot::MOD_LIST,
+            mod_index: None,
+        };
+        let menu = Kept {
+            loader: list.pack(),
+            ..kept(None)
+        };
+        let snapshot = compose(menu, 150, name);
+        assert_eq!(snapshot.state, ClientSnapshot::NEVER, "no game drew");
+        assert_eq!(snapshot.available, ClientSnapshot::LOADER_SCREEN);
+        assert_eq!(snapshot.loader_screen, ClientSnapshot::MOD_LIST);
+        let off = Kept { off: true, ..menu };
+        assert_eq!(compose(off, 150, name).available, 0, "reads off");
+        let unread = compose(kept(Some([1, 1, 0, 100])), 150, name);
+        assert_eq!(
+            unread.available & ClientSnapshot::LOADER_SCREEN,
+            0,
+            "no frame read the loader's screen"
+        );
     }
 
     #[test]
@@ -477,23 +595,53 @@ mod tests {
 
     #[test]
     fn the_frame_keeps_nothing_until_a_mod_asks_and_then_counts_a_session() {
-        let mut ran = false;
-        frame(|| {
-            ran = true;
-            None
-        });
-        assert!(!ran, "no read before an ask");
+        let ran = core::cell::Cell::new(false);
+        frame(
+            || {
+                ran.set(true);
+                None
+            },
+            || {
+                ran.set(true);
+                LoaderScreen::default()
+            },
+        );
+        assert!(!ran.get(), "no read before an ask");
         // The frame's own copy, composed as `snapshot` does, without asking
         // for the held reads, which other tests in the process read as
         // never asked.
-        let kept = || compose(kept(STATE.copy.load()), local_held::now_ms(), name);
+        let kept = || {
+            let words = STATE.copy.load();
+            let loader = STATE.loader.load(Ordering::Relaxed);
+            let base = kept(None);
+            compose(
+                Kept {
+                    words,
+                    loader,
+                    ..base
+                },
+                local_held::now_ms(),
+                name,
+            )
+        };
         ask();
         assert_eq!(kept().state, ClientSnapshot::NEVER);
-        frame(|| Some(read(4, TabRead::Shown(MenuTab::Map))));
+        let list = || LoaderScreen {
+            page: ClientSnapshot::MOD_LIST,
+            mod_index: None,
+        };
+        frame(|| None, list);
+        let menu = kept();
+        assert_eq!(
+            (menu.state, menu.loader_screen),
+            (ClientSnapshot::NEVER, ClientSnapshot::MOD_LIST),
+            "the main menu's Mods screen, before any game"
+        );
+        frame(|| Some(read(4, TabRead::Shown(MenuTab::Map))), list);
         let second = kept();
         assert_eq!(second.state, ClientSnapshot::FRESH);
         assert_eq!(second.session, 1);
-        frame(|| Some(read(4, TabRead::Shown(MenuTab::Map))));
+        frame(|| Some(read(4, TabRead::Shown(MenuTab::Map))), list);
         assert_eq!(kept().session, 1, "the same session");
     }
 }

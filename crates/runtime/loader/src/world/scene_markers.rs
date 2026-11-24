@@ -416,6 +416,29 @@ impl<V: Clone, E: Clone> SceneCache<V, E> {
             _ => false,
         }
     }
+
+    /// The last scene's value, whatever scene asks now; `None` before one
+    /// read or when it failed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader::world::scene_markers::{ReadSceneError, SceneCache, SceneKey};
+    ///
+    /// let mut cache: SceneCache<u8, ReadSceneError> = SceneCache::new();
+    /// let key = SceneKey::new([1; 16], 2).unwrap();
+    /// assert_eq!(cache.last(), None);
+    /// let _start = cache.lookup(key);
+    /// assert!(cache.finish(key, Ok(5)));
+    /// assert_eq!(cache.last(), Some(5));
+    /// ```
+    #[must_use]
+    pub fn last(&self) -> Option<V> {
+        match &self.held {
+            Some((_, Some(Ok(value)))) => Some(value.clone()),
+            _ => None,
+        }
+    }
 }
 
 impl<V: Clone, E: Clone> Default for SceneCache<V, E> {

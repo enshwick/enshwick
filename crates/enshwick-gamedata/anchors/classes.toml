@@ -1014,13 +1014,20 @@ reason = "the game's key hint wrapper: its three callers pass a build's own acti
 [[class]]
 entries = [
   "ui.post_back",
+  "ui.post_character",
+  "ui.post_character_slot",
   "ui.post_join",
   "ui.post_join_area",
   "ui.post_join_tail",
   "ui.post_password",
   "ui.post_password_len",
   "ui.post_password_text",
+  "ui.post_play_world",
+  "ui.post_session",
+  "ui.post_session_kind",
   "ui.post_start_play",
+  "ui.post_world",
+  "ui.post_world_slot",
 ]
 class = "pattern"
 reason = "the interface's command posters, one per kind, each reserving its command in the UI queue and writing its kind byte: no code calls them directly, they share one shape, and only the kind byte and size tell them apart; where the main menu reads their payload, the password's text and length and the join's area byte and last word, is in its command switch, which no route reaches either"

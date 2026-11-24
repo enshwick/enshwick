@@ -539,13 +539,13 @@ export type ChunkData = {
 
 --- `ClientCommand` as Luau gives it; its `Debug` shows none of the password.
 export type ClientCommand = {
-	--- `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`, `"move"`, `"highlight_recipe"`, `"join"`, `"leave"` or `"press"`.
+	--- `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`, `"move"`, `"highlight_recipe"`, `"join"`, `"leave"`, `"press"`, `"set_waypoint"`, `"clear_waypoint"`, `"ping"`, `"host"`, `"open_mods"`, `"open_mod"` or `"open_mod_settings"`.
 	kind: string,
 	--- The session, as `client_snapshot().session` gives it.
 	session: string,
 	--- The HUD screen the client must show.
 	expected_screen: string?,
-	--- The screen to open, the tab to choose or the server to join.
+	--- The screen to open, the tab to choose, the server to join or the mod whose page to open, by its id.
 	target: string?,
 	--- A look's yaw and pitch in radians.
 	look: {number}?,
@@ -559,6 +559,14 @@ export type ClientCommand = {
 	password: string?,
 	--- The game action a press holds, by its game name, as a control's `link` names it.
 	action: string?,
+	--- The world position, x, y and z in metres, a waypoint or a ping marks.
+	position: vector?,
+	--- A host's world, by its place in the main menu's list from 0.
+	world: number?,
+	--- A host's character, by its place in the main menu's list from 0.
+	character: number?,
+	--- Whether a host opens its world online; offline without it.
+	online: boolean?,
 }
 
 --- The client's state in one copy, as `Input.client_snapshot` gives it to Luau.
@@ -571,7 +579,7 @@ export type ClientSnapshot = {
 	age_ms: string?,
 	--- The world's name.
 	scene: string?,
-	--- The parts the build reads: `"screens"`, `"menu_tab"`, `"held"`, `"player"` and `"recipe"`.
+	--- The parts the build reads: `"screens"`, `"menu_tab"`, `"held"`, `"player"`, `"recipe"` and `"loader_screen"`.
 	reads: {string},
 	--- The open HUD screen.
 	hud_screen: string?,
@@ -589,6 +597,10 @@ export type ClientSnapshot = {
 	highlighted_recipe: number?,
 	--- The server a join of this loader joined, as `host:query_port`.
 	server: string?,
+	--- The page of the loader's Mods screen that shows: `"mod_list"`, `"mod_page"`, `"mod_server_settings"`, `"server_mod_list"`, `"mod_bindings"` or `"mod_mismatch"`; nil while none does.
+	loader_screen: string?,
+	--- The id of the mod that page names.
+	loader_screen_mod: string?,
 }
 
 --- The mod's factor on how fast the server's clock runs.
@@ -625,7 +637,7 @@ export type CommandStatus = {
 	reason: string?,
 	--- Milliseconds since the command was queued.
 	age_ms: string,
-	--- A join or leave's phase: `"queued"`, `"menu"`, `"connecting"`, `"loading"`, `"in_world"` or `"left"`.
+	--- A join, host or leave's phase: `"queued"`, `"menu"`, `"connecting"`, `"loading"`, `"in_world"` or `"left"`.
 	phase: string?,
 }
 

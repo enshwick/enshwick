@@ -36,6 +36,9 @@ use core::cell::RefCell;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
 use enshwick_core::abi::UiWidget;
+
+use crate::actions::client_commands::{Applied, ModsAsk};
+use crate::actions::client_snapshot::LoaderScreen;
 use list::{Listed, list};
 use server::{server_list, server_settings};
 use settings::{page_rows, settings};
@@ -236,6 +239,93 @@ impl Screen {
 
 thread_local! {
     static SCREEN: RefCell<Option<Screen>> = const { RefCell::new(None) };
+    /// The page a client command asked for and the frame count it asked
+    /// in: that frame's draw opens it, and any later draw drops it.
+    static ASKED: core::cell::Cell<Option<(ModsAsk, u64)>> = const { core::cell::Cell::new(None) };
+}
+
+/// What the screen shows, for the client snapshot and client commands; on
+/// the interface thread, with `loader`'s mods naming a page's mod.
+pub(crate) fn shown(loader: &Loader) -> LoaderScreen {
+    use enshwick_core::abi::ClientSnapshot as Snapshot;
+    let index_of = |id: &str| loader.mods.iter().position(|m| m.id == id);
+    SCREEN.with_borrow(|slot| {
+        let Some(screen) = slot else {
+            return LoaderScreen::default();
+        };
+        let (page, mod_index) = match &screen.page {
+            Page::List { .. } => (Snapshot::MOD_LIST, None),
+            Page::Settings { index, .. } => (Snapshot::MOD_PAGE, Some(*index)),
+            Page::Bindings { id, .. } => (Snapshot::MOD_BINDINGS, index_of(id)),
+            Page::ServerList { .. } => (Snapshot::SERVER_MOD_LIST, None),
+            Page::ServerSettings { id, .. } => (Snapshot::MOD_SERVER_SETTINGS, index_of(id)),
+            Page::Mismatch { .. } => (Snapshot::MOD_MISMATCH, None),
+        };
+        LoaderScreen { page, mod_index }
+    })
+}
+
+/// Asks for a page of the screen for a client command, before this frame's
+/// draw: the draw opens it, opening the screen first over the main or the
+/// pause menu, whichever drew in this frame. Busy while neither does;
+/// unavailable while the screen cannot open.
+pub(crate) fn ask(ask: ModsAsk) -> Applied {
+    if !opens() {
+        return Applied::Unavailable;
+    }
+    // The count before this frame's, which the menus' hooks in it noted.
+    let frame = STATE.frame.load(Ordering::Relaxed);
+    if !SCREEN.with_borrow(Option::is_some) {
+        let drew = |from: u8| drew_before_draw(STATE.seen(from).load(Ordering::Relaxed), frame);
+        let Some(from) = [FROM_MAIN, FROM_PAUSE].into_iter().find(|&from| drew(from)) else {
+            return Applied::Busy;
+        };
+        STATE.open.store(from, Ordering::Relaxed);
+    }
+    ASKED.set(Some((ask, frame)));
+    Applied::Taken
+}
+
+/// Whether a menu its hook `seen` at a count keeps the screen in this
+/// frame's draw, judged at `frame`, the count before the draw moves it on.
+pub(super) const fn drew_before_draw(seen: u64, frame: u64) -> bool {
+    seen != 0 && !mods_screen::missed_frame(seen, frame + 1)
+}
+
+/// The page of `asked`, a command's ask with the count it asked at, if it
+/// asked in the frame whose draw runs at `frame`; a later draw drops it.
+pub(super) fn asked_in(asked: Option<(ModsAsk, u64)>, frame: u64) -> Option<ModsAsk> {
+    asked.and_then(|(ask, at)| (at + 1 == frame).then_some(ask))
+}
+
+/// Whether the screen can open for a client command: the interface, the
+/// screen and the entry of a menu it opens over are on.
+fn opens() -> bool {
+    opens_with(
+        &super::INTERFACE_FUSE,
+        [&MAIN_MENU_FUSE, &PAUSE_MENU_FUSE],
+        &super::MODS_SCREEN_FUSE,
+    )
+}
+
+/// Whether the screen opens with the `interface` it draws in, one of the
+/// menu `entries` and the `screen` itself on.
+pub(super) fn opens_with(interface: &Fuse, entries: [&Fuse; 2], screen: &Fuse) -> bool {
+    entries
+        .into_iter()
+        .any(|entry| screen_drawn(interface, entry, screen))
+}
+
+/// Opens the page `ask` names on `screen`.
+fn open_asked(loader: &Loader, screen: &mut Screen, ask: ModsAsk) {
+    let next = match ask.mod_index {
+        None => Next::page(Page::List { first: 0 }, None),
+        Some(index) => settings_page(loader, screen.from, index, ask.gear),
+    };
+    if let Next::Page(page, message) = next {
+        screen.message = message;
+        screen.open(*page);
+    }
 }
 
 /// Counts a frame of the interface.
@@ -252,6 +342,7 @@ pub(super) fn frame() -> u64 {
 
 /// Links the menu hooks; the screen draws from the interface hook.
 pub(super) fn link(loader: &Loader, engine: &Engine) {
+    crate::actions::client_commands::register_mods_screen(opens);
     for (site, handler, fuse, id) in [
         (
             engine.main_menu_site,
@@ -376,6 +467,9 @@ crate::engine::mid::mid_handler! {
 /// - No other window is open.
 /// - `frame` is the count [`next_frame`] gave this frame.
 pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, frame: u64) {
+    // A command's page counts only in the frame it asked in, so a screen
+    // that closed or did not draw then never opens it later.
+    let asked = asked_in(ASKED.take(), frame);
     let opened = STATE.open.swap(0, Ordering::Relaxed);
     SCREEN.with_borrow_mut(|slot| {
         if opened != 0 {
@@ -407,6 +501,9 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
         if mods_screen::missed_frame(seen, frame) {
             *slot = None;
             return;
+        }
+        if let Some(asked) = asked {
+            open_asked(loader, screen, asked);
         }
         if let Some(entries) = screen.page.entries() {
             entries.ending = false;

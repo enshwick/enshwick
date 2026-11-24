@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 22
+#define ENSHWICK_ABI_MINOR 23
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -1038,7 +1038,7 @@ typedef uint32_t EnshwickRecipeId;
 typedef struct EnshwickClientCommand {
   // Size and version of this struct.
   struct EnshwickHeader header;
-  // What to do: `EnshwickClientCommand_OPEN_SCREEN` to `EnshwickClientCommand_PRESS`.
+  // What to do: `EnshwickClientCommand_OPEN_SCREEN` to `EnshwickClientCommand_OPEN_MOD_SETTINGS`.
   uint32_t kind;
   // A move's hold in milliseconds, 1 to `EnshwickClientCommand_MAX_HOLD_MS`;
   // a press's, 1 to `EnshwickClientCommand_MAX_PRESS_MS`.
@@ -1075,6 +1075,21 @@ typedef struct EnshwickClientCommand {
   // the call. The loader hands it to the game's own join and never
   // keeps, logs or returns it. ABI 12.11.
   struct EnshwickStr password;
+  // The world position, x, y and z in metres, that
+  // `EnshwickClientCommand_SET_WAYPOINT` and `EnshwickClientCommand_PING` mark.
+  // ABI 12.23.
+  double position[3];
+  // The world `EnshwickClientCommand_HOST` plays: its place in the main
+  // menu's list of worlds, from 0, below `EnshwickClientCommand_MAX_SLOTS`.
+  // ABI 12.23.
+  uint16_t world;
+  // The character `EnshwickClientCommand_HOST` plays as: its place in the
+  // main menu's list of characters, from 0, below
+  // `EnshwickClientCommand_MAX_SLOTS`. ABI 12.23.
+  uint16_t character;
+  // 1 when `EnshwickClientCommand_HOST` opens the world to other players
+  // online, 0 to play it offline. ABI 12.23.
+  uint32_t online;
 } EnshwickClientCommand;
 // Opens `target`, one of the screens the game opens from a key in the
 // world.
@@ -1100,6 +1115,29 @@ typedef struct EnshwickClientCommand {
 // Holds the game action `target` in the local player's input for
 // `hold_ms`, as its key would. ABI 12.21.
 #define EnshwickClientCommand_PRESS 10
+// Sets the local player's waypoint at `position`, or moves it there.
+// ABI 12.23.
+#define EnshwickClientCommand_SET_WAYPOINT 11
+// Clears the local player's waypoint. ABI 12.23.
+#define EnshwickClientCommand_CLEAR_WAYPOINT 12
+// Pings `position` for the players of the world. ABI 12.23.
+#define EnshwickClientCommand_PING 13
+// Hosts `world` with `character` from the main menu, offline or
+// `online`; `session` is 0. Refused while a join, a host or a world
+// runs. ABI 12.23.
+#define EnshwickClientCommand_HOST 14
+// Opens the loader's Mods screen over the main menu or the pause menu,
+// whichever shows, at its list of mods. ABI 12.23.
+#define EnshwickClientCommand_OPEN_MODS 15
+// Opens mod `target`'s page on the Mods screen, by its id, opening
+// the screen first. ABI 12.23.
+#define EnshwickClientCommand_OPEN_MOD 16
+// Presses mod `target`'s settings gear on the Mods screen, by its id,
+// opening the screen first. ABI 12.23.
+#define EnshwickClientCommand_OPEN_MOD_SETTINGS 17
+// How many worlds and characters the main menu lists at most.
+// ABI 12.23.
+#define EnshwickClientCommand_MAX_SLOTS 16
 // The longest password, in bytes, the game's join takes.
 #define EnshwickClientCommand_MAX_PASSWORD 1024
 // The longest move.
@@ -1134,8 +1172,8 @@ typedef struct EnshwickClientCommandStatus {
   uint32_t reserved;
   // Milliseconds since the command was queued.
   uint64_t age_ms;
-  // Where the client stands on a `EnshwickClientCommand_JOIN` or
-  // `EnshwickClientCommand_LEAVE`: `EnshwickClientCommandStatus_PHASE_QUEUED` to
+  // Where the client stands on a `EnshwickClientCommand_JOIN`,
+  // `EnshwickClientCommand_HOST` or `EnshwickClientCommand_LEAVE`: `EnshwickClientCommandStatus_PHASE_QUEUED` to
   // `EnshwickClientCommandStatus_PHASE_LEFT`; 0 for other kinds. ABI 12.11.
   uint32_t phase;
   // Why a `EnshwickClientCommandStatus_FAILED` join failed, as far as the
@@ -1171,7 +1209,8 @@ typedef struct EnshwickClientCommandStatus {
 #define EnshwickClientCommandStatus_INPUT_BLOCKED 6
 // The mod or the feature turned off.
 #define EnshwickClientCommandStatus_MOD_OFF 7
-// The game ended a join without reaching the world, for `failure`.
+// The game ended a join or a host without reaching the world, for
+// `failure`.
 // ABI 12.11.
 #define EnshwickClientCommandStatus_FAILED 5
 // Waiting to start: the loader asks the server for its address.
@@ -1266,6 +1305,16 @@ typedef struct EnshwickClientSnapshot {
   // world; empty in the menu and in a world the client hosts or joined
   // another way. ABI 12.11.
   struct EnshwickStr server;
+  // The mod whose page of the loader's own screen shows, by its id, empty
+  // for none; group `EnshwickClientSnapshot_LOADER_SCREEN`. ABI 12.23.
+  struct EnshwickStr loader_screen_mod;
+  // The page of the loader's own Mods screen that shows:
+  // `EnshwickClientSnapshot_NO_LOADER_SCREEN` to
+  // `EnshwickClientSnapshot_MOD_MISMATCH`; group
+  // `EnshwickClientSnapshot_LOADER_SCREEN`. ABI 12.23.
+  uint32_t loader_screen;
+  // Zero.
+  uint32_t reserved2;
 } EnshwickClientSnapshot;
 // No interface read yet.
 #define EnshwickClientSnapshot_NEVER 0
@@ -1286,6 +1335,26 @@ typedef struct EnshwickClientSnapshot {
 #define EnshwickClientSnapshot_PLAYER 8
 // `highlighted_recipe`.
 #define EnshwickClientSnapshot_RECIPE 16
+// `loader_screen` and
+// `loader_screen_mod`. ABI 12.23.
+#define EnshwickClientSnapshot_LOADER_SCREEN 32
+// The loader's Mods screen does not show. ABI 12.23.
+#define EnshwickClientSnapshot_NO_LOADER_SCREEN 0
+// The list of mods shows. ABI 12.23.
+#define EnshwickClientSnapshot_MOD_LIST 1
+// A mod's page shows, with its settings this world gives it.
+// ABI 12.23.
+#define EnshwickClientSnapshot_MOD_PAGE 2
+// The joined server's settings of a mod show. ABI 12.23.
+#define EnshwickClientSnapshot_MOD_SERVER_SETTINGS 3
+// The joined server's list of mods with settings shows. ABI 12.23.
+#define EnshwickClientSnapshot_SERVER_MOD_LIST 4
+// The key bindings of a mod the joined server runs and this client
+// lacks show. ABI 12.23.
+#define EnshwickClientSnapshot_MOD_BINDINGS 5
+// The mods that differ from a server that refused this client show.
+// ABI 12.23.
+#define EnshwickClientSnapshot_MOD_MISMATCH 6
 
 // A comfort provider in a base registering its comfort for its category,
 // as `EnshwickHostApi.comfort_filter` hands it on.
@@ -7696,7 +7765,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, header) == 0, "offset of Chun
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, x) == 8, "offset of ChunkData.x");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, z) == 12, "offset of ChunkData.z");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, size) == 16, "offset of ChunkData.size");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientCommand) == 104, "size of ClientCommand");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientCommand) == 136, "size of ClientCommand");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientCommand) == 8, "alignment of ClientCommand");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, header) == 0, "offset of ClientCommand.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, kind) == 8, "offset of ClientCommand.kind");
@@ -7710,6 +7779,10 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, recipe) == 72, "offset of
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, reserved) == 76, "offset of ClientCommand.reserved");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, cancels) == 80, "offset of ClientCommand.cancels");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, password) == 88, "offset of ClientCommand.password");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, position) == 104, "offset of ClientCommand.position");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, world) == 128, "offset of ClientCommand.world");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, character) == 130, "offset of ClientCommand.character");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, online) == 132, "offset of ClientCommand.online");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientCommandStatus) == 40, "size of ClientCommandStatus");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientCommandStatus) == 8, "alignment of ClientCommandStatus");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, header) == 0, "offset of ClientCommandStatus.header");
@@ -7720,7 +7793,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, reserved) == 20, "o
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, age_ms) == 24, "offset of ClientCommandStatus.age_ms");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, phase) == 32, "offset of ClientCommandStatus.phase");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, failure) == 36, "offset of ClientCommandStatus.failure");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientSnapshot) == 136, "size of ClientSnapshot");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientSnapshot) == 160, "size of ClientSnapshot");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientSnapshot) == 8, "alignment of ClientSnapshot");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, header) == 0, "offset of ClientSnapshot.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, state) == 8, "offset of ClientSnapshot.state");
@@ -7737,6 +7810,9 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, host) == 108, "offset of
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, highlighted_recipe) == 112, "offset of ClientSnapshot.highlighted_recipe");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, reserved) == 116, "offset of ClientSnapshot.reserved");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, server) == 120, "offset of ClientSnapshot.server");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, loader_screen_mod) == 136, "offset of ClientSnapshot.loader_screen_mod");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, loader_screen) == 152, "offset of ClientSnapshot.loader_screen");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, reserved2) == 156, "offset of ClientSnapshot.reserved2");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickComfort) == 40, "size of Comfort");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickComfort) == 8, "alignment of Comfort");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickComfort, header) == 0, "offset of Comfort.header");

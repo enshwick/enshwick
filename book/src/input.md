@@ -350,7 +350,10 @@ cancels a command in these cases:
 - two seconds pass without its effect, in a world or outside one.
 
 A reason a newer loader gives reads as `CancelReason::Other`, `"other"` in
-Luau.
+Luau. In Rust, the `name()` of a reason, a join failure or a join phase is
+the name Luau uses, such as `"other_screen"`. So a Rust mod logs an
+outcome under the same name. `CommandId::as_u64()` gives the command's
+number, the one Luau returns.
 
 One command of each kind waits per mod, and one press of each game action.
 A second answers `WorldError::Refused` until the first ends.
@@ -472,8 +475,14 @@ forms. For those, press the form the key gives. These were seen on client
 A press of `MainhandAction` alone does nothing: that bit is the key held,
 and the game attacks on its tap.
 
-A press runs only on the world's own screen, `InGame`. It is cancelled in
-the same cases as a move, with the same reasons. A control the player
+A press runs only on the world's own screen, `InGame`. A press of the
+interact key may open the screen of what the player faces during the hold,
+such as a storage chest's. That screen is the press's effect, so the press
+is then `Observed` and stops holding. The interact key's actions are
+`ContextualAction` and its tap and hold forms. Any other screen cancels a
+press, such as the map the player opens or a screen another command opens.
+Otherwise it is cancelled in the same cases as a move, with the same
+reasons. A control the player
 presses cancels it with `PlayerInput`; a control the player already held
 when the press started does not. The bits presses set are not the player's
 own input, so they cancel no command. When a press ends for any reason,
@@ -532,6 +541,61 @@ local function highlight(recipe: number)
         recipe = recipe,
     })
 end
+```
+
+## Setting the waypoint and pinging the map
+
+`CommandAction::SetWaypoint(position)` sets the local player's waypoint at
+a world position, x, y and z in metres, or moves it there.
+`CommandAction::ClearWaypoint` clears it, and `CommandAction::Ping(position)`
+pings a position for the players of the world and leaves the waypoint as
+it is. Each one asks the server as the map's own waypoint and ping do. The
+loader writes the request into the local player's input in the next game
+step, and the server takes it as the player's own.
+
+| Command | Bounds | Observed |
+| --- | --- | --- |
+| `SetWaypoint` | a finite position, inside the map | the step's input carries it to the server |
+| `ClearWaypoint` | none | the same |
+| `Ping` | a finite position, inside the map | the same |
+
+A position that is not finite returns `WorldError::Refused`. So does a
+position outside the map's frame in a hosted world. The loader reads that
+frame shortly after a mod first takes a client snapshot or queues a client
+command. A client joined to a server has no frame, so there the loader
+checks only that the position is finite. The
+server's waypoint follows the request.
+[`load.on_waypoint`](map.md#hearing-waypoints-and-pings) and
+[`map.waypoint`](map.md#waypoints) tell when it changed. They run on the
+server's side, so on a client only in a hosted game.
+
+The commands run on any screen, such as the map's, and the player's input
+does not cancel them. One waypoint or ping runs at a time across all mods.
+Another waits until the first is written, and after two seconds of waiting
+it is cancelled with `TimedOut`. A mod has one waypoint or ping open at a
+time.
+
+These commands write what the game's own code writes, as read on client
+26430625 and server 26430253.
+
+```rust
+use enshwick::input::{ClientCommand, CommandAction};
+
+fn mark(input: enshwick::input::Input, at: [f64; 3]) {
+    let Ok(snapshot) = input.client_snapshot() else {
+        return;
+    };
+    let _queued = input.client_command(&ClientCommand::new(CommandAction::SetWaypoint(at), snapshot.session()));
+}
+```
+
+```luau
+local snapshot = enshwick.input.client_snapshot()
+enshwick.input.client_command({
+    kind = "ping",
+    session = snapshot.session,
+    position = vector.create(4096, 80, 5120),
+})
 ```
 
 ## Joining a server and leaving it
@@ -613,4 +677,76 @@ enshwick.ui.on_frame(function()
     local status = enshwick.input.command_status(id)
     enshwick.log.info(`{status.state} {status.phase}`)
 end)
+```
+
+## Hosting a world from the main menu
+
+`CommandAction::Host { world, character, online }` hosts one of the
+player's worlds from the main menu, as the menu's own Play does. `world`
+and `character` are places in the main menu's lists of worlds and
+characters, counted from 0 and below 16. `online` opens the world to other
+players, and `false` plays it offline. A host starts at the main menu with
+session 0, as a join does. The loader refuses a host while a join, a host
+or a leave runs, or while the client is in a world.
+
+`CommandStatus::phase` follows play through the phases of a
+[join](#joining-a-server-and-leaving-it). Once it reaches `InWorld`, the
+host is `Observed`. A host that ends back at the main menu is `Failed(Unknown)`. A
+host that does not start play within 20 seconds is `Failed(TimedOut)`.
+
+These posts are the main menu's own commands, read on client 26430625.
+When the save system does not take
+the world or the character, the menu keeps its last choice, so play may
+start with that one.
+
+```rust
+use enshwick::input::{ClientCommand, CommandAction};
+
+fn host(input: enshwick::input::Input) -> Option<enshwick::input::CommandId> {
+    let action = CommandAction::Host { world: 0, character: 0, online: false };
+    input.client_command(&ClientCommand::new(action, 0)).ok()
+}
+```
+
+```luau
+local id = enshwick.input.client_command({
+    kind = "host",
+    session = "0",
+    world = 0,
+    character = 0,
+})
+```
+
+## Opening the Mods screen
+
+`CommandAction::OpenMods` opens the loader's own Mods screen at its list of
+mods. It opens over the main menu or the pause menu, whichever shows. A
+command made while neither menu shows waits, and after two seconds it is
+cancelled with `TimedOut`. While the Mods screen or both menus' entries
+are turned off, the call returns `WorldError::Unavailable`. `CommandAction::OpenMod(id)` opens a mod's page,
+and `CommandAction::OpenModSettings(id)` presses its settings gear. Both
+name the mod by its id and open the screen first. An id that no loaded mod
+has returns `WorldError::Refused`.
+
+The snapshot's `loader_screen()` names the page that shows, at the main
+menu too, before any world. `loader_screen_mod()` names the page's mod
+when this client loads it, so a page of a mod only the server runs names
+none. A command is `Observed` once its page shows. A gear may open the joined server's settings of a mod
+that has nothing to set on this client, and that page counts too.
+
+| `LoaderPage` | Shows |
+| --- | --- |
+| `ModList` | the list of mods |
+| `ModPage` | a mod's page, with its settings in this world |
+| `ModServerSettings` | the joined server's settings of a mod |
+| `ServerModList` | the joined server's mods with settings |
+| `ModBindings` | the key bindings of a mod the server runs and this client lacks |
+| `ModMismatch` | the mods that differ from a server that refused this client |
+
+```luau
+enshwick.input.client_command({
+    kind = "open_mod_settings",
+    session = enshwick.input.client_snapshot().session,
+    target = "you.trail",
+})
 ```

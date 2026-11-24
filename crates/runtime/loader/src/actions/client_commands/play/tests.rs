@@ -29,6 +29,10 @@ fn frame(op: &mut Op, seen: Seen, now: u64) -> (bool, Vec<String>) {
             Post::Join(bytes) => format!("join {}", bytes.len()),
             Post::StartPlay => "start".to_owned(),
             Post::Back => "back".to_owned(),
+            Post::Character(slot) => format!("character {slot}"),
+            Post::World(slot) => format!("world {slot}"),
+            Post::Session { online } => format!("session online {online}"),
+            Post::PlayWorld => "play world".to_owned(),
         });
         true
     });
@@ -349,4 +353,119 @@ fn the_stage_byte_names_the_menu_loading_and_the_world() {
 fn the_password_never_shows_in_a_debug_print() {
     let op = join_op(posting());
     assert!(!format!("{op:?}").contains("hunter2"));
+}
+
+#[test]
+fn a_host_posts_its_character_world_and_session_then_plays_the_world() {
+    let host = Host {
+        world: 2,
+        character: 0,
+        online: true,
+    };
+    let mut op = Op {
+        info: None,
+        password_given: false,
+        ..join_op(Step::Hosting { host, posted: 0 })
+    };
+    assert_eq!(
+        frame(&mut op, seen(Stage::Loading, false), 10).1,
+        Vec::<String>::new(),
+        "only at the menu"
+    );
+    assert_eq!(
+        frame(&mut op, seen(Stage::Menu, false), 20),
+        (
+            false,
+            vec![
+                "character 1".to_owned(),
+                "world 3".to_owned(),
+                "session online true".to_owned(),
+                "play world".to_owned(),
+            ]
+        ),
+        "the list places as the game's slot ids, place plus 1"
+    );
+    assert!(matches!(op.step, Step::Starting { .. }));
+    assert_eq!(op.report, report(Progress::Taken, Status::PHASE_MENU, 0));
+    assert_eq!(frame(&mut op, seen(Stage::Menu, false), 300).1, ["start"]);
+    frame(&mut op, seen(Stage::Loading, true), 600);
+    assert_eq!(op.report.phase, Status::PHASE_LOADING);
+    assert!(frame(&mut op, seen(Stage::InGame, true), 900).0);
+    assert_eq!(op.report, report(Progress::Done, Status::PHASE_IN_WORLD, 0));
+}
+
+#[test]
+fn a_host_whose_posts_the_queue_refuses_goes_on_from_where_it_stopped() {
+    let host = Host {
+        world: 0,
+        character: 4,
+        online: false,
+    };
+    let mut op = join_op(Step::Hosting { host, posted: 0 });
+    let mut taken = 2;
+    let mut posted = Vec::new();
+    let done = step(&mut op, seen(Stage::Menu, false), 10, &mut |p| {
+        posted.push(format!("{p:?}"));
+        taken -= 1;
+        taken >= 0
+    });
+    assert!(!done);
+    assert!(
+        matches!(op.step, Step::Hosting { posted: 2, .. }),
+        "{:?}",
+        op.step
+    );
+    let (_, next) = frame(&mut op, seen(Stage::Menu, false), 20);
+    assert_eq!(next, ["session online false", "play world"]);
+    let mut late = join_op(Step::Hosting { host, posted: 0 });
+    let (done, _) = frame(&mut late, seen(Stage::Menu, false), START_MS + 1);
+    assert!(done);
+    assert_eq!(
+        late.report.progress,
+        Progress::Failed(Status::JOIN_TIMED_OUT)
+    );
+}
+
+#[test]
+fn a_host_whose_posts_land_late_still_times_out_twenty_seconds_after_its_queue() {
+    let host = Host {
+        world: 0,
+        character: 0,
+        online: false,
+    };
+    let mut op = join_op(Step::Hosting { host, posted: 0 });
+    let late = START_MS - 1000;
+    assert!(!frame(&mut op, seen(Stage::Menu, false), late).0);
+    assert!(matches!(op.step, Step::Starting { .. }));
+    let (_, posted) = frame(&mut op, seen(Stage::Menu, false), START_MS + 1);
+    assert_eq!(
+        op.report.progress,
+        Progress::Failed(Status::JOIN_TIMED_OUT),
+        "not a second limit from the last post"
+    );
+    assert_eq!(posted, ["back"], "a start posted just before may be taken");
+}
+
+#[test]
+fn a_host_starts_only_at_the_menu_and_never_beside_a_join() {
+    let host = Host {
+        world: 0,
+        character: 0,
+        online: false,
+    };
+    note_stage(7, 100);
+    assert_eq!(
+        super::host(40, host, 100),
+        Err(StartError::NotNow),
+        "in a world"
+    );
+    note_stage(2, 200);
+    assert_eq!(super::host(41, host, 200), Ok(()));
+    assert_eq!(
+        super::host(42, host, 200),
+        Err(StartError::NotNow),
+        "one runs"
+    );
+    release(41, 200, false);
+    assert_eq!(report_of(41), None);
 }

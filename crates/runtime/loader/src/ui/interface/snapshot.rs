@@ -4,7 +4,7 @@
 use std::cell::OnceCell;
 
 use super::{READS_FUSE, extensions};
-use crate::actions::client_commands::{Applied, Kind, Seen};
+use crate::actions::client_commands::{Applied, ScreenChange, Seen};
 use crate::actions::client_snapshot::{FrameRead, TabRead};
 use crate::ui::interface::engine::Engine;
 
@@ -40,34 +40,43 @@ pub(super) unsafe fn note(engine: &Engine, context: usize) {
     let view = || *read.get_or_init(|| unsafe { view(engine, context) });
     // The browser's draw since the last frame, taken once for both.
     let recipe = crate::actions::client_recipes::take_drawn();
-    crate::actions::client_snapshot::frame(|| {
-        view().map(|(view, tab)| FrameRead {
-            play: view.play,
-            screen: view.screen,
-            return_to: view.return_to,
-            host: view.host,
-            tab,
-            recipe,
+    // The loader's own Mods screen, which reads at the main menu too; read
+    // at most once, and only for a mod that asked.
+    let shown = OnceCell::new();
+    let loader_screen = || {
+        *shown.get_or_init(|| {
+            crate::engine::loader::loader().map_or_else(Default::default, super::mods::shown)
         })
-    });
+    };
+    crate::actions::client_snapshot::frame(
+        || {
+            view().map(|(view, tab)| FrameRead {
+                play: view.play,
+                screen: view.screen,
+                return_to: view.return_to,
+                host: view.host,
+                tab,
+                recipe,
+            })
+        },
+        loader_screen,
+    );
     crate::actions::client_commands::frame(
         || {
             view().map(|(view, tab)| Seen {
                 session: crate::actions::client_snapshot::session(),
-                screen: view.screen,
+                screen: Some(view.screen),
                 tab,
                 recipe,
                 held: crate::actions::local_held::players_held(),
+                host: view.host,
+                loader: loader_screen(),
             })
         },
-        |kind| {
-            let Some((view, _)) = view() else {
-                return Applied::Busy;
-            };
-            // SAFETY: inside the frame on the interface thread, with its
-            // own context and the interface state it read.
-            unsafe { apply(context, view.state, kind) }
-        },
+        || Seen::menu(crate::actions::client_snapshot::session(), loader_screen()),
+        // SAFETY: inside the frame on the interface thread, with its own
+        // context and the interface state it read.
+        |change| unsafe { apply(context, view().map(|(view, _)| view.state), change) },
     );
     // SAFETY: the caller's contract: inside the frame on the interface
     // thread, with its own non-zero context.
@@ -87,28 +96,26 @@ unsafe fn play(engine: &Engine, context: usize, game: impl FnOnce() -> bool) {
         || engine.app_state(context),
         game,
         |post| {
-            crate::actions::client_control::GROUPS
-                .menu
-                .get()
-                .is_some_and(|menu| {
-                    // SAFETY: inside the frame on the interface thread, with
-                    // its own live context, as this function's contract gives.
-                    unsafe { menu.post(context, post) }
-                })
+            // SAFETY: inside the frame on the interface thread, with its own
+            // live context, as this function's contract gives.
+            unsafe { crate::actions::client_control::post_menu(context, post) }
         },
     );
 }
 
-/// Hands `kind` to the game in this frame.
+/// Hands `change` to the game in this frame; the game's own screens change
+/// only in a game, whose interface `state` the frame read.
 ///
 /// # Safety
 ///
 /// - Called inside a frame on the interface thread; `context` is the frame's
-///   own, non-zero, and `state` the interface state it read.
-unsafe fn apply(context: usize, state: usize, kind: Kind) -> Applied {
+///   own, non-zero, and `state` the interface state it read, if any.
+unsafe fn apply(context: usize, state: Option<usize>, change: ScreenChange) -> Applied {
     let groups = &crate::actions::client_control::GROUPS;
-    match kind {
-        Kind::Open(screen) | Kind::Close(screen) => {
+    match (change, state) {
+        (ScreenChange::Mods(ask), _) => super::mods::ask(ask),
+        (_, None) => Applied::Busy,
+        (ScreenChange::Open(screen) | ScreenChange::Close(screen), Some(_)) => {
             let Some(toggle) = groups.toggle.get() else {
                 return Applied::Unavailable;
             };
@@ -120,7 +127,7 @@ unsafe fn apply(context: usize, state: usize, kind: Kind) -> Applied {
                 Applied::Busy
             }
         }
-        Kind::Tab(tab) => {
+        (ScreenChange::Tab(tab), Some(state)) => {
             let Some(layout) = groups.tab.get() else {
                 return Applied::Unavailable;
             };
@@ -129,12 +136,5 @@ unsafe fn apply(context: usize, state: usize, kind: Kind) -> Applied {
             unsafe { layout.choose(core::ptr::with_exposed_provenance_mut(state), tab) };
             Applied::Taken
         }
-        // Handed to their detours or the play module, never applied here.
-        Kind::Look(_)
-        | Kind::Move(..)
-        | Kind::Press(..)
-        | Kind::Highlight(_)
-        | Kind::Join
-        | Kind::Leave => Applied::Unavailable,
     }
 }

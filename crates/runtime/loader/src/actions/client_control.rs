@@ -19,8 +19,12 @@ use crate::engine::loader::Loader;
 use crate::engine::pinned;
 
 mod menu;
+mod waypoint;
 
-pub(crate) use menu::MenuPosts;
+pub(crate) use menu::{HostPosts, MenuPosts, post as post_menu};
+#[cfg(test)]
+pub(crate) use waypoint::TEST_LAYOUT as WAYPOINT_TEST_LAYOUT;
+pub(crate) use waypoint::{Mark, WaypointLayout};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -39,6 +43,13 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::POST_PASSWORD_LEN.id(),
     pinned::ui::POST_PASSWORD_TEXT.id(),
     pinned::ui::POST_START_PLAY.id(),
+    pinned::ui::POST_CHARACTER.id(),
+    pinned::ui::POST_WORLD.id(),
+    pinned::ui::POST_SESSION.id(),
+    pinned::ui::POST_PLAY_WORLD.id(),
+    pinned::ui::POST_CHARACTER_SLOT.id(),
+    pinned::ui::POST_WORLD_SLOT.id(),
+    pinned::ui::POST_SESSION_KIND.id(),
     pinned::ui::RECIPE_DIRECTORY.id(),
     pinned::ui::RECIPE_HIGHLIGHTED.id(),
     pinned::ui::RECIPE_SELECT.id(),
@@ -128,6 +139,11 @@ pub(crate) struct Groups {
     pub(crate) recipes: Group<Recipes>,
     /// The menu's own commands a join and a leave post.
     pub(crate) menu: Group<MenuPosts>,
+    /// The menu's own commands a host posts.
+    pub(crate) host: Group<HostPosts>,
+    /// The waypoint request in the input, which waypoint and ping commands
+    /// write.
+    pub(crate) waypoint: Group<WaypointLayout>,
 }
 
 /// The groups of this process.
@@ -138,6 +154,8 @@ pub(crate) static GROUPS: Groups = Groups {
     buttons: Group::new("the player's buttons: presses and the hold under loader windows"),
     recipes: Group::new("the crafting menu's recipe browser"),
     menu: Group::new("the menu's join and leave commands"),
+    host: Group::new("the menu's host commands"),
+    waypoint: Group::new("the client's waypoint and ping commands"),
 };
 
 /// Where the in-game menu keeps its tab, and which screen bytes are the
@@ -600,6 +618,10 @@ pub(crate) fn link(loader: &Loader) {
     GROUPS.buttons.link(loader, Buttons::resolve(loader));
     GROUPS.recipes.link(loader, Recipes::resolve(loader));
     GROUPS.menu.link(loader, MenuPosts::resolve(loader));
+    GROUPS.host.link(loader, HostPosts::resolve(loader));
+    GROUPS
+        .waypoint
+        .link(loader, WaypointLayout::resolve(loader));
 }
 
 /// A look input per device, each a float pair, as the input builder writes
@@ -883,6 +905,8 @@ mod tests {
             &GROUPS.buttons.fuse,
             &GROUPS.recipes.fuse,
             &GROUPS.menu.fuse,
+            &GROUPS.host.fuse,
+            &GROUPS.waypoint.fuse,
         ] {
             assert!(fuse.is_off(), "{}", fuse.feature());
         }

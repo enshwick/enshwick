@@ -106,6 +106,18 @@ pub(crate) const POST_BACK: Symbol = Symbol::new("ui.post_back");
 pub(crate) const POST_JOIN: Symbol = Symbol::new("ui.post_join");
 pub(crate) const POST_PASSWORD: Symbol = Symbol::new("ui.post_password");
 pub(crate) const POST_START_PLAY: Symbol = Symbol::new("ui.post_start_play");
+/// The posters a host uses: the character (0x11), the world (0x16), the
+/// session's kind (0x27) and the play of the chosen world (0x28).
+pub(crate) const POST_CHARACTER: Symbol = Symbol::new("ui.post_character");
+pub(crate) const POST_WORLD: Symbol = Symbol::new("ui.post_world");
+pub(crate) const POST_SESSION: Symbol = Symbol::new("ui.post_session");
+pub(crate) const POST_PLAY_WORLD: Symbol = Symbol::new("ui.post_play_world");
+/// Where the main menu reads a host's payload (`0x140873710`, client
+/// 26430625): the character's slot id, the world's slot id, each a `u16`,
+/// and the session's kind byte.
+pub(crate) const POST_CHARACTER_SLOT: Constant = Constant::new("ui.post_character_slot");
+pub(crate) const POST_WORLD_SLOT: Constant = Constant::new("ui.post_world_slot");
+pub(crate) const POST_SESSION_KIND: Constant = Constant::new("ui.post_session_kind");
 /// Where the main menu reads a posted command's payload (`0x140873710`,
 /// client 26430625): the password's text and its `u16` length, the join's
 /// area byte (its target follows it) and the address's last `u16`.
