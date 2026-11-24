@@ -546,7 +546,7 @@ impl Engine {
     /// The scroll's navigation config: the window's, as a scrolled column
     /// with the highlight sound.
     fn scroll_nav(&self, fns: &Scrolling, bundle: usize) -> Buf<NAV_CONFIG> {
-        let mut nav = self.nav_config(super::windows::NAV_COLUMN);
+        let mut nav = self.nav_config(super::windows::NAV_COLUMN, false);
         // SAFETY: `bundle` is the frame's look bundle, read from the live
         // context, and `fns.highlight` the reflected offset of a 16-byte
         // sound reference inside it.

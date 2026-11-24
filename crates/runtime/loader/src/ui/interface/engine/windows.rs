@@ -35,6 +35,17 @@ impl Window {
         if self.place().is_some() { 0 } else { MODAL }
     }
 
+    /// Whether the window's navigation gives the focus to no member in
+    /// interface update `now`: a panel beside a screen in the update it
+    /// opens in, so the screen keeps the one focused slot and the panel's
+    /// members take the focus only from the cursor, a move or a click. On a
+    /// new group's first frame `ui.nav_end` focuses its first member while
+    /// the config's focus byte is set, later only a moved selection (client
+    /// 26430625, decompiler).
+    const fn holds_focus(&self, now: u64) -> bool {
+        self.place.is_some() && !self.drawn_lately(now)
+    }
+
     /// The layer the window starts on: one under the popup's while a loader
     /// dialog shows or waits over it (`dialog`), so the dialog alone takes
     /// the clicks and keys, else its own.
@@ -145,7 +156,9 @@ impl Engine {
         if window.place().is_none() {
             crate::ui::interface::window_drawn();
         }
-        window.began = Some(crate::ui::interface::tick());
+        let now = crate::ui::interface::tick();
+        let holds_focus = window.holds_focus(now);
+        window.began = Some(now);
         window.saved_nav = self.nav(context);
         super::widgets::twins_window(name.hash);
         let short;
@@ -242,7 +255,7 @@ impl Engine {
             // the panel frame opened above is the window `title` asks for.
             unsafe { self.title(context, title) };
         }
-        let mut nav = self.nav_config(NAV_WINDOW);
+        let mut nav = self.nav_config(NAV_WINDOW, holds_focus);
         // SAFETY: `self.nav_init` is the game's `ui.nav_init`, its entry bytes
         // checked in `Engine::resolve`; `window.nav` holds the table's
         // `ui.nav_extent` bytes and `nav` its `ui.nav_config_size`
@@ -266,9 +279,9 @@ impl Engine {
 
     /// A navigation config of `kind`, as the game's popups, scrolled columns
     /// and chat field fill theirs: wrapping, both axes, every input, no
-    /// moves while a text field types, and a window's focus held back after
-    /// one typed.
-    pub(super) fn nav_config(&self, kind: u32) -> Buf<NAV_CONFIG> {
+    /// moves while a text field types, and the focus held back when `held`
+    /// or, in a window, after a field typed.
+    pub(super) fn nav_config(&self, kind: u32, held: bool) -> Buf<NAV_CONFIG> {
         let mut nav = Buf::<NAV_CONFIG>::zeroed();
         // The table's `ui.nav_sound` is the focus byte (client 26430625).
         let [kind_at, wrap, axis, flags, input, layer, focus] = self.layout.nav;
@@ -280,7 +293,7 @@ impl Engine {
         nav.u16(layer, 0x1b);
         nav.u16(
             focus,
-            text_field::focus_byte(kind == NAV_WINDOW && text_field::focus_held()),
+            text_field::focus_byte(held || (kind == NAV_WINDOW && text_field::focus_held())),
         );
         nav
     }
@@ -334,6 +347,23 @@ mod tests {
         assert_eq!(panel.flags(), 0, "an overlay, as the game's button hints");
         assert_eq!(Window::new().flags(), MODAL, "a popup, as the game's");
         assert_eq!(Window::screen(0x1b, 30.0).flags(), MODAL);
+    }
+
+    #[test]
+    fn a_panel_beside_a_screen_takes_no_focus_as_it_opens_and_a_window_does() {
+        let mut panel = Window::extension(Place::edge(UiExtension::RIGHT), 0xa);
+        assert!(panel.holds_focus(5), "the update the panel opens in");
+        panel.began = Some(5);
+        assert!(
+            !panel.holds_focus(6),
+            "a move between its members takes the focus from then on"
+        );
+        assert!(panel.holds_focus(8), "opened again after its screen closed");
+        assert!(
+            !Window::new().holds_focus(5),
+            "a popup takes the focus, as the game's"
+        );
+        assert!(!Window::screen(0x1b, 30.0).holds_focus(5));
     }
 
     #[test]
