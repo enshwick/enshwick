@@ -8,6 +8,7 @@ use crate::{Side, Table, exact, kept};
 
 mod attributes;
 mod bindings;
+mod pass;
 mod quests;
 
 /// Entries a route finds on a table build that its own table does not pin
@@ -694,6 +695,7 @@ fn routed_only() -> impl Iterator<Item = (&'static str, &'static str, u64)> {
         .chain(ITEM_UI_SYMBOLS)
         .chain(SOUND_SYMBOLS)
         .chain(bindings::BINDING_SYMBOLS)
+        .chain(pass::PASS_SYMBOLS)
         .chain(quests::QUEST_PAY_SYMBOLS)
         .chain(attributes::ATTRIBUTE_SYMBOLS)
         .copied()
@@ -702,6 +704,7 @@ fn routed_only() -> impl Iterator<Item = (&'static str, &'static str, u64)> {
                 .into_iter()
                 .chain(CLIENT_CONTROL_READS)
                 .chain(WIDGET_READS)
+                .chain(pass::PASS_READS)
                 .chain(ITEM_UI_READS)
                 .chain(SOUND_READS)
                 .chain(bindings::BINDING_READS)
