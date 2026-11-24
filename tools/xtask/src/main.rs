@@ -188,6 +188,16 @@ fn packages() -> Result<Vec<Package>, String> {
                     .filter(|feature| *feature != "default")
                     .cloned()
                     .collect(),
+                feature_table: package["features"]
+                    .as_object()
+                    .into_iter()
+                    .flatten()
+                    .map(|(feature, list)| {
+                        let on = list.as_array().into_iter().flatten();
+                        let on = on.filter_map(|entry| entry.as_str().map(str::to_owned));
+                        (feature.clone(), on.collect())
+                    })
+                    .collect(),
             }
         })
         .collect())

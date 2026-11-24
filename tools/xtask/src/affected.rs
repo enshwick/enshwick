@@ -6,7 +6,7 @@ pub(crate) mod idents;
 mod shared;
 mod versions;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// A workspace package, as far as choosing checks needs it.
 #[derive(Debug, Clone, Default)]
@@ -50,6 +50,9 @@ pub(crate) struct Package {
     /// Its own features, `default` left out, which the host check lints one
     /// at a time.
     pub(crate) features: Vec<String>,
+    /// What each of its features turns on, as its `[features]` table lists
+    /// it (`unstable`, `dep:x`, `x/typed`).
+    pub(crate) feature_table: BTreeMap<String, Vec<String>>,
 }
 
 /// What a change needs checked.
@@ -261,7 +264,7 @@ fn bump(texts: &dyn Texts, path: &str, only_versions: fn(&str, &str) -> bool) ->
 }
 
 /// The package whose directory holds `file`, the innermost one.
-fn owner<'a>(file: &str, packages: &'a [Package]) -> Option<&'a Package> {
+pub(crate) fn owner<'a>(file: &str, packages: &'a [Package]) -> Option<&'a Package> {
     packages
         .iter()
         .filter(|package| file.starts_with(&format!("{}/", package.dir)))

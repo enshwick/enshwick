@@ -257,7 +257,13 @@ fn only_a_change_that_checks_a_package_with_features_and_windows_code_lists_the_
     let windows_code = |p: &Package| p.name != "enshwick-values";
     let listed = |scope: &Scope| {
         let due = windows_features_due(scope, &packages, windows_code);
-        let planned = windows_lint::steps(scope, &packages, &[Part::WindowsFeatures], windows_code);
+        let planned = windows_lint::steps(
+            scope,
+            &packages,
+            &[Part::WindowsFeatures],
+            windows_code,
+            &features::Alone::Every,
+        );
         assert_eq!(due, !planned.is_empty(), "the listing and the plan differ");
         due_parts(&[Part::WindowsFeatures], scope, due)
     };
@@ -659,94 +665,6 @@ fn the_test_filter_names_each_package() {
 }
 
 #[test]
-fn each_checked_package_is_linted_without_features_and_with_each_alone() {
-    let mut content = package("enshwick-content", "crates/api/content", false);
-    content.features = vec!["fake".to_owned(), "unstable".to_owned()];
-    let mut stub = package("enshwick-loader-stub", "crates/runtime/stub", true);
-    stub.features = vec!["trace".to_owned()];
-    let mut untouched = package("enshwick-world", "crates/api/world", false);
-    untouched.features = vec!["fake".to_owned()];
-    let packages = [
-        content,
-        stub,
-        untouched,
-        package("enshwick-abi", "crates/abi", false),
-    ];
-    let scope = Scope::Some {
-        code: ["enshwick-content", "enshwick-loader-stub", "enshwick-abi"]
-            .map(str::to_owned)
-            .into(),
-        docs: BTreeSet::new(),
-        tested: BTreeSet::new(),
-        built: BTreeSet::new(),
-        wide: false,
-    };
-    let host_ok = |p: &Package| p.name != "enshwick-loader-stub";
-    let lines: Vec<String> = features::steps(&scope, &packages, host_ok, &["clippy"])
-        .iter()
-        .map(Step::line)
-        .collect();
-    let clippy = "cargo clippy --package enshwick-content --no-default-features";
-    assert_eq!(
-        lines,
-        [
-            format!("{clippy} -- -D warnings"),
-            format!("{clippy} --features fake -- -D warnings"),
-            format!("{clippy} --features unstable -- -D warnings"),
-        ]
-    );
-    assert_eq!(
-        features::steps(&Scope::All, &packages, |_| true, &["clippy"]).len(),
-        3 + 2 + 2
-    );
-}
-
-#[test]
-fn the_windows_lint_lints_each_feature_alone_of_the_checked_packages_with_windows_code() {
-    let mut stub = package("enshwick-loader-stub", "crates/runtime/stub", true);
-    stub.features = vec!["trace".to_owned()];
-    let mut portable = package("enshwick-values", "crates/internal/values", false);
-    portable.features = vec!["serde".to_owned()];
-    let mut untouched = package("enshwick-world", "crates/api/world", false);
-    untouched.features = vec!["fake".to_owned()];
-    let packages = [stub, portable, untouched];
-    let scope = Scope::Some {
-        code: ["enshwick-loader-stub", "enshwick-values"]
-            .map(str::to_owned)
-            .into(),
-        docs: BTreeSet::new(),
-        tested: BTreeSet::new(),
-        built: BTreeSet::new(),
-        wide: false,
-    };
-    let windows_code = |p: &Package| p.name != "enshwick-values";
-    let lines = |parts: &[Part]| -> Vec<String> {
-        windows_lint::steps(&scope, &packages, parts, windows_code)
-            .iter()
-            .map(Step::line)
-            .collect()
-    };
-    let xwin = format!("cargo xwin clippy --target {WINDOWS_TARGET}");
-    let stub = format!("{xwin} --package enshwick-loader-stub --no-default-features");
-    let workspace =
-        format!("{xwin} --workspace --features {TEST_FEATURE} --all-targets -- -D warnings");
-    let alone = [
-        format!("{stub} -- -D warnings"),
-        format!("{stub} --features trace -- -D warnings"),
-    ];
-    assert_eq!(
-        lines(&[Part::WindowsLint]),
-        std::slice::from_ref(&workspace)
-    );
-    assert_eq!(lines(&[Part::WindowsFeatures]), alone);
-    assert_eq!(
-        lines(&Part::every(false)),
-        [[workspace].as_slice(), &alone].concat()
-    );
-    assert!(lines(&[Part::Host, Part::Features]).is_empty());
-}
-
-#[test]
 fn a_package_has_windows_code_when_it_is_windows_only_or_a_cfg_in_its_source_names_the_target() {
     let root = workspace_root();
     assert!(features::windows_code(
@@ -984,4 +902,5 @@ fn the_stable_doctests_skip_unstable_modules_under_either_path_separator() {
 }
 
 mod docs;
+mod feature_lints;
 mod targets;
