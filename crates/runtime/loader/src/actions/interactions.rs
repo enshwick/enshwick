@@ -122,11 +122,6 @@ impl State {
     fn reads_inputs(&self, fuse: &Fuse) -> bool {
         still_linked(self.reads_inputs.load(Ordering::Acquire), fuse)
     }
-
-    /// Forgets the players of a hosted game that ended.
-    fn forget(&self) {
-        crate::inventory::item_actions::keep_players(None);
-    }
 }
 
 static STATE: State = State::new();
@@ -391,8 +386,9 @@ fn players() -> arc_swap::Guard<Option<std::sync::Arc<Vec<u32>>>> {
     crate::inventory::item_actions::players()
 }
 
+/// Forgets the players of a hosted game that ended.
 pub(crate) fn forget() {
-    STATE.forget();
+    crate::inventory::item_actions::keep_players(None);
 }
 
 fn allowed(call: &Interaction) -> bool {
