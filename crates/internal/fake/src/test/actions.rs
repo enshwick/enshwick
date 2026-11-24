@@ -47,6 +47,8 @@ impl FakeHost {
             Type::new("demo::ecs::PlayerInputType", Kind::Enum, 1, 1).with_constants(vec![
                 Constant::new("MainhandAction", 0),
                 Constant::new("ContextualAction", 5),
+                Constant::new("QuickUse0", 14),
+                Constant::new("QuickUse1", 15),
                 Constant::new("Block", 30),
             ]);
         let hash = controls.qualified_hash();

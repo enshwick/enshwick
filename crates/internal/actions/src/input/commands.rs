@@ -642,11 +642,12 @@ impl Input {
     /// tells what came of it. It runs later on the client's game thread,
     /// only while the client is still in the command's session on its
     /// screen. One command of each kind waits per mod, and one press of each
-    /// game action.
+    /// game action, up to four presses.
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] while one of its kind waits, a bad argument
+    /// [`WorldError::Refused`] while one of its kind waits or the mod holds
+    /// four presses, a bad argument
     /// for a wrong screen, tab or bound, [`WorldError::Unavailable`] on a
     /// server and on a build without what it needs.
     ///

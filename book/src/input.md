@@ -352,8 +352,8 @@ cancels a command in these cases:
 A reason a newer loader gives reads as `CancelReason::Other`, `"other"` in
 Luau.
 
-One command of each kind waits per mod. A second answers
-`WorldError::Refused` until the first ends.
+One command of each kind waits per mod, and one press of each game action.
+A second answers `WorldError::Refused` until the first ends.
 
 A command opens the screens the game opens from a key in the world. These
 are the seven tabs of the [snapshot](#reading-the-clients-state-in-one-copy)
@@ -474,15 +474,16 @@ and the game attacks on its tap.
 
 A press runs only on the world's own screen, `InGame`. It is cancelled in
 the same cases as a move, with the same reasons. A control the player
-presses cancels it with `PlayerInput`; the bits presses set are not the
-player's own input, so they cancel no command. When a press ends for any
-reason, the bit is the game's own again in the same step.
+presses cancels it with `PlayerInput`; a control the player already held
+when the press started does not. The bits presses set are not the player's
+own input, so they cancel no command. When a press ends for any reason,
+the bit is the game's own again in the same step.
 
 Several presses hold at once, beside a look or a move, so a mod can sprint
-while it moves. A mod holds one press of each action at a time: a second
-press of the same action returns `WorldError::Refused` until the first
-ends. Up to eight presses hold at once across all mods; another waits
-until one ends.
+while it moves. A mod holds one press of each action and four presses at
+most: another returns `WorldError::Refused` until one ends. Up to eight
+presses hold at once across all mods. Another waits until one ends, and
+after two seconds of waiting it is cancelled with `TimedOut`.
 
 The server sees a press as the player's key: `Input::held` names it there,
 and `Input::local_held` names it on the client. The server checks every

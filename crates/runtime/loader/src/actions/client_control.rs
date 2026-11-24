@@ -120,8 +120,9 @@ pub(crate) struct Groups {
     pub(crate) toggle: Group<Toggle>,
     /// The input builder's stick and look.
     pub(crate) input: Group<InputLayout>,
-    /// The input builder's buttons and target selection, which only the hold
-    /// under loader windows writes, so their entries turn off only it.
+    /// The input builder's buttons and target selection, which the hold
+    /// under loader windows and the presses write, so their entries turn off
+    /// only those two.
     pub(crate) buttons: Group<Buttons>,
     /// The crafting menu's recipe browser.
     pub(crate) recipes: Group<Recipes>,
@@ -134,7 +135,7 @@ pub(crate) static GROUPS: Groups = Groups {
     tab: Group::new("the in-game menu's tab"),
     toggle: Group::new("the HUD's screen toggle"),
     input: Group::new("the client's look and stick input"),
-    buttons: Group::new("the player's buttons held under loader windows"),
+    buttons: Group::new("the player's buttons: presses and the hold under loader windows"),
     recipes: Group::new("the crafting menu's recipe browser"),
     menu: Group::new("the menu's join and leave commands"),
 };

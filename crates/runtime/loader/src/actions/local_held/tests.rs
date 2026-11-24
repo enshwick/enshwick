@@ -343,6 +343,21 @@ fn a_host_read_no_step_renewed_is_no_answer() {
 }
 
 #[test]
+fn the_player_s_keys_are_those_of_the_read_without_the_presses_bits() {
+    let (block, jump) = (1 << 30, 1 << 32);
+    STATE.bits.store(block | jump, Ordering::Relaxed);
+    STATE.players.store(block, Ordering::Relaxed);
+    STATE.read_ms.store(now_ms().max(1), Ordering::Release);
+    assert_eq!(
+        players_held(),
+        Some(block),
+        "the press's jump is not theirs"
+    );
+    STATE.read_ms.store(0, Ordering::Release);
+    assert_eq!(players_held(), None, "no fresh read");
+}
+
+#[test]
 fn a_read_after_the_reads_turned_off_or_went_stale_is_no_answer() {
     let read = Some((42, [9; 16], [3, 4, 5]));
     assert_eq!(answer(42, true, read), Some(([9; 16], [3, 4, 5])));

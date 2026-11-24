@@ -266,6 +266,34 @@ side = "both""#
     }
 
     #[test]
+    fn a_mod_holds_at_most_four_presses_at_once() {
+        let (loader, input) = input(Side::CLIENT);
+        for action in [
+            GameAction::MainhandAction,
+            GameAction::ContextualAction,
+            GameAction::QuickUse0,
+            GameAction::QuickUse1,
+        ] {
+            assert!(
+                input.client_command(&press(action, 2000)).is_ok(),
+                "{action:?}"
+            );
+        }
+        assert!(
+            matches!(
+                input.client_command(&press(GameAction::Block, 16)),
+                Err(WorldError::Refused)
+            ),
+            "its fifth"
+        );
+        loader.set_command_status(1, Status::OBSERVED, 0);
+        assert!(
+            input.client_command(&press(GameAction::Block, 16)).is_ok(),
+            "one ended"
+        );
+    }
+
+    #[test]
     fn a_press_past_its_bounds_or_off_the_world_screen_is_refused() {
         let (_loader, input) = input(Side::CLIENT);
         for refused in [
@@ -292,6 +320,13 @@ side = "both""#
             input.client_command(&press(GameAction::Jump, 16)),
             Err(WorldError::Unavailable)
         ));
+        assert!(
+            matches!(
+                input.client_command(&press(GameAction::Jump, 16).on_screen("Backpack")),
+                Err(WorldError::Unavailable)
+            ),
+            "the loader finds the action's bit before it checks the screen"
+        );
     }
 
     #[test]

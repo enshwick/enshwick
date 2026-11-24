@@ -94,8 +94,8 @@ impl Kind {
         }
     }
 
-    /// The longest hold of its kind, which its timeout waits past: a move
-    /// or a press taken just before the timeout still holds its whole hold.
+    /// The longest hold of its kind, which its timeout waits past once its
+    /// detour took it, so a move or a press holds its whole hold.
     const fn longest_hold(self) -> u64 {
         match self {
             Self::Move(..) => Spec::MAX_HOLD_MS as u64,
@@ -174,8 +174,9 @@ pub(crate) struct Command {
     queued_ms: u64,
     state: u32,
     reason: u32,
-    /// Whether its detour holds it, to be released when it ends.
-    handed: bool,
+    /// When its detour took it, as [`local_held::now_ms`] counts; `None`
+    /// while none holds it. A held one is released when it ends.
+    handed: Option<u64>,
     /// A join or leave's last phase, 0 for other kinds.
     phase: u32,
     /// Why a join failed, 0 otherwise.
@@ -189,9 +190,7 @@ impl Command {
 
     /// Where its detour stands with it; `None` before it is handed.
     fn progress(&self) -> Option<Progress> {
-        if !self.handed {
-            return None;
-        }
+        self.handed?;
         let progress = match self.kind {
             Kind::Look(_) | Kind::Move(..) => client_input::progress(self.id),
             Kind::Press(..) => client_input::press_progress(self.id),
@@ -221,7 +220,7 @@ impl Command {
     /// Takes it back from its detour once it ended; `by_mod` when its mod
     /// cancelled it, so a join the game took goes back to the menu.
     fn release(&self, by_mod: bool) {
-        if !self.handed {
+        if self.handed.is_none() {
             return;
         }
         match self.kind {
@@ -242,7 +241,8 @@ pub(crate) struct Seen {
     pub(crate) tab: TabRead,
     /// The crafting menu's highlighted recipe.
     pub(crate) recipe: RecipeRead,
-    /// The held controls of a fresh read, `None` without one.
+    /// The player's own held controls of a fresh read, without the bits
+    /// presses set; `None` without one.
     pub(crate) held: Option<u64>,
 }
 
@@ -324,7 +324,9 @@ fn next(command: &Command, seen: &Seen, progress: Option<Progress>, now: u64) ->
             | Kind::Join
             | Kind::Leave => true,
         };
-        if ready {
+        // One that waits for its detour, such as for a press's slot, times
+        // out as one that waits for its effect.
+        if ready && !timed_out(command, now) {
             return Next::Apply;
         }
     }
@@ -365,10 +367,15 @@ const fn ended(progress: Progress) -> Option<Next> {
     }
 }
 
-/// Whether `command` waited past its timeout at `now`.
+/// Whether `command` waited past its timeout at `now`: from its queue while
+/// no detour holds it, else from when one took it, its hold beside.
 fn timed_out(command: &Command, now: u64) -> bool {
-    let limit = TIMEOUT_MS + command.kind.longest_hold();
-    now.saturating_sub(command.queued_ms) > limit
+    let (since, limit) = command
+        .handed
+        .map_or((command.queued_ms, TIMEOUT_MS), |at| {
+            (at, TIMEOUT_MS + command.kind.longest_hold())
+        });
+    now.saturating_sub(since) > limit
 }
 
 /// The commands: the ones still open and the last [`KEPT`] that ended.
@@ -404,8 +411,9 @@ pub(crate) enum CommandError {
     /// The build lacks what the kind needs.
     #[error("this build lacks what the command needs")]
     Unavailable,
-    /// The mod has a command of this kind open.
-    #[error("a command of this kind waits")]
+    /// The mod has a command of this kind open, or as many presses as one
+    /// mod may hold.
+    #[error("a command of this kind waits, or the mod holds its presses")]
     Waiting,
     /// The client is not where the command starts, or a join or leave runs.
     #[error("the client is not where the command starts, or a join or leave runs")]
@@ -557,16 +565,9 @@ pub(crate) fn queue(loader: &Loader, owner: ModIndex, spec: &Spec) -> Result<u64
     }
     // SAFETY: the mod's spec, its text borrowed for the call.
     let expected = expected_screen(kind, unsafe { text(spec.expected_screen) }?)?;
-    let held = match local_held::sample() {
-        local_held::Sample::Fresh { bits, .. } => Some(local_held::players(bits)),
-        _ => None,
-    };
+    let held = local_held::players_held();
     let mut commands = STATE.commands.relock();
-    if commands
-        .kept
-        .iter()
-        .any(|c| c.open() && c.owner == owner && !c.kind.waits_beside(kind))
-    {
+    if !may_queue(&commands.kept, owner, kind) {
         return Err(CommandError::Waiting);
     }
     let id = commands.next_id;
@@ -596,7 +597,7 @@ pub(crate) fn queue(loader: &Loader, owner: ModIndex, spec: &Spec) -> Result<u64
         queued_ms: now,
         state: Status::PENDING,
         reason: 0,
-        handed: kind == Kind::Join,
+        handed: (kind == Kind::Join).then_some(now),
         phase: kind.queued_phase(),
         failure: 0,
     });
@@ -605,6 +606,16 @@ pub(crate) fn queue(loader: &Loader, owner: ModIndex, spec: &Spec) -> Result<u64
     }
     STATE.open.store(true, Ordering::Release);
     Ok(id)
+}
+
+/// Whether mod `owner` may queue `kind` beside its open commands in `kept`:
+/// one of each kind, one press of each action, and no more presses than
+/// one mod may hold.
+fn may_queue(kept: &VecDeque<Command>, owner: ModIndex, kind: Kind) -> bool {
+    let mine = || kept.iter().filter(|c| c.open() && c.owner == owner);
+    let presses = mine().filter(|c| matches!(c.kind, Kind::Press(..))).count();
+    mine().all(|c| c.kind.waits_beside(kind))
+        && !(matches!(kind, Kind::Press(..)) && presses >= rules::PRESSES_PER_MOD)
 }
 
 /// Cancels mod `owner`'s command `id` if it is still open.
@@ -687,17 +698,12 @@ fn run(
     now: u64,
     mut apply: impl FnMut(Kind) -> Applied,
 ) -> bool {
-    // The player's own keys only: a press's bits are no input of theirs.
-    let seen = seen.map(|seen| Seen {
-        held: seen.held.map(local_held::players),
-        ..seen
-    });
     for command in commands.kept.iter_mut().filter(|c| c.open()) {
         let off = crate::engine::loader::is_off(command.owner)
             || (command.kind.handed() && !runs(command.kind));
         let next = if off {
             Next::End(Status::CANCELLED, Status::MOD_OFF)
-        } else if command.kind.plays() && command.handed {
+        } else if command.kind.plays() && command.handed.is_some() {
             plays_next(command)
         } else if let Some(seen) = &seen {
             // Session 0, before the client read a game, is the one this
@@ -716,7 +722,7 @@ fn run(
         };
         match next {
             Next::Wait => {}
-            Next::Apply if command.kind.handed() => command.handed = command.hand(),
+            Next::Apply if command.kind.handed() => command.handed = command.hand().then_some(now),
             Next::Apply => match apply(command.kind) {
                 Applied::Taken => command.state = Status::APPLIED,
                 Applied::Busy => {}

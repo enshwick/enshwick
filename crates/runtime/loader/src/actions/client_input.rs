@@ -26,7 +26,7 @@ use crate::engine::mod_index::ModIndex;
 use crate::engine::pinned;
 
 /// The feature's name in the log and on the Mods screen.
-const FEATURE: &str = "the client's look and move commands";
+const FEATURE: &str = "the client's look, move and press commands";
 /// `cameraRotationInput`'s mouse slot, which takes radians per frame with
 /// no time step (client 26430625).
 const MOUSE: usize = 2;
@@ -289,7 +289,7 @@ crate::engine::chains::chain_detour! {
         a12: usize,
     ) -> ();
     next NEXT;
-    fuse &FUSE, "the client's look and move";
+    fuse &FUSE, "the client's look, move and presses";
     |onward| {
         onward.call();
         if crate::engine::screens::holds_world()
@@ -422,6 +422,7 @@ mod tests {
 
     #[test]
     fn the_benchmark_s_move_holds_its_stick_through_every_pass_it_times() {
+        let _slots = enshwick_base::Relock::relock(&presses::tests::TEST_SLOTS);
         let mut moving = bench_client_build(true, true);
         for pass in 0..4 {
             assert_eq!(
@@ -430,6 +431,8 @@ mod tests {
                 "pass {pass}"
             );
         }
+        unpress(2);
+        unpress(3);
     }
 
     #[test]

@@ -144,9 +144,9 @@ struct State {
     linked: AtomicBool,
     start: OnceLock<Instant>,
     bits: AtomicU64,
-    /// The bits of `bits` the loader's own presses wrote, not the player's
-    /// keys, kept with each read.
-    own: AtomicU64,
+    /// The player's own keys of `bits`, without those the loader's presses
+    /// wrote, taken in the same read so a reader never pairs two reads.
+    players: AtomicU64,
     /// The local player's entity at the last mask read, 0 before one.
     player: AtomicU32,
     read_ms: AtomicU64,
@@ -185,7 +185,7 @@ static STATE: State = State {
     linked: AtomicBool::new(false),
     start: OnceLock::new(),
     bits: AtomicU64::new(0),
-    own: AtomicU64::new(0),
+    players: AtomicU64::new(0),
     player: AtomicU32::new(0),
     read_ms: AtomicU64::new(0),
     miss: AtomicU8::new(0),
@@ -350,9 +350,8 @@ unsafe fn read(ctx: *mut u64, layout: &Layout) {
     let bits: u64 = unsafe { enshwick_core::raw::read_at(input, layout.digital) };
     STATE.bits.store(bits, Ordering::Relaxed);
     // The builder's pass that wrote this mask left the presses' bits.
-    STATE
-        .own
-        .store(crate::actions::client_input::written(), Ordering::Relaxed);
+    let players = bits & !crate::actions::client_input::written();
+    STATE.players.store(players, Ordering::Relaxed);
     STATE.player.store(player.0, Ordering::Relaxed);
     STATE.miss.store(0, Ordering::Relaxed);
     STATE.read_ms.store(now_ms(), Ordering::Release);
@@ -644,10 +643,10 @@ pub(crate) fn held() -> Result<u64, HeldError> {
     }
 }
 
-/// `bits` of the last read without those the loader's own presses wrote
-/// into it: the keys the player holds.
-pub(crate) fn players(bits: u64) -> u64 {
-    bits & !STATE.own.load(Ordering::Relaxed)
+/// The keys the player holds in a fresh read: its mask without the bits the
+/// loader's own presses wrote into it; `None` while no fresh one is read.
+pub(crate) fn players_held() -> Option<u64> {
+    matches!(sample(), Sample::Fresh { .. }).then(|| STATE.players.load(Ordering::Relaxed))
 }
 
 /// The local player's entity at the last mask read; `None` before one.

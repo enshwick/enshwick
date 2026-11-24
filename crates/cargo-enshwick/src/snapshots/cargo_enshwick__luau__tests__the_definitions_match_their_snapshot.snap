@@ -4928,7 +4928,7 @@ declare enshwick: {
 		local_status: () -> LocalInputStatus,
 		--- The client's state in one copy, for any thread: its session and world, the open screens and menu tab, the local player and its held controls. The reads start when the mod opens its input, so the client's first interface step after that answers, in the mod's first frame in a game. It is `SnapshotState.Never` before that step, and while no frame drew a game since, as in the main menu before the first world. The reads cost one look at the interface's screen state and menu tab per frame, which client commands share, and a copy of four words; the held controls cost their own row, as `Input.local_held` says.
 		client_snapshot: () -> ClientSnapshot,
-		--- Queues `command` for the client's interface or input; its id. The call answers only that it is queued: `Input.command_status` tells what came of it. It runs later on the client's game thread, only while the client is still in the command's session on its screen. One command of each kind waits per mod, and one press of each game action.
+		--- Queues `command` for the client's interface or input; its id. The call answers only that it is queued: `Input.command_status` tells what came of it. It runs later on the client's game thread, only while the client is still in the command's session on its screen. One command of each kind waits per mod, and one press of each game action, up to four presses.
 		client_command: (command: ClientCommand) -> string,
 		--- Cancels the mod's command `id` if it still waits.
 		cancel_command: (id: string) -> (),

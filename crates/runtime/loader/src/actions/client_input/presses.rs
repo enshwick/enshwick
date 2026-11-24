@@ -4,7 +4,7 @@
 //!
 //! The builder clears and rewrites every bit of the mask in its step pass
 //! (client 26430625, read in the decompiler and seen live), so a press sets
-//! its bit again on every pass it holds, and the mask is the game's own
+//! its bit again on every step it holds, and the mask is the game's own
 //! again in the first pass after it ends. A press takes one of [`SLOTS`]
 //! slots, each its own [`Handoff`]; while none is armed and the last pass
 //! wrote nothing, the detour adds two atomic loads.
@@ -21,6 +21,10 @@ use crate::engine::mod_index::ModIndex;
 
 /// How many presses hold at once, every mod's together.
 pub(crate) const SLOTS: usize = 8;
+const _: () = assert!(
+    enshwick_core::__private::rules::PRESSES_PER_MOD < SLOTS,
+    "one mod's presses leave slots for the others"
+);
 
 /// The stages of a handed press.
 mod stage {
@@ -30,7 +34,7 @@ mod stage {
     pub(super) const PRESSING: u8 = 2;
     /// Its hold ran out.
     pub(super) const DONE: u8 = 3;
-    /// The player's own buttons were not zero.
+    /// The player pressed a button not held when the press started.
     pub(super) const PLAYER: u8 = 4;
     /// The game blocked the player's input.
     pub(super) const BLOCKED: u8 = 5;
@@ -46,6 +50,9 @@ struct Slot {
     hold_ms: AtomicU32,
     /// When the hold ends, as [`local_held::now_ms`] counts.
     until: AtomicU64,
+    /// The player's buttons at the step the press started: only a button
+    /// beyond these is the player's new input.
+    baseline: AtomicU64,
     /// The command's mod, as its load-order index.
     owner: AtomicUsize,
 }
@@ -57,6 +64,7 @@ impl Slot {
             bit: AtomicU8::new(0),
             hold_ms: AtomicU32::new(0),
             until: AtomicU64::new(0),
+            baseline: AtomicU64::new(0),
             owner: AtomicUsize::new(0),
         }
     }
@@ -137,7 +145,8 @@ pub(crate) fn pending() -> bool {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Game {
     blocked: bool,
-    /// The game's own buttons were not zero: the player pressed a key.
+    /// The game's own buttons hold one the press's start did not: the
+    /// player pressed a key.
     player: bool,
     owner_off: bool,
 }
@@ -182,10 +191,10 @@ fn mask(bit: u8) -> u64 {
     1u64.checked_shl(u32::from(bit)).unwrap_or(0)
 }
 
-/// Runs the builder's pass in `mode` on every armed press and sets the bits
-/// of those that hold into the mask. Only the step pass, which rewrites the
-/// mask, starts, ends or reads the player's buttons; a frame pass only
-/// keeps the bits of the presses that hold.
+/// Runs the builder's step pass on every armed press and sets the bits of
+/// those that hold into the mask the step rewrote. A frame pass writes only
+/// the camera's look and leaves the mask, and so the bits [`written`]
+/// names, as the step left them (client 26430625), so it does nothing.
 ///
 /// # Safety
 ///
@@ -200,14 +209,13 @@ pub(crate) unsafe fn drive(
     mapping: *const u8,
     mode: u32,
 ) {
+    if mode != STEP {
+        return;
+    }
     // SAFETY: the caller's record, just written by the game's pass.
     let own = unsafe { buttons.digital_input(input) };
-    let game = (mode == STEP).then(|| Game {
-        // SAFETY: the caller's contract: the mapping the builder took.
-        blocked: unsafe { layout.blocked(mapping) },
-        player: own != 0,
-        owner_off: false,
-    });
+    // SAFETY: the caller's contract: the mapping the builder took.
+    let blocked = unsafe { layout.blocked(mapping) };
     let now = local_held::now_ms();
     let armed = PRESSES.armed.load(Ordering::Acquire);
     let mut ours = 0u64;
@@ -219,17 +227,12 @@ pub(crate) unsafe fn drive(
             continue;
         };
         let bit = mask(slot.bit.load(Ordering::Relaxed));
-        let Some(game) = game else {
-            if stage == stage::PRESSING {
-                ours |= bit;
-            }
-            continue;
-        };
         let game = Game {
+            blocked,
+            player: stage == stage::PRESSING && own & !slot.baseline.load(Ordering::Relaxed) != 0,
             owner_off: crate::engine::loader::is_off(ModIndex::new(
                 slot.owner.load(Ordering::Relaxed),
             )),
-            ..game
         };
         let hold = u64::from(slot.hold_ms.load(Ordering::Relaxed));
         let until = slot.until.load(Ordering::Relaxed);
@@ -240,6 +243,7 @@ pub(crate) unsafe fn drive(
             }
             Pass::Start(until) => {
                 slot.until.store(until, Ordering::Relaxed);
+                slot.baseline.store(own, Ordering::Relaxed);
                 if slot.handoff.advance(id, stage, stage::PRESSING) {
                     ours |= bit;
                 }
@@ -255,8 +259,15 @@ pub(crate) unsafe fn drive(
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
+    use enshwick_base::Relock;
+
     use super::*;
+    use crate::actions::client_control::pass::FRAME;
+
+    /// Held by every test that arms the process's slots, so tests in one
+    /// process never see each other's presses.
+    pub(crate) static TEST_SLOTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     const IDLE: Game = Game {
         blocked: false,
@@ -356,7 +367,7 @@ mod tests {
 
     #[test]
     fn two_presses_hold_together_beside_the_game_s_bits_and_leave_nothing_after_release() {
-        use crate::actions::client_control::pass::FRAME;
+        let _slots = TEST_SLOTS.relock();
         let (jump, sprint) = (32, 53);
         assert!(hand(70, ModIndex::LOADER, jump, 1000));
         assert!(hand(71, ModIndex::LOADER, sprint, 1000));
@@ -365,7 +376,6 @@ mod tests {
         assert_eq!(run(STEP, 0), both, "both start in the step pass");
         assert_eq!(progress(71), Some(Progress::Taken));
         assert_eq!(written(), both, "the held read can drop them");
-        assert_eq!(run(FRAME, 0), both, "a frame pass keeps them");
         release(70);
         assert_eq!(run(STEP, 0), mask(sprint));
         assert_eq!(progress(70), None);
@@ -377,14 +387,54 @@ mod tests {
     }
 
     #[test]
-    fn a_player_s_key_ends_a_press_and_its_bit_is_not_written() {
+    fn a_frame_pass_after_a_release_leaves_the_last_step_s_bits_as_the_loader_s() {
+        let _slots = TEST_SLOTS.relock();
+        let jump = 32;
+        assert!(hand(90, ModIndex::LOADER, jump, 1000));
+        assert_eq!(run(STEP, 0), mask(jump));
+        release(90);
+        assert_eq!(
+            run(FRAME, mask(jump)),
+            mask(jump),
+            "the frame pass leaves the mask the step wrote"
+        );
+        assert_eq!(
+            written(),
+            mask(jump),
+            "so the held read still drops the bit as the loader's"
+        );
+        assert_eq!(run(STEP, 0), 0);
+        assert_eq!(written(), 0);
+    }
+
+    #[test]
+    fn a_player_s_new_key_ends_a_press_and_its_bit_is_not_written() {
+        let _slots = TEST_SLOTS.relock();
+        let quick_use = 1 << 14;
         assert!(hand(80, ModIndex::LOADER, 5, 1000));
-        assert_eq!(run(STEP, 1 << 14), 1 << 14, "the player's QuickUse0 only");
+        assert_eq!(run(STEP, 0), mask(5));
+        assert_eq!(
+            run(STEP, quick_use),
+            quick_use,
+            "the player's QuickUse0 only"
+        );
         assert_eq!(
             progress(80),
             Some(Progress::Cancelled(Status::PLAYER_INPUT))
         );
         release(80);
+        assert_eq!(run(STEP, 0), 0);
+    }
+
+    #[test]
+    fn a_key_the_player_held_when_the_press_started_does_not_end_it() {
+        let _slots = TEST_SLOTS.relock();
+        let block = 1 << 30;
+        assert!(hand(81, ModIndex::LOADER, 32, 1000));
+        assert_eq!(run(STEP, block), block | mask(32), "it starts beside it");
+        assert_eq!(run(STEP, block), block | mask(32), "and holds");
+        assert_eq!(progress(81), Some(Progress::Taken));
+        release(81);
         assert_eq!(run(STEP, 0), 0);
     }
 }

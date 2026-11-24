@@ -133,6 +133,10 @@ pub const MENU_TABS: [&str; 7] = [
     "SkillTree",
 ];
 
+/// How many presses of game actions one mod holds at once, so no mod takes
+/// every press the loader holds for all of them.
+pub const PRESSES_PER_MOD: usize = 4;
+
 /// The world's own screen: the one a close returns to and the only one a
 /// look, a move or a press may expect.
 pub const WORLD_SCREEN: &str = "InGame";

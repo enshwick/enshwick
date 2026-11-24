@@ -760,10 +760,7 @@ entries! {
                 unsafe { id.write(spec.cancels) };
                 return Status::OK;
             }
-            if !(Spec::OPEN_SCREEN..=Spec::PRESS).contains(&spec.kind)
-                || !spec.in_bounds()
-                || !named_as_the_loader_takes(&spec)
-            {
+            if !(Spec::OPEN_SCREEN..=Spec::PRESS).contains(&spec.kind) || !spec.in_bounds() {
                 return Status::BAD_ARGS;
             }
             // SAFETY: the mod's spec, its target borrowed for the call; the
@@ -771,6 +768,7 @@ entries! {
             let target = unsafe { spec.target.as_str() }
                 .unwrap_or_default()
                 .to_owned();
+            // As the loader: a press's action and its bit before its screen.
             if spec.kind == Spec::PRESS {
                 // `GameAction` comes with `unstable`, as the press API does.
                 #[cfg(feature = "unstable")]
@@ -784,10 +782,21 @@ entries! {
                     return Status::UNAVAILABLE;
                 }
             }
-            // One of each kind waits, and one press of each action.
+            if !named_as_the_loader_takes(&spec) {
+                return Status::BAD_ARGS;
+            }
+            // One of each kind waits, one press of each action, and a mod's
+            // presses up to the loader's limit.
+            let presses =
+                s.ui.client_commands
+                    .iter()
+                    .filter(|(_, kind, _, status)| *kind == Spec::PRESS && open(status))
+                    .count();
             if s.ui.client_commands.iter().any(|(_, kind, queued, status)| {
                 *kind == spec.kind && open(status) && (spec.kind != Spec::PRESS || *queued == target)
-            }) {
+            }) || (spec.kind == Spec::PRESS
+                && presses >= enshwick_core::__fake::rules::PRESSES_PER_MOD)
+            {
                 return Status::REFUSED;
             }
             // One join or leave at a time; a join from the main menu, outside a
