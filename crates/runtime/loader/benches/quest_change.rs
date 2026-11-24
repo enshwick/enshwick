@@ -2,13 +2,15 @@
 //! one a quest step reads, on an index of 2,000 ids, about what the game's
 //! and a few mods' quests name; before the quest events no change paid it.
 
+#[cfg(windows)]
 use std::hint::black_box;
 
+#[cfg(windows)]
 use criterion::{Criterion, criterion_group, criterion_main};
-use enshwick_loader::bench::bench_quest_change;
 
+#[cfg(windows)]
 fn quest_change(c: &mut Criterion) {
-    let indexed = bench_quest_change(2_000);
+    let indexed = enshwick_loader::bench::bench_quest_change(2_000);
     let mut group = c.benchmark_group("quest_change");
     group.bench_function("not_a_quest_id", |b| {
         b.iter(|| indexed(black_box(0x1d)));
@@ -19,5 +21,10 @@ fn quest_change(c: &mut Criterion) {
     group.finish();
 }
 
+#[cfg(windows)]
 criterion_group!(benches, quest_change);
+#[cfg(windows)]
 criterion_main!(benches);
+
+#[cfg(not(windows))]
+fn main() {}
