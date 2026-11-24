@@ -618,7 +618,7 @@ A `Window` holds a title and items, in order:
 | `.text(key, values)` | a line |
 | `.row(Row::new(key, values).button(label, action, values))` | a line with up to 4 buttons |
 | `.action(id)` | the action whole: its fields above a Run button, or a list's players with a switch each |
-| `.map(WindowMap)` | a line that says to open the map; the [map's markers](#a-map-in-a-window) show there |
+| `.map(WindowMap)` | a line about the map and an Open the map button; the [map's markers](#a-map-in-a-window) show there |
 
 Texts are keys of the mod's texts, filled with the values in each player's
 language. A button runs its action with the values it gives. When the
@@ -744,9 +744,10 @@ windows inside the game. Joined friends get theirs over the network.
 ### A map in a window
 
 A window may hold one map. Its markers show on the player's own Map screen
-while the player holds the window, and the window steps aside while that
-screen is open. When the player holds several windows with a map, the
-newest one counts: its markers show and its actions run. The waypoint the
+while the player holds the window. The window's Open the map button opens
+that screen, and the window steps aside while it is open. The button stays
+off on a build that cannot open the Map screen. When the player holds
+several windows with a map, the newest one counts: its markers show and its actions run. The waypoint the
 player sets on the map runs the mod's actions:
 
 | Builder | What it does |
