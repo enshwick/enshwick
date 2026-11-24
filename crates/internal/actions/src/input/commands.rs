@@ -4,6 +4,7 @@
 
 use super::Input;
 use crate::abi::{ClientCommand as RawCommand, ClientCommandStatus as Raw, Status, Str};
+use crate::controls::GameAction;
 use crate::{RecipeId, WorldError};
 use enshwick_world::__internal::world_status;
 
@@ -62,6 +63,21 @@ pub enum CommandAction {
     },
     /// Leaves the world back to the main menu.
     Leave,
+    /// Holds `action` in the local player's input for `hold_ms`
+    /// milliseconds, 1 to 2000, as its key would; one step is a tap.
+    ///
+    /// The game acts on the form its key sets: an attack is
+    /// [`GameAction::MainhandActionTap`] with
+    /// [`GameAction::MainhandActionRelease`], an interaction
+    /// [`GameAction::ContextualActionTap`]; a plain action such as
+    /// [`GameAction::Jump`] or [`GameAction::Sprint`] acts on its own bit.
+    /// Several presses hold at once, beside a look or a move.
+    Press {
+        /// The action.
+        action: GameAction,
+        /// The hold in milliseconds.
+        hold_ms: u32,
+    },
 }
 
 /// A server's password for [`CommandAction::Join`]: the loader hands it to
@@ -183,6 +199,11 @@ impl ClientCommand {
                 raw.password = password.as_ref().map_or(Str::EMPTY, |p| Str::new(&p.0));
             }
             CommandAction::Leave => raw.kind = RawCommand::LEAVE,
+            CommandAction::Press { action, hold_ms } => {
+                raw.kind = RawCommand::PRESS;
+                raw.target = Str::new(action.name());
+                raw.hold_ms = *hold_ms;
+            }
         }
         raw
     }
@@ -443,7 +464,7 @@ impl JoinPhase {
 #[script(name = "ClientCommand")]
 struct LuauCommand {
     /// `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`,
-    /// `"move"`, `"highlight_recipe"`, `"join"` or `"leave"`.
+    /// `"move"`, `"highlight_recipe"`, `"join"`, `"leave"` or `"press"`.
     pub kind: String,
     /// The session, as `client_snapshot().session` gives it.
     pub session: u64,
@@ -455,12 +476,15 @@ struct LuauCommand {
     pub look: Option<[f32; 2]>,
     /// A move's direction.
     pub direction: Option<[f32; 2]>,
-    /// A move's hold in milliseconds.
+    /// A move's or a press's hold in milliseconds.
     pub hold_ms: Option<u32>,
     /// The recipe to highlight.
     pub recipe: Option<RecipeId>,
     /// A join's server password.
     pub password: Option<String>,
+    /// The game action a press holds, by its game name, as a control's
+    /// `link` names it.
+    pub action: Option<String>,
 }
 
 impl core::fmt::Debug for LuauCommand {
@@ -475,6 +499,7 @@ impl core::fmt::Debug for LuauCommand {
             .field("hold_ms", &self.hold_ms)
             .field("recipe", &self.recipe)
             .field("password", &self.password.as_ref().map(|_| "<secret>"))
+            .field("action", &self.action)
             .finish()
     }
 }
@@ -509,6 +534,18 @@ impl TryFrom<LuauCommand> for ClientCommand {
                 password: luau.password.clone().map(Password),
             },
             "leave" => CommandAction::Leave,
+            "press" => {
+                let name = luau.action.as_deref().ok_or_else(|| missing("an action"))?;
+                let action = GameAction::ALL
+                    .iter()
+                    .copied()
+                    .find(|action| action.name() == name)
+                    .ok_or_else(|| crate::script::Error::new(format!("no game action {name:?}")))?;
+                CommandAction::Press {
+                    action,
+                    hold_ms: luau.hold_ms.ok_or_else(|| missing("a hold"))?,
+                }
+            }
             other => {
                 return Err(crate::script::Error::new(format!(
                     "no client command kind {other:?}"
@@ -604,7 +641,8 @@ impl Input {
     /// call answers only that it is queued: [`Input::command_status`]
     /// tells what came of it. It runs later on the client's game thread,
     /// only while the client is still in the command's session on its
-    /// screen. One command of each kind waits per mod.
+    /// screen. One command of each kind waits per mod, and one press of each
+    /// game action.
     ///
     /// # Errors
     ///
@@ -724,6 +762,7 @@ mod tests {
             hold_ms: None,
             recipe: None,
             password: None,
+            action: None,
         };
         assert!(ClientCommand::try_from(luau("open_screen", Some("Map"))).is_ok());
         assert!(ClientCommand::try_from(luau("open_screen", None)).is_err());
@@ -732,6 +771,52 @@ mod tests {
             ClientCommand::try_from(luau("close_screen", None))
                 .is_ok_and(|c| c.action == CommandAction::CloseScreen)
         );
+    }
+
+    #[test]
+    fn a_press_carries_its_action_s_game_name_and_its_hold() {
+        let press = ClientCommand::new(
+            CommandAction::Press {
+                action: GameAction::ContextualActionTap,
+                hold_ms: 60,
+            },
+            3,
+        )
+        .raw();
+        // SAFETY: the view points at the action's static name.
+        let target = unsafe { press.target.as_str() };
+        assert_eq!(
+            (press.kind, target, press.hold_ms, press.session),
+            (RawCommand::PRESS, Some("ContextualAction_Tap"), 60, 3)
+        );
+    }
+
+    #[test]
+    fn a_luau_press_needs_a_game_action_by_its_game_name_and_a_hold() {
+        let luau = |action: Option<&str>, hold_ms: Option<u32>| LuauCommand {
+            kind: "press".to_owned(),
+            session: 1,
+            expected_screen: None,
+            target: None,
+            look: None,
+            direction: None,
+            hold_ms,
+            recipe: None,
+            password: None,
+            action: action.map(str::to_owned),
+        };
+        assert!(
+            ClientCommand::try_from(luau(Some("MainhandAction_Tap"), Some(16))).is_ok_and(|c| {
+                c.action
+                    == CommandAction::Press {
+                        action: GameAction::MainhandActionTap,
+                        hold_ms: 16,
+                    }
+            })
+        );
+        assert!(ClientCommand::try_from(luau(Some("Dance"), Some(16))).is_err());
+        assert!(ClientCommand::try_from(luau(None, Some(16))).is_err());
+        assert!(ClientCommand::try_from(luau(Some("Jump"), None)).is_err());
     }
 
     #[test]
@@ -760,6 +845,7 @@ mod tests {
             hold_ms: None,
             recipe: None,
             password: Some("hunter2".to_owned()),
+            action: None,
         };
         let shown = format!("{luau:?}");
         assert!(!shown.contains("hunter2"), "{shown}");

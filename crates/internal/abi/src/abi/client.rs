@@ -197,9 +197,10 @@ impl ClientSnapshot {
 pub struct ClientCommand {
     /// Size and version of this struct.
     pub header: Header,
-    /// What to do: [`ClientCommand::OPEN_SCREEN`] to [`ClientCommand::LEAVE`].
+    /// What to do: [`ClientCommand::OPEN_SCREEN`] to [`ClientCommand::PRESS`].
     pub kind: u32,
-    /// A move's hold in milliseconds, 1 to [`ClientCommand::MAX_HOLD_MS`].
+    /// A move's hold in milliseconds, 1 to [`ClientCommand::MAX_HOLD_MS`];
+    /// a press's, 1 to [`ClientCommand::MAX_PRESS_MS`].
     pub hold_ms: u32,
     /// The session the command belongs to, as
     /// [`ClientSnapshot::session`] names it; a command whose session ended
@@ -213,7 +214,8 @@ pub struct ClientCommand {
     /// What the command opens or chooses: a screen for
     /// [`ClientCommand::OPEN_SCREEN`], a tab for [`ClientCommand::CHOOSE_TAB`], by the
     /// `HudScreenType` member it stands for; the server, `host:query_port`,
-    /// for [`ClientCommand::JOIN`].
+    /// for [`ClientCommand::JOIN`]; the game action's reflected
+    /// `PlayerInputType` name, such as `Jump`, for [`ClientCommand::PRESS`].
     pub target: Str,
     /// A look's turn in radians of yaw and pitch, before the player's
     /// camera sensitivity; each at most [`ClientCommand::MAX_LOOK`]. A positive yaw
@@ -258,10 +260,15 @@ impl ClientCommand {
     pub const JOIN: u32 = 8;
     /// Leaves the world back to the main menu. ABI 12.11.
     pub const LEAVE: u32 = 9;
+    /// Holds the game action `target` in the local player's input for
+    /// `hold_ms`, as its key would. ABI 12.21.
+    pub const PRESS: u32 = 10;
     /// The longest password, in bytes, the game's join takes.
     pub const MAX_PASSWORD: usize = 0x400;
     /// The longest move.
     pub const MAX_HOLD_MS: u32 = 250;
+    /// The longest press. ABI 12.21.
+    pub const MAX_PRESS_MS: u32 = 2000;
     /// The largest turn of one look, in radians, a quarter turn.
     pub const MAX_LOOK: f32 = 1.570_796_4;
     /// No command, its header set.
@@ -282,7 +289,8 @@ impl ClientCommand {
 
     /// Whether the command's own bounds hold: a finite look of at most
     /// [`ClientCommand::MAX_LOOK`] each, a finite direction of length above 0 and
-    /// at most 1 held 1 to [`ClientCommand::MAX_HOLD_MS`] ms, a non-zero recipe.
+    /// at most 1 held 1 to [`ClientCommand::MAX_HOLD_MS`] ms, a press held 1
+    /// to [`ClientCommand::MAX_PRESS_MS`] ms, a non-zero recipe.
     ///
     /// # Examples
     ///
@@ -309,6 +317,7 @@ impl ClientCommand {
                     && length <= 1.0 + 1e-4
                     && (1..=Self::MAX_HOLD_MS).contains(&self.hold_ms)
             }
+            Self::PRESS => (1..=Self::MAX_PRESS_MS).contains(&self.hold_ms),
             Self::HIGHLIGHT_RECIPE => self.recipe.0 != 0,
             Self::JOIN => self.session == 0 && self.password.len() <= Self::MAX_PASSWORD,
             _ => true,

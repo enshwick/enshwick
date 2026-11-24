@@ -134,21 +134,21 @@ pub const MENU_TABS: [&str; 7] = [
 ];
 
 /// The world's own screen: the one a close returns to and the only one a
-/// look or a move may expect.
+/// look, a move or a press may expect.
 pub const WORLD_SCREEN: &str = "InGame";
 
 /// Whether a client command of raw kind `kind` names a `target` and an
 /// `expected` screen the loader takes.
 ///
 /// An open takes a screen in [`CLIENT_OPENS`], a tab one in [`MENU_TABS`],
-/// and a look or move expects only [`WORLD_SCREEN`] or nothing.
+/// and a look, move or press expects only [`WORLD_SCREEN`] or nothing.
 #[must_use]
 pub fn client_command_names(kind: u32, target: &str, expected: &str) -> bool {
     use crate::abi::ClientCommand as Spec;
     match kind {
         Spec::OPEN_SCREEN => CLIENT_OPENS.contains(&target),
         Spec::CHOOSE_TAB => MENU_TABS.contains(&target),
-        Spec::LOOK | Spec::MOVE => expected.is_empty() || expected == WORLD_SCREEN,
+        Spec::LOOK | Spec::MOVE | Spec::PRESS => expected.is_empty() || expected == WORLD_SCREEN,
         Spec::JOIN => join_target(target).is_some() && expected.is_empty(),
         _ => true,
     }
@@ -177,6 +177,8 @@ mod tests {
         assert!(!client_command_names(Spec::CHOOSE_TAB, "Inventory", ""));
         assert!(client_command_names(Spec::LOOK, "", WORLD_SCREEN));
         assert!(!client_command_names(Spec::MOVE, "", "Backpack"));
+        assert!(client_command_names(Spec::PRESS, "Jump", ""));
+        assert!(!client_command_names(Spec::PRESS, "Jump", "Backpack"));
         assert!(client_command_names(Spec::JOIN, "127.0.0.1:15637", ""));
         assert!(!client_command_names(
             Spec::JOIN,
