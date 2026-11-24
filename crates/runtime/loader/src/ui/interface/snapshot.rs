@@ -57,7 +57,7 @@ pub(super) unsafe fn note(engine: &Engine, context: usize) {
                 screen: view.screen,
                 tab,
                 recipe,
-                held: crate::actions::local_held::held().ok(),
+                held: crate::actions::local_held::players_held(),
             })
         },
         |kind| {
@@ -130,8 +130,11 @@ unsafe fn apply(context: usize, state: usize, kind: Kind) -> Applied {
             Applied::Taken
         }
         // Handed to their detours or the play module, never applied here.
-        Kind::Look(_) | Kind::Move(..) | Kind::Highlight(_) | Kind::Join | Kind::Leave => {
-            Applied::Unavailable
-        }
+        Kind::Look(_)
+        | Kind::Move(..)
+        | Kind::Press(..)
+        | Kind::Highlight(_)
+        | Kind::Join
+        | Kind::Leave => Applied::Unavailable,
     }
 }

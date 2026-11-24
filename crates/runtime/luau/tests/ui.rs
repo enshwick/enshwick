@@ -428,6 +428,44 @@ mod tests {
     }
 
     #[test]
+    fn a_script_presses_a_game_action_by_its_game_name_within_its_bound() {
+        use enshwick::abi::ClientCommandStatus as Status;
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r#"
+            local interact = enshwick.input.client_command({ kind = "press", session = "1", action = "ContextualAction", hold_ms = 50 })
+            local block = enshwick.input.client_command({ kind = "press", session = "1", action = "Block", hold_ms = 2000 })
+            local long = pcall(enshwick.input.client_command, { kind = "press", session = "1", action = "Block", hold_ms = 2001 })
+            local dance = pcall(enshwick.input.client_command, { kind = "press", session = "1", action = "Dance", hold_ms = 50 })
+            enshwick.log.info(`queued {interact} {block} long {long} dance {dance}`)
+            enshwick.ui.on_frame(function()
+                local s = enshwick.input.command_status(interact)
+                enshwick.log.info(`press {s.state} {s.reason}`)
+            end)
+            "#,
+        );
+        assert_eq!(
+            loader.client_commands(),
+            [
+                (
+                    1,
+                    enshwick::abi::ClientCommand::PRESS,
+                    "ContextualAction".to_owned()
+                ),
+                (2, enshwick::abi::ClientCommand::PRESS, "Block".to_owned()),
+            ]
+        );
+        loader.set_command_status(1, Status::CANCELLED, Status::PLAYER_INPUT);
+        let _drawn = loader.draw_frame();
+        for line in [
+            "queued 1 2 long false dance false",
+            "press cancelled player_input",
+        ] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
+    }
+
+    #[test]
     fn a_script_joins_a_server_and_reads_the_join_s_phase_and_failure() {
         use enshwick::abi::ClientCommandStatus as Status;
         let loader = run(

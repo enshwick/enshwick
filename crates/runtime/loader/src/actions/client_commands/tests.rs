@@ -11,7 +11,7 @@ fn command(kind: Kind) -> Command {
         queued_ms: 100,
         state: Status::PENDING,
         reason: 0,
-        handed: false,
+        handed: None,
         phase: 0,
         failure: 0,
     }
@@ -37,7 +37,7 @@ fn a_look_is_handed_on_the_world_screen_and_observed_when_written() {
     let look = command(Kind::Look([0.5, 0.0]));
     assert_eq!(next(&look, &world(), None, 150), Next::Apply);
     let handed = Command {
-        handed: true,
+        handed: Some(100),
         ..look
     };
     assert_eq!(
@@ -54,7 +54,7 @@ fn a_look_is_handed_on_the_world_screen_and_observed_when_written() {
 #[test]
 fn a_move_is_applied_while_it_holds_and_cancelled_by_a_press_or_another_screen() {
     let walk = Command {
-        handed: true,
+        handed: Some(100),
         ..command(Kind::Move([0.0, 1.0], 250))
     };
     assert_eq!(
@@ -103,7 +103,7 @@ fn a_move_is_applied_while_it_holds_and_cancelled_by_a_press_or_another_screen()
 #[test]
 fn a_move_taken_late_keeps_its_hold_before_the_timeout() {
     let moving = Command {
-        handed: true,
+        handed: Some(100),
         state: Status::APPLIED,
         ..command(Kind::Move([0.0, 1.0], 250))
     };
@@ -132,7 +132,7 @@ fn a_recipe_waits_for_the_browser_and_is_observed_once_it_is_highlighted() {
     assert_eq!(next(&highlight, &world(), None, 150), Next::Wait, "no menu");
     assert_eq!(next(&highlight, &browser(None), None, 150), Next::Apply);
     let handed = Command {
-        handed: true,
+        handed: Some(100),
         ..highlight
     };
     assert_eq!(
@@ -156,6 +156,8 @@ fn a_recipe_waits_for_the_browser_and_is_observed_once_it_is_highlighted() {
 
 #[test]
 fn a_look_or_move_past_its_bounds_and_on_another_screen_is_refused() {
+    let loader = crate::start::tests::bare_loader();
+    let kind = |spec: &Spec| kind(&loader, spec);
     let spec = |kind, look, direction, hold_ms| Spec {
         kind,
         look,
@@ -184,6 +186,159 @@ fn a_look_or_move_past_its_bounds_and_on_another_screen_is_refused() {
     assert_eq!(
         expected_screen(Kind::Move([0.0, 1.0], 100), "Backpack"),
         Err(CommandError::BadArgs)
+    );
+}
+
+#[test]
+fn a_press_needs_a_game_action_a_bounded_hold_and_the_build_s_bit() {
+    let loader = crate::start::tests::bare_loader();
+    let press = |name: &str, hold_ms| Spec {
+        kind: Spec::PRESS,
+        target: Str::new(name),
+        hold_ms,
+        ..Spec::EMPTY
+    };
+    for (spec, why) in [
+        (press("Jump", 0), "no hold"),
+        (press("Jump", Spec::MAX_PRESS_MS + 1), "past the bound"),
+        (press("Dance", 16), "no game action"),
+    ] {
+        assert_eq!(kind(&loader, &spec), Err(CommandError::BadArgs), "{why}");
+    }
+    assert_eq!(
+        kind(&loader, &press("Jump", Spec::MAX_PRESS_MS)),
+        Err(CommandError::Unavailable),
+        "a build that does not reflect the action"
+    );
+    assert_eq!(
+        expected_screen(Kind::Press(32, 16), "Backpack"),
+        Err(CommandError::BadArgs),
+        "a press runs only on the world's screen"
+    );
+}
+
+#[test]
+fn a_mod_holds_one_press_per_action_beside_its_move() {
+    let (jump, sprint) = (Kind::Press(32, 16), Kind::Press(53, 2000));
+    assert!(jump.waits_beside(sprint));
+    assert!(!jump.waits_beside(Kind::Press(32, 500)), "the same action");
+    assert!(sprint.waits_beside(Kind::Move([0.0, 1.0], 250)));
+    assert!(!Kind::Move([0.0, 1.0], 250).waits_beside(Kind::Move([1.0, 0.0], 10)));
+}
+
+#[test]
+fn a_mod_holds_its_share_of_presses_and_leaves_the_other_slots_to_other_mods() {
+    let (me, other) = (ModIndex::new(0), ModIndex::new(1));
+    let mut kept: VecDeque<Command> = (0..rules::PRESSES_PER_MOD)
+        .map(|bit| command(Kind::Press(u8::try_from(bit).unwrap(), 2000)))
+        .collect();
+    let next = Kind::Press(40, 16);
+    assert!(!may_queue(&kept, me, next), "its share is held");
+    assert!(may_queue(&kept, other, next), "another mod's presses");
+    assert!(may_queue(&kept, me, Kind::Move([0.0, 1.0], 250)));
+    kept[0].state = Status::OBSERVED;
+    assert!(may_queue(&kept, me, next), "one ended");
+    assert!(
+        !may_queue(&kept, me, Kind::Press(1, 16)),
+        "one press of each action"
+    );
+}
+
+#[test]
+fn a_press_holds_until_done_and_ends_on_the_player_s_key_or_another_screen() {
+    let press = Command {
+        handed: Some(100),
+        ..command(Kind::Press(32, 2000))
+    };
+    assert_eq!(next(&press, &world(), None, 150), Next::Apply);
+    assert_eq!(
+        next(&press, &world(), Some(Progress::Taken), 150),
+        Next::Applied
+    );
+    let pressing = Command {
+        state: Status::APPLIED,
+        ..press
+    };
+    let cancelled = |reason| Next::End(Status::CANCELLED, reason);
+    let keyed = Seen {
+        held: Some(1 << 14),
+        ..world()
+    };
+    assert_eq!(
+        next(&pressing, &keyed, Some(Progress::Taken), 160),
+        cancelled(Status::PLAYER_INPUT)
+    );
+    assert_eq!(
+        next(
+            &pressing,
+            &seen(4, TabRead::NoMenu),
+            Some(Progress::Taken),
+            160
+        ),
+        cancelled(Status::OTHER_SCREEN)
+    );
+    assert_eq!(
+        next(
+            &pressing,
+            &world(),
+            Some(Progress::Cancelled(Status::MOD_OFF)),
+            160
+        ),
+        cancelled(Status::MOD_OFF)
+    );
+    let late = 100 + TIMEOUT_MS + 1000;
+    assert_eq!(
+        next(&pressing, &world(), Some(Progress::Taken), late),
+        Next::Wait,
+        "a press taken late keeps its whole hold"
+    );
+    assert_eq!(
+        next(&pressing, &world(), Some(Progress::Done), late),
+        Next::End(Status::OBSERVED, 0)
+    );
+}
+
+#[test]
+fn a_press_that_waits_past_the_timeout_for_a_slot_ends_timed_out() {
+    let waiting = command(Kind::Press(53, 2000));
+    assert_eq!(
+        next(&waiting, &world(), None, 100 + TIMEOUT_MS),
+        Next::Apply,
+        "every slot held, it asks again"
+    );
+    assert_eq!(
+        next(&waiting, &world(), None, 100 + TIMEOUT_MS + 1),
+        Next::End(Status::CANCELLED, Status::TIMED_OUT)
+    );
+}
+
+#[test]
+fn a_press_handed_late_holds_its_whole_hold_from_its_handing() {
+    let handed_at = 100 + TIMEOUT_MS - 10;
+    let pressing = Command {
+        handed: Some(handed_at),
+        state: Status::APPLIED,
+        ..command(Kind::Press(53, 2000))
+    };
+    let held_out = handed_at + 16 + 2000;
+    assert_eq!(
+        next(&pressing, &world(), Some(Progress::Taken), held_out - 1),
+        Next::Wait,
+        "past the queue's timeout and hold, not the handing's"
+    );
+    assert_eq!(
+        next(&pressing, &world(), Some(Progress::Done), held_out),
+        Next::End(Status::OBSERVED, 0)
+    );
+    assert_eq!(
+        next(
+            &pressing,
+            &world(),
+            Some(Progress::Taken),
+            handed_at + TIMEOUT_MS + u64::from(Spec::MAX_PRESS_MS) + 1
+        ),
+        Next::End(Status::CANCELLED, Status::TIMED_OUT),
+        "a detour that never ends it"
     );
 }
 

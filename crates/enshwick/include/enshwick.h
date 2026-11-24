@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 20
+#define ENSHWICK_ABI_MINOR 21
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -1038,9 +1038,10 @@ typedef uint32_t EnshwickRecipeId;
 typedef struct EnshwickClientCommand {
   // Size and version of this struct.
   struct EnshwickHeader header;
-  // What to do: `EnshwickClientCommand_OPEN_SCREEN` to `EnshwickClientCommand_LEAVE`.
+  // What to do: `EnshwickClientCommand_OPEN_SCREEN` to `EnshwickClientCommand_PRESS`.
   uint32_t kind;
-  // A move's hold in milliseconds, 1 to `EnshwickClientCommand_MAX_HOLD_MS`.
+  // A move's hold in milliseconds, 1 to `EnshwickClientCommand_MAX_HOLD_MS`;
+  // a press's, 1 to `EnshwickClientCommand_MAX_PRESS_MS`.
   uint32_t hold_ms;
   // The session the command belongs to, as
   // `EnshwickClientSnapshot.session` names it; a command whose session ended
@@ -1054,7 +1055,8 @@ typedef struct EnshwickClientCommand {
   // What the command opens or chooses: a screen for
   // `EnshwickClientCommand_OPEN_SCREEN`, a tab for `EnshwickClientCommand_CHOOSE_TAB`, by the
   // `HudScreenType` member it stands for; the server, `host:query_port`,
-  // for `EnshwickClientCommand_JOIN`.
+  // for `EnshwickClientCommand_JOIN`; the game action's reflected
+  // `PlayerInputType` name, such as `Jump`, for `EnshwickClientCommand_PRESS`.
   struct EnshwickStr target;
   // A look's turn in radians of yaw and pitch, before the player's
   // camera sensitivity; each at most `EnshwickClientCommand_MAX_LOOK`. A positive yaw
@@ -1095,10 +1097,15 @@ typedef struct EnshwickClientCommand {
 #define EnshwickClientCommand_JOIN 8
 // Leaves the world back to the main menu. ABI 12.11.
 #define EnshwickClientCommand_LEAVE 9
+// Holds the game action `target` in the local player's input for
+// `hold_ms`, as its key would. ABI 12.21.
+#define EnshwickClientCommand_PRESS 10
 // The longest password, in bytes, the game's join takes.
 #define EnshwickClientCommand_MAX_PASSWORD 1024
 // The longest move.
 #define EnshwickClientCommand_MAX_HOLD_MS 250
+// The longest press. ABI 12.21.
+#define EnshwickClientCommand_MAX_PRESS_MS 2000
 // The largest turn of one look, in radians, a quarter turn.
 #define EnshwickClientCommand_MAX_LOOK 1.5707964
 

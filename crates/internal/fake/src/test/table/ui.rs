@@ -760,16 +760,42 @@ entries! {
                 unsafe { id.write(spec.cancels) };
                 return Status::OK;
             }
-            if !(Spec::OPEN_SCREEN..=Spec::LEAVE).contains(&spec.kind)
-                || !spec.in_bounds()
-                || !named_as_the_loader_takes(&spec)
-            {
+            if !(Spec::OPEN_SCREEN..=Spec::PRESS).contains(&spec.kind) || !spec.in_bounds() {
                 return Status::BAD_ARGS;
             }
-            if s.ui
-                .client_commands
-                .iter()
-                .any(|(_, kind, _, status)| *kind == spec.kind && open(status))
+            // SAFETY: the mod's spec, its target borrowed for the call; the
+            // password is never read, kept or returned.
+            let target = unsafe { spec.target.as_str() }
+                .unwrap_or_default()
+                .to_owned();
+            // As the loader: a press's action and its bit before its screen.
+            if spec.kind == Spec::PRESS {
+                // `GameAction` comes with `unstable`, as the press API does.
+                #[cfg(feature = "unstable")]
+                if !enshwick_core::controls::GameAction::ALL
+                    .iter()
+                    .any(|action| action.name() == target)
+                {
+                    return Status::BAD_ARGS;
+                }
+                if !reflects_action(&s.host, &target) {
+                    return Status::UNAVAILABLE;
+                }
+            }
+            if !named_as_the_loader_takes(&spec) {
+                return Status::BAD_ARGS;
+            }
+            // One of each kind waits, one press of each action, and a mod's
+            // presses up to the loader's limit.
+            let presses =
+                s.ui.client_commands
+                    .iter()
+                    .filter(|(_, kind, _, status)| *kind == Spec::PRESS && open(status))
+                    .count();
+            if s.ui.client_commands.iter().any(|(_, kind, queued, status)| {
+                *kind == spec.kind && open(status) && (spec.kind != Spec::PRESS || *queued == target)
+            }) || (spec.kind == Spec::PRESS
+                && presses >= enshwick_core::__fake::rules::PRESSES_PER_MOD)
             {
                 return Status::REFUSED;
             }
@@ -787,11 +813,6 @@ entries! {
                 }
             }
             let next = s.ui.client_commands.len() as u64 + 1;
-            // SAFETY: the mod's spec, its target borrowed for the call; the
-            // password is never read, kept or returned.
-            let target = unsafe { spec.target.as_str() }
-                .unwrap_or_default()
-                .to_owned();
             s.ui.client_commands.push((
                 next,
                 spec.kind,
@@ -813,6 +834,23 @@ entries! {
             Status::OK
         })
     }
+}
+
+/// Whether the host's reflected `PlayerInputType`, which
+/// [`FakeHost::player_input`](crate::test::FakeHost::player_input) declares,
+/// names the game action `name`, as the loader finds a press's bit; a host
+/// without it names none.
+fn reflects_action(host: &crate::test::FakeHost, name: &str) -> bool {
+    host.base
+        .type_hashes
+        .get(enshwick_core::__fake::ids::PLAYER_INPUT_TYPE)
+        .and_then(|hash| {
+            host.content
+                .type_list
+                .iter()
+                .find(|ty| ty.qualified_hash() == *hash)
+        })
+        .is_some_and(|ty| ty.constants().iter().any(|c| c.name() == name))
 }
 
 /// Whether `spec`'s target and expected screen are ones the loader takes:
