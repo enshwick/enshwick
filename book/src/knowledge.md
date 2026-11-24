@@ -131,6 +131,8 @@ which way the value goes:
 | `KnowledgeNotice::Shown` | grants what the value gains, as `grant` does, and writes what it loses at once, as `revoke` does |
 
 What is written reaches the clients and the next save as a revoke does.
+A rejoin loads the character's save again, so every mark is set once more,
+whichever notice the set chose.
 Which notice the client shows for a value whose mark is clear is not yet
 seen in the game. A set fails as a grant does, and for a bool above 1. A
 shown set also fails for a gained bit the game does not expect.
