@@ -319,7 +319,7 @@ fn tell_admins(loader: &Loader, mods: &str) {
         let text = crate::engine::texts::for_player(key, || {
             crate::engine::texts::fill("saves.held-long", &[("mods", mods)])
         });
-        crate::actions::reply::tell(loader, key, &text);
+        crate::base::tell::tell(loader, key, &text);
     }
 }
 

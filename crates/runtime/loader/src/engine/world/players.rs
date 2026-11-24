@@ -10,6 +10,14 @@ use crate::engine::loader::Loader;
 use crate::engine::memory::read;
 use crate::engine::players::{CharacterId, MAX_PLAYERS};
 
+/// The connected player with account key `key`.
+pub(crate) fn player_with_key(loader: &Loader, key: u64) -> Option<PlayerInfo> {
+    players(loader)
+        .ok()?
+        .into_iter()
+        .find(|p| p.key == enshwick_core::PlayerKey::new(key))
+}
+
 /// Every player in game, in slot order.
 pub(crate) fn players(loader: &Loader) -> Result<Vec<PlayerInfo>, WorldError> {
     #[cfg(test)]

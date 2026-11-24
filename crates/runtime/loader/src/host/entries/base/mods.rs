@@ -200,7 +200,7 @@ entries! {
         out.put(
             loader()
                 .filter(|loader| loader.side == Side::CLIENT)
-                .map_or(0, |_| crate::content::served::language().0),
+                .map_or(0, |_| crate::engine::texts::game_language().0),
         )
     }
 }

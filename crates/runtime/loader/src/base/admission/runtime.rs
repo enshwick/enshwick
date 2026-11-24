@@ -352,7 +352,7 @@ fn run(loader: Option<&Loader>, serving: &Serving, step: Step) {
                 "join check: the game of {key:016x} {why}, lacking {}; told",
                 ids.join(", ")
             );
-            crate::actions::chat::send(key, &text);
+            crate::base::tell::line(key, &text);
         }
         Step::Stay { key } => {
             crate::log!(
@@ -360,7 +360,7 @@ fn run(loader: Option<&Loader>, serving: &Serving, step: Step) {
                 "join check: the game of {key:016x} said a matching hello late; it stays"
             );
             crate::engine::texts::for_player(key, || {
-                crate::actions::chat::send(key, &crate::engine::texts::fill("join.admitted", &[]))
+                crate::base::tell::line(key, &crate::engine::texts::fill("join.admitted", &[]))
             });
         }
         Step::Kick { key } => {

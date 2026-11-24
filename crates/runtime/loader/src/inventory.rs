@@ -33,7 +33,7 @@ pub(crate) mod survivors;
 pub(crate) mod transactions;
 
 #[cfg(windows)]
-use crate::engine::parts::{Part, fused, part, step};
+use crate::engine::parts::{EventFollower, Part, ServerLink, fused, part, step};
 
 /// The inventory domain's parts, in the order the joins call each of their
 /// phases. Stats seal before item data, as they open an item data kind of
@@ -78,6 +78,7 @@ pub(crate) static PARTS: &[&Part] = &[
     &Part {
         seal: Some(|_| item_actions::seal()),
         link: Some(item_actions::link),
+        game_events: Some(item_actions::FOLLOWER),
         forget: Some(|_| {
             item_actions::forget();
         }),
@@ -106,12 +107,31 @@ pub(crate) static PARTS: &[&Part] = &[
             stats::world_event(loader, event);
         })),
         follows: Some(|_| stats::wanted()),
+        // While a mod uses stats, a player's equipment changing makes every
+        // watched entity look again.
+        game_events: Some(EventFollower {
+            types: |loader| {
+                let id = crate::engine::catalogue::ids::HANDLE_EQUIPMENT_SLOT_CHANGED_EVENT;
+                stats::wanted()
+                    .then(|| crate::engine::catalogue::component_hash(loader, id))
+                    .flatten()
+                    .map(|hash| vec![hash])
+            },
+            screen: None,
+            follow: Some(|_, _| stats::equipment_changed()),
+            fuse: None,
+        }),
         forget: Some(|_| stats::forget()),
         ..part!("stats", stats)
     },
     &Part {
         table_ids: item_data::TABLE_IDS,
-        seal: Some(|_| item_data::seal()),
+        seal: Some(|_| {
+            item_data::seal();
+            crate::base::net::on_control(crate::base::wire::ITEM_DATA, |_, records| {
+                item_data::received(records);
+            });
+        }),
         link: Some(item_data::link),
         steps: &[step!(Follow, "item data steps", |s| item_data::after_step(
             s.loader
@@ -128,6 +148,16 @@ pub(crate) static PARTS: &[&Part] = &[
         follows: Some(|_| item_data::wanted()),
         forget: Some(|_| {
             item_data::forget_server();
+        }),
+        server_link: Some(|link| {
+            if link == ServerLink::Forgotten {
+                item_data::forget_client();
+            }
+        }),
+        handover: Some(|key| {
+            item_data::hello()
+                .iter()
+                .all(|records| crate::base::net::item_data(key, records))
         }),
         ..part!("item_data", item_data)
     },

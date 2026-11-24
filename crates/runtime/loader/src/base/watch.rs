@@ -170,7 +170,7 @@ pub(crate) fn start(loader: &'static Loader) {
             for index in edited {
                 crate::base::worlds::changed(loader, index);
             }
-            crate::content::recipes::poll(loader);
+            loader.parts.poll(loader);
         }
     });
 }

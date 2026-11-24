@@ -86,7 +86,7 @@ fn the_hosting_client_s_own_player_reads_the_game_s_language_before_any_hello() 
     let (host, guest) = (0x1a96_0011, 0x1a96_0012);
     crate::base::carrier::host_for_test(host);
     let unhost = Unhost;
-    let game = crate::content::served::language();
+    let game = crate::engine::texts::game_language();
     assert_eq!(language_of(host), Some(game));
     assert_eq!(language_number(host), game.0);
     assert_eq!(

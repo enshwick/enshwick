@@ -54,7 +54,9 @@ pub(crate) mod terrain_materials;
 pub(crate) mod textures;
 
 #[cfg(windows)]
-use crate::engine::parts::{Part, fused, part};
+use crate::base::remote::Message;
+#[cfg(windows)]
+use crate::engine::parts::{Part, ServerLink, fused, part};
 
 /// The content domain's parts, in the order the joins call each of their
 /// phases.
@@ -62,15 +64,34 @@ use crate::engine::parts::{Part, fused, part};
 pub(crate) static PARTS: &[&Part] = &[
     &Part {
         table_ids: recipes::TABLE_IDS,
+        seal: Some(|_| {
+            crate::base::remote::on_client(crate::base::remote::RECIPES, |message| {
+                if let Message::Recipes { first, last, ids } = message {
+                    recipes::received(first, last, &ids);
+                }
+            });
+        }),
         link: Some(recipes::init),
         forget: Some(|_| {
             recipes::forget();
         }),
+        settings: Some(recipes::world_changed),
+        poll: Some(recipes::poll),
+        server_link: Some(|link| {
+            if link == ServerLink::Joining {
+                recipes::joining();
+            }
+        }),
+        handover: Some(recipes::hello),
         ..part!("recipes", recipes)
     },
     &Part {
         table_ids: served::TABLE_IDS,
         seal: Some(served::seal_and_link),
+        status: Some(fused!("content status", |summary| {
+            summary.served = served::summary();
+        })),
+        shared: Some(fused!("content shared resources", served::shared)),
         ..part!("content", served)
     },
     &Part {

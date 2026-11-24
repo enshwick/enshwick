@@ -7,8 +7,9 @@
 //! them over right after it, with the world still quiescent and the
 //! entities they name still in it.
 //!
-//! The same pass lets the craft filters screen the craft requests in the
-//! server's streams before the engine moves them (see the vetoes module).
+//! The same pass hands the loader's own followers, which the parts name in
+//! their lists, the server's events they read: a screen sees the live event
+//! before the engine moves it, a follow its copy after the move.
 //!
 //! A client moves its own world's events as well as, while it hosts a game,
 //! the built-in server's. Mods subscribe to each world apart: the client's
@@ -28,6 +29,7 @@ use crate::engine::chains::Onward;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
+use crate::engine::parts::{EventFollow, EventFollower, EventScreen};
 use crate::engine::pinned;
 use crate::engine::pinned::Constant;
 use crate::engine::registry::{JoinFeatureError, Registry};
@@ -123,15 +125,54 @@ impl Wanted {
     }
 }
 
-/// The subscriptions once every mod is initialised.
-#[derive(Debug)]
+/// The subscriptions once every mod is initialised, and what the loader's
+/// own followers read of the server's events.
+#[derive(Debug, Default)]
 struct Sealed {
+    /// The server's handlers, with the types the followers follow among
+    /// those the move copies.
     server: Wanted,
     client: Wanted,
-    /// The server's equipment event, when stats follow it.
-    equipment: Option<u32>,
-    /// Whether the craft filters or item actions read the server's events.
-    screened: bool,
+    /// Each type a follower screens, with its screen.
+    screens: Box<[(u32, EventScreen)]>,
+    /// Each type a follower follows, with its follow.
+    follows: Box<[(u32, EventFollow)]>,
+    /// The switches of the followers that read the server's events.
+    fuses: Box<[&'static Fuse]>,
+    /// Whether a follower reads the server's events.
+    followed: bool,
+}
+
+impl Sealed {
+    /// Adds what `followers` read, each with its types on this run.
+    fn with_followers(mut self, followers: &[(EventFollower, Vec<u32>)]) -> Self {
+        let mut screens = Vec::new();
+        let mut follows = Vec::new();
+        for (follower, types) in followers {
+            if let Some(screen) = follower.screen {
+                screens.extend(types.iter().map(|&hash| (hash, screen)));
+            }
+            // A screen sees the live event, so only a follow needs the copy.
+            if let Some(follow) = follower.follow {
+                self.server.types.extend(types);
+                follows.extend(types.iter().map(|&hash| (hash, follow)));
+            }
+        }
+        self.screens = screens.into();
+        self.follows = follows.into();
+        self.fuses = followers.iter().filter_map(|(f, _)| f.fuse).collect();
+        self.followed = !followers.is_empty();
+        self
+    }
+
+    /// Lists the switch of every follower that reads the server's events
+    /// off, by the entry `id` the build lacks for `reason`: they read them
+    /// only in the event move.
+    fn unfollowed(&self, loader: &Loader, id: &str, reason: &str) {
+        for &fuse in &self.fuses {
+            let _off = loader.fuse_off(fuse, id, reason);
+        }
+    }
 }
 
 /// Where the engine keeps its event streams, from the build table.
@@ -196,14 +237,14 @@ trait Scope {
     /// Whether a move copies the events of `type_hash`.
     fn copies(sealed: &Sealed, type_hash: u32) -> bool;
 
-    /// Lets the loader's filters see the event of `type_hash` at `payload`
-    /// in the stream, `size` bytes, before the engine moves it.
+    /// Lets the loader's followers screen the event of `type_hash` at
+    /// `payload` in the stream, `size` bytes, before the engine moves it.
     ///
     /// # Safety
     ///
     /// `payload` is the live event's `size` bytes in a stream of this
     /// world, on its thread before the engine moves the streams.
-    unsafe fn screen(type_hash: u32, payload: usize, size: usize);
+    unsafe fn screen(sealed: &Sealed, type_hash: u32, payload: usize, size: usize);
 
     /// Lets the loader's own followers see a copied event before the mods.
     fn follow(sealed: &Sealed, type_hash: u32, payload: &[u8]);
@@ -229,37 +270,38 @@ impl Scope for ServerScope {
     }
 
     fn idle(sealed: &Sealed) -> bool {
-        sealed.server.is_empty() && sealed.equipment.is_none() && !sealed.screened
+        sealed.server.is_empty() && !sealed.followed
     }
 
     #[inline]
     fn copies(sealed: &Sealed, type_hash: u32) -> bool {
         sealed.server.contains(type_hash)
-            || sealed.equipment == Some(type_hash)
-            || crate::inventory::item_actions::hears(type_hash)
     }
 
     #[inline]
-    unsafe fn screen(type_hash: u32, payload: usize, size: usize) {
-        // SAFETY: `payload` is the live server event's `size` bytes before
-        // the engine moves the streams (this function's contract).
-        unsafe {
-            crate::actions::vetoes::screen(
-                type_hash,
-                core::ptr::with_exposed_provenance_mut(payload),
-                size,
-            );
+    unsafe fn screen(sealed: &Sealed, type_hash: u32, payload: usize, size: usize) {
+        for &(hash, screen) in &sealed.screens {
+            if hash == type_hash {
+                // SAFETY: `payload` is the live server event of `type_hash`,
+                // `size` bytes, on its world's thread before the engine
+                // moves the streams (this function's contract), all an
+                // `EventScreen` asks.
+                unsafe {
+                    screen(
+                        type_hash,
+                        core::ptr::with_exposed_provenance_mut(payload),
+                        size,
+                    );
+                };
+            }
         }
     }
 
     fn follow(sealed: &Sealed, type_hash: u32, payload: &[u8]) {
-        if sealed.equipment == Some(type_hash) {
-            crate::inventory::stats::equipment_changed();
-        }
-        // SAFETY: `payload` is the event's copy in the batch, which nothing
-        // writes during the call.
-        unsafe {
-            crate::inventory::item_actions::screen(type_hash, payload.as_ptr(), payload.len());
+        for &(hash, follow) in &sealed.follows {
+            if hash == type_hash {
+                follow(type_hash, payload);
+            }
         }
     }
 }
@@ -283,7 +325,7 @@ impl Scope for ClientScope {
         sealed.client.contains(type_hash)
     }
 
-    unsafe fn screen(_type_hash: u32, _payload: usize, _size: usize) {}
+    unsafe fn screen(_sealed: &Sealed, _type_hash: u32, _payload: usize, _size: usize) {}
 
     fn follow(_sealed: &Sealed, _type_hash: u32, _payload: &[u8]) {}
 }
@@ -394,39 +436,40 @@ fn by_world(sealed: &'static [Subscriber]) -> (Wanted, Wanted) {
 pub(crate) fn link(loader: &'static Loader) {
     let subscribers = SUBSCRIBERS.seal_with(server_first);
     let (server, client) = by_world(subscribers);
-    let equipment = crate::inventory::stats::wanted()
-        .then(|| {
-            crate::engine::catalogue::component_hash(
-                loader,
-                crate::engine::catalogue::ids::HANDLE_EQUIPMENT_SLOT_CHANGED_EVENT,
-            )
-        })
-        .flatten();
+    let followers: Vec<(EventFollower, Vec<u32>)> = loader
+        .parts
+        .iter()
+        .filter(|part| part.runs())
+        .filter_map(|part| part.game_events)
+        .filter_map(|follower| Some((follower, (follower.types)(loader)?)))
+        .collect();
     let sealed = Sealed {
         server,
         client,
-        equipment,
-        screened: crate::actions::vetoes::crafting() || crate::inventory::item_actions::wanted(),
-    };
-    let count = subscribers.len() + usize::from(equipment.is_some());
-    let client_wanted = !sealed.client.is_empty();
+        ..Sealed::default()
+    }
+    .with_followers(&followers);
+    let count = subscribers.len();
     // A client always links the move, to raise the loader's notices in its
     // own world.
     let idle = ServerScope::idle(&sealed) && loader.side != Side::CLIENT;
     if SEALED.set(sealed).is_err() || idle {
         return;
     }
+    let Some(sealed) = SEALED.get() else {
+        return;
+    };
     // Without the layout the move still links: a client's notices and the
     // freeing of handed lists need no stream.
-    let _first = LINKED.set(stream_layout(loader, client_wanted));
+    let _first = LINKED.set(stream_layout(loader, sealed));
     let target = Target::Pinned(pinned::ecs::EVENT_MERGE);
     if loader.link_feature(&EVENTS_FUSE, target, &MERGE_NEXT, merge, HookFlags::NONE) {
         crate::log!(INFO, "game events: {count} subscriptions");
     } else {
         // shortcut: a move that links but fails to arm later turns off only
-        // its own fuse (`Loader::unarmed`); list the screens there too once a
-        // build shows that.
-        unscreened(loader, pinned::ecs::EVENT_MERGE.id(), MOVE_OFF);
+        // its own fuse (`Loader::unarmed`); list the followers there too once
+        // a build shows that.
+        sealed.unfollowed(loader, pinned::ecs::EVENT_MERGE.id(), MOVE_OFF);
     }
 }
 
@@ -440,21 +483,13 @@ pub(crate) fn untold(loader: &Loader, id: &str, reason: &str) {
     let _off = loader.fuse_off(&NOTICES_FUSE, id, reason);
 }
 
-/// Why the screens are off when the event move does not link.
+/// Why the followers are off when the event move does not link.
 const MOVE_OFF: &str = "the event move is off";
 
-/// Lists the craft filters and the item event filters off, by the entry
-/// `id` the build lacks for `reason`: they screen only in the event move's
-/// copy of the server's streams.
-fn unscreened(loader: &Loader, id: &str, reason: &str) {
-    crate::actions::vetoes::unscreened(loader, id, reason);
-    crate::inventory::item_actions::unscreened(loader, id, reason);
-}
-
 /// The build's event stream layout; without it the delivery is off, listed
-/// by the first entry the build lacks, and on a client with `client_wanted`
-/// handlers the delivery of its own events too.
-fn stream_layout(loader: &Loader, client_wanted: bool) -> Option<Layout> {
+/// by the first entry the build lacks, with the followers of `sealed` and,
+/// on a client whose mods handle its own events, their delivery too.
+fn stream_layout(loader: &Loader, sealed: &Sealed) -> Option<Layout> {
     let constant = |name: Constant| {
         loader
             .build
@@ -477,8 +512,8 @@ fn stream_layout(loader: &Loader, client_wanted: bool) -> Option<Layout> {
         .inspect_err(|missing: &Constant| {
             let absent = crate::engine::builds::ABSENT;
             let _off = loader.fuse_off(&DELIVERY_FUSE, missing.id(), absent);
-            unscreened(loader, missing.id(), absent);
-            if loader.side == Side::CLIENT && client_wanted {
+            sealed.unfollowed(loader, missing.id(), absent);
+            if loader.side == Side::CLIENT && !sealed.client.is_empty() {
                 let _off = loader.fuse_off(&CLIENT_FUSE, missing.id(), absent);
             }
         })
@@ -656,7 +691,7 @@ unsafe fn copy<S: Scope>(sealed: &Sealed, layout: &Layout, entity_world: *mut u8
             // record's header, `size` bytes inside the bytes used (the `> used`
             // check breaks first), on the world's thread before the engine
             // moves the streams (the caller's contract).
-            unsafe { S::screen(type_hash, payload, size) };
+            unsafe { S::screen(sealed, type_hash, payload, size) };
             // Item notices are after the fact: they go out with the batch,
             // after the move, so a filter may change the world.
             if S::copies(sealed, type_hash) {
@@ -761,9 +796,7 @@ pub unsafe fn bench_server_copy(entity_world: *mut u8, offsets: [usize; 7], want
             types: [wanted].into_iter().collect(),
             ..Wanted::default()
         },
-        client: Wanted::default(),
-        equipment: None,
-        screened: false,
+        ..Sealed::default()
     };
     let layout = Layout {
         streams,

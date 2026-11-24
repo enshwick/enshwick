@@ -17,8 +17,22 @@ fn sealed_with(subscribers: &[Subscriber]) -> Sealed {
     Sealed {
         server,
         client,
-        equipment: None,
-        screened: false,
+        ..Sealed::default()
+    }
+}
+
+/// A follower of `screen` and `follow` under `fuse`; its types are given
+/// beside it, as the move's link asks them.
+fn follower(
+    screen: Option<EventScreen>,
+    follow: Option<fn(u32, &[u8])>,
+    fuse: Option<&'static Fuse>,
+) -> EventFollower {
+    EventFollower {
+        types: |_| None,
+        screen,
+        follow,
+        fuse,
     }
 }
 
@@ -132,27 +146,19 @@ fn a_server_world_nothing_wants_is_idle() {
         Whose::Server,
         42
     )])));
-    let equipment = Sealed {
-        equipment: Some(43),
-        ..sealed_with(&[])
-    };
-    assert!(!ServerScope::idle(&equipment));
-    let screened = Sealed {
-        screened: true,
-        ..sealed_with(&[])
-    };
+    let followed = sealed_with(&[]).with_followers(&[(follower(None, None, None), vec![43])]);
+    assert!(!ServerScope::idle(&followed));
+    let reading = sealed_with(&[]).with_followers(&[(follower(None, None, None), Vec::new())]);
     assert!(
-        !ServerScope::idle(&screened),
-        "a craft filter or item action reads them"
+        !ServerScope::idle(&reading),
+        "a follower reads them, though no type of its own is on this build"
     );
 }
 
 #[test]
 fn a_client_with_only_server_handlers_copies_nothing_of_its_own() {
-    let sealed = Sealed {
-        equipment: Some(43),
-        ..sealed_with(&[subscriber(Whose::Server, 0)])
-    };
+    let sealed = sealed_with(&[subscriber(Whose::Server, 0)])
+        .with_followers(&[(follower(None, None, None), vec![43])]);
     assert!(ClientScope::idle(&sealed));
     assert!(!ClientScope::copies(&sealed, 43));
     assert!(ServerScope::copies(&sealed, 99));
@@ -198,14 +204,33 @@ fn a_batch_taken_out_leaves_the_cell_free_and_keeps_events_copied_meanwhile() {
 }
 
 #[test]
-fn a_build_without_the_stream_layout_lists_only_the_delivery_off_by_the_entry_it_lacks() {
+fn a_build_without_the_stream_layout_lists_the_delivery_and_the_followers_off_while_the_move_links()
+{
+    static SWITCH: Fuse = Fuse::new("test follower without streams");
     let loader = crate::start::tests::bare_loader();
-    assert!(stream_layout(&loader, true).is_none());
+    let sealed = sealed_with(&[subscriber(Whose::Client, 7)])
+        .with_followers(&[(follower(None, None, Some(&SWITCH)), vec![5])]);
+    assert!(stream_layout(&loader, &sealed).is_none());
     assert!(DELIVERY_FUSE.is_off());
     assert!(!EVENTS_FUSE.is_off(), "the move still links for the rest");
-    let reason = crate::base::off_reason(&DELIVERY_FUSE).unwrap_or_default();
+    for fuse in [&DELIVERY_FUSE, &SWITCH] {
+        let reason = crate::base::off_reason(fuse).unwrap_or_default();
+        assert!(
+            reason.starts_with(pinned::ecs::EVENT_STREAMS.id()),
+            "{reason}"
+        );
+    }
+}
+
+#[test]
+fn a_move_that_does_not_link_lists_its_followers_off_by_it() {
+    static READS: Fuse = Fuse::new("test follower that reads");
+    let loader = crate::start::tests::bare_loader();
+    let sealed = sealed_with(&[]).with_followers(&[(follower(None, None, Some(&READS)), vec![5])]);
+    sealed.unfollowed(&loader, pinned::ecs::EVENT_MERGE.id(), MOVE_OFF);
+    let reason = crate::base::off_reason(&READS).unwrap_or_default();
     assert!(
-        reason.starts_with(pinned::ecs::EVENT_STREAMS.id()),
+        reason.starts_with(pinned::ecs::EVENT_MERGE.id()),
         "{reason}"
     );
 }
@@ -213,12 +238,12 @@ fn a_build_without_the_stream_layout_lists_only_the_delivery_off_by_the_entry_it
 #[test]
 fn a_client_build_without_the_stream_layout_lists_its_client_events_off_too() {
     let loader = crate::start::tests::pinning_loader(Side::CLIENT, &[], &[]);
-    assert!(stream_layout(&loader, false).is_none());
+    assert!(stream_layout(&loader, &sealed_with(&[])).is_none());
     assert!(
         !CLIENT_FUSE.is_off(),
         "no mod asked for client events, so none is listed off"
     );
-    assert!(stream_layout(&loader, true).is_none());
+    assert!(stream_layout(&loader, &sealed_with(&[subscriber(Whose::Client, 7)])).is_none());
     assert!(DELIVERY_FUSE.is_off());
     assert!(
         CLIENT_FUSE.is_off(),
@@ -228,5 +253,63 @@ fn a_client_build_without_the_stream_layout_lists_its_client_events_off_too() {
     assert!(
         reason.starts_with(pinned::ecs::EVENT_STREAMS.id()),
         "{reason}"
+    );
+}
+
+#[test]
+fn each_follower_screens_and_follows_only_its_own_types_and_the_move_copies_only_followed_ones() {
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static SCREENED: AtomicU32 = AtomicU32::new(0);
+    static FOLLOWED: AtomicU32 = AtomicU32::new(0);
+    static SWITCH: Fuse = Fuse::new("test follower");
+    unsafe fn screen(type_hash: u32, payload: *mut u8, _size: usize) {
+        SCREENED.fetch_add(type_hash, Ordering::Relaxed);
+        // SAFETY: the test hands a payload of at least one writable byte.
+        unsafe { payload.write(9) };
+    }
+    fn follow(type_hash: u32, payload: &[u8]) {
+        FOLLOWED.fetch_add(type_hash * u32::from(payload[0]), Ordering::Relaxed);
+    }
+    let sealed = sealed_with(&[subscriber(Whose::Server, 42)]).with_followers(&[
+        (follower(Some(screen), None, Some(&SWITCH)), vec![5]),
+        (follower(None, Some(follow), None), vec![7]),
+    ]);
+    for type_hash in [7, 42] {
+        assert!(ServerScope::copies(&sealed, type_hash), "{type_hash}");
+    }
+    assert!(
+        !ServerScope::copies(&sealed, 5),
+        "a screen sees the live event, so its type needs no copy"
+    );
+    assert!(!ServerScope::copies(&sealed, 6));
+    assert!(
+        !ClientScope::copies(&sealed, 5),
+        "the client's own world reads none"
+    );
+    let mut payload = [1u8];
+    for type_hash in [5, 6, 7] {
+        // SAFETY: one writable byte on this stack, which only this thread
+        // touches.
+        unsafe { ServerScope::screen(&sealed, type_hash, payload.as_mut_ptr().addr(), 1) };
+        ServerScope::follow(&sealed, type_hash, &[2]);
+    }
+    assert_eq!(
+        SCREENED.load(Ordering::Relaxed),
+        5,
+        "the screen saw its type alone"
+    );
+    assert_eq!(payload, [9], "and changed the live event");
+    assert_eq!(
+        FOLLOWED.load(Ordering::Relaxed),
+        14,
+        "the follow saw its type's copy"
+    );
+    assert_eq!(sealed.follows.len(), 1);
+    let fuses: Vec<&str> = sealed.fuses.iter().map(|fuse| fuse.feature()).collect();
+    assert_eq!(
+        fuses,
+        ["test follower"],
+        "only a follower with a switch has one listed"
     );
 }

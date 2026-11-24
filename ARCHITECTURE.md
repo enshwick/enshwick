@@ -347,9 +347,13 @@ its own; these steps hold for one that grows inside core first.
   `Part` per module with its build table ids and what the joins call in it
   (seal, link, its work at a stage of the server step, a player's join and
   leave, a hosted game's start and end, the world's loaded, saved and
-  shutdown events). The joins walk the layers in the order of `domains.toml`
+  shutdown events, the server's game events, a world's settings and its
+  poll, the status summary, a client's link to its server and a joining
+  client's data). The joins walk the layers in the order of `domains.toml`
   and each list in its own order, so a domain's change touches its own list
-  only. Each call the game's threads make runs under a fuse of its own. A
+  only. Where base needs one part above it (the chat's lines, the
+  interface's dialogs, the take of a message kind), that part names itself
+  in base when it seals, so base names nothing above it. Each call the game's threads make runs under a fuse of its own. A
   snapshot test pins each phase's order; a change to it is made with its
   reason.
 - The `[loader]` table of `domains.toml` holds the layers to the domain

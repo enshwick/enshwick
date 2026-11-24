@@ -13,6 +13,8 @@ pub mod configure;
     expect(dead_code, reason = "only the running game reads the marker")
 )]
 pub(crate) mod developer_tools;
+#[cfg(windows)]
+pub(crate) mod dialogs;
 pub mod discovery;
 #[cfg(windows)]
 pub(crate) mod emits;
@@ -68,6 +70,8 @@ pub(crate) mod services;
 pub(crate) mod status;
 #[cfg(windows)]
 pub(crate) mod stop;
+#[cfg(windows)]
+pub(crate) mod tell;
 #[cfg(windows)]
 pub(crate) mod watch;
 pub mod wire;

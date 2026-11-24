@@ -29,6 +29,9 @@ pub(crate) static PARTS: &[&Part] = &[
         forget: Some(|_| {
             store::forget();
         }),
+        status: Some(fused!("knowledge status", |summary| {
+            summary.knowledge_guard = store::guard::status();
+        })),
         ..part!("knowledge", store)
     },
     &Part {

@@ -532,6 +532,7 @@ mod tests {
     fn joining_another_server_forgets_the_demos_request_and_its_place() {
         let _shared = SHARED.relock();
         open(Some([1, 2, 3]));
+        let _running = crate::engine::loader::install_for_test(crate::start::tests::bare_loader());
         crate::base::net::joining(false);
         assert_eq!(take_open(), None, "no open is left to draw");
         assert_eq!(

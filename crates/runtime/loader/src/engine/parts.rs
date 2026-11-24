@@ -7,8 +7,10 @@ use std::time::Instant;
 
 use enshwick_core::abi::{Event, PlayerData};
 
+use crate::engine::diag::Summary;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
+use crate::engine::mod_index::ModIndex;
 use crate::engine::part_order;
 
 /// One part of a layer: a module, with what the joins call in it.
@@ -56,6 +58,27 @@ pub(crate) struct Part {
     /// Whether the part follows the world with no mod subscribed to those
     /// events, so their links are made.
     pub(crate) follows: Option<fn(&Loader) -> bool>,
+    /// What the part reads of the server's game events as the engine moves
+    /// them.
+    pub(crate) game_events: Option<EventFollower>,
+    /// A world's settings were applied, at its load, or dropped, at its
+    /// stop: the part reads what it keeps of them, before the mods hear.
+    pub(crate) settings: Option<fn(&Loader)>,
+    /// The part's look at its own files on the settings thread, once a
+    /// second, after the mods' settings files.
+    pub(crate) poll: Option<fn(&Loader)>,
+    /// Writes the part's section of the status summary, under a fuse of its
+    /// own, so a panic there leaves the part's game work on.
+    pub(crate) status: Option<Fused<fn(&mut Summary)>>,
+    /// What two or more mods change of the part's, by name with those mods,
+    /// for the conflict lines, under a fuse of its own.
+    pub(crate) shared: Option<Fused<fn() -> Shared>>,
+    /// What the part keeps of a client's server follows its link to it.
+    pub(crate) server_link: Option<fn(ServerLink)>,
+    /// Sends the client of the player with this account key, which just
+    /// said hello, the part's join data; false when some of it did not fit
+    /// the link, so the whole goes again.
+    pub(crate) handover: Option<fn(u64) -> bool>,
     /// The part as a whole, named after it: its hosting, end and forget run
     /// under it, and once a panic in one of them turns it off, the part's
     /// steps, joins, leaves, hellos and world events stop too, since they
@@ -82,6 +105,13 @@ impl Part {
             forget: None,
             world_event: None,
             follows: None,
+            game_events: None,
+            settings: None,
+            poll: None,
+            status: None,
+            shared: None,
+            server_link: None,
+            handover: None,
             fuse,
         }
     }
@@ -99,18 +129,22 @@ impl Part {
         }
     }
 
-    /// Runs the part's `forget` at a hosted game's end: under the part's
-    /// fuse, and still once the fuse is off, a panic then swallowed, since
-    /// the part's links stay armed and read what `forget` clears.
+    /// Runs the part's `forget` at a hosted game's end, as [`Part::clearing`]
+    /// does.
     fn clear(&self, loader: &'static Loader) {
-        let Some(forget) = self.forget else {
-            return;
-        };
+        if let Some(forget) = self.forget {
+            self.clearing("forgetting its hosted game", || forget(loader));
+        }
+    }
+
+    /// Runs `clear`, which drops state the part keeps, under the part's fuse
+    /// at `site`, and still once the fuse is off, a panic then swallowed,
+    /// since the part's links stay armed and read what `clear` drops.
+    fn clearing(&self, site: &str, clear: impl FnOnce()) {
         if self.runs() {
-            self.whole(Some(forget), "forgetting its hosted game", loader);
+            let _ran = self.fuse.run(site, clear);
         } else {
-            let _cleared =
-                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| forget(loader)));
+            let _cleared = std::panic::catch_unwind(std::panic::AssertUnwindSafe(clear));
         }
     }
 
@@ -152,8 +186,60 @@ pub(crate) type PlayerCall = Fused<fn(&'static Loader, &PlayerData)>;
 /// A call about one player's client, by its account key.
 pub(crate) type KeyCall = Fused<fn(&'static Loader, u64)>;
 
+/// What becomes of a client's link to the server it plays on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ServerLink {
+    /// The client joins a server: what the last one sent goes.
+    Joining,
+    /// The server answered the client's hello and takes its messages.
+    Answered,
+    /// The link to the server went: the windows it showed go.
+    Lost,
+    /// The client forgets its server: it changes servers or its hosted
+    /// game ends.
+    Forgotten,
+}
+
+/// What two or more mods change of a part's, each by its name with
+/// those mods.
+pub(crate) type Shared = Vec<(String, Vec<ModIndex>)>;
+
 /// A call at the world's loaded, saved and shutdown events.
 pub(crate) type WorldCall = Fused<fn(&Loader, Event)>;
+
+/// A part of the loader that reads the server's game events in the event
+/// move, beside the mods' handlers: once the move links, it screens the
+/// follower's types and copies those it follows, and it lists the
+/// follower's switch off when the move cannot run.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct EventFollower {
+    /// The event types it reads on this run, asked once as the move links,
+    /// after every seal; `None` when it reads none, so the move need not
+    /// link for it.
+    pub(crate) types: fn(&Loader) -> Option<Vec<u32>>,
+    /// Sees a live event of one of its types in the server's streams before
+    /// the engine moves them, and may change it.
+    pub(crate) screen: Option<EventScreen>,
+    /// Sees the copy of an event of one of its types after the move, before
+    /// the mods' handlers.
+    pub(crate) follow: Option<EventFollow>,
+    /// Its switch, listed off by the entry the build lacks when the move or
+    /// its stream layout is off while it reads.
+    pub(crate) fuse: Option<&'static Fuse>,
+}
+
+/// A follower's screen of the live event of `type_hash` at `payload`,
+/// `size` bytes.
+///
+/// # Safety
+///
+/// `payload` is a live event of `type_hash` in a stream of the server's
+/// world, readable and writable for `size` bytes, on the thread that steps
+/// that world before the engine moves its streams.
+pub(crate) type EventScreen = unsafe fn(type_hash: u32, payload: *mut u8, size: usize);
+
+/// A follower's follow of the copy `payload` of an event of `type_hash`.
+pub(crate) type EventFollow = fn(type_hash: u32, payload: &[u8]);
 
 /// When in the server step a part's work runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -210,6 +296,13 @@ macro_rules! fused {
             run: |$($arg),*| {
                 $run;
             },
+        }
+    }};
+    ($feature:literal, $run:path) => {{
+        static FUSE: $crate::engine::fuse::Fuse = $crate::engine::fuse::Fuse::new($feature);
+        $crate::engine::parts::Fused {
+            fuse: &FUSE,
+            run: $run,
         }
     }};
 }
@@ -312,6 +405,72 @@ impl Parts {
         for fused in self.running().filter_map(|part| part.world_event.as_ref()) {
             let _ran = fused.call("a world event", |run| run(loader, event));
         }
+    }
+
+    /// Tells every part that keeps something of a world's settings that they
+    /// were applied or dropped, each under the part's fuse and still once it
+    /// is off, as [`Part::clearing`] runs it.
+    pub(crate) fn settings(&self, loader: &Loader) {
+        for part in self.iter() {
+            if let Some(settings) = part.settings {
+                part.clearing("a world's settings", || settings(loader));
+            }
+        }
+    }
+
+    /// Lets every part look at its files on the settings thread, each under
+    /// the part's fuse.
+    pub(crate) fn poll(&self, loader: &Loader) {
+        for part in self.running() {
+            if let Some(poll) = part.poll {
+                let _ran = part.fuse.run("its settings poll", || poll(loader));
+            }
+        }
+    }
+
+    /// Lets every part write its section of `summary`, an off part's too,
+    /// each under the fuse of its status alone.
+    pub(crate) fn status(&self, summary: &mut Summary) {
+        for status in self.iter().filter_map(|part| part.status.as_ref()) {
+            let _ran = status.call("its status", |write| write(summary));
+        }
+    }
+
+    /// What two or more mods change of every part's, an off part's too, for
+    /// the conflict lines, each read under its own fuse.
+    pub(crate) fn shared(&self) -> Shared {
+        self.iter()
+            .filter_map(|part| part.shared.as_ref())
+            .filter_map(|shared| shared.call("its shared resources", |read| read()))
+            .flatten()
+            .collect()
+    }
+
+    /// Tells every part that keeps something of the client's server what
+    /// became of its link, each under the part's fuse; a link that drops
+    /// what the last server sent reaches an off part too, as
+    /// [`Part::clearing`] runs it.
+    pub(crate) fn server_link(&self, link: ServerLink) {
+        for part in self.iter() {
+            let Some(follow) = part.server_link else {
+                continue;
+            };
+            if link == ServerLink::Answered {
+                let _ran = part.fuse.run("its server link", || follow(link));
+            } else {
+                part.clearing("its server link", || follow(link));
+            }
+        }
+    }
+
+    /// Sends the client of player `key` every part's join data, lowest
+    /// layer first, each under the part's fuse; false once some did not
+    /// fit, leaving the parts after it unsent. A part that panicked or is
+    /// off sends none and holds nothing up.
+    pub(crate) fn handover(&self, key: u64) -> bool {
+        self.running()
+            .filter_map(|part| Some((part, part.handover?)))
+            .all(|(part, hand)| part.fuse.run("its join data", || hand(key)).unwrap_or(true))
     }
 
     /// Tells every part that the client of player `key` said hello, each
@@ -477,6 +636,182 @@ mod tests {
             2,
             "its links stay armed, so it still forgets each game"
         );
+    }
+
+    #[test]
+    fn settings_polls_status_and_shared_reach_each_part_until_one_panics_alone() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        static SETTINGS: AtomicU32 = AtomicU32::new(0);
+        static POLLS: AtomicU32 = AtomicU32::new(0);
+        fn shared_file() -> Shared {
+            vec![("a.file".to_owned(), vec![ModIndex::new(1)])]
+        }
+        fn shared_badly() -> Shared {
+            panic!("broken")
+        }
+        static READERS: &[&Part] = &[
+            &Part {
+                settings: Some(|_| {
+                    SETTINGS.fetch_add(1, Ordering::Relaxed);
+                }),
+                poll: Some(|_| {
+                    POLLS.fetch_add(1, Ordering::Relaxed);
+                }),
+                status: Some(fused!("test status that reads", |summary| {
+                    summary.knowledge_guard = Some("read".to_owned());
+                })),
+                shared: Some(fused!("test shared file", shared_file)),
+                ..part!("reads", reads)
+            },
+            &Part {
+                poll: Some(|_| panic!("broken")),
+                status: Some(fused!(
+                    "test status of the part that polls badly",
+                    |summary| {
+                        summary.served.texts = 3;
+                    }
+                )),
+                ..part!("polls badly", polls_badly)
+            },
+            &Part {
+                poll: Some(|_| {
+                    POLLS.fetch_add(10, Ordering::Relaxed);
+                }),
+                status: Some(fused!("test status that panics", |_| panic!("broken"))),
+                shared: Some(fused!("test shared that panics", shared_badly)),
+                ..part!("reports badly", reports_badly)
+            },
+        ];
+        static WITH_READERS: &[(&str, &[&Part])] = &[("readers", READERS)];
+        let loader = crate::start::tests::bare_loader();
+        let parts = Parts::new(WITH_READERS);
+        parts.settings(&loader);
+        parts.poll(&loader);
+        let mut summary = Summary::default();
+        parts.status(&mut summary);
+        assert_eq!(
+            (summary.knowledge_guard.as_deref(), summary.served.texts),
+            (Some("read"), 3),
+            "the part whose poll panicked still writes its section"
+        );
+        assert_eq!(parts.shared(), shared_file());
+        parts.poll(&loader);
+        assert_eq!(
+            (
+                SETTINGS.load(Ordering::Relaxed),
+                POLLS.load(Ordering::Relaxed)
+            ),
+            (1, 22)
+        );
+        assert!(!READERS[1].runs());
+        let reports_badly = READERS[2];
+        assert!(
+            reports_badly.runs(),
+            "a panic in its status or shared read leaves its game work on"
+        );
+        assert!(
+            reports_badly
+                .status
+                .as_ref()
+                .is_some_and(|status| status.fuse.is_off())
+        );
+        assert!(
+            reports_badly
+                .shared
+                .as_ref()
+                .is_some_and(|shared| shared.fuse.is_off())
+        );
+    }
+
+    #[test]
+    fn a_part_that_is_off_still_drops_what_a_world_s_settings_or_its_last_server_left() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        static DROPPED: AtomicU32 = AtomicU32::new(0);
+        static ANSWERED: AtomicU32 = AtomicU32::new(0);
+        static OFF: &[&Part] = &[&Part {
+            poll: Some(|_| panic!("broken")),
+            settings: Some(|_| {
+                DROPPED.fetch_add(1, Ordering::Relaxed);
+            }),
+            server_link: Some(|link| {
+                if link == ServerLink::Answered {
+                    ANSWERED.fetch_add(1, Ordering::Relaxed);
+                } else {
+                    DROPPED.fetch_add(10, Ordering::Relaxed);
+                    panic!("broken again");
+                }
+            }),
+            ..part!("off", off)
+        }];
+        static WITH_OFF: &[(&str, &[&Part])] = &[("off", OFF)];
+        let loader = crate::start::tests::bare_loader();
+        let parts = Parts::new(WITH_OFF);
+        parts.poll(&loader);
+        assert!(!OFF[0].runs());
+        parts.settings(&loader);
+        for link in [
+            ServerLink::Joining,
+            ServerLink::Answered,
+            ServerLink::Lost,
+            ServerLink::Forgotten,
+        ] {
+            parts.server_link(link);
+        }
+        assert_eq!(
+            DROPPED.load(Ordering::Relaxed),
+            31,
+            "its armed links read what it keeps, so it still drops it"
+        );
+        assert_eq!(
+            ANSWERED.load(Ordering::Relaxed),
+            0,
+            "an answer is no drop, so the off part does not hear it"
+        );
+    }
+
+    #[test]
+    fn a_client_s_join_data_goes_lowest_layer_first_and_stops_at_the_first_that_does_not_fit() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static HANDED: AtomicU64 = AtomicU64::new(0);
+        static LINKS: AtomicU64 = AtomicU64::new(0);
+        static LOW: &[&Part] = &[&Part {
+            handover: Some(|key| HANDED.fetch_add(key, Ordering::Relaxed) == 0),
+            server_link: Some(|link| {
+                if link == ServerLink::Forgotten {
+                    LINKS.fetch_add(1, Ordering::Relaxed);
+                }
+            }),
+            ..part!("low", low)
+        }];
+        static HIGH: &[&Part] = &[
+            &Part {
+                handover: Some(|_| panic!("broken")),
+                ..part!("breaks", breaks)
+            },
+            &Part {
+                handover: Some(|key| {
+                    HANDED.fetch_add(10 * key, Ordering::Relaxed);
+                    true
+                }),
+                ..part!("high", high)
+            },
+        ];
+        static HANDS: &[(&str, &[&Part])] = &[("low", LOW), ("high", HIGH)];
+        let parts = Parts::new(HANDS);
+        assert!(parts.handover(1), "a panic holds nothing up");
+        assert_eq!(HANDED.load(Ordering::Relaxed), 11);
+        assert!(!parts.handover(1), "the low part's data no longer fits");
+        assert_eq!(
+            HANDED.load(Ordering::Relaxed),
+            12,
+            "the high part sends none"
+        );
+        parts.server_link(ServerLink::Joining);
+        parts.server_link(ServerLink::Forgotten);
+        assert_eq!(LINKS.load(Ordering::Relaxed), 1);
     }
 
     #[test]

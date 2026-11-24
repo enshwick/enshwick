@@ -220,7 +220,7 @@ pub(crate) fn after_step(loader: &Loader) {
             continue;
         }
         let text = shown(loader, &seen.reason, crate::base::net::language_of(key));
-        crate::actions::reply::tell(loader, key, &text);
+        crate::base::tell::tell(loader, key, &text);
     }
 }
 

@@ -27,12 +27,13 @@ use enshwick_core::i18n::Language;
 use rustc_hash::FxHashMap;
 
 use crate::base::wire::{
-    CONTROL, ITEM_DATA, NOTICE, Peer, SOUND, STAT_VALUES, UI_DEMO, WELCOME, control, demo_position,
-    hello, read_notice, read_stat_values, remote_message,
+    CONTROL, ITEM_DATA, NOTICE, Peer, SOUND, STAT_VALUES, UI_DEMO, WELCOME, control, hello,
+    read_notice, read_stat_values, remote_message,
 };
 pub(crate) use crate::base::wire::{MAX_CONTROL, MAX_MESSAGE};
 use crate::engine::loader::{Loader, Registered};
 use crate::engine::mod_index::ModIndex;
+use crate::engine::parts::ServerLink;
 use crate::engine::registry::{JoinFeatureError, Registry, sealed_is_too_late};
 use enshwick_base::Relock;
 
@@ -95,10 +96,19 @@ struct State {
     /// On a client: the stat values its server last sent for its player's
     /// own character, by stat key.
     own_stats: arc_swap::ArcSwapOption<FxHashMap<u32, f32>>,
-    /// On a client: what takes the mods' sounds the server sends, set by
-    /// the sounds' link, a layer above.
-    sounds: std::sync::OnceLock<fn(&Loader, &[u8])>,
+    /// On a client: what takes each kind of control message the server
+    /// sends that a part above base owns, by its kind, as that part named
+    /// it.
+    takes: [std::sync::OnceLock<TakeControl>; CONTROL_KINDS],
 }
+
+/// What takes a control message of one kind on the client: the message
+/// after its kind.
+pub(crate) type TakeControl = fn(&Loader, &[u8]);
+
+/// The control kinds a part may take, every kind the protocol names below
+/// it.
+const CONTROL_KINDS: usize = 32;
 
 impl State {
     const fn new() -> Self {
@@ -108,7 +118,7 @@ impl State {
             answered: AtomicBool::new(false),
             dropped: AtomicU64::new(0),
             own_stats: arc_swap::ArcSwapOption::const_empty(),
-            sounds: std::sync::OnceLock::new(),
+            takes: [const { std::sync::OnceLock::new() }; CONTROL_KINDS],
         }
     }
 
@@ -311,7 +321,7 @@ pub(crate) fn client_tick(opened: bool) {
     carry(
         NetMessage::SERVER.get(),
         CONTROL,
-        &hello(&mods, nonce, crate::content::served::language()),
+        &hello(&mods, nonce, crate::engine::texts::game_language()),
     );
 }
 
@@ -324,7 +334,7 @@ pub(crate) fn link_lost() {
         s.peers.remove(&NetMessage::SERVER.get());
         s.sending.remove(&NetMessage::SERVER.get());
     });
-    crate::ui::interface::carried::forget();
+    server_link(ServerLink::Lost);
 }
 
 /// Hands a message to the mod that opened its channel.
@@ -432,10 +442,30 @@ pub(crate) fn stat_values(key: u64, values: &[(u32, f32)]) -> bool {
     post_one(key, CONTROL, &crate::base::wire::stat_values(values)) == Some(true)
 }
 
-/// Names `take` as what takes the mods' sounds the server sends this
-/// client, after their control kind; the first one named stays.
-pub(crate) fn on_sounds(take: fn(&Loader, &[u8])) {
-    let _first = STATE.sounds.set(take);
+/// Names `take` as what takes the control messages of `kind` the server
+/// sends this client, after their kind; the first one named stays.
+pub(crate) fn on_control(kind: u8, take: TakeControl) {
+    crate::base::remote::name(&STATE.takes, kind, take);
+}
+
+/// Hands `rest`, a control message of `kind` after its kind, to the part
+/// that takes that kind, once the loader runs.
+fn take(kind: u8, rest: &[u8]) {
+    let Some(loader) = crate::engine::loader::loader() else {
+        return;
+    };
+    match crate::base::remote::named(&STATE.takes, kind) {
+        Some(take) => take(loader, rest),
+        None => crate::base::remote::untaken("control message", kind),
+    }
+}
+
+/// Tells the parts what became of the client's link to its server, once
+/// the loader runs.
+fn server_link(link: ServerLink) {
+    if let Some(loader) = crate::engine::loader::loader() {
+        loader.parts.server_link(link);
+    }
 }
 
 /// Sends a mod's sound message `data` to the clients `keys` from the
@@ -522,26 +552,24 @@ pub(crate) fn client_carried(channel: u32, data: &[u8]) {
         STATE.answered.store(true, Ordering::Release);
         if fresh {
             crate::log!(INFO, "mod messages: the server answered");
-            crate::actions::player_actions::joined();
+            server_link(ServerLink::Answered);
             crate::base::join::client::admitted();
         }
     } else if let Some((list, complete)) = crate::base::wire::read_mods(data) {
         crate::base::join::client::kicked_for_mods(&list, complete);
     } else if let Some(records) = data.strip_prefix(control(ITEM_DATA).as_slice()) {
-        crate::inventory::item_data::received(records);
+        take(ITEM_DATA, records);
     } else if let Some(values) = data.strip_prefix(control(STAT_VALUES).as_slice()) {
         own_stats::received(read_stat_values(values));
     } else if let Some(rest) = data.strip_prefix(control(SOUND).as_slice()) {
-        if let (Some(take), Some(loader)) = (STATE.sounds.get(), crate::engine::loader::loader()) {
-            take(loader, rest);
-        }
+        take(SOUND, rest);
     } else if let Some(rest) = data.strip_prefix(control(NOTICE).as_slice())
         && let Some((entity, text)) = read_notice(rest)
     {
         crate::base::notices::queue(Entity(entity), text);
     } else if let Some(rest) = data.strip_prefix(control(UI_DEMO).as_slice()) {
         if crate::engine::loader::loader().is_some_and(|loader| loader.developer_tools) {
-            crate::ui::interface::open_demo(demo_position(rest));
+            take(UI_DEMO, rest);
         } else {
             crate::log!(
                 WARN,
@@ -559,9 +587,7 @@ pub(crate) fn client_carried(channel: u32, data: &[u8]) {
 /// forgets the last server's state.
 pub(crate) fn joining(runs_enshwick: bool) {
     forget();
-    crate::content::recipes::joining();
-    crate::ui::interface::demo::forget();
-    crate::ui::interface::close_world_dialogs();
+    server_link(ServerLink::Joining);
     STATE
         .server_runs_enshwick
         .store(runs_enshwick, Ordering::Release);
@@ -579,9 +605,7 @@ pub(crate) fn forget() {
     crate::base::carrier::forget();
     STATE.forget();
     crate::base::notices::forget();
-    crate::inventory::item_data::forget_client();
-    crate::actions::controls::forget_carried();
-    crate::ui::interface::carried::forget();
+    server_link(ServerLink::Forgotten);
 }
 
 /// Forgets a player's client, when the player leaves.
@@ -600,7 +624,7 @@ pub(crate) fn forget_peer(key: u64) {
 /// language the ABI does not list.
 pub(crate) fn language_of(key: u64) -> Option<Language> {
     if crate::base::carrier::is_host(key) {
-        return known(crate::content::served::language());
+        return known(crate::engine::texts::game_language());
     }
     state(|s| language_in(s, key))
 }
@@ -795,7 +819,7 @@ fn refund(keys: &[u64]) {
 /// The status summary's line on mod messages lost on the way, once any
 /// were.
 pub(crate) fn status() -> Option<String> {
-    let (lines, strayed) = crate::actions::chat::delivery();
+    let (lines, strayed) = crate::base::tell::delivery();
     let dropped = STATE.dropped.load(Ordering::Relaxed) + crate::base::carrier::dropped();
     crate::engine::diag::messages_line(dropped, lines, strayed)
 }

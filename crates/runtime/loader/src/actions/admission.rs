@@ -186,7 +186,7 @@ mod live {
     /// Admits a run of the player of account `key` from `path` now.
     pub(crate) fn admit(loader: &Loader, path: Path, key: u64) -> Verdict {
         let is_admin =
-            || crate::actions::player_actions::player(loader, key).is_some_and(|p| p.is_admin());
+            || crate::engine::world::player_with_key(loader, key).is_some_and(|p| p.is_admin());
         STATE.relock().admit(path, key, Instant::now(), is_admin)
     }
 

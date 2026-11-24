@@ -32,6 +32,7 @@ use crate::engine::filters::Filters;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Registered, Target};
 use crate::engine::mod_index::ModIndex;
+use crate::engine::parts::EventFollower;
 use crate::engine::pinned;
 use crate::engine::profile::Feature;
 use crate::engine::registry::JoinFeatureError;
@@ -139,22 +140,17 @@ fn build_layout(loader: &Loader) -> Option<BuildLayout> {
     })
 }
 
-/// Whether craft requests are screened, for mods' filters and disabled
-/// recipes alike, for the event link.
-pub(crate) fn crafting() -> bool {
-    CRAFT.get().is_some()
-}
-
-/// Lists the craft filters off, by the event stream entry `id` the build
-/// lacks for `reason`, when they screen craft requests: only the copy of the
-/// server's event streams screens them. Wanted with no filter too: recipe
-/// rules and the admin command may disable a recipe at any world load, and a
-/// client may host one.
-pub(crate) fn unscreened(loader: &Loader, id: &str, reason: &str) {
-    if crafting() {
-        let _off = loader.fuse_off(&CRAFT_FUSE, id, reason);
-    }
-}
+/// The craft request screen in the event move: it reads the craft request
+/// once the build reflects it, for mods' filters and disabled recipes alike,
+/// so with no filter too, since recipe rules and the admin command may
+/// disable a recipe at any world load and a client may host one. Only the
+/// move screens craft requests, so its being off lists the filters off.
+pub(crate) const FOLLOWER: EventFollower = EventFollower {
+    types: |_| CRAFT.get().map(|layout| vec![layout.hash]),
+    screen: Some(screen),
+    follow: None,
+    fuse: Some(&CRAFT_FUSE),
+};
 
 /// Seals the build and craft filters and finds the craft request's layout,
 /// before any link: game events link the event move when craft requests are
@@ -205,7 +201,7 @@ pub(crate) fn link(loader: &'static Loader) {
 ///   `size` bytes.
 /// - Called on the game thread before the engine moves the streams, so
 ///   nothing else reads or writes the event during the call.
-pub(crate) unsafe fn screen(type_hash: u32, payload: *mut u8, size: usize) {
+unsafe fn screen(type_hash: u32, payload: *mut u8, size: usize) {
     let Some(layout) = CRAFT.get() else {
         return;
     };
@@ -492,16 +488,16 @@ mod tests {
     }
 
     #[test]
-    fn a_build_without_the_event_streams_lists_the_craft_filters_off_by_the_entry() {
+    fn the_craft_screen_reads_the_craft_request_once_found_under_the_craft_filters_switch() {
         let loader = crate::start::tests::bare_loader();
         let _first = CRAFT.set(LAYOUT);
-        unscreened(&loader, "ecs.event_streams", "absent");
-        assert!(CRAFT_FUSE.is_off());
-        let off = crate::base::off_reason(&CRAFT_FUSE);
+        assert_eq!((FOLLOWER.types)(&loader), Some(vec![LAYOUT.hash]));
+        assert!(FOLLOWER.screen.is_some() && FOLLOWER.follow.is_none());
         assert!(
-            off.as_deref()
-                .is_some_and(|r| r.starts_with("ecs.event_streams")),
-            "{off:?}"
+            FOLLOWER
+                .fuse
+                .is_some_and(|fuse| core::ptr::eq(fuse, &raw const CRAFT_FUSE)),
+            "the move lists the craft filters off with it"
         );
     }
 

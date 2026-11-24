@@ -874,4 +874,4 @@ mod texts;
 pub use patches::bench_served_build;
 #[cfg(feature = "test")]
 pub use texts::bench_text_lookup;
-pub(crate) use texts::{add_text, language, mod_text, mod_texts_sealed};
+pub(crate) use texts::{add_text, mod_text, mod_texts_sealed};

@@ -1,4 +1,3 @@
-use core::sync::atomic::{AtomicU32, Ordering};
 use std::sync::OnceLock;
 
 use enshwick_core::abi::{HookFlags, Side};
@@ -11,8 +10,8 @@ use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
 use crate::engine::registry::{Registry, Sealed};
 
-/// The mod texts and the language the client's game shows them in. Both
-/// live for the process, so nothing here ends with a hosted game.
+/// The mod texts, which live for the process, so nothing here ends with a
+/// hosted game.
 struct Texts {
     /// Mod texts as mods add them during init: tag id, language, text.
     added: Registry<(u32, u32, String)>,
@@ -23,8 +22,6 @@ struct Texts {
     ours: OnceLock<FxHashSet<u32>>,
     /// The offset of a text pool's current language, from the build table.
     pool_language: OnceLock<usize>,
-    /// The language the game last asked a text in.
-    language: AtomicU32,
 }
 
 static TEXTS: Texts = Texts {
@@ -32,16 +29,10 @@ static TEXTS: Texts = Texts {
     by_id: OnceLock::new(),
     ours: OnceLock::new(),
     pool_language: OnceLock::new(),
-    language: AtomicU32::new(ENGLISH),
 };
 
 /// The English the game falls back to.
-pub(super) const ENGLISH: u32 = 1;
-
-/// The language the game shows its texts in, as far as the loader saw.
-pub(crate) fn language() -> enshwick_core::i18n::Language {
-    enshwick_core::i18n::Language(TEXTS.language.load(Ordering::Relaxed))
-}
+pub(super) const ENGLISH: u32 = enshwick_core::i18n::Language::EN_US.0;
 
 /// Registers a mod text.
 ///
@@ -131,7 +122,7 @@ crate::engine::chains::chain_detour! {
             }
             _ => ENGLISH,
         };
-        TEXTS.language.store(language, Ordering::Relaxed);
+        crate::engine::texts::game_asked(language);
         match text_for(id, language) {
             // SAFETY: `out` is the lookup's own out record argument, null or
             // writable for the call.
@@ -173,7 +164,7 @@ crate::engine::chains::chain_detour! {
             return onward.call();
         }
         onward.run(&FORMAT_FUSE, "the text format", |onward| {
-            let Some(text) = text_for(id, TEXTS.language.load(Ordering::Relaxed)) else {
+            let Some(text) = text_for(id, crate::engine::texts::game_language().0) else {
                 return onward.call();
             };
             let view = [
@@ -285,7 +276,9 @@ pub fn bench_text_lookup() -> impl FnMut(u32) -> u64 {
         clippy::fn_to_numeric_cast_any,
         reason = "a slot holds its next function's address"
     )]
-    TEXT_NEXT.slot().store(next as usize, Ordering::Release);
+    TEXT_NEXT
+        .slot()
+        .store(next as usize, core::sync::atomic::Ordering::Release);
     let mut texts = FxHashMap::default();
     texts.insert(7, vec![(ENGLISH, "bench")]);
     let _first = TEXTS.ours.set(ours(&texts));
@@ -325,7 +318,9 @@ mod tests {
             clippy::fn_to_numeric_cast_any,
             reason = "a slot holds its next function's address"
         )]
-        FORMAT_NEXT.slot().store(next as usize, Ordering::Release);
+        FORMAT_NEXT
+            .slot()
+            .store(next as usize, core::sync::atomic::Ordering::Release);
         let mut texts = FxHashMap::default();
         texts.insert(7, vec![(ENGLISH, "Luau check")]);
         let answered = ours(&texts);

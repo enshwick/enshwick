@@ -3,7 +3,7 @@
 use std::time::Instant;
 
 use super::outbox::{self, Taken};
-use super::{Links, deliver, dropped, item_data, remember_language, state};
+use super::{Links, deliver, dropped, remember_language, state};
 use crate::base::wire::{CONTROL, Peer, WELCOME, control, read_hello, remote_message};
 
 /// Tries to hand a client its join data, one a second, before the server
@@ -190,16 +190,12 @@ pub(super) fn handed(state: &mut Links, key: u64, whole: bool, now: Instant) -> 
     Handover::Again { first: tries == 1 }
 }
 
-/// Sends client `key` the data a joining client gets: item data, the
-/// disabled recipes, the join values and the controls of the mods of side
-/// server. A dropped part leaves it owed.
+/// Sends client `key` the data a joining client gets: the join values,
+/// then each part's (the disabled recipes, item data, the controls of the
+/// mods of side server). A dropped part leaves it owed.
 fn hand_data(key: u64) {
-    let whole = crate::inventory::item_data::hello()
-        .iter()
-        .all(|records| item_data(key, records))
-        && crate::content::recipes::hello(key)
-        && crate::base::remote::sync_to(key)
-        && crate::actions::controls::hello(key);
+    let whole = crate::base::remote::sync_to(key)
+        && crate::engine::loader::loader().is_none_or(|loader| loader.parts.handover(key));
     match state(|s| handed(s, key, whole, Instant::now())) {
         Handover::Whole | Handover::Again { first: false } => {}
         Handover::Again { first: true } => crate::log!(

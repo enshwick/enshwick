@@ -74,6 +74,8 @@ pub(crate) mod weather;
 pub(crate) mod writes;
 
 #[cfg(windows)]
+use crate::base::remote::Message;
+#[cfg(windows)]
 use crate::engine::parts::{Part, fused, part, step};
 
 /// The world domain's parts, in the order the joins call each of their
@@ -160,7 +162,14 @@ pub(crate) static PARTS: &[&Part] = &[
     },
     &Part {
         table_ids: fog::TABLE_IDS,
-        seal: Some(|_| fog::seal()),
+        seal: Some(|_| {
+            fog::seal();
+            crate::base::remote::on_client(crate::base::remote::FOG_UNCOVER, |message| {
+                if let Message::FogUncover { at, radius } = message {
+                    let _queued = fog::uncover_here(at, radius);
+                }
+            });
+        }),
         link: Some(fog::link),
         forget: Some(|_| {
             fog::forget_world();

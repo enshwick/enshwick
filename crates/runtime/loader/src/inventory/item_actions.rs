@@ -33,6 +33,7 @@ use crate::engine::filters::Filters;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::mod_index::ModIndex;
+use crate::engine::parts::EventFollower;
 use crate::engine::profile::Feature;
 use crate::engine::registry::JoinFeatureError;
 use crate::inventory::stacks::Stacks;
@@ -297,15 +298,6 @@ pub(crate) fn wanted() -> bool {
     FILTERS.has_sealed()
 }
 
-/// Lists the item event filters off, by the event stream entry `id` the
-/// build lacks for `reason`, when a mod filters items: only the copy of the
-/// server's event streams hears pickups and placements.
-pub(crate) fn unscreened(loader: &Loader, id: &str, reason: &str) {
-    if wanted() {
-        let _off = loader.fuse_off(&EVENTS_FUSE, id, reason);
-    }
-}
-
 /// Seals the filters before any link: game events link the event move when
 /// a mod registered one.
 pub(crate) fn seal() {
@@ -554,7 +546,7 @@ pub(crate) fn own_pickup(player: u32, item: u32, count: u32) {
     }
 }
 
-/// Whether [`screen`] reads the pickups the server's streams hold: a mod
+/// Whether [`follow`] reads the pickups the server's streams hold: a mod
 /// filters items, the event filters are on and the build reflects the event.
 fn screens_pickups() -> bool {
     wanted() && !EVENTS_FUSE.is_off() && EVENTS.get().is_some_and(|e| e.pickup.is_some())
@@ -586,25 +578,31 @@ pub(crate) fn forget() {
         .store(0, std::sync::atomic::Ordering::Release);
 }
 
-/// Whether the filters hear events of `type_hash`, so the event link copies
-/// them for [`screen`].
-pub(crate) fn hears(type_hash: u32) -> bool {
-    EVENTS.get().is_some_and(|events| {
-        [events.pickup, events.place]
-            .into_iter()
-            .flatten()
-            .any(|h| h.hash == type_hash)
-    })
-}
+/// The item filters' follower in the event move: once a mod filters items,
+/// it copies the pickups and placements this build reflects for
+/// [`follow`], and only the move hears them, so its being off lists the
+/// item event filters off.
+pub(crate) const FOLLOWER: EventFollower = EventFollower {
+    types: |loader| {
+        wanted().then(|| {
+            let events = events(loader);
+            [events.pickup, events.place]
+                .into_iter()
+                .flatten()
+                .map(|heard| heard.hash)
+                .collect()
+        })
+    },
+    screen: None,
+    follow: Some(follow),
+    fuse: Some(&EVENTS_FUSE),
+};
 
-/// Tells the filters of a pickup or a placement in one event the server's
-/// streams held, on the game thread after the merge.
-///
-/// # Safety
-///
-/// - `payload` is a copy of an event of `type_hash`, readable for `size`
-///   bytes, which nothing writes during the call.
-pub(crate) unsafe fn screen(type_hash: u32, payload: *const u8, size: usize) {
+/// Tells the filters of a pickup or a placement in the copy `event` of one
+/// event of `type_hash` the server's streams held, on the game thread after
+/// the merge.
+fn follow(type_hash: u32, event: &[u8]) {
+    let (payload, size) = (event.as_ptr(), event.len());
     let Some(events) = EVENTS.get() else {
         return;
     };
@@ -617,8 +615,8 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *const u8, size: usize) {
     };
     let _done = EVENTS_FUSE.run("the item events", || {
         // SAFETY: the event is of `heard`'s type and at least its reflected
-        // size (`find` checks both), readable for `size` bytes (the caller's
-        // contract); its u32 item id sits at the reflected `heard.item`.
+        // size (`find` checks both), readable for `size` bytes (the slice's
+        // length); its u32 item id sits at the reflected `heard.item`.
         let item: u32 = unsafe { read_at(payload, heard.item) };
         // SAFETY: the event is of `heard`'s type and at least its reflected
         // size, readable for `size` bytes; its u32 player entity sits at the
@@ -688,24 +686,28 @@ mod tests {
     /// The one test that registers a filter: the registry is the process's,
     /// and a sealed one takes no more.
     #[test]
-    fn a_registered_filter_is_wanted_once_sealed_and_its_events_go_off_without_the_streams() {
+    fn a_registered_filter_is_wanted_once_sealed_and_the_move_follows_it_under_its_events_switch() {
         let loader = crate::start::tests::bare_loader();
-        unscreened(&loader, "ecs.event_streams", "absent");
-        assert!(!EVENTS_FUSE.is_off(), "no mod filters items yet");
+        assert!(
+            (FOLLOWER.types)(&loader).is_none(),
+            "no mod filters items yet"
+        );
         FILTERS
             .register(ModIndex::new(0), filter, core::ptr::null_mut())
             .unwrap();
         assert!(!wanted(), "open filters answer nothing yet");
         seal();
         assert!(wanted(), "game events read it before this part links");
-        unscreened(&loader, "ecs.event_streams", "absent");
-        assert!(EVENTS_FUSE.is_off());
-        assert!(!ITEMS_FUSE.is_off(), "the item uses still run");
-        let off = crate::base::off_reason(&EVENTS_FUSE);
         assert!(
-            off.as_deref()
-                .is_some_and(|r| r.starts_with("ecs.event_streams")),
-            "{off:?}"
+            (FOLLOWER.types)(&loader).is_some(),
+            "the move follows the filters even where this build reflects neither event"
+        );
+        assert!(FOLLOWER.follow.is_some() && FOLLOWER.screen.is_none());
+        assert!(
+            FOLLOWER
+                .fuse
+                .is_some_and(|fuse| core::ptr::eq(fuse, &raw const EVENTS_FUSE)),
+            "the move lists the item event filters off with it, not the item uses"
         );
     }
 

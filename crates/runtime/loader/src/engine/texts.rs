@@ -4,6 +4,8 @@
 
 use std::cell::Cell;
 use std::sync::OnceLock;
+#[cfg(windows)]
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use enshwick_core::i18n::{Language, Texts};
 
@@ -11,6 +13,31 @@ use enshwick_core::i18n::{Language, Texts};
 const EMBEDDED: &[&str] = include!(concat!(env!("OUT_DIR"), "/texts.rs"));
 
 static TEXTS: OnceLock<Texts> = OnceLock::new();
+
+/// What the texts keep of the game while it runs.
+#[cfg(windows)]
+struct State {
+    /// The language the game shows its texts in, as its text lookup last
+    /// asked for one; the game's English until then.
+    game_language: AtomicU32,
+}
+
+#[cfg(windows)]
+static STATE: State = State {
+    game_language: AtomicU32::new(Language::EN_US.0),
+};
+
+/// The language the game shows its texts in, as far as the loader saw.
+#[cfg(windows)]
+pub(crate) fn game_language() -> Language {
+    Language(STATE.game_language.load(Ordering::Relaxed))
+}
+
+/// Notes the language the game's text lookup asked a text in.
+#[cfg(windows)]
+pub(crate) fn game_asked(language: u32) {
+    STATE.game_language.store(language, Ordering::Relaxed);
+}
 
 fn texts() -> &'static Texts {
     TEXTS.get_or_init(shipped)
@@ -78,7 +105,7 @@ pub(crate) fn language() -> Language {
         return reader;
     }
     #[cfg(windows)]
-    return crate::content::served::language();
+    return game_language();
     #[cfg(not(windows))]
     Language::FALLBACK
 }

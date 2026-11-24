@@ -168,7 +168,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
             (targets, hooks)
         }
     };
-    Summary {
+    let mut summary = Summary {
         version: crate::base::releases::running_with_abi(),
         game: loader.build.name.clone(),
         hosting: loader.side == Side::SERVER || crate::engine::world::hosting(),
@@ -197,7 +197,6 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
             links.extend(crate::base::calls::lines(loader));
             links
         },
-        served: crate::content::served::summary(),
         patches: crate::engine::diag::patches(),
         targets,
         hooks,
@@ -205,11 +204,13 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
         tsc_hz: crate::engine::patch::tsc_hz(),
         costs: cost_lines(loader, 10, 4),
         conflicts: conflicts(loader),
-        knowledge_guard: crate::knowledge::store::guard::status(),
         messages: crate::base::net::status(),
         settings: loader.settings_problems.clone(),
         parts: loader.build.parts(loader.parts.table_ids()),
-    }
+        ..Summary::default()
+    };
+    loader.parts.status(&mut summary);
+    summary
 }
 
 /// Starts the housekeeping thread: it puts the crash filter back on top and
@@ -425,7 +426,9 @@ pub(crate) fn conflicts(loader: &Loader) -> Vec<String> {
             }
         }
     }
-    let resources: Vec<(String, Vec<String>)> = crate::content::served::shared()
+    let resources: Vec<(String, Vec<String>)> = loader
+        .parts
+        .shared()
         .into_iter()
         .map(|(key, owners)| (key, owners.into_iter().map(name).collect()))
         .collect();
@@ -464,4 +467,31 @@ fn component_name(loader: &Loader, hash: u32) -> String {
                 == Some(hash)
         })
         .map_or_else(|| format!("{hash:#010x}"), str::to_owned)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The status text of a loader with no game and no mod, its clock,
+    /// uptime and version left out, and what the process counts across
+    /// loaders (lost messages, features turned off, the last crash), so each
+    /// part's section shows where it reads.
+    #[test]
+    fn the_status_text_of_a_bare_loader_reads_as_its_parts_write_it() {
+        let loader = crate::start::tests::bare_loader();
+        let summary = Summary {
+            version: String::new(),
+            at: 0,
+            uptime: Duration::ZERO,
+            tsc_hz: None,
+            last_crash: None,
+            turned_off: Vec::new(),
+            parts_off: Vec::new(),
+            messages: None,
+            conflicts: Vec::new(),
+            ..summary(&loader)
+        };
+        insta::assert_snapshot!(summary.render());
+    }
 }
