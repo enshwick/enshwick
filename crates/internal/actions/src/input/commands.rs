@@ -156,7 +156,7 @@ pub enum CommandAction {
         text: String,
     },
     /// Answers the loader's dialog that shows, a mod's
-    /// ([`Ui::ask`](crate::ui::Ui::ask)) or the loader's own, with a
+    /// (`Ui::ask`) or the loader's own, with a
     /// response one of its buttons gives, as a click would, on any screen.
     /// Observed once the dialog closes with that answer;
     /// [`WorldError::Unavailable`] while no dialog shows in game, which
