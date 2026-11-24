@@ -6,7 +6,7 @@
 
 use core::cell::RefCell;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use enshwick_core::abi::{UiDialog, UiWidget};
 
@@ -23,6 +23,13 @@ struct State {
     /// Asked to open: read without the lock each frame, set and cleared
     /// only under it, so a request and its place change together.
     open: AtomicBool,
+    /// Whether the HUD samples show: set on the demo's last page, kept when
+    /// its window closes, since the samples show only then, and cleared
+    /// with the world ([`forget`]).
+    hud: AtomicBool,
+    /// The fill of the samples' bar, the demo's smooth slider, as `f32`
+    /// bits; a new demo starts from it.
+    fill: AtomicU32,
     shared: Mutex<Shared>,
 }
 
@@ -38,6 +45,8 @@ struct Shared {
 
 static STATE: State = State {
     open: AtomicBool::new(false),
+    hud: AtomicBool::new(false),
+    fill: AtomicU32::new(0.25f32.to_bits()),
     shared: Mutex::new(Shared {
         at: None,
         answer: None,
@@ -52,7 +61,6 @@ struct Demo {
     smooth: f32,
     pick: u32,
     answer: Option<&'static str>,
-    hud: bool,
     marker: bool,
     /// Where the administrator stood when they opened this demo.
     at: Option<[i64; 3]>,
@@ -71,12 +79,31 @@ pub(crate) fn open(at: Option<[i64; 3]>) {
 }
 
 /// Forgets a request to open that no frame drew yet, with the place it was
-/// asked from, when the client changes servers or a hosted game ends; an
-/// open demo keeps its own place and marker toggle.
+/// asked from, and hides the HUD samples, when the client changes servers
+/// or a hosted game ends; an open demo keeps its own place and marker
+/// toggle.
 pub(crate) fn forget() {
     let mut shared = STATE.shared.relock();
     STATE.open.store(false, Ordering::Release);
     shared.at = None;
+    STATE.hud.store(false, Ordering::Relaxed);
+}
+
+/// The fill of the HUD samples' bar while they show.
+fn hud_fill() -> Option<f32> {
+    STATE
+        .hud
+        .load(Ordering::Relaxed)
+        .then(|| f32::from_bits(STATE.fill.load(Ordering::Relaxed)))
+}
+
+/// Closes the demo in `slot`, clearing its map marker; the HUD samples stay
+/// as they were set.
+fn close(slot: &mut Option<Demo>) {
+    if slot.take().is_some_and(|demo| demo.marker) {
+        let _cleared = super::map::set(ModIndex::LOADER, &[]);
+    }
+    crate::log!(INFO, "interface: the demo closed");
 }
 
 /// A request to open the demo that a frame took.
@@ -109,10 +136,9 @@ fn start(at: Option<[i64; 3]>) -> bool {
         page: 0,
         on: true,
         stops: 5.0,
-        smooth: 0.25,
+        smooth: f32::from_bits(STATE.fill.load(Ordering::Relaxed)),
         pick: 0,
         answer: None,
-        hud: false,
         marker: false,
         at,
         window: Window::new(),
@@ -128,11 +154,7 @@ pub(super) fn hud_samples(items: &mut Vec<super::HudItem>) {
     if super::DEMO_FUSE.is_off() {
         return;
     }
-    let Some(fill) = DEMO.with_borrow(|demo| {
-        demo.as_ref()
-            .filter(|demo| demo.hud)
-            .map(|demo| demo.smooth)
-    }) else {
+    let Some(fill) = hud_fill() else {
         return;
     };
     let label = |anchor: u32, key: &str, style: u32| super::HudItem {
@@ -221,13 +243,8 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize) {
         }
         // SAFETY: this function's `# Safety` gives the frame, its thread, its
         // `context` and no other open window, which `page` asks for.
-        let close = unsafe { page(engine, context, demo) };
-        if close {
-            if demo.marker {
-                let _cleared = super::map::set(ModIndex::LOADER, &[]);
-            }
-            *slot = None;
-            crate::log!(INFO, "interface: the demo closed");
+        if unsafe { page(engine, context, demo) } {
+            close(slot);
         }
     });
 }
@@ -337,6 +354,7 @@ fn rows_page(paint: &Painter<'_>, demo: &mut Demo) {
         false,
     ) {
         demo.smooth = value;
+        STATE.fill.store(value.to_bits(), Ordering::Relaxed);
     }
     let _fixed = paint.slider(
         words("demo.slider.fixed").as_bytes(),
@@ -372,8 +390,9 @@ fn hud_page(paint: &Painter<'_>, demo: &mut Demo) {
         true,
         false,
     );
-    if let Some(on) = paint.toggle(words("demo.hud.show").as_bytes(), demo.hud, false) {
-        demo.hud = on;
+    let shown = STATE.hud.load(Ordering::Relaxed);
+    if let Some(on) = paint.toggle(words("demo.hud.show").as_bytes(), shown, false) {
+        STATE.hud.store(on, Ordering::Relaxed);
     }
     let Some(position) = demo.at else {
         paint.label(
@@ -525,6 +544,22 @@ mod tests {
             "the new demo has no marker and no place"
         );
         DEMO.set(None);
+    }
+
+    #[test]
+    fn the_hud_samples_outlast_the_demo_s_window_and_go_with_the_world() {
+        let _shared = SHARED.relock();
+        let _replaced = start(None);
+        STATE.hud.store(true, Ordering::Relaxed);
+        DEMO.with_borrow_mut(close);
+        assert!(DEMO.with_borrow(Option::is_none), "the window closed");
+        assert_eq!(
+            hud_fill(),
+            Some(f32::from_bits(STATE.fill.load(Ordering::Relaxed))),
+            "the samples show once the window closed"
+        );
+        forget();
+        assert_eq!(hud_fill(), None, "the world took them");
     }
 
     #[test]

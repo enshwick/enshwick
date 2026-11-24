@@ -256,6 +256,8 @@ thread_local! {
     static CURRENT: core::cell::RefCell<Option<Current>> = const { core::cell::RefCell::new(None) };
     /// The interface update in which a dialog last bound Back.
     static BACK_BOUND: core::cell::Cell<Option<u64>> = const { core::cell::Cell::new(None) };
+    /// The interface update in which a dialog last drew.
+    static DRAWN: core::cell::Cell<Option<u64>> = const { core::cell::Cell::new(None) };
     /// Frames in a row a shown dialog's popup root was not in the game's node map.
     static ROOT_MISSES: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
 }
@@ -263,6 +265,26 @@ thread_local! {
 /// Whether a dialog shows, on the interface thread.
 pub(super) fn showing() -> bool {
     CURRENT.with_borrow(Option::is_some)
+}
+
+/// Whether a dialog shows, waits to show in game or drew in the last
+/// update, on the interface thread: the loader's windows, which draw before
+/// it in a frame, then begin under it, so it alone hears the player from its
+/// first frame on, and the click or key that answered it does not reach the
+/// window under it in the next one.
+pub(in crate::ui::interface) fn over_windows() -> bool {
+    holds_windows(
+        showing(),
+        DRAWN.get(),
+        super::tick(),
+        STATE.mode.load(Ordering::Acquire) == IN_GAME && STATE.waiting.any.load(Ordering::Acquire),
+    )
+}
+
+/// [`over_windows`] from what it reads: a dialog on screen, the update it
+/// last drew in, this update, and whether one waits to show in game.
+const fn holds_windows(showing: bool, drawn: Option<u64>, now: u64, waiting: bool) -> bool {
+    showing || waiting || engine::lately(drawn, now)
 }
 
 /// Whether a dialog shows and bound Back in this interface update or the
@@ -480,6 +502,7 @@ pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
         let Some(shown) = current.as_mut() else {
             return;
         };
+        DRAWN.set(Some(super::tick()));
         // SAFETY: `host` is non-zero, checked by the guard before it, and is
         // the interface host read from the frame's live context; its answer
         // flag sits at the table's `ui.host_answered`, and only this thread,
@@ -815,6 +838,18 @@ mod tests {
         assert_eq!(rest, ["second", "third"]);
         assert!(!waiting.any.load(Ordering::Acquire));
         assert!(waiting.pop().is_none());
+    }
+
+    #[test]
+    fn windows_stay_under_a_dialog_for_one_update_after_it_answered() {
+        assert!(holds_windows(true, Some(7), 7, false), "on screen");
+        assert!(holds_windows(false, None, 7, true), "waiting in game");
+        assert!(
+            holds_windows(false, Some(7), 8, false),
+            "the update after its answer"
+        );
+        assert!(!holds_windows(false, Some(7), 9, false), "then free again");
+        assert!(!holds_windows(false, None, 9, false), "never drawn");
     }
 
     #[test]

@@ -108,6 +108,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::ITEM_SLOT.id(),
     pinned::ui::ITEM_SLOT_CLICKABLE.id(),
     pinned::ui::ITEM_SLOT_COUNT.id(),
+    pinned::ui::ITEM_SLOT_FOCUSABLE.id(),
     pinned::ui::ITEM_SLOT_FOCUSED.id(),
     pinned::ui::ITEM_SLOT_HIT.id(),
     pinned::ui::ITEM_SLOT_INIT.id(),

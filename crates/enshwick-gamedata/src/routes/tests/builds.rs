@@ -605,9 +605,12 @@ const ITEM_UI_SYMBOLS: &[(&str, &str, u64)] = &[
 /// (`ui.item_slot` reads the pointer only while that byte is 0), the
 /// record's count at 0x10 and its 0x48 bytes, and the 0x91 bytes the init
 /// writes (`doItemSlot` and its init in the decompiler on client 26430625,
-/// 2026-11-16; the same on every kept client).
-const ITEM_UI_READS: [(&str, u64); 20] = [
+/// 2026-11-16; the same on every kept client). The flag that adds a slot to
+/// its window's navigation and has its look follow the focus and the cursor
+/// at 0x61 (the decompiler on client 26430625, 2026-11-24).
+const ITEM_UI_READS: [(&str, u64); 21] = [
     ("ui.item_slot_clickable", 0x62),
+    ("ui.item_slot_focusable", 0x61),
     ("ui.item_slot_state", 0x10),
     ("ui.item_slot_state_local", 0x60),
     ("ui.item_slot_focused", 0x60),
