@@ -20,11 +20,30 @@ use super::{
 /// widgets.
 const MODAL: u32 = 1;
 
+/// The layer the game's popup, and so the loader's dialog, begins its window
+/// on, modal, and the loader's windows' own: `ui.popup` calls
+/// `ui.window_begin` with layer 0x1f and flags 1. The window begin stores
+/// the layer at the window's `+0x7c` (`0x1411bf610`), and the gates refuse
+/// a node only for a modal window on a strictly higher layer, so two modal
+/// windows on one layer hold neither's input (client 26430625, decompiler).
+pub(super) const POPUP_LAYER: u32 = 0x1f;
+
 impl Window {
     /// The flags the window starts with: a panel beside a game screen is an
     /// overlay, so that screen keeps its keys, tabs and hover.
     const fn flags(&self) -> u32 {
         if self.place().is_some() { 0 } else { MODAL }
+    }
+
+    /// The layer the window starts on: one under the popup's while a loader
+    /// dialog shows or waits over it (`dialog`), so the dialog alone takes
+    /// the clicks and keys, else its own.
+    const fn begin_layer(&self, dialog: bool) -> u32 {
+        if dialog && self.layer >= POPUP_LAYER {
+            POPUP_LAYER - 1
+        } else {
+            self.layer
+        }
     }
 }
 
@@ -154,7 +173,7 @@ impl Engine {
                 window.object.ptr(),
                 &raw const name,
                 1,
-                window.layer,
+                window.begin_layer(crate::ui::interface::dialog::over_windows()),
                 u32::MAX,
                 window.flags(),
             );
@@ -315,5 +334,19 @@ mod tests {
         assert_eq!(panel.flags(), 0, "an overlay, as the game's button hints");
         assert_eq!(Window::new().flags(), MODAL, "a popup, as the game's");
         assert_eq!(Window::screen(0x1b, 30.0).flags(), MODAL);
+    }
+
+    #[test]
+    fn a_loader_dialog_holds_the_input_of_a_window_on_its_layer_and_leaves_lower_ones_be() {
+        let window = Window::new();
+        assert_eq!(window.begin_layer(false), POPUP_LAYER);
+        assert!(
+            window.begin_layer(true) < POPUP_LAYER,
+            "under the dialog, which the game's gates then hold it for"
+        );
+        let mods_screen = Window::screen(0x1b, 30.0);
+        assert_eq!(mods_screen.begin_layer(true), 0x1b);
+        let panel = Window::extension(Place::edge(UiExtension::RIGHT), 0xa);
+        assert_eq!(panel.begin_layer(true), 0xa);
     }
 }

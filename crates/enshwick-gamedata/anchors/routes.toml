@@ -9551,6 +9551,18 @@ shape = ["cmp [r15+*],sil", "je ?b", "mov rax,[rbp+?]", "lea rcx,[rbp-?]"]
 take = "value"
 range = [49, 159]
 
+# The flag that adds a slot to its window's navigation and has its look
+# follow the focus and the cursor, read first thing in the widget; the
+# inventory screens set it, the slot data's init clears it (client 26430625,
+# decompiler).
+[[route]]
+id = "ui.item_slot_focusable"
+sides = ["client"]
+in = "ui.item_slot"
+shape = ["cmp byte [?1+*],0x0", "mov [rbp-?],rax", "je ?b", "cmp qword [?1+0x18],?i"]
+take = "value"
+range = [0x30, 0xc2]
+
 [[route]]
 id = "ui.context_player"
 sides = ["client"]

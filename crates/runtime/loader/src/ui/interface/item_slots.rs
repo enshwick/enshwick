@@ -151,6 +151,10 @@ struct Linked {
     init: InitFn,
     info: InfoFn,
     clickable: usize,
+    /// The flag that adds a slot to its window's navigation and has its look
+    /// follow the focus and the cursor, as the inventory screens' slots;
+    /// `None` on a build that lacks it.
+    focusable: Option<usize>,
     player: usize,
     player_data: usize,
     player_items: usize,
@@ -363,9 +367,22 @@ fn linked(loader: &Loader) -> Result<Linked, Failed> {
     if !slot_data_holds(offset(pinned::ui::ITEM_SLOT_INIT_END)?) {
         return Err((pinned::ui::ITEM_SLOT_INIT_END.id(), room));
     }
-    let clickable = offset(pinned::ui::ITEM_SLOT_CLICKABLE)?;
-    if !slot_data_holds(clickable + 1) {
-        return Err((pinned::ui::ITEM_SLOT_CLICKABLE.id(), room));
+    let flag = |id: pinned::Constant| {
+        let at = offset(id)?;
+        if slot_data_holds(at + 1) {
+            Ok(at)
+        } else {
+            Err((id.id(), room))
+        }
+    };
+    let focusable = flag(pinned::ui::ITEM_SLOT_FOCUSABLE);
+    let (clickable, focusable_at) = slot_flags(flag(pinned::ui::ITEM_SLOT_CLICKABLE), focusable)?;
+    if let Err((id, reason)) = focusable {
+        let reason = loader.build.reason(id, reason);
+        crate::log!(
+            INFO,
+            "interface: mods' item slots show no hover look, which this build lacks: {id} {reason}"
+        );
     }
     Ok(Linked {
         // SAFETY: `code_holds` checked the code at `ui.item_slot` against its
@@ -381,10 +398,20 @@ fn linked(loader: &Loader) -> Result<Linked, Failed> {
         // the inventory layer's `ItemLookup`.
         info: unsafe { core::mem::transmute::<usize, InfoFn>(info) },
         clickable,
+        focusable: focusable_at,
         player: offset(pinned::ui::CONTEXT_PLAYER)?,
         player_data: offset(pinned::ui::PLAYER_DATA)?,
         player_items: offset(pinned::ui::PLAYER_ITEMS)?,
     })
+}
+
+/// The click flag, which mods' slots need, and the navigation flag, which
+/// only gives them the hover look, so a build lacking it still draws them.
+fn slot_flags(
+    clickable: Result<usize, Failed>,
+    focusable: Result<usize, Failed>,
+) -> Result<(usize, Option<usize>), Failed> {
+    Ok((clickable?, focusable.ok()))
 }
 
 /// Whether the bytes of a slot's data before `end` lie in the `SLOT_DATA`
@@ -575,14 +602,13 @@ pub(super) unsafe fn draw(context: usize, raw: &mut UiWidget) -> Result<(), Widg
     // `slot_data_holds` at link.
     unsafe { (linked.init)(slot.as_mut_ptr().cast()) };
     slot[0] = (&raw mut record).expose_provenance() as u64;
-    // SAFETY: `slot` holds `SLOT_DATA` `u64`s, its click flag at the table's
-    // `ui.item_slot_clickable`, inside them by `slot_data_holds` at link.
-    unsafe {
-        crate::engine::memory::write::<u8>(
-            slot.as_mut_ptr().expose_provenance(),
-            linked.clickable,
-            1,
-        );
+    for flag in core::iter::once(linked.clickable).chain(linked.focusable) {
+        // SAFETY: `slot` holds `SLOT_DATA` `u64`s, its click flag and its
+        // navigation flag at the table's `ui.item_slot_clickable` and
+        // `ui.item_slot_focusable`, inside them by `slot_data_holds` at link.
+        unsafe {
+            crate::engine::memory::write::<u8>(slot.as_mut_ptr().expose_provenance(), flag, 1);
+        }
     }
     let mut answer: Answer = bytemuck::Zeroable::zeroed();
     // SAFETY: `draw` is the game's `ui.item_slot`, checked at link, inside
@@ -704,12 +730,30 @@ mod tests {
             "the click flag on client 26430625"
         );
         assert!(
+            slot_data_holds(0x61 + 1),
+            "the navigation flag on client 26430625"
+        );
+        assert!(
             slot_data_holds(0x91),
             "the init's extent on client 26430625"
         );
         assert!(slot_data_holds(SLOT_DATA * 8));
         assert!(!slot_data_holds(SLOT_DATA * 8 + 1));
         assert!(!slot_data_holds(0x122), "the init route's upper bound");
+    }
+
+    #[test]
+    fn a_build_without_the_navigation_flag_still_draws_slots_but_one_without_the_click_flag_does_not()
+     {
+        let missing = ("ui.item_slot_focusable", "is absent");
+        assert_eq!(slot_flags(Ok(0x62), Ok(0x61)), Ok((0x62, Some(0x61))));
+        assert_eq!(
+            slot_flags(Ok(0x62), Err(missing)),
+            Ok((0x62, None)),
+            "only the hover look goes"
+        );
+        let no_click = ("ui.item_slot_clickable", "is absent");
+        assert_eq!(slot_flags(Err(no_click), Ok(0x61)), Err(no_click));
     }
 
     #[test]

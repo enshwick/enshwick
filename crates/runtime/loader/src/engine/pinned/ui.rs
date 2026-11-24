@@ -116,6 +116,7 @@ pub(crate) const POST_JOIN_TAIL: Constant = Constant::new("ui.post_join_tail");
 pub(crate) const ITEM_SLOT: Symbol = Symbol::new("ui.item_slot");
 pub(crate) const ITEM_SLOT_CLICKABLE: Constant = Constant::new("ui.item_slot_clickable");
 pub(crate) const ITEM_SLOT_COUNT: Constant = Constant::new("ui.item_slot_count");
+pub(crate) const ITEM_SLOT_FOCUSABLE: Constant = Constant::new("ui.item_slot_focusable");
 pub(crate) const ITEM_SLOT_HIT: Constant = Constant::new("ui.item_slot_hit");
 pub(crate) const ITEM_SLOT_FOCUSED: Constant = Constant::new("ui.item_slot_focused");
 pub(crate) const ITEM_SLOT_POINTER: Constant = Constant::new("ui.item_slot_pointer");

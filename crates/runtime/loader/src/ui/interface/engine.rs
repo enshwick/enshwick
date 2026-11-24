@@ -535,7 +535,7 @@ impl Window {
             panel: Buf::zeroed(),
             nav: Buf::zeroed(),
             saved_nav: 0,
-            layer: 0x1f,
+            layer: windows::POPUP_LAYER,
             gap: 30.0,
             place: None,
             began: None,
