@@ -68,7 +68,7 @@ The types are in
 | `KnowledgeChanged` | `KnowledgeData` | A knowledge value of a player (or the world, entity 0) changed ([knowledge](knowledge.md)). | game |
 | `QuestCompleted` | `QuestData` | A quest's bool was set for a player: the game gave its experience, not its items. | game |
 | `QuestStarted` | `QuestData` | A quest's first step now shows for a player, or for the world (entity 0). A quest whose first step always shows raises none ([journal](content/journal.md)). | game |
-| `QuestStepDone` | `QuestStepData` | A quest step is done for a player or the world. The data names the step by its place, from 0. | game |
+| `QuestStepDone` | `QuestStepData` | A quest step is done for a player or the world, when the knowledge it tests moved ([journal](content/journal.md)). The data names the step by its place, from 0. | game |
 | `QuestProgressed` | `QuestProgressData` | A counter that a step's counted part reads changed. The data has the count now and the count the part asks for. | game |
 | `ChunkLoaded` | `ChunkData` | A 256 m chunk of the server's entities loaded as players came near. Its entities exist now. The terrain's voxels raise no event ([weather and the world's chunks](weather.md)). | game |
 | `ChunkUnloaded` | `ChunkData` | An entity chunk unloaded once no player was near. Its entities are gone. | game |

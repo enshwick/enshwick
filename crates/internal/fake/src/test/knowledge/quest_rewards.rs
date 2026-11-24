@@ -14,8 +14,8 @@ impl Installed {
     /// them before the game pays a quest, and returns what the game would
     /// pay: each filter sees the payment as the filters before left it,
     /// and its refusal stands unless a later filter answers yes. A count
-    /// past the payment's `limit` or [`QuestPayment::MAX`] is cut there, as
-    /// the loader cuts it.
+    /// past the `limit` the payment came with or [`QuestPayment::MAX`] is
+    /// cut there, and a refused payment pays none, as the loader pays.
     ///
     /// # Examples
     ///
@@ -38,6 +38,9 @@ impl Installed {
     #[must_use]
     pub fn pay_quest(&self, mut payment: QuestPayment) -> QuestPayment {
         let filters = table::with(Vec::new(), |s| s.knowledge.quest_reward_filters.clone());
+        let most = payment
+            .limit
+            .min(u32::try_from(QuestPayment::MAX).unwrap_or(u32::MAX));
         for filter in filters {
             // SAFETY: the filter the mod registered, with its pointer and the
             // payment, which lives for the call.
@@ -47,10 +50,11 @@ impl Installed {
                 _ => {}
             }
         }
-        let most = payment
-            .limit
-            .min(u32::try_from(QuestPayment::MAX).unwrap_or(u32::MAX));
-        payment.count = payment.count.min(most);
+        payment.count = if payment.allowed == 0 {
+            0
+        } else {
+            payment.count.min(most)
+        };
         payment
     }
 }

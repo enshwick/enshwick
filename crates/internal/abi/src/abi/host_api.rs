@@ -2491,11 +2491,15 @@ pub struct HostApi {
     /// saved with the next save; nothing a grant brings follows.
     /// [`KnowledgeChange::SHOWN`] grants what the value gains as
     /// [`HostApi::change_knowledge`] does (the next step applies it with
-    /// what follows) and writes what it loses at once with no bit marked.
+    /// what follows) and writes what it loses at once, keeping the mark of
+    /// flags and no mark for a bool or a counter. A counter's gain is the
+    /// difference from the value it reads now, so another grant queued
+    /// before the step applies it adds to the count.
     ///
     /// [`Status::BAD_ARGS`] for an unknown id or `notice`, a bool above 1,
     /// or, for `SHOWN`, a gained bit the game does not expect;
-    /// [`Status::BUSY`] when the game's queue fills while `SHOWN` grants;
+    /// [`Status::BUSY`] when the game's queue fills while `SHOWN` grants,
+    /// with what it wrote and queued before kept;
     /// [`Status::REFUSED`] as for [`HostApi::change_knowledge`]. On the
     /// server's game thread only. ABI 12.22.
     pub knowledge_set: extern "system" fn(

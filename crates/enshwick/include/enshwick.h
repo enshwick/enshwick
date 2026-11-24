@@ -3071,7 +3071,7 @@ typedef struct EnshwickKnowledgeChange {
 #define EnshwickKnowledgeChange_QUIET 0
 // A notice of `EnshwickHostApi.knowledge_set`:
 // what the value gains granted as the game grants it, what it loses
-// written with no bit marked seen.
+// written with the mark of flags kept and none for a bool or a counter.
 #define EnshwickKnowledgeChange_SHOWN 1
 
 // One widget, drawn with `EnshwickHostApi.ui_widget`: `kind` says which, and
@@ -7440,11 +7440,15 @@ typedef struct EnshwickHostApi {
   // saved with the next save; nothing a grant brings follows.
   // `EnshwickKnowledgeChange_SHOWN` grants what the value gains as
   // `EnshwickHostApi.change_knowledge` does (the next step applies it with
-  // what follows) and writes what it loses at once with no bit marked.
+  // what follows) and writes what it loses at once, keeping the mark of
+  // flags and no mark for a bool or a counter. A counter's gain is the
+  // difference from the value it reads now, so another grant queued
+  // before the step applies it adds to the count.
   //
   // `EnshwickStatus_BAD_ARGS` for an unknown id or `notice`, a bool above 1,
   // or, for `SHOWN`, a gained bit the game does not expect;
-  // `EnshwickStatus_BUSY` when the game's queue fills while `SHOWN` grants;
+  // `EnshwickStatus_BUSY` when the game's queue fills while `SHOWN` grants,
+  // with what it wrote and queued before kept;
   // `EnshwickStatus_REFUSED` as for `EnshwickHostApi.change_knowledge`. On the
   // server's game thread only. ABI 12.22.
   EnshwickStatus (*knowledge_set)(EnshwickModHandle me,

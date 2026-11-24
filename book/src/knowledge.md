@@ -72,8 +72,9 @@ its own table, built from the game's data.
 
 `grant(player, id, grant)` and `grant_world(id, grant)` grant knowledge as the
 game does. The next step applies it with everything that follows, such as
-experience, unlocks chained on it, the clients and the save. The grant must
-fit the id's kind:
+experience, unlocks chained on it, the clients and the save. A grant made
+before `WorldLoaded` waits in the game's queue until the world has loaded.
+The grant must fit the id's kind:
 
 - `Grant::Set` for a bool
 - `Grant::Add(n)` for a counter
@@ -134,8 +135,12 @@ What is written reaches the clients and the next save as a revoke does.
 A rejoin loads the character's save again, so every mark is set once more,
 whichever notice the set chose.
 Which notice the client shows for a value whose mark is clear is not yet
-seen in the game. A set fails as a grant does, and for a bool above 1. A
-shown set also fails for a gained bit the game does not expect.
+seen in the game. A shown counter gains the difference from the value it
+reads now. So another grant before the next step adds to the count, the
+game's or a second set's; a quiet set is exact. A set fails as a grant
+does, and for a bool above 1. A shown set also fails for a gained bit the
+game does not expect. When the game's queue fills, a shown set keeps what
+it wrote and granted before.
 
 ```rust
 use enshwick::knowledge::KnowledgeNotice;

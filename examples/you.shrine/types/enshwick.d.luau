@@ -16,7 +16,7 @@ export type AcceptOfferedInteractionEvent = {
 export type AccountAction = "Kick" | "Ban" | "Unban"
 
 --- What a player does that a reward follows.
-export type Action = { Craft: number } | { LevelUp: number } | "Join" | "Loot" | { Quest: number? } | { Consume: number } | { Pickup: number }
+export type Action = { Craft: number } | { LevelUp: number } | "Join" | "Loot" | "AnyQuest" | { Quest: number } | { Consume: number } | { Pickup: number }
 
 --- How a request went, as a script's handler answers it: `Outcome`'s parts as a table.
 export type ActionOutcome = {
@@ -2781,6 +2781,8 @@ export type QuestPayment = {
 	experience: {number},
 	--- The most experience values the game pays on this build; the loader drops the rest with a warning.
 	limit: number,
+	--- Whether the game pays it so far: `false` once a filter before refused it.
+	allowed: boolean,
 }
 
 --- The data of the `QuestProgressed` event.
@@ -5114,7 +5116,7 @@ declare enshwick: {
 		get: (player: number, id: number) -> Known?,
 		--- Knowledge `id` of the world; nil for an id the game does not know, a player's id, or off the game thread.
 		world: (id: number) -> Known?,
-		--- Grants knowledge `id` to the player whose character is `player` (or to the world, for an id of the world's), as the game grants it: the next step applies it with what follows. A grant only adds: a bool set, a counter raised, a bit set.
+		--- Grants knowledge `id` to the player whose character is `player` (or to the world, for an id of the world's), as the game grants it: the next step applies it with what follows, or the first steps after `WorldLoaded` for a grant made before it. A grant only adds: a bool set, a counter raised, a bit set.
 		grant: (player: number, id: number, grant: Grant) -> (),
 		--- Grants knowledge `id` of the world's, as `Knowledge.grant` does.
 		grant_world: (id: number, grant: Grant) -> (),
@@ -5122,7 +5124,7 @@ declare enshwick: {
 		revoke: (player: number, id: number, revoke: Revoke) -> (),
 		--- Takes knowledge `id` of the world's back, as `Knowledge.revoke` does. Unstable: needs the `unstable` feature and may change in any release.
 		revoke_world: (id: number, revoke: Revoke) -> (),
-		--- Sets knowledge `id` of the player whose character is `player` (or of the world, for an id of the world's) to exactly `value`: 0 or 1 for a bool, any count or bits otherwise. `KnowledgeNotice.Quiet` writes it at once, marked seen, and the next save keeps it; `KnowledgeNotice.Shown` grants what it gains the game's way and writes what it loses at once. The clients get what is written as a revoke sends it. `KnowledgeChanged` reports what it changed after the next step. Unstable: needs the `unstable` feature and may change in any release.
+		--- Sets knowledge `id` of the player whose character is `player` (or of the world, for an id of the world's) to exactly `value`: 0 or 1 for a bool, any count or bits otherwise. `KnowledgeNotice.Quiet` writes it at once, marked seen, and the next save keeps it; `KnowledgeNotice.Shown` grants what it gains the game's way and writes what it loses at once. The clients get what is written as a revoke sends it. A shown counter gains the difference from the value it reads now, so another grant queued before the step applies it, the game's or a second set's, adds to the count; a quiet set is exact. `KnowledgeChanged` reports what it changed after the next step. Unstable: needs the `unstable` feature and may change in any release.
 		set: (player: number, id: number, value: number, notice: KnowledgeNotice) -> (),
 		--- Sets knowledge `id` of the world's to exactly `value`, as `Knowledge.set` does. Unstable: needs the `unstable` feature and may change in any release.
 		set_world: (id: number, value: number, notice: KnowledgeNotice) -> (),

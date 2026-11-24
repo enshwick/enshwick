@@ -36,7 +36,7 @@ mod tests {
                 ("smith", Action::Craft(RecipeId::new(RECIPE)), 100),
                 ("looter", Action::Loot, 1000),
                 ("drinker", Action::Consume(tonic()), 3),
-                ("one-quest", Action::Quest(Some(QUEST)), 30),
+                ("one-quest", Action::Quest(QUEST), 30),
             ] {
                 load.add_reward(Reward::new(name, on).with(Give::Experience(amount)))?;
             }

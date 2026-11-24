@@ -363,7 +363,7 @@ impl PackReward {
             PackOn::LevelUp(level) => Action::LevelUp(level),
             PackOn::Join => Action::Join,
             PackOn::Loot => Action::Loot,
-            PackOn::Quest => Action::Quest(None),
+            PackOn::Quest => Action::AnyQuest,
             PackOn::Consume(item) => Action::Consume(crate::ItemId::from_guid(item)),
             PackOn::Pickup(item) => Action::Pickup(crate::ItemId::from_guid(item)),
         };

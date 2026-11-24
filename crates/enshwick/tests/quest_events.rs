@@ -17,6 +17,7 @@ mod tests {
     const PLAYER: Entity = Entity(2);
     const DOUBLED: KnowledgeId = KnowledgeId::new(0x51);
     const REFUSED: KnowledgeId = KnowledgeId::new(0x52);
+    const ALLOWED_AGAIN: KnowledgeId = KnowledgeId::new(0x54);
 
     static HEARD: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
@@ -42,7 +43,12 @@ mod tests {
                         .flat_map(|&value| [value, value])
                         .collect(),
                 ),
-                REFUSED => QuestPay::Refuse,
+                REFUSED | ALLOWED_AGAIN => QuestPay::Refuse,
+                _ => QuestPay::Keep,
+            })?;
+            load.on_quest_reward(|paid| match paid.quest {
+                REFUSED => QuestPay::Pay(paid.experience.clone()),
+                ALLOWED_AGAIN if !paid.allowed => QuestPay::Allow,
                 _ => QuestPay::Keep,
             })?;
             Ok(Self)
@@ -123,11 +129,19 @@ mod tests {
         assert_eq!(&doubled.experience[..2], &[0x77, 0x77]);
         let refused = loader.pay_quest(payment(REFUSED, &[0x77]));
         assert_eq!(
-            refused.allowed, 0,
-            "nothing paid, the quest still completes"
+            (refused.allowed, refused.count),
+            (0, 0),
+            "nothing paid though a later filter paid other values, the quest still completes"
         );
         let kept = payment(KnowledgeId::new(0x53), &[0x77]);
         assert_eq!(loader.pay_quest(kept), kept);
+    }
+
+    #[test]
+    fn a_later_filter_that_sees_a_refusal_may_pay_the_quest_again() {
+        let loader = start();
+        let paid = loader.pay_quest(payment(ALLOWED_AGAIN, &[0x77]));
+        assert_eq!((paid.allowed, paid.count), (1, 1));
     }
 
     #[test]

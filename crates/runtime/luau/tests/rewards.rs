@@ -2,8 +2,9 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{Header, ItemAction, PlayerInfo, TickData};
-    use enshwick::events::{Ticked, WorldLoaded};
+    use enshwick::abi::{Header, ItemAction, PlayerInfo, QuestData, TickData};
+    use enshwick::events::{QuestCompleted, Ticked, WorldLoaded};
+    use enshwick::knowledge::KnowledgeId;
     use enshwick::progress::Experience;
     use enshwick::test::FakeHost;
     use enshwick::{Entity, PlayerKey};
@@ -68,6 +69,59 @@ mod tests {
         }];
         loader.experience(&mut rows, 25, |level| level * 1000);
         assert_eq!(rows[0].gained, 23, "{:?}", loader.logs());
+        let _gone = std::fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn a_script_rewards_any_quest_by_name_and_one_quest_by_its_id() {
+        let player = PlayerInfo {
+            header: Header::of::<PlayerInfo>(),
+            slot: 0,
+            entity: Entity(2),
+            key: PlayerKey::new(7),
+            permissions: 0,
+            name_len: 0,
+            name: [0; PlayerInfo::NAME_MAX],
+        };
+        let data = std::env::temp_dir().join(format!(
+            "enshwick-luau-quest-rewards-{}",
+            std::process::id()
+        ));
+        let loader = run(
+            FakeHost::new()
+                .world()
+                .player(player)
+                .data_dir(data.to_str().unwrap())
+                .world_key("world0"),
+            r#"
+            enshwick.rewards.add_reward({ name = "any", on = "AnyQuest", give = { { Experience = 1 } } })
+            enshwick.rewards.add_reward({ name = "one", on = { Quest = 0x51 }, give = { { Experience = 10 } } })
+            "#,
+        );
+        assert!(loader.faults().is_empty(), "{:?}", loader.faults());
+        let _loaded = loader.raise::<WorldLoaded>(&());
+        for quest in [0x52, 0x51] {
+            let _heard = loader.raise::<QuestCompleted>(&QuestData {
+                header: Header::of::<QuestData>(),
+                entity: Entity(2),
+                quest: KnowledgeId::new(quest),
+            });
+        }
+        let _ran = loader.raise::<Ticked>(&TickData::new(1));
+        let mut rows = [Experience {
+            entity: Entity(2),
+            level: 1,
+            progress: 0,
+            need: 1000,
+            gained: 0,
+        }];
+        loader.experience(&mut rows, 25, |level| level * 1000);
+        assert_eq!(
+            rows[0].gained,
+            12,
+            "any twice, one once: {:?}",
+            loader.logs()
+        );
         let _gone = std::fs::remove_dir_all(&data);
     }
 

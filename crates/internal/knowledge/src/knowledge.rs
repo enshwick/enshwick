@@ -9,7 +9,9 @@
 //! player's flags knowledge (seen bit 0, crafted bit 1); a quest's id is a
 //! player's bool the game sets when it rewards the quest. A grant goes the
 //! game's way: the next step applies it with what follows, such as
-//! experience, unlocks chained on it, the clients and the save. A revoke
+//! experience, unlocks chained on it, the clients and the save; a grant made
+//! before [`WorldLoaded`](crate::events::WorldLoaded) waits in the game's
+//! queue and applies in the first steps after it. A revoke
 //! takes a value back at once and sends it to the clients again; what the
 //! grant brought, such as experience, stays. A player's knowledge lives in
 //! the character's save on the player's machine, so a change for an account
@@ -314,8 +316,9 @@ impl Knowledge {
 
     /// Grants knowledge `id` to the player whose character is `player` (or
     /// to the world, for an id of the world's), as the game grants it: the
-    /// next step applies it with what follows. A grant only adds: a bool
-    /// set, a counter raised, a bit set.
+    /// next step applies it with what follows, or the first steps after
+    /// [`WorldLoaded`](crate::events::WorldLoaded) for a grant made before
+    /// it. A grant only adds: a bool set, a counter raised, a bit set.
     ///
     /// # Errors
     ///
@@ -439,9 +442,11 @@ impl Knowledge {
     /// writes it at once, marked seen, and the next save keeps it;
     /// [`KnowledgeNotice::Shown`] grants what it gains the game's way and
     /// writes what it loses at once. The clients get what is written as a
-    /// revoke sends it.
-    /// [`KnowledgeChanged`](crate::events::KnowledgeChanged) reports what
-    /// it changed after the next step.
+    /// revoke sends it. A shown counter gains the difference from the value
+    /// it reads now, so another grant queued before the step applies it,
+    /// the game's or a second set's, adds to the count; a quiet set is
+    /// exact. [`KnowledgeChanged`](crate::events::KnowledgeChanged) reports
+    /// what it changed after the next step.
     ///
     /// Unstable: needs the `unstable` feature and may change in any release.
     ///
@@ -450,7 +455,8 @@ impl Knowledge {
     /// [`WorldError::Refused`] for an id the game does not know, a bool
     /// above 1, a gained bit the game does not expect when shown, or a
     /// player not in the game or whose save has not loaded yet;
-    /// [`WorldError::Busy`] when a shown gain finds the step's grants full;
+    /// [`WorldError::Busy`] when a shown gain finds the step's grants full,
+    /// with what the set wrote and granted before it kept;
     /// [`WorldError::WrongThread`] off the game thread;
     /// [`WorldError::Unavailable`] on a build without it.
     ///

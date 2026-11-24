@@ -5,4 +5,4 @@
 
 ### Changed
 
-- `rewards::Action::Quest` takes an optional quest id.
+- `rewards::Action::Quest` takes a quest id, and `rewards::Action::AnyQuest` follows every quest.

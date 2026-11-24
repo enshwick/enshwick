@@ -6577,6 +6577,7 @@ quests::QuestInfo::source unstable
 quests::QuestInfo::steps unstable
 quests::QuestInfo::tutorial unstable
 quests::QuestPay unstable
+quests::QuestPay::Allow unstable
 quests::QuestPay::Keep unstable
 quests::QuestPay::Pay unstable
 quests::QuestPay::Refuse unstable
@@ -6584,6 +6585,7 @@ quests::QuestPay::TY unstable
 quests::QuestPay::from_answer unstable
 quests::QuestPayment unstable
 quests::QuestPayment::TY unstable
+quests::QuestPayment::allowed unstable
 quests::QuestPayment::experience unstable
 quests::QuestPayment::from_value unstable
 quests::QuestPayment::into_value unstable
@@ -6868,6 +6870,7 @@ resources::crc64
 resources::fnv1a32
 rewards unstable
 rewards::Action unstable
+rewards::Action::AnyQuest unstable
 rewards::Action::Consume unstable
 rewards::Action::Craft unstable
 rewards::Action::Join unstable

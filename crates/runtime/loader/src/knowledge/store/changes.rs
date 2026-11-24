@@ -276,7 +276,7 @@ pub(crate) fn revoke(
 pub(crate) enum Notice {
     /// Every bit marked seen.
     Quiet,
-    /// Gains granted the game's way, losses written unmarked.
+    /// Gains granted the game's way, losses written with [`lost`]'s mark.
     Shown,
 }
 
@@ -645,12 +645,14 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
     }
 }
 
-/// After a step: raises the revokes of the step before and, now and then,
-/// applies what waits for accounts now in the game.
+/// After a step: raises the revokes and exact sets of the step before, and
+/// what they moved of the quests, and, now and then, applies what waits for
+/// accounts now in the game.
 pub(crate) fn after_step(loader: &Loader, step: u64) {
     let raised = STATE.raised.take();
     for data in &raised {
         loader.emit(Event::KNOWLEDGE_CHANGED, None, (&raw const *data).cast());
+        crate::knowledge::quest_events::changed(loader, data.entity, data.id.get(), data.value);
     }
     if STATE.waiting.load(Ordering::Acquire) && step.is_multiple_of(LOOK_EVERY) {
         settle(loader);
@@ -736,6 +738,25 @@ mod tests {
         assert_eq!(shown(flags, 0b01, 0b11), (vec![1], None));
         assert_eq!(shown(flags, 0b11, 0b11), (vec![], None));
         assert_eq!(shown(flags, 0, 1 << 31), (vec![31], None));
+    }
+
+    #[test]
+    fn a_value_the_loader_writes_reaches_the_quest_events_after_the_step() {
+        use crate::knowledge::quest_events::{follow_for_test, forget, held_for_test};
+        follow_for_test(Entity(2), 7);
+        STATE.raised.push(KnowledgeData {
+            header: Header::of::<KnowledgeData>(),
+            entity: Entity(2),
+            id: enshwick_core::abi::KnowledgeId::new(7),
+            value: 5,
+        });
+        after_step(&crate::start::tests::bare_loader(), 1);
+        assert_eq!(
+            held_for_test(Entity(2), 7),
+            Some(5),
+            "a revoke or reset seen, so a replay raises again"
+        );
+        forget();
     }
 
     #[test]

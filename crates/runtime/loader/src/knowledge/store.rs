@@ -86,7 +86,7 @@ type WorldValueFn = unsafe extern "system" fn(state: *const u8, id: *const u32) 
 type PushFn = unsafe extern "system" fn(queue: *mut u8, request: *const [u8; 16]) -> u8;
 
 /// More player records than a server keeps: a count past it is a misread.
-const MAX_RECORDS: u64 = 4096;
+pub(crate) const MAX_RECORDS: u64 = 4096;
 /// More changes than one update logs: a count past it is a misread.
 const MAX_LOG: u32 = 1 << 16;
 /// The bytes of a trigger request, which the game's push copies whole.

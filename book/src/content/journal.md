@@ -80,7 +80,8 @@ for the game's quests and mods' quests alike:
 
 A game query decides some steps, and the game answers a query in its own
 pass. So the loader asks such a step again for three steps after an entry
-that its query reads changes. What a player holds when they join
+that its query reads changes. A step whose game query reads no knowledge,
+such as one on items, raises nothing. What a player holds when they join
 raises nothing. The entity is 0 when the knowledge that moved is the
 world's.
 
@@ -111,8 +112,10 @@ pays other experience values, or refuses. A refused quest pays nothing and
 still completes. The same value twice pays it twice. The game pays at most
 `limit` values, 3 on server 26430253, and the loader drops the rest with a
 warning. Filters run in load order, and each one sees the payment as the
-filters before it left it. A payment that the game puts off comes again
-in a later step, and the filters see it again.
+filters before it left it. `allowed` is `false` once a filter refused
+it. Other values leave a refusal standing, and `QuestPay::Allow` pays a
+refused quest again. A payment that the game puts off comes again in a
+later step, and the filters see it again.
 
 ```rust
 use enshwick::quests::QuestPay;
@@ -135,8 +138,8 @@ enshwick.quests.on_quest_reward(function(paid)
 end)
 ```
 
-A Luau filter returns `false` to refuse, a list to pay those values, and
-nil to keep the payment.
+A Luau filter returns `false` to refuse and `true` to pay a refused quest
+again. It returns a list to pay those values, and nil to keep the payment.
 
 ## Giving a quest's items
 

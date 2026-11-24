@@ -29,12 +29,16 @@ pub struct QuestPayment {
     /// The most experience values the game pays on this build; the loader
     /// drops the rest with a warning.
     pub limit: u32,
+    /// Whether the game pays it so far: `false` once a filter before
+    /// refused it.
+    pub allowed: bool,
 }
 
 /// What a quest reward filter does with a payment.
 ///
-/// From Luau a filter answers `false` to refuse, a list of experience
-/// values to pay those instead, and nil or `true` to keep it.
+/// From Luau a filter answers `false` to refuse, `true` to pay what a
+/// filter before refused, a list of experience values to pay those
+/// instead, and nil to keep it.
 ///
 /// # Examples
 ///
@@ -42,12 +46,15 @@ pub struct QuestPayment {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum QuestPay {
-    /// The payment goes on as it is.
+    /// The payment goes on as it is, refused or not.
     Keep,
     /// The game pays nothing, and the quest still completes.
     Refuse,
+    /// The game pays the payment as the filters before left its values,
+    /// though one of them refused it.
+    Allow,
     /// The game pays these experience values instead, which the filters
-    /// after this one see.
+    /// after this one see; a payment a filter before refused stays refused.
     Pay(Vec<ExperienceValue>),
 }
 
@@ -57,6 +64,7 @@ impl Answer for QuestPay {
     fn from_answer(answer: Result<Value, Error>) -> Self {
         match answer {
             Ok(Value::Bool(false)) => Self::Refuse,
+            Ok(Value::Bool(true)) => Self::Allow,
             Ok(list @ Value::List(_)) => {
                 Vec::<ExperienceValue>::from_value(list).map_or(Self::Keep, Self::Pay)
             }
@@ -76,6 +84,7 @@ impl QuestPayment {
                 .map(|&id| ExperienceValue::new(id))
                 .collect(),
             limit: raw.limit,
+            allowed: raw.allowed != 0,
         }
     }
 }
@@ -86,13 +95,14 @@ fn answer(pay: QuestPay, raw: &mut RawPayment) -> u8 {
     match pay {
         QuestPay::Keep => crate::abi::FILTER_PASS,
         QuestPay::Refuse => crate::abi::FILTER_REFUSE,
+        QuestPay::Allow => crate::abi::FILTER_YES,
         QuestPay::Pay(experience) => {
             let kept = experience.len().min(raw.experience.len());
             for (slot, value) in raw.experience.iter_mut().zip(&experience) {
                 *slot = value.get();
             }
             raw.count = u32::try_from(kept).unwrap_or(0);
-            crate::abi::FILTER_YES
+            crate::abi::FILTER_PASS
         }
     }
 }
@@ -172,17 +182,19 @@ mod tests {
     }
 
     #[test]
-    fn a_verdict_keeps_refuses_or_writes_the_values_it_pays() {
+    fn a_verdict_keeps_refuses_allows_or_writes_the_values_it_pays() {
         let mut call = raw(1);
         assert_eq!(answer(QuestPay::Keep, &mut call), crate::abi::FILTER_PASS);
         assert_eq!(
             answer(QuestPay::Refuse, &mut call),
             crate::abi::FILTER_REFUSE
         );
+        assert_eq!(answer(QuestPay::Allow, &mut call), crate::abi::FILTER_YES);
         let twice = vec![ExperienceValue::new(9); 2];
         assert_eq!(
             answer(QuestPay::Pay(twice), &mut call),
-            crate::abi::FILTER_YES
+            crate::abi::FILTER_PASS,
+            "new values leave a refusal before standing"
         );
         assert_eq!((call.count, &call.experience[..2]), (2, &[9, 9][..]));
         let long = vec![ExperienceValue::new(1); RawPayment::MAX + 4];
@@ -191,11 +203,16 @@ mod tests {
     }
 
     #[test]
-    fn a_script_answers_false_to_refuse_a_list_to_pay_and_nil_to_keep() {
+    fn a_script_answers_false_to_refuse_true_to_allow_a_list_to_pay_and_nil_to_keep() {
         assert_eq!(
             QuestPay::from_answer(Ok(Value::Bool(false))),
             QuestPay::Refuse
         );
+        assert_eq!(
+            QuestPay::from_answer(Ok(Value::Bool(true))),
+            QuestPay::Allow
+        );
+        assert!(QuestPayment::of(&raw(1)).allowed);
         assert_eq!(QuestPay::from_answer(Ok(Value::Nil)), QuestPay::Keep);
         assert_eq!(
             QuestPay::from_answer(Ok(Value::List(vec![Value::Number(5.0)]))),

@@ -610,7 +610,7 @@ impl KnowledgeChange {
     pub const QUIET: u8 = 0;
     /// A notice of [`HostApi::knowledge_set`](super::HostApi::knowledge_set):
     /// what the value gains granted as the game grants it, what it loses
-    /// written with no bit marked seen.
+    /// written with the mark of flags kept and none for a bool or a counter.
     pub const SHOWN: u8 = 1;
 }
 
