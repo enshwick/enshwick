@@ -10,9 +10,10 @@
 //!
 //! The markers of the held windows' maps show on the game's own map as the
 //! loader's, and the windows step aside while the Map screen is open, so
-//! the player sees the map and sets the waypoint the server reads.
+//! the player sees the map and sets the waypoint the server reads. The
+//! game's map key opens it under a window with a map, as does its button.
 
-use core::cell::RefCell;
+use core::cell::{Cell, RefCell};
 use std::sync::{Arc, Mutex};
 
 use arc_swap::ArcSwapOption;
@@ -138,8 +139,8 @@ struct Drawn {
     /// aside for.
     map_screen: Option<u8>,
     /// The Map screen's byte while the build can also open it from the
-    /// window, set each frame: the modal window takes the game's map key,
-    /// so its Map items open the map with a button.
+    /// window, set each frame: its Map items open the map with a button too,
+    /// on a build whose windows do not let the game's map key through.
     map_opens: Option<u8>,
     /// The tries left for a map open the interface refused, such as on a
     /// full queue; `None` while none waits.
@@ -192,6 +193,25 @@ impl Drawn {
             (Click::Nothing, Some(map)) => Click::OpenMap(map),
             (click, _) => click,
         }
+    }
+
+    /// Whether the window steps aside on `screen`, the screen the player
+    /// sees: the Map screen, opened with the map key or as the in-game
+    /// menu's Map tab, which [`Tab::seen`] names by the Map screen too.
+    ///
+    /// [`Tab::seen`]: crate::actions::client_control::Tab::seen
+    fn aside(&self, screen: Option<u8>) -> bool {
+        screen.is_some() && screen == self.map_screen
+    }
+
+    /// Whether the game's map key reaches the game under the window: it
+    /// holds a Map item, and no field of it has the caret, so a letter typed
+    /// there stays in the field.
+    fn passes_map(&self, view: &View) -> bool {
+        view.items
+            .iter()
+            .any(|item| matches!(item, ItemView::Map(_)))
+            && !self.fields.iter().any(|(_, field)| field.text.typing())
     }
 
     /// Leaves the window undrawn while the Map screen is open, keeping its
@@ -259,6 +279,9 @@ impl Drawn {
 
 thread_local! {
     static DRAWN: RefCell<Option<Drawn>> = const { RefCell::new(None) };
+    /// Whether this frame's draw wants the game's map key let through,
+    /// taken by [`pass_map`] once every window of the frame drew.
+    static MAP_WANTED: Cell<bool> = const { Cell::new(false) };
 }
 
 /// What the player did in a window this frame.
@@ -295,7 +318,9 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize, screen: Option<u8>) {
         let Some(drawn) = slot.as_mut() else {
             return Click::Nothing;
         };
-        if screen.is_some() && screen == drawn.map_screen {
+        let aside = drawn.aside(screen);
+        MAP_WANTED.set(!aside && drawn.passes_map(&top.view));
+        if aside {
             drawn.step_aside();
             return Click::Nothing;
         }
@@ -354,6 +379,32 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize, screen: Option<u8>) {
         }
         Click::Nothing | Click::Form(_) | Click::Cancel => {}
     }
+}
+
+/// Ends the frame's map key: lets it through the game's modal windows only
+/// while this frame drew a carried window that wants it, `drawn` is whether
+/// the loader's windows drew at all (not under the game's own popup), and
+/// no field of any window has the caret. Called on every frame with a
+/// context, so a skipped or fused-off draw gives the game its keys back.
+///
+/// # Safety
+///
+/// - Called inside a frame of the game's interface update, on its thread,
+///   after every window of the frame drew.
+/// - `context` is the non-zero context `Engine::context` read in this frame.
+pub(super) unsafe fn pass_map(engine: &Engine, context: usize, drawn: bool) {
+    let wanted = map_wanted(MAP_WANTED.take(), drawn, super::engine::caret_shown());
+    if let Some(keys) = &engine.map_keys {
+        // SAFETY: the caller's contract: inside the interface frame, on its
+        // thread, with its live `context`.
+        unsafe { keys.pass(context, wanted) };
+    }
+}
+
+/// Whether the map key passes: a draw asked for it, the loader's windows
+/// drew this frame, and no field types.
+const fn map_wanted(asked: bool, drawn: bool, typing: bool) -> bool {
+    asked && drawn && !typing
 }
 
 /// Draws `view` as one window; what the player did.

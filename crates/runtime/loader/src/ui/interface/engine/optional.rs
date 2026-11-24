@@ -1,5 +1,5 @@
 use super::popup::{NodeMap, PopupRoot};
-use super::{DialogLayout, MenuLayout, Missing, hint, rows, scroll, text_field};
+use super::{DialogLayout, MenuLayout, Missing, hint, pass, rows, scroll, text_field};
 use crate::engine::fuse::Fuse;
 use crate::engine::interface_parts::Part;
 use crate::engine::loader::Loader;
@@ -9,6 +9,9 @@ static SCROLLING_FUSE: Fuse = Fuse::new("scrolling on the Mods screen (lists pag
 /// The Mods screen edits text settings; off, they are read-only.
 static TEXT_FIELDS_FUSE: Fuse = Fuse::new("text settings on the Mods screen (read-only)");
 static HINTS_FUSE: Fuse = Fuse::new("input hints");
+/// The game's map key opens the map under a carried window with a map; off,
+/// only the window's button does.
+static MAP_KEYS_FUSE: Fuse = Fuse::new("the map key under carried windows (their button opens it)");
 /// The Mods screen lays settings out in rows; off, they stack.
 static ROWS_FUSE: Fuse = Fuse::new("rows on the Mods screen (stacked)");
 /// Back closes the loader's windows, screens and dialogs; off, their buttons
@@ -28,6 +31,7 @@ pub(super) struct Optional {
     pub(super) scroll: Option<scroll::Scrolling>,
     pub(super) text_fields: Option<text_field::TextFields>,
     pub(super) hint: Option<hint::InputHints>,
+    pub(super) map_keys: Option<pass::MapKeys>,
     pub(super) rows: Option<rows::Rows>,
 }
 
@@ -90,6 +94,9 @@ impl Optional {
                 .ok(),
             hint: hint::InputHints::resolve(loader)
                 .inspect_err(off(&HINTS_FUSE))
+                .ok(),
+            map_keys: pass::MapKeys::resolve(loader)
+                .inspect_err(off(&MAP_KEYS_FUSE))
                 .ok(),
             rows: rows::Rows::resolve(loader)
                 .inspect_err(off(&ROWS_FUSE))

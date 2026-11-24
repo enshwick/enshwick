@@ -376,6 +376,52 @@ fn map_view() -> View {
 }
 
 #[test]
+fn the_window_steps_aside_on_the_map_screen_and_on_the_in_game_menu_s_map_tab() {
+    // Client 26430625: the Map screen is 5, the in-game menu 4, its
+    // Backpack tab 9; the menu on its Map tab is seen as the Map screen.
+    let mut drawn = drawn();
+    drawn.map_screen = Some(5);
+    assert!(
+        drawn.aside(Some(5)),
+        "the map, by its key or the menu's tab"
+    );
+    assert!(!drawn.aside(Some(9)), "the menu on its Backpack tab");
+    assert!(!drawn.aside(Some(4)), "the menu without the tab read");
+    assert!(!drawn.aside(None), "a tab the build adds");
+    drawn.map_screen = None;
+    assert!(!drawn.aside(None), "a build without the Map screen");
+}
+
+#[test]
+fn the_map_key_passes_only_under_a_window_with_a_map_and_no_typing() {
+    let mut drawn = drawn();
+    assert!(drawn.passes_map(&map_view()));
+    assert!(!drawn.passes_map(&view("Kick")), "no map in the window");
+    let text = ArgView {
+        kind: ArgView::TEXT,
+        ..ArgView::default()
+    };
+    drawn.field("say", 0, &text).text.start_typing();
+    assert!(!drawn.passes_map(&map_view()), "M is typed into the field");
+    drawn.back();
+    assert!(drawn.passes_map(&map_view()), "the typing ended");
+}
+
+#[test]
+fn the_map_key_passes_only_in_a_frame_whose_windows_drew_and_where_nothing_types() {
+    assert!(map_wanted(true, true, false));
+    assert!(!map_wanted(false, true, false), "no carried draw asked");
+    assert!(
+        !map_wanted(true, false, false),
+        "the game's own popup is up"
+    );
+    assert!(
+        !map_wanted(true, true, true),
+        "a field of another window types"
+    );
+}
+
+#[test]
 fn a_map_draws_its_line_and_a_button_that_opens_the_map() {
     let paint = Recorder::default();
     let mut drawn = drawn();

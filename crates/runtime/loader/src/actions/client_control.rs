@@ -820,6 +820,8 @@ mod tests {
         );
         assert_eq!(seen(&state, menu), [Some(character), Some(menu)]);
         assert_eq!(seen(&state, chest), [Some(chest), None], "no menu open");
+        put(&mut state, 0x3_1e88, MenuTab::Map.index());
+        assert_eq!(seen(&state, menu), [Some(5), Some(menu)], "the Map screen");
         put(&mut state, 0x3_1e88, 7u64);
         assert_eq!(
             seen(&state, menu),

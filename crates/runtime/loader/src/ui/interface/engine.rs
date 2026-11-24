@@ -633,6 +633,9 @@ pub(crate) struct Engine {
     text_fields: Option<text_field::TextFields>,
     /// The game's key hint; `None` refuses mods' input hints.
     pub(super) hint: Option<hint::InputHints>,
+    /// The keys the game's modal windows let through; `None` leaves the
+    /// map's to the carried windows' button.
+    pub(super) map_keys: Option<pass::MapKeys>,
     /// The row frame and the separator; `None` stacks a row's cells.
     rows: Option<rows::Rows>,
     window_begin: WindowBeginFn,
@@ -775,6 +778,7 @@ impl Engine {
             scroll,
             text_fields,
             hint,
+            map_keys,
             rows,
         } = Optional::resolve(loader, &mut parts_off);
         let on = |part: Part| !parts_off.iter().any(|(p, _)| *p == part);
@@ -809,6 +813,7 @@ impl Engine {
             scroll,
             text_fields,
             hint,
+            map_keys,
             rows,
             window_begin: function!(pinned::ui::WINDOW_BEGIN, WindowBeginFn),
             window_end: function!(pinned::ui::WINDOW_END, OneFn),
@@ -954,6 +959,7 @@ mod hud;
 mod looks;
 mod menus;
 mod optional;
+mod pass;
 mod popup;
 mod rows;
 mod scroll;
@@ -971,5 +977,5 @@ pub(super) use popup::note_root;
 use popup::{NodeMap, PopupRoot};
 pub(super) use rows::{Row, SlotRow};
 pub(super) use scroll::Scroll;
-pub(super) use text_field::{CLICKED, TextBuffer, Typed, caret_next_frame};
+pub(super) use text_field::{CLICKED, TextBuffer, Typed, caret_next_frame, caret_shown};
 pub(super) use widgets::Takes;

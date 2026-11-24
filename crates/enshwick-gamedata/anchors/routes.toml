@@ -9507,6 +9507,75 @@ take = "value"
 range = [0x18f38, 0x63d10]
 
 [[route]]
+id = "~ui_update"
+sides = ["client"]
+callers = "ui.popup"
+shape = ["lea rcx,[rsp+?]", "call ?b", "mov rcx,rax", "call {ui.popup}", "lea rcx,[rbp+?]"]
+
+[[route]]
+id = "ui.pass_refresh"
+sides = ["client"]
+callees = "~ui_update"
+shape = ["mov rcx,{ui.context}", "lea rdx,[rsp+?]", "call ?b", "mov rax,[rsp+?]", "cmp rax,0x11"]
+check = ["push rbx", "sub rsp,?", "mov rcx,[rip+?]"]
+
+[[route]]
+id = "ui.pass_bindings"
+sides = ["client"]
+in = "ui.pass_refresh"
+shape = ["mov dl,?i", "mov [rsp+?],rax", "mov qword [rsp+?],0x10", "call *"]
+take = "address"
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rdi", "push rbp"]
+
+[[route]]
+id = "ui.pass_set"
+sides = ["client"]
+in = "ui.pass_refresh"
+shape = ["mov rcx,{ui.context}", "lea rdx,[rsp+?]", "call *"]
+take = "address"
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rsi", "push rdi", "sub rsp,?i", "mov rax,[rcx+?]"]
+
+[[route]]
+id = "ui.pass_holder"
+sides = ["client"]
+in = "ui.pass_set"
+shape = ["mov rax,[rcx+*]", "xor r8d,r8d"]
+take = "value"
+range = [8, 32]
+
+[[route]]
+id = "ui.pass_count"
+sides = ["client"]
+in = "ui.pass_set"
+shape = ["xor r8d,r8d", "mov [rax+*],r8"]
+take = "value"
+range = [0x348, 0xd20]
+
+[[route]]
+id = "ui.pass_keys"
+sides = ["client"]
+in = "ui.pass_set"
+shape = ["mov rbx,[rdx+0x8]", "add rdi,*"]
+take = "value"
+range = [0x344, 0xd10]
+
+[[route]]
+id = "ui.pass_on"
+sides = ["client"]
+in = "ui.window_end"
+shape = ["cmp byte [?1+*],0x0", "je ?b", "mov ?r,[?1+?]"]
+take = "value"
+range = [0x498, 0x1260]
+
+[[route]]
+id = "ui.pass_key_size"
+sides = ["client"]
+in = "ui.window_end"
+shape = ["inc ?1", "add ?r,*", "cmp ?1,?r"]
+take = "value"
+range = [20, 80]
+
+[[route]]
 id = "ui.return_screen"
 sides = ["client"]
 in = "~in_game_menu"
