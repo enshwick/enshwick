@@ -4,10 +4,14 @@
 //! runs the newest one kept for its base on main and then its own, back to
 //! back, so both see the same load. The executables live in the clone's own
 //! `target/kept-benches`, which every worktree of the clone shares, unless
-//! [`KEPT_VAR`] names another folder.
+//! [`KEPT_VAR`] names another folder. A kept executable runs from the
+//! branch's package folder, with the branch's files, and under the build
+//! settings it was kept with; the commit pins the toolchain, but not
+//! settings such as `RUSTFLAGS` set for one run.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::SystemTime;
 
 use crate::commands::check::git;
 use crate::{cargo, say};
@@ -56,6 +60,11 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
             .join(&args.name)
             .with_extension(std::env::consts::EXE_EXTENSION)
     };
+    if git(&["fetch", "--quiet", "origin", "main"]).is_none() {
+        say(&format!(
+            "could not fetch main: comparing with {MAIN} as it is here"
+        ));
+    }
     let base = line(&["merge-base", "HEAD", MAIN]).ok_or("no merge base with origin/main")?;
     let on_main = line(&["rev-parse", "HEAD"]).as_ref() == Some(&base)
         && git(&["status", "--porcelain"]).is_some_and(|status| status.trim().is_empty());
@@ -65,7 +74,7 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
         &format!("--max-count={LOOKBACK}"),
         &base,
     ])
-    .unwrap_or_default();
+    .ok_or_else(|| format!("git rev-list could not list main before {base}"))?;
     let history: Vec<&str> = history.lines().collect();
     let plan = plan(on_main, &base, &history, |commit| kept(commit).is_file());
     let built = build(&target, &args.name)?;
@@ -82,10 +91,8 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
         Plan::Keep(commit) => {
             let to = kept(&commit);
             say(&format!("keeping main at {commit} in {}", to.display()));
-            if let Some(dir) = to.parent() {
-                std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-            }
-            std::fs::copy(&built, &to).map_err(|e| format!("{}: {e}", to.display()))?;
+            keep(&built, &to)?;
+            prune(&kept_dir);
             bench(&built, &[])
         }
         Plan::Compare { commit, behind } => {
@@ -93,8 +100,8 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
                 "running main at {commit}, {behind} commits before the base, then the branch"
             ));
             let baseline = format!("main-{commit}");
-            Ok(bench(&kept(&commit), &["--save-baseline", &baseline])?
-                && bench(&built, &["--baseline", &baseline])?)
+            let [main, branch] = compare_flags(&baseline);
+            Ok(bench(&kept(&commit), &main)? && bench(&built, &branch)?)
         }
         Plan::Alone => {
             say(&format!(
@@ -120,6 +127,58 @@ fn plan(on_main: bool, base: &str, history: &[&str], saved: impl Fn(&str) -> boo
             commit: history[behind].to_owned(),
             behind,
         })
+}
+
+/// The criterion flags of main's run and the branch's: lenient, so a
+/// benchmark the branch adds runs alone instead of failing the comparison.
+fn compare_flags(baseline: &str) -> [[&str; 2]; 2] {
+    [
+        ["--save-baseline", baseline],
+        ["--baseline-lenient", baseline],
+    ]
+}
+
+/// Copies `from` to `to` under a name of its own first, so a run in another
+/// worktree never starts a half-written executable; one kept already stays.
+fn keep(from: &Path, to: &Path) -> Result<(), String> {
+    if to.is_file() {
+        return Ok(());
+    }
+    let dir = to.parent().ok_or("a kept executable has no folder")?;
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let partial = to.with_extension(format!("partial-{}", std::process::id()));
+    std::fs::copy(from, &partial).map_err(|e| format!("{}: {e}", partial.display()))?;
+    if let Err(error) = std::fs::rename(&partial, to) {
+        let _removed = std::fs::remove_file(&partial);
+        if !to.is_file() {
+            return Err(format!("{}: {error}", to.display()));
+        }
+    }
+    Ok(())
+}
+
+/// Removes the kept commits beyond the newest [`LOOKBACK`], which no run
+/// compares with any more; a folder in use stays until a later run.
+fn prune(kept_dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(kept_dir) else {
+        return;
+    };
+    let dirs = entries.filter_map(Result::ok).filter_map(|entry| {
+        let changed = entry.metadata().ok()?.modified().ok()?;
+        Some((entry.path(), changed))
+    });
+    for dir in stale(dirs.collect()) {
+        let _removed = std::fs::remove_dir_all(dir);
+    }
+}
+
+/// The kept folders past the newest [`LOOKBACK`] by when they changed.
+fn stale(mut dirs: Vec<(PathBuf, SystemTime)>) -> Vec<PathBuf> {
+    dirs.sort_by_key(|dir| std::cmp::Reverse(dir.1));
+    dirs.into_iter()
+        .skip(LOOKBACK)
+        .map(|(dir, _)| dir)
+        .collect()
 }
 
 /// Builds the bench target `name` as `cargo bench` does and gives its
@@ -176,16 +235,30 @@ fn bench_target(name: &str) -> Result<Target, String> {
         .args(["metadata", "--format-version", "1", "--no-deps"])
         .output()
         .map_err(|error| format!("running cargo metadata: {error}"))?;
+    if !output.status.success() {
+        return Err("cargo metadata failed".to_owned());
+    }
     let metadata: serde_json::Value = serde_json::from_slice(&output.stdout)
         .map_err(|error| format!("reading cargo metadata: {error}"))?;
     for package in metadata["packages"].as_array().into_iter().flatten() {
         for target in package["targets"].as_array().into_iter().flatten() {
             if target["name"] == name && target["kind"] == serde_json::json!(["bench"]) {
                 let features = target["required-features"].as_array().into_iter().flatten();
-                let manifest = Path::new(package["manifest_path"].as_str().unwrap_or_default());
+                let missing = |field| format!("cargo metadata gave {name} no package {field}");
+                let manifest = Path::new(
+                    package["manifest_path"]
+                        .as_str()
+                        .ok_or_else(|| missing("manifest_path"))?,
+                );
                 return Ok(Target {
-                    package: package["name"].as_str().unwrap_or_default().to_owned(),
-                    dir: manifest.parent().unwrap_or(manifest).to_owned(),
+                    package: package["name"]
+                        .as_str()
+                        .ok_or_else(|| missing("name"))?
+                        .to_owned(),
+                    dir: manifest
+                        .parent()
+                        .ok_or_else(|| missing("folder"))?
+                        .to_owned(),
                     features: features
                         .filter_map(|f| f.as_str().map(str::to_owned))
                         .collect(),
@@ -230,6 +303,50 @@ mod tests {
     #[test]
     fn a_branch_runs_alone_when_no_main_commit_is_kept() {
         assert_eq!(plan(false, "c3", &HISTORY, |_| false), Plan::Alone);
+    }
+
+    #[test]
+    fn the_branch_compares_leniently_so_a_new_benchmark_runs_alone() {
+        assert_eq!(
+            compare_flags("main-c2"),
+            [
+                ["--save-baseline", "main-c2"],
+                ["--baseline-lenient", "main-c2"]
+            ]
+        );
+    }
+
+    #[test]
+    fn keeping_writes_the_executable_whole_and_leaves_one_kept_already() {
+        let dir = std::env::temp_dir().join(format!("xtask-bench-keep-{}", std::process::id()));
+        let from = dir.join("built.exe");
+        let to = dir.join("c3").join("client_build.exe");
+        std::fs::create_dir_all(&dir).expect("temp folder");
+        std::fs::write(&from, b"new").expect("built executable");
+        keep(&from, &to).expect("first keep");
+        std::fs::write(&from, b"newer").expect("rebuilt executable");
+        keep(&from, &to).expect("second keep");
+        let kept = std::fs::read(&to).expect("kept executable");
+        let leftovers = std::fs::read_dir(to.parent().expect("folder"))
+            .expect("kept folder")
+            .count();
+        std::fs::remove_dir_all(&dir).expect("cleanup");
+        assert_eq!((kept.as_slice(), leftovers), (b"new".as_slice(), 1));
+    }
+
+    #[test]
+    fn pruning_drops_only_the_kept_commits_past_the_newest_lookback() {
+        let start = SystemTime::UNIX_EPOCH;
+        let dirs: Vec<_> = (0..LOOKBACK as u64 + 2)
+            .map(|age| {
+                let changed = start + std::time::Duration::from_secs(1_000 - age);
+                (PathBuf::from(format!("c{age}")), changed)
+            })
+            .collect();
+        let expected: Vec<_> = (LOOKBACK as u64..LOOKBACK as u64 + 2)
+            .map(|age| PathBuf::from(format!("c{age}")))
+            .collect();
+        assert_eq!(stale(dirs), expected);
     }
 
     #[test]
