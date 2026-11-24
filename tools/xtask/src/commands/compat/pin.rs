@@ -191,7 +191,8 @@ fn typed(
 /// the renames its diff found in the rename table and, for a server build,
 /// the typed API regenerated.
 fn write_typed(args: &Args, data: &Path, typed: &Typed, new_fp: Fingerprint) -> anyhow::Result<()> {
-    generate::write_snapshot(data, &typed.reflected, typed.side, new_fp)?;
+    let steam = args.steam_build.map(enshwick_gamedata::SteamBuild::new);
+    generate::write_snapshot(data, &typed.reflected, typed.side, new_fp, steam)?;
     let renames = args.repo.join(enshwick_gamedata::typed::RENAMES);
     if typed.renames != generate::renames(&args.repo)? {
         let text = typed.renames.to_toml().context("the rename table")?;

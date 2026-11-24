@@ -5,9 +5,9 @@
 use std::path::{Path, PathBuf};
 
 /// The dedicated server's Steam app.
-pub(crate) const SERVER_APP: u32 = 2_278_520;
+pub(crate) const SERVER_APP: u32 = enshwick_gamedata::Side::Server.steam_app();
 /// The game's Steam app.
-pub(crate) const GAME_APP: u32 = 1_203_620;
+pub(crate) const GAME_APP: u32 = enshwick_gamedata::Side::Client.steam_app();
 
 /// An install Steam knows of.
 #[derive(Debug, Clone, PartialEq, Eq)]

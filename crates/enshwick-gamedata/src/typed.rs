@@ -288,8 +288,10 @@ pub fn build_name(table: &crate::Table) -> String {
 }
 
 /// The words a generated file's header names the build of the snapshot
-/// `path` by: its kept table's [`build_name`] among `tables`, else its side
-/// and the linker age in its file name, with the Steam build `steam` the
+/// `path` by.
+///
+/// They are its kept table's [`build_name`] among `tables`, else its side
+/// and the linker age in its file name, with the Steam build `recorded` the
 /// snapshot records.
 ///
 /// # Examples
@@ -308,7 +310,7 @@ pub fn build_name(table: &crate::Table) -> String {
 pub fn snapshot_build(
     path: &std::path::Path,
     tables: &[crate::Table],
-    steam: Option<crate::SteamBuild>,
+    recorded: Option<crate::SteamBuild>,
 ) -> String {
     let name = path
         .file_name()
@@ -331,8 +333,8 @@ pub fn snapshot_build(
             ))
         })
         .unwrap_or_else(|| name.to_owned());
-    match steam {
-        Some(steam) => format!("{build} (Steam {steam})"),
+    match recorded {
+        Some(id) => format!("{build} (Steam {id})"),
         None => build,
     }
 }

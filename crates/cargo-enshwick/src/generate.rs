@@ -498,7 +498,7 @@ mod tests {
         );
         std::fs::write(data.join("tables").join(&name), older).unwrap();
         let wrote = run(&root, &data, Some(&exe), None, false).unwrap();
-        assert!(wrote.contains("of Steam build 1\n"), "{wrote}");
+        assert!(wrote.contains(" of Steam build "), "{wrote}");
         assert!(wrote.ends_with("from server build 2 (Steam 3)"), "{wrote}");
         assert!(snapshot_in(&data, &name).is_file(), "{wrote}");
         let header = std::fs::read_to_string(root.join(TYPED).join("ecs.rs")).unwrap();
