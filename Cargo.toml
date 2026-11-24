@@ -180,9 +180,11 @@ panic = "unwind"
 debug = "line-tables-only"
 strip = "none"
 
-# Benches build as the loader DLL ships, without cross-crate LTO, so their
-# numbers are the shipped code's; a fat-LTO link per bench took about 190 s of
-# a 340 s build (2026-11-24). Once the DLL ships with fat LTO, this goes back.
+# Every bench of the workspace builds as the loader and mod DLLs ship, without
+# cross-crate LTO, so their numbers are the shipped code's; a fat-LTO link per
+# bench took about 190 s of a 340 s build (2026-11-24). Code that also ships in
+# a fat-LTO binary (enshwick-gamedata in cargo-enshwick) runs faster there than
+# its bench shows. Once the DLLs ship with fat LTO, this goes back.
 # Build one bench at a time with `cargo xtask bench <name>`, which compares
 # with main's kept executable instead of building main again.
 [profile.bench]
