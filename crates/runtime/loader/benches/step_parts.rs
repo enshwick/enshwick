@@ -115,7 +115,7 @@ fn step_parts(c: &mut Criterion) {
     group.bench_function("walked_by_part", |b| {
         b.iter(|| walked_by_part(black_box(&STEPS), black_box(&stepping)));
     });
-    #[cfg(all(windows, feature = "test"))]
+    #[cfg(windows)]
     {
         let mut idle = enshwick_loader::bench::bench_waypoint_idle_step();
         assert!(idle(), "nothing watches the waypoints without a loader");

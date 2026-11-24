@@ -124,6 +124,7 @@ required-features = ["test"]
 [[bench]]
 name = "step_parts"
 harness = false
+required-features = ["test"]
 
 [[bench]]
 name = "linked_controls"
