@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 21
+#define ENSHWICK_ABI_MINOR 22
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -1796,6 +1796,25 @@ typedef uint32_t EnshwickEvent;
 // back from there does. A mod's waypoint handler hears it. The name
 // is enshwick's. Server only. ABI 12.16.
 #define EnshwickEvent_WAYPOINT_CHANGED 27
+// A player, or the world for a quest of the world's, started a quest:
+// the journal shows its first step now, by the knowledge the step asks
+// for, and did not before; data is a `EnshwickQuestData`. A quest whose first
+// step always shows raises none. Raised on the game thread after the
+// step that changed that knowledge, a mod's change included; what a
+// player holds when they join raises nothing. The name is enshwick's.
+// Server only. ABI 12.22.
+#define EnshwickEvent_QUEST_STARTED 28
+// A step of a quest is done for a player or the world: the knowledge
+// its completion asks for holds now and did not before; data is a
+// `EnshwickQuestStepData`. Raised as `EnshwickEvent_QUEST_STARTED` is. The name is
+// enshwick's. Server only. ABI 12.22.
+#define EnshwickEvent_QUEST_STEP_DONE 29
+// A counter one of a quest step's progress parts counts changed, such
+// as a mod's objective; data is a `EnshwickQuestProgressData` with the count
+// now and the count the part asks for. Raised as
+// `EnshwickEvent_QUEST_STARTED` is, for each change of the counter. The
+// name is enshwick's. Server only. ABI 12.22.
+#define EnshwickEvent_QUEST_PROGRESSED 30
 
 // A mod event a mod defines, or the one it subscribes to.
 typedef struct EnshwickEventSpec {
@@ -3047,6 +3066,13 @@ typedef struct EnshwickKnowledgeChange {
 #define EnshwickKnowledgeChange_GRANT 0
 // Takes the value back.
 #define EnshwickKnowledgeChange_REVOKE 1
+// A notice of `EnshwickHostApi.knowledge_set`:
+// the value written with every bit marked seen, as a save loads it.
+#define EnshwickKnowledgeChange_QUIET 0
+// A notice of `EnshwickHostApi.knowledge_set`:
+// what the value gains granted as the game grants it, what it loses
+// written with no bit marked seen.
+#define EnshwickKnowledgeChange_SHOWN 1
 
 // One widget, drawn with `EnshwickHostApi.ui_widget`: `kind` says which, and
 // which fields it reads; the loader writes `index`, `value` and `result`
@@ -4145,15 +4171,79 @@ typedef struct EnshwickPropRemove {
 // `EnshwickTransactionInfo.holds`); without it, such a prop is refused.
 #define EnshwickPropRemove_DISCARD_STATE 1
 
-// The data of the `QuestCompleted` event.
+// The data of the `QuestCompleted`
+// and `QuestStarted` events.
 typedef struct EnshwickQuestData {
   // Size and version of this struct.
   struct EnshwickHeader header;
-  // The player's character.
+  // The player's character; 0 for a quest of the world's that started.
   EnshwickEntity entity;
   // The quest's id, a player knowledge id.
   EnshwickKnowledgeId quest;
 } EnshwickQuestData;
+
+// What the game pays a player for a quest, handed to the filters
+// registered with `EnshwickHostApi.quest_reward_filter`
+// as the filters before left it.
+//
+// The game pays a quest's experience and sets the quest's bool; the items
+// its journal draws as rewards it never pays, so they are not here.
+typedef struct EnshwickQuestPayment {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The player's character.
+  EnshwickEntity entity;
+  // The quest's id.
+  EnshwickKnowledgeId quest;
+  // How many of `experience` the game pays, from the first.
+  uint32_t count;
+  // The most the game pays on this build: the loader pays the first
+  // `limit` of `experience` and drops the rest with a warning.
+  uint32_t limit;
+  // 1 while the game pays it; 0 pays nothing, and the quest still
+  // completes.
+  uint8_t allowed;
+  // Zero.
+  uint8_t reserved[3];
+  // The experience values the game pays, each an experience value id of
+  // the game's, as `ExperienceValue` names them; the same id twice pays
+  // it twice.
+  uint32_t experience[8];
+} EnshwickQuestPayment;
+// How many experience values the struct holds.
+#define EnshwickQuestPayment_MAX 8
+
+// The data of the `QuestProgressed` event.
+typedef struct EnshwickQuestProgressData {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The player's character, or 0 for the world's knowledge.
+  EnshwickEntity entity;
+  // The quest's id.
+  EnshwickKnowledgeId quest;
+  // The step's place among the quest's steps, from 0.
+  uint32_t step;
+  // The part's place among the step's progress parts, from 0.
+  uint32_t part;
+  // The counter's value now.
+  uint32_t value;
+  // The count the part asks for: it holds at this count, or above it
+  // for a part that asks for at least the count.
+  uint32_t target;
+} EnshwickQuestProgressData;
+
+// The data of the `QuestStepDone` event.
+typedef struct EnshwickQuestStepData {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The player's character, or 0 for the world's knowledge.
+  EnshwickEntity entity;
+  // The quest's id.
+  EnshwickKnowledgeId quest;
+  // The step's place among the quest's steps, from 0, as the journal
+  // lists them.
+  uint32_t step;
+} EnshwickQuestStepData;
 
 // The general-purpose registers and flags at a mid-function hook, as the
 // interrupted game code had them.
@@ -4811,6 +4901,20 @@ typedef void (*EnshwickNetMessageFn)(const struct EnshwickNetMessage *message, v
 // `EnshwickStatus_BAD_ARGS` and keeps nothing.
 // Runs on the thread that asks the point.
 typedef EnshwickPointVerdict (*EnshwickPointFn)(const void *input, void *value, void *user);
+
+// A mod's quest reward filter, which may change the payment in place.
+//
+// It gets the payment and the pointer given at registration, and returns
+// `FILTER_REFUSE` to pay nothing,
+// `FILTER_YES` to pay again what a filter before
+// refused, else `FILTER_PASS`.
+//
+// Null is never a callback: the loader refuses a null one with
+// `EnshwickStatus_BAD_ARGS` and keeps nothing.
+// Runs on the thread of the game's quest reward system, the game thread or
+// a task worker. A payment the game puts off, as when it cannot queue the
+// quest's bool, comes again on a later step, and the filters see it again.
+typedef uint8_t (*EnshwickQuestRewardFilterFn)(struct EnshwickQuestPayment *call, void *user);
 
 // A mod's rename filter: the call and the pointer given at registration;
 // returns `FILTER_REFUSE` to refuse the rename, else `FILTER_PASS`.
@@ -7314,6 +7418,40 @@ typedef struct EnshwickHostApi {
   // `EnshwickStatus_BAD_ARGS` for a key a mod control may not take, or a
   // modifier the game's bindings do not list. Any thread. ABI 12.20.
   EnshwickStatus (*game_rebind)(EnshwickModHandle me, struct EnshwickStr action, uint32_t key);
+  // Registers a filter on what the game pays a player for a quest, the
+  // quest's experience, before it pays it and sets the quest's bool.
+  // Filters run in load order, each with the payment as the filters
+  // before left it, on the thread of the game's quest reward system, in
+  // the dedicated server or a hosting client. `EnshwickStatus_UNAVAILABLE` on
+  // a build where the loader does not find the payment, or where its
+  // code is not what the loader expects; `EnshwickStatus_BAD_ARGS` for a null
+  // callback. Allowed during `enshwick_mod_init` only. ABI 12.22.
+  EnshwickStatus (*quest_reward_filter)(EnshwickModHandle me,
+                                        EnshwickQuestRewardFilterFn callback,
+                                        void *user);
+  // Sets knowledge `id` of the player whose character is `entity`, or of
+  // the world for 0 or an id of the world's, to exactly `value`: 0 or 1
+  // for a `EnshwickKnowledgeInfo_BOOL`, any count or bits otherwise.
+  //
+  // The game keeps a mark beside each value, one bit per flag (all of
+  // them for a bool or a counter), set for what the player has seen.
+  // `EnshwickKnowledgeChange_QUIET` writes the value at once with every bit
+  // marked, as a save loads it, sends it to the clients again and is
+  // saved with the next save; nothing a grant brings follows.
+  // `EnshwickKnowledgeChange_SHOWN` grants what the value gains as
+  // `EnshwickHostApi.change_knowledge` does (the next step applies it with
+  // what follows) and writes what it loses at once with no bit marked.
+  //
+  // `EnshwickStatus_BAD_ARGS` for an unknown id or `notice`, a bool above 1,
+  // or, for `SHOWN`, a gained bit the game does not expect;
+  // `EnshwickStatus_BUSY` when the game's queue fills while `SHOWN` grants;
+  // `EnshwickStatus_REFUSED` as for `EnshwickHostApi.change_knowledge`. On the
+  // server's game thread only. ABI 12.22.
+  EnshwickStatus (*knowledge_set)(EnshwickModHandle me,
+                                  EnshwickEntity entity,
+                                  EnshwickKnowledgeId id,
+                                  uint32_t value,
+                                  uint8_t notice);
 } EnshwickHostApi;
 
 // The layout the loader was built with, from its golden layout file.
@@ -7781,7 +7919,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, detour) == 16, "offset of Hook
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, next) == 24, "offset of HookSpec.next");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, priority) == 32, "offset of HookSpec.priority");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, flags) == 36, "offset of HookSpec.flags");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1848, "size of HostApi");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1864, "size of HostApi");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, header) == 0, "offset of HostApi.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, host_version) == 8, "offset of HostApi.host_version");
@@ -8013,6 +8151,8 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_steer_for) == 1816, "offs
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, rekey_resource) == 1824, "offset of HostApi.rekey_resource");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_binding) == 1832, "offset of HostApi.game_binding");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_rebind) == 1840, "offset of HostApi.game_rebind");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, quest_reward_filter) == 1848, "offset of HostApi.quest_reward_filter");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, knowledge_set) == 1856, "offset of HostApi.knowledge_set");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 96, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");
@@ -8339,6 +8479,31 @@ ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickQuestData) == 4, "alignment of Q
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestData, header) == 0, "offset of QuestData.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestData, entity) == 8, "offset of QuestData.entity");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestData, quest) == 12, "offset of QuestData.quest");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickQuestPayment) == 60, "size of QuestPayment");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickQuestPayment) == 4, "alignment of QuestPayment");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestPayment, header) == 0, "offset of QuestPayment.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestPayment, entity) == 8, "offset of QuestPayment.entity");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestPayment, quest) == 12, "offset of QuestPayment.quest");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestPayment, count) == 16, "offset of QuestPayment.count");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestPayment, limit) == 20, "offset of QuestPayment.limit");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestPayment, allowed) == 24, "offset of QuestPayment.allowed");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestPayment, reserved) == 25, "offset of QuestPayment.reserved");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestPayment, experience) == 28, "offset of QuestPayment.experience");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickQuestProgressData) == 32, "size of QuestProgressData");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickQuestProgressData) == 4, "alignment of QuestProgressData");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestProgressData, header) == 0, "offset of QuestProgressData.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestProgressData, entity) == 8, "offset of QuestProgressData.entity");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestProgressData, quest) == 12, "offset of QuestProgressData.quest");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestProgressData, step) == 16, "offset of QuestProgressData.step");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestProgressData, part) == 20, "offset of QuestProgressData.part");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestProgressData, value) == 24, "offset of QuestProgressData.value");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestProgressData, target) == 28, "offset of QuestProgressData.target");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickQuestStepData) == 20, "size of QuestStepData");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickQuestStepData) == 4, "alignment of QuestStepData");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestStepData, header) == 0, "offset of QuestStepData.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestStepData, entity) == 8, "offset of QuestStepData.entity");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestStepData, quest) == 12, "offset of QuestStepData.quest");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickQuestStepData, step) == 16, "offset of QuestStepData.step");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickRateId) == 4, "size of RateId");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickRateId) == 4, "alignment of RateId");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickRecipeId) == 4, "size of RecipeId");

@@ -42,6 +42,7 @@ mod queries;
 
 pub use experience::NewExperience;
 pub(crate) use experience::{balance_parts, balancing_table, source_type, values_of};
+pub(crate) use queries::served_knowledge_read;
 pub use queries::{NewQuery, QueryForm};
 
 /// The game's knowledge: every world and player entry and the skill

@@ -399,6 +399,8 @@ pub(crate) static TABLE: HostApi = HostApi {
     rekey_resource,
     game_binding,
     game_rebind,
+    quest_reward_filter,
+    knowledge_set,
 };
 
 /// What the loader runs after each step's own work: the waits it ended.

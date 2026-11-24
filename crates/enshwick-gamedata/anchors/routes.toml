@@ -3666,6 +3666,13 @@ called_by = [
 check = ["mov r8,rcx", "mov eax,0x1"]
 
 [[route]]
+id = "knowledge.quest_pay"
+system = "trigger_quest_rewards"
+shape = ["lea rcx,[rsp+?]", "mov [rsp+0x20],eax", "call *"]
+take = "address"
+check = ["mov [rsp+0x18],r8", "mov [rsp+0x8],rcx", "push rbp", "push r12"]
+
+[[route]]
 id = "knowledge.queue"
 in = "~fn:buffs.registry"
 shape = ["mov [rdi+?],rax", "call ?", "mov [rdi+*],rax", "lea r8,[rbp+?]"]

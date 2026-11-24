@@ -20,6 +20,7 @@ pub(crate) const PLAYER_VALUE: Symbol = Symbol::new("knowledge.player_value");
 pub(crate) const PUSH: Symbol = Symbol::new("knowledge.push");
 pub(crate) const QUERY_PLAYER: Symbol = Symbol::new("knowledge.query_player");
 pub(crate) const QUERY_WORLD: Symbol = Symbol::new("knowledge.query_world");
+pub(crate) const QUEST_PAY: Symbol = Symbol::new("knowledge.quest_pay");
 pub(crate) const QUEUE: Constant = Constant::new("knowledge.queue");
 pub(crate) const RECORDS: Constant = Constant::new("knowledge.records");
 pub(crate) const RECORD_ACTIVE: Constant = Constant::new("knowledge.record_active");

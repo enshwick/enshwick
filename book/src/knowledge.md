@@ -113,6 +113,45 @@ unlocks chained on it, skill points already spent. A quest's id taken back
 while its steps still hold is rewarded again. A revoke fails as a grant
 does, and for a player whose save has not loaded yet.
 
+## Setting an exact value
+
+Unstable: needs the `unstable` feature and may change in any release
+([Stability](stability.md)).
+
+`set(player, id, value, notice)` and `set_world(id, value, notice)` set a
+value exactly: 0 or 1 for a bool, any count or bits otherwise. Beside each
+value the game marks what the player has seen: a bit per flag, one mark for
+a bool or a counter. A character's save loads with every
+mark set, and a grant clears the mark of what it sets. The `notice` says
+which way the value goes:
+
+| Notice | What it does |
+| --- | --- |
+| `KnowledgeNotice::Quiet` | writes the value at once with every mark set, as a save loads it; nothing a grant brings follows |
+| `KnowledgeNotice::Shown` | grants what the value gains, as `grant` does, and writes what it loses at once, as `revoke` does |
+
+What is written reaches the clients and the next save as a revoke does.
+Which notice the client shows for a value whose mark is clear is not yet
+seen in the game. A set fails as a grant does, and for a bool above 1. A
+shown set also fails for a gained bit the game does not expect.
+
+```rust
+use enshwick::knowledge::KnowledgeNotice;
+
+fn learned_quietly(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::Entity, recipe: enshwick::RecipeId) {
+    // Seen and crafted, without the game's notice.
+    if let Err(why) = knowledge.set(player, recipe.into(), 0b11, KnowledgeNotice::Quiet) {
+        enshwick::warn!("not set: {why}");
+    }
+}
+```
+
+```luau
+local function learned_quietly(player: number, recipe: number)
+    enshwick.knowledge.set(player, recipe, 3, "Quiet")
+end
+```
+
 ## Players not in the game
 
 A player's knowledge lives in the character's save on the player's machine.

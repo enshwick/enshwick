@@ -19,4 +19,6 @@ pub(super) const NAMESPACES: &[Namespace] = &[
     Namespace::starting("knowledge", "", &[crate::Load::SCRIPT_KNOWLEDGE]),
     #[cfg(feature = "typed")]
     Namespace::of::<crate::quests::Quests>(),
+    #[cfg(feature = "typed")]
+    Namespace::starting("quests", "", &[crate::Load::SCRIPT_QUEST_REWARDS]),
 ];

@@ -22,7 +22,7 @@ arc-swap.workspace = true
 bytemuck.workspace = true
 enshwick-abi.workspace = true
 enshwick-base.workspace = true
-enshwick-core = { workspace = true, features = ["unstable"] }
+enshwick-core = { workspace = true, features = ["unstable", "typed"] }
 enshwick-gamedata.workspace = true
 postcard.workspace = true
 rustc-hash.workspace = true
@@ -177,5 +177,10 @@ required-features = ["test"]
 
 [[bench]]
 name = "sound_frame"
+harness = false
+required-features = ["test"]
+
+[[bench]]
+name = "quest_change"
 harness = false
 required-features = ["test"]

@@ -475,6 +475,14 @@ pub(crate) fn value(
     entity: Entity,
     id: u32,
 ) -> Result<KnowledgeInfo, KnowledgeError> {
+    marked(loader, entity, id).map(|(info, _)| info)
+}
+
+/// Knowledge `id` of the character `entity`, or of the world, with the mark
+/// the game keeps beside it: a bit per flag, all of them for a bool or a
+/// counter, set for what was seen; 0xFF for a value not in the map (server
+/// 26430253).
+fn marked(loader: &Loader, entity: Entity, id: u32) -> Result<(KnowledgeInfo, u8), KnowledgeError> {
     let layout = layout(loader).ok_or(KnowledgeError::Unread)?;
     let (_, state) = store(layout)?;
     let (scope, def) = definition(layout, state, id).ok_or(KnowledgeError::Unknown)?;
@@ -500,7 +508,7 @@ pub(crate) fn value(
             )
         }
     };
-    Ok(KnowledgeInfo {
+    let info = KnowledgeInfo {
         header: Header::of::<KnowledgeInfo>(),
         id: enshwick_core::abi::KnowledgeId::new(id),
         // SAFETY: `def` is the definition `definition` found in the live
@@ -513,7 +521,12 @@ pub(crate) fn value(
         // SAFETY: `def` is the definition `definition` found in the live
         // blob; its flags sit at the reflected `expectedFlags` field.
         flags: unsafe { read(def, layout.def_flags) },
-    })
+    };
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "the mark is the byte above the value"
+    )]
+    Ok((info, (raw >> 32) as u8))
 }
 
 /// The switch of [`grant`], off once the live store it writes to does not
@@ -655,6 +668,7 @@ fn quest_set(layout: &Layout, game: usize) -> Option<&'static FxHashSet<u32>> {
 pub(crate) fn after_step(loader: &Loader) {
     if !crate::engine::loader::handles(Event::KNOWLEDGE_CHANGED)
         && !crate::engine::loader::handles(Event::QUEST_COMPLETED)
+        && !super::quest_events::wanted()
     {
         // A handler that arrives later hears the updates after its first look.
         if !STATE.unseen.load(Ordering::Relaxed) {
@@ -687,6 +701,7 @@ pub(crate) fn after_step(loader: &Loader) {
     // its u32 world log count sits at the build table's
     // `knowledge.world_log_count` offset.
     let count: u32 = unsafe { read(state, layout.world_log_count) };
+    super::quest_events::look(loader, Entity(0));
     raise(loader, layout, game, Entity(0), log, count);
     // SAFETY: `state` is the live store `store` found on the game thread;
     // its record array pointer sits at the build table's `knowledge.records`
@@ -700,6 +715,7 @@ pub(crate) fn after_step(loader: &Loader) {
         return;
     }
     for index in 0..usize::try_from(record_count).unwrap_or(0) {
+        let entity = Entity(u32::try_from(index + 1).unwrap_or(0));
         let record = records + index * layout.record_size;
         // SAFETY: `records` is non-null by the check before it and `index` below
         // the record count, so `record` is a record of the array; its u8
@@ -707,6 +723,7 @@ pub(crate) fn after_step(loader: &Loader) {
         // offset.
         let active: u8 = unsafe { read(record, layout.record_active) };
         if active == 0 {
+            super::quest_events::gone(entity);
             continue;
         }
         // SAFETY: `record` is an active record of the array; its log pointer
@@ -716,8 +733,9 @@ pub(crate) fn after_step(loader: &Loader) {
         // count sits at the build table's `knowledge.record_log_count`
         // offset.
         let count: u32 = unsafe { read(record, layout.record_log_count) };
-        let entity = u32::try_from(index + 1).unwrap_or(0);
-        raise(loader, layout, game, Entity(entity), log, count);
+
+        super::quest_events::look(loader, entity);
+        raise(loader, layout, game, entity, log, count);
     }
 }
 
@@ -748,6 +766,7 @@ fn raise(loader: &Loader, layout: &Layout, game: usize, entity: Entity, log: usi
             value,
         };
         loader.emit(Event::KNOWLEDGE_CHANGED, None, (&raw const data).cast());
+        super::quest_events::changed(loader, entity, id, value);
         if entity != Entity(0)
             && value != 0
             && quest_set(layout, game).is_some_and(|set| set.contains(&id))
@@ -766,6 +785,7 @@ fn raise(loader: &Loader, layout: &Layout, game: usize, entity: Entity, log: usi
 /// ended.
 pub(crate) fn forget() {
     STATE.forget();
+    super::quest_events::forget();
     guard::forget();
 }
 

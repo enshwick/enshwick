@@ -86,7 +86,7 @@ impl Event {
     /// applied it. Server only.
     pub const KNOWLEDGE_CHANGED: Self = Self(15);
     /// A player completed a quest: its bool was set for them, and the game
-    /// gave its experience, not its items; data is a [`QuestData`]. Raised
+    /// gave its experience, not its items; data is a [`QuestData`](super::QuestData). Raised
     /// on the game thread after the step, for every change that sets the
     /// bool, a mod's grant of it included. Server only.
     pub const QUEST_COMPLETED: Self = Self(16);
@@ -158,6 +158,25 @@ impl Event {
     /// back from there does. A mod's waypoint handler hears it. The name
     /// is enshwick's. Server only. ABI 12.16.
     pub const WAYPOINT_CHANGED: Self = Self(27);
+    /// A player, or the world for a quest of the world's, started a quest:
+    /// the journal shows its first step now, by the knowledge the step asks
+    /// for, and did not before; data is a [`QuestData`](super::QuestData). A quest whose first
+    /// step always shows raises none. Raised on the game thread after the
+    /// step that changed that knowledge, a mod's change included; what a
+    /// player holds when they join raises nothing. The name is enshwick's.
+    /// Server only. ABI 12.22.
+    pub const QUEST_STARTED: Self = Self(28);
+    /// A step of a quest is done for a player or the world: the knowledge
+    /// its completion asks for holds now and did not before; data is a
+    /// [`QuestStepData`](super::QuestStepData). Raised as [`Event::QUEST_STARTED`] is. The name is
+    /// enshwick's. Server only. ABI 12.22.
+    pub const QUEST_STEP_DONE: Self = Self(29);
+    /// A counter one of a quest step's progress parts counts changed, such
+    /// as a mod's objective; data is a [`QuestProgressData`](super::QuestProgressData) with the count
+    /// now and the count the part asks for. Raised as
+    /// [`Event::QUEST_STARTED`] is, for each change of the counter. The
+    /// name is enshwick's. Server only. ABI 12.22.
+    pub const QUEST_PROGRESSED: Self = Self(30);
 }
 
 /// The data of [`Event::WAYPOINT_CHANGED`], and what
@@ -289,31 +308,8 @@ pub struct KnowledgeData {
 
 impl_headed!(KnowledgeData);
 
-/// The data of the [`QuestCompleted`](../events/struct.QuestCompleted.html) event.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::abi::{Header, QuestData};
-///
-/// let done = QuestData { header: Header::of::<QuestData>(), entity: enshwick::Entity(2), quest: enshwick::knowledge::KnowledgeId::new(0x51) };
-/// assert_eq!(done.entity, enshwick::Entity(2));
-/// ```
-#[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, crate::Script)]
-pub struct QuestData {
-    /// Size and version of this struct.
-    pub header: Header,
-    /// The player's character.
-    pub entity: Entity,
-    /// The quest's id, a player knowledge id.
-    pub quest: KnowledgeId,
-}
-
-impl_headed!(QuestData);
-
 /// Knowledge a client asks the server for in its input, handed to the
-/// filters registered with [`HostApi::knowledge_input_filter`](super::HostApi::knowledge_input_filter) with the
+/// filters registered with [`HostApi::knowledge_input_filter`](crate::abi::HostApi::knowledge_input_filter) with the
 /// verdict so far.
 ///
 /// # Examples
@@ -344,10 +340,10 @@ pub struct KnowledgeInput {
     pub character: Entity,
     /// The knowledge id.
     pub id: KnowledgeId,
-    /// The kind the client names: [`KnowledgeInfo::BOOL`](super::KnowledgeInfo::BOOL),
-    /// [`KnowledgeInfo::COUNTER`](super::KnowledgeInfo::COUNTER) or [`KnowledgeInfo::FLAGS`](super::KnowledgeInfo::FLAGS).
+    /// The kind the client names: [`KnowledgeInfo::BOOL`](crate::abi::KnowledgeInfo::BOOL),
+    /// [`KnowledgeInfo::COUNTER`](crate::abi::KnowledgeInfo::COUNTER) or [`KnowledgeInfo::FLAGS`](crate::abi::KnowledgeInfo::FLAGS).
     pub kind: u8,
-    /// [`KnowledgeInfo::WORLD`](super::KnowledgeInfo::WORLD) or [`KnowledgeInfo::PLAYER`](super::KnowledgeInfo::PLAYER), as the id's
+    /// [`KnowledgeInfo::WORLD`](crate::abi::KnowledgeInfo::WORLD) or [`KnowledgeInfo::PLAYER`](crate::abi::KnowledgeInfo::PLAYER), as the id's
     /// definition says; [`KnowledgeInput::NO_SCOPE`] for an id the game
     /// does not know.
     pub scope: u8,
@@ -391,7 +387,7 @@ impl KnowledgeInput {
 }
 
 /// A mod's knowledge input filter: the request and the pointer given at
-/// registration; returns [`FILTER_REFUSE`](super::FILTER_REFUSE) to refuse it, else [`FILTER_PASS`](super::FILTER_PASS).
+/// registration; returns [`FILTER_REFUSE`](crate::abi::FILTER_REFUSE) to refuse it, else [`FILTER_PASS`](crate::abi::FILTER_PASS).
 ///
 /// Null is never a callback: the loader refuses a null one with
 /// [`Status::BAD_ARGS`](crate::abi::Status::BAD_ARGS) and keeps nothing.

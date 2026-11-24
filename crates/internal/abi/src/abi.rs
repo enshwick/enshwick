@@ -312,6 +312,7 @@ mod mods;
 mod net;
 mod pacing;
 mod points;
+mod quests;
 mod rates;
 mod script;
 mod services;
@@ -355,6 +356,7 @@ pub use mods::*;
 pub use net::*;
 pub use pacing::*;
 pub use points::*;
+pub use quests::*;
 pub use rates::*;
 pub use services::*;
 pub use sound::*;
@@ -813,6 +815,9 @@ const _: () = {
     assert!(size_of::<SoundInfo>() == 8 + 4 + 4);
     assert!(size_of::<SoundAudience>() == 8 + 4 + 4 + 8 + 24);
     assert!(size_of::<QuestData>() == 8 + 8);
+    assert!(size_of::<QuestStepData>() == 8 + 12);
+    assert!(size_of::<QuestProgressData>() == 8 + 24);
+    assert!(size_of::<QuestPayment>() == 8 + 16 + 4 + 4 * QuestPayment::MAX);
     // Headed: written at the entry size the caller states.
     assert!(size_of::<WeatherFront>() == 8 + 8 + 24 + 8 + 8 + 16);
     assert!(size_of::<WeatherSample>() == 8 + 16);

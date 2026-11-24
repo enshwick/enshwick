@@ -91,7 +91,7 @@ entries! {
     ui_item_tooltip change_permissions transaction_settled prop_placement_info container_rule
     show_pickup respawn_point set_respawn_point buff_type_add damage_causes_off waypoint
     sound_play sound_steer sound_state sound_play_for sound_steer_for rekey_resource
-    game_binding game_rebind
+    game_binding game_rebind quest_reward_filter knowledge_set
 }
 
 /// What the caller is when it calls.

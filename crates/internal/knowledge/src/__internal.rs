@@ -26,6 +26,17 @@ pub fn objective_lookup(objectives: u32) -> impl Fn(crate::ItemId) -> usize {
     crate::quests::objectives::lookup(objectives)
 }
 
+/// The quests of the journal the game serves now, read through `host`, for
+/// the loader's quest events.
+///
+/// # Errors
+///
+/// [`Off`](crate::Off) when the journal does not read.
+#[cfg(feature = "typed")]
+pub fn journal_quests(host: crate::Host) -> Result<Vec<crate::quests::QuestInfo>, crate::Off> {
+    crate::quests::journal_quests(host)
+}
+
 /// The level table a script's filter gets from `Load::on_experience_script`.
 pub use crate::progress::script::ScriptLevels;
 

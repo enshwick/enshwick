@@ -14,7 +14,12 @@
 //! grant brought, such as experience, stays. A player's knowledge lives in
 //! the character's save on the player's machine, so a change for an account
 //! that is not in the game waits with the world until its character loads
-//! there.
+//! there. An exact set writes a value as a revoke does, or grants what it
+//! gains, with a `KnowledgeNotice` on what the player sees: the game keeps
+//! a mark of what the player has seen beside each value, a character's save
+//! loads with everything marked seen, and a grant clears the mark of what
+//! it sets. The exact set needs the `unstable` feature, since which notice
+//! the client shows for an unmarked value is not yet seen in the game.
 //! [`KnowledgeChanged`](crate::events::KnowledgeChanged) and
 //! [`QuestCompleted`](crate::events::QuestCompleted) report what each step
 //! changed.
@@ -183,6 +188,44 @@ impl Revoke {
             Self::Clear => (KnowledgeInfo::BOOL, 0),
             Self::Sub(amount) => (KnowledgeInfo::COUNTER, amount),
             Self::Unflag(bit) => (KnowledgeInfo::FLAGS, bit),
+        }
+    }
+}
+
+/// Whether [`Knowledge::set`] lets the player see the change.
+///
+/// The game keeps a mark beside each value, a bit per flag (all of them for
+/// a bool or a counter), set for what the player has seen: a save loads
+/// every value with all bits set, and the game's grant clears the bit it
+/// sets. Which notice the client shows for an unmarked bit, and when, is not
+/// yet seen in the game.
+///
+/// The name is enshwick's, not the game's.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
+/// # Examples
+///
+/// See [`Knowledge::set`].
+#[cfg(feature = "unstable")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[non_exhaustive]
+pub enum KnowledgeNotice {
+    /// Writes the value at once with every bit marked seen, as a save loads
+    /// it; nothing a grant brings follows.
+    Quiet,
+    /// Grants what the value gains as [`Knowledge::grant`] does, with what
+    /// follows, and writes what it loses at once, as
+    /// [`Knowledge::revoke`] does.
+    Shown,
+}
+
+#[cfg(feature = "unstable")]
+impl KnowledgeNotice {
+    const fn raw(self) -> u8 {
+        match self {
+            Self::Quiet => KnowledgeChange::QUIET,
+            Self::Shown => KnowledgeChange::SHOWN,
         }
     }
 }
@@ -388,6 +431,83 @@ impl Knowledge {
     #[script]
     pub fn revoke_world(&self, id: KnowledgeId, revoke: Revoke) -> Result<(), WorldError> {
         self.revoke(Entity(0), id, revoke)
+    }
+
+    /// Sets knowledge `id` of the player whose character is `player` (or of
+    /// the world, for an id of the world's) to exactly `value`: 0 or 1 for
+    /// a bool, any count or bits otherwise. [`KnowledgeNotice::Quiet`]
+    /// writes it at once, marked seen, and the next save keeps it;
+    /// [`KnowledgeNotice::Shown`] grants what it gains the game's way and
+    /// writes what it loses at once. The clients get what is written as a
+    /// revoke sends it.
+    /// [`KnowledgeChanged`](crate::events::KnowledgeChanged) reports what
+    /// it changed after the next step.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Refused`] for an id the game does not know, a bool
+    /// above 1, a gained bit the game does not expect when shown, or a
+    /// player not in the game or whose save has not loaded yet;
+    /// [`WorldError::Busy`] when a shown gain finds the step's grants full;
+    /// [`WorldError::WrongThread`] off the game thread;
+    /// [`WorldError::Unavailable`] on a build without it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::knowledge::KnowledgeNotice;
+    ///
+    /// fn learned(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::Entity, recipe: enshwick::RecipeId) {
+    ///     let _set = knowledge.set(player, recipe.into(), 0b11, KnowledgeNotice::Quiet);
+    /// }
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[script]
+    pub fn set(
+        &self,
+        player: Entity,
+        id: KnowledgeId,
+        value: u32,
+        notice: KnowledgeNotice,
+    ) -> Result<(), WorldError> {
+        world_status((self.host.api().knowledge_set)(
+            self.host.handle(),
+            player,
+            id,
+            value,
+            notice.raw(),
+        ))
+    }
+
+    /// Sets knowledge `id` of the world's to exactly `value`, as
+    /// [`Knowledge::set`] does.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Knowledge::set`]; a player's id is refused.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::knowledge::KnowledgeNotice;
+    ///
+    /// fn count(knowledge: &enshwick::knowledge::Knowledge, visits: enshwick::knowledge::KnowledgeId) {
+    ///     let _set = knowledge.set_world(visits, 3, KnowledgeNotice::Shown);
+    /// }
+    /// ```
+    #[cfg(feature = "unstable")]
+    #[script]
+    pub fn set_world(
+        &self,
+        id: KnowledgeId,
+        value: u32,
+        notice: KnowledgeNotice,
+    ) -> Result<(), WorldError> {
+        self.set(Entity(0), id, value, notice)
     }
 
     /// Grants knowledge `id` of a player's to the account whose

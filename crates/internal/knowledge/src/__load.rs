@@ -10,5 +10,7 @@ pub use crate::progress::LoadMethods as _;
 pub use crate::progress::script::LoadMethods as _;
 #[cfg(feature = "typed")]
 pub use crate::quests::LoadMethods as _;
+#[cfg(feature = "typed")]
+pub use crate::quests::payment::LoadMethods as _;
 #[cfg(feature = "unstable")]
 pub use crate::rewards::LoadMethods as _;

@@ -71,6 +71,7 @@ pub mod bench {
         content::served::{bench_served_build, bench_text_lookup},
         content::textures::bench_texture_request,
         engine::world::accounts::bench_accounts,
+        knowledge::quest_events::bench_quest_change,
         ui::interface::tooltips::bench_tooltip_lines,
         ui::sound::bench_sound_frame,
         world::waypoints::bench_waypoint_idle_step,

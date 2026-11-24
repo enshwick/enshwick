@@ -67,6 +67,77 @@ fn init(load: &mut enshwick::Load<'_>, torch: Guid) -> Result<(), enshwick::Off>
 On a server copy of server 399, the server's journal listed a mod's quest
 beside the game's 188.
 
+## Following a quest
+
+The loader raises three events from the knowledge that quest steps test,
+for the game's quests and mods' quests alike:
+
+| Event | When |
+| --- | --- |
+| `QuestStarted` | the quest's first step shows now and did not before |
+| `QuestStepDone` | a step's completion holds now and did not before |
+| `QuestProgressed` | a counter that a step's counted part reads changed |
+
+A game query decides some steps, and the game answers a query in its own
+pass. So the loader asks such a step again for three steps after an entry
+that its query reads changes. What a player holds when they join
+raises nothing. The entity is 0 when the knowledge that moved is the
+world's.
+
+```rust
+use enshwick::events::{QuestProgressed, QuestStepDone};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.on::<QuestStepDone>(|done| {
+        enshwick::info!("player {} did step {} of quest {}", done.entity.0, done.step, done.quest);
+    })?;
+    load.on::<QuestProgressed>(|counted| {
+        enshwick::info!("{} of {}", counted.value, counted.target);
+    })
+}
+```
+
+```lua
+enshwick.on("QuestStepDone", function(done)
+    enshwick.log.info(`player {done.entity} did step {done.step} of quest {done.quest}`)
+end)
+```
+
+## Changing what a quest pays
+
+The game pays a quest's experience values and sets the quest's bool.
+`load.on_quest_reward` runs before it pays. The filter keeps the payment,
+pays other experience values, or refuses. A refused quest pays nothing and
+still completes. The same value twice pays it twice. The game pays at most
+`limit` values, 3 on server 26430253, and the loader drops the rest with a
+warning. Filters run in load order, and each one sees the payment as the
+filters before it left it. A payment that the game puts off comes again
+in a later step, and the filters see it again.
+
+```rust
+use enshwick::quests::QuestPay;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.on_quest_reward(|paid| {
+        QuestPay::Pay(paid.experience.iter().flat_map(|&value| [value, value]).collect())
+    })
+}
+```
+
+```lua
+enshwick.quests.on_quest_reward(function(paid)
+    local twice = {}
+    for _, value in paid.experience do
+        table.insert(twice, value)
+        table.insert(twice, value)
+    end
+    return twice
+end)
+```
+
+A Luau filter returns `false` to refuse, a list to pay those values, and
+nil to keep the payment.
+
 ## Giving a quest's items
 
 The game gives a quest's experience and never its items. It only draws an

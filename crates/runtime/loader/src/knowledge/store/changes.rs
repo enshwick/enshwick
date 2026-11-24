@@ -1,8 +1,14 @@
-//! Knowledge taken back, and changes for players who are not in the game.
+//! Knowledge taken back or set exactly, and changes for players who are not
+//! in the game.
 //!
-//! The game's queue only adds, so a revoke writes the value maps the way a
-//! client applies what the server sends: the game's own set function puts a
-//! value in or, for 0, takes the id out, and logs it. A log written after a
+//! The game's queue only adds, so a revoke or a quiet set writes the value
+//! maps the way a client applies what the server sends: the game's own set
+//! function puts a value in with its mark or, for 0, takes the id out, and
+//! logs both. The mark is a byte beside each value, a bit per flag (all of
+//! them for a bool or a counter) set for what the player has seen: a save
+//! loads every value with all bits set, and the game's grant clears the
+//! bit it sets, or the whole mark of a bool or a counter (server 26430253).
+//! A log written after a
 //! step never reaches the clients, since the next step clears the logs
 //! before it sends them, so the loader asks the game for a full resend of
 //! what changed, the world's to every client or one player's to that
@@ -149,6 +155,102 @@ pub(crate) fn character_loaded(loader: &Loader, entity: Entity) -> bool {
         .is_some_and(|slot| loaded(parts, game, slot))
 }
 
+/// The mark a save loads every value with: each bit seen (server 26430253).
+const SEEN: u8 = 0xff;
+
+/// The mark a value of `kind` keeps when it loses bits, from `mark` before:
+/// a flags value keeps the marks of the bits it holds, as the game's grant
+/// changes only the mark of the bit it sets; a bool or a counter has no bit
+/// marked, as the game's grant of one leaves it (server 26430253).
+const fn lost(kind: u8, mark: u8) -> u8 {
+    if kind == KnowledgeInfo::FLAGS {
+        mark
+    } else {
+        0
+    }
+}
+
+/// Knowledge of the character `entity` or of the world, found in the live
+/// store for a direct write on the game thread.
+struct Held {
+    layout: &'static super::Layout,
+    parts: &'static Parts,
+    game: usize,
+    state: usize,
+    /// The character, 0 for the world's knowledge.
+    entity: u32,
+    id: u32,
+    kind: u8,
+    expected: u32,
+    current: u32,
+    mark: u8,
+}
+
+impl Held {
+    fn find(loader: &Loader, entity: u32, id: u32) -> Result<Self, KnowledgeError> {
+        let layout = layout(loader).ok_or(KnowledgeError::Unread)?;
+        let parts = parts(loader).ok_or(KnowledgeError::Unread)?;
+        let (game, state) = store(layout)?;
+        let (scope, _) = definition(layout, state, id).ok_or(KnowledgeError::BadChange)?;
+        let entity = if scope == KnowledgeInfo::PLAYER {
+            entity
+        } else {
+            0
+        };
+        let (info, mark) = super::marked(loader, Entity(entity), id)?;
+        Ok(Self {
+            layout,
+            parts,
+            game,
+            state,
+            entity,
+            id,
+            kind: info.kind,
+            expected: info.flags,
+            current: info.value,
+            mark,
+        })
+    }
+
+    /// Writes `new` with `mark` at once, as the game applies what a server
+    /// sends, and has the clients resend it.
+    fn write(&self, loader: &Loader, new: u32, mark: u8) -> Result<(), KnowledgeError> {
+        let Self {
+            layout,
+            parts,
+            game,
+            state,
+            entity,
+            id,
+            ..
+        } = *self;
+        let list = ValueList {
+            ids: &raw const id,
+            count: 1,
+            states: &raw const mark,
+            state_count: 1,
+            values: &raw const new,
+            value_count: 1,
+            save: 0,
+        };
+        write_list(layout, parts, game, state, entity, &list)?;
+        crate::log!(
+            DEBUG,
+            "knowledge: id {id:#x} of {entity} written {new} marked {mark:#04x}, reads {:?}",
+            super::marked(loader, Entity(entity), id).map(|(info, mark)| (info.value, mark))
+        );
+        if new != self.current {
+            STATE.raised.push(KnowledgeData {
+                header: Header::of::<KnowledgeData>(),
+                entity: Entity(entity),
+                id: enshwick_core::abi::KnowledgeId::new(id),
+                value: new,
+            });
+        }
+        Ok(())
+    }
+}
+
 /// Takes knowledge `id` of `kind` back from the character `entity`, or
 /// from the world.
 pub(crate) fn revoke(
@@ -158,33 +260,96 @@ pub(crate) fn revoke(
     kind: u32,
     value: u32,
 ) -> Result<(), KnowledgeError> {
-    let layout = layout(loader).ok_or(KnowledgeError::Unread)?;
-    let parts = parts(loader).ok_or(KnowledgeError::Unread)?;
-    let (game, state) = store(layout)?;
-    let (scope, def) = definition(layout, state, id).ok_or(KnowledgeError::BadChange)?;
-    // SAFETY: `def` is the definition `definition` found in the live blob;
-    // its u8 kind sits at the reflected `type` field.
-    let def_kind: u8 = unsafe { read(def, layout.def_kind) };
-    if u32::from(def_kind) != kind {
+    let held = Held::find(loader, entity, id)?;
+    if u32::from(held.kind) != kind {
         return Err(KnowledgeError::BadChange);
     }
-    let player = scope == KnowledgeInfo::PLAYER;
-    let current = super::value(loader, if player { Entity(entity) } else { Entity(0) }, id)?.value;
-    let new = lowered(def_kind, current, value).ok_or(KnowledgeError::BadChange)?;
-    if new == current {
+    let new = lowered(held.kind, held.current, value).ok_or(KnowledgeError::BadChange)?;
+    if new == held.current {
         return Ok(());
     }
-    let list = ValueList {
-        ids: &raw const id,
-        count: 1,
-        states: core::ptr::null(),
-        state_count: 0,
-        values: &raw const new,
-        value_count: 1,
-        save: 0,
-    };
+    held.write(loader, new, lost(held.kind, held.mark))
+}
+
+/// How [`set`] lets the player see a change.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Notice {
+    /// Every bit marked seen.
+    Quiet,
+    /// Gains granted the game's way, losses written unmarked.
+    Shown,
+}
+
+/// What a set from `current` to `new` of a value of `kind` grants through
+/// the game's queue, as [`super::grant`]'s kind and value each, and the
+/// value it writes at once, if any.
+fn shown(kind: u8, current: u32, new: u32) -> (Vec<u32>, Option<u32>) {
+    match kind {
+        KnowledgeInfo::FLAGS => {
+            let gained = new & !current;
+            let kept = current & new;
+            let bits = (0..u32::BITS)
+                .filter(|bit| gained & (1 << bit) != 0)
+                .collect();
+            (bits, (kept != current).then_some(kept))
+        }
+        _ if new > current => (
+            vec![if kind == KnowledgeInfo::COUNTER {
+                new - current
+            } else {
+                0
+            }],
+            None,
+        ),
+        _ => (Vec::new(), (new != current).then_some(new)),
+    }
+}
+
+/// Sets knowledge `id` of the character `entity`, or of the world, to
+/// exactly `new`, the way `notice` names.
+pub(crate) fn set(
+    loader: &Loader,
+    entity: u32,
+    id: u32,
+    new: u32,
+    notice: Notice,
+) -> Result<(), KnowledgeError> {
+    let held = Held::find(loader, entity, id)?;
+    if held.kind == KnowledgeInfo::BOOL && new > 1 {
+        return Err(KnowledgeError::BadChange);
+    }
+    if notice == Notice::Quiet {
+        return held.write(loader, new, SEEN);
+    }
+    let (grants, written) = shown(held.kind, held.current, new);
+    if held.kind == KnowledgeInfo::FLAGS
+        && held.expected != 0
+        && grants.iter().any(|bit| held.expected & (1 << bit) == 0)
+    {
+        return Err(KnowledgeError::BadChange);
+    }
+    if let Some(value) = written {
+        held.write(loader, value, lost(held.kind, held.mark))?;
+    }
+    for value in grants {
+        super::grant(loader, held.entity, id, u32::from(held.kind), value)?;
+    }
+    Ok(())
+}
+
+/// Writes `list` into the map of the character `entity`, or of the world for
+/// 0, and has the clients resend it: the world's to every client, the
+/// player's to that player.
+fn write_list(
+    layout: &super::Layout,
+    parts: &Parts,
+    game: usize,
+    state: usize,
+    entity: u32,
+    list: &ValueList,
+) -> Result<(), KnowledgeError> {
     let records = super::records(layout, state);
-    if player {
+    if entity != 0 {
         let record = super::record(layout, state, Entity(entity))?;
         let slot = entity as usize - 1;
         if !loaded(parts, game, slot) {
@@ -194,12 +359,12 @@ pub(crate) fn revoke(
         // checked it) whose save has loaded (`loaded` checked it), with its
         // log at the build table's `knowledge.record_log` offset; `store`
         // put this call on the game thread at a quiet moment; `list` and
-        // what it points at live on this stack for the call.
+        // what it points at outlive the call.
         unsafe {
             (parts.set_values)(
                 core::ptr::with_exposed_provenance_mut(record),
                 core::ptr::with_exposed_provenance_mut(record + layout.record_log),
-                &raw const list,
+                core::ptr::from_ref(list),
             );
         };
         // SAFETY: `record` is the character's active record, read on the game
@@ -221,11 +386,11 @@ pub(crate) fn revoke(
     } else {
         // SAFETY: `state` is the live store `store` found, and `store` put
         // this call on the game thread at a quiet moment; `list` and what it
-        // points at live on this stack for the call.
+        // points at outlive the call.
         unsafe {
             (parts.set_world)(
                 core::ptr::with_exposed_provenance_mut(state),
-                &raw const list,
+                core::ptr::from_ref(list),
             );
         };
         // SAFETY: `state` is the live store, written on the game thread at a
@@ -249,12 +414,6 @@ pub(crate) fn revoke(
             }
         }
     }
-    STATE.raised.push(KnowledgeData {
-        header: Header::of::<KnowledgeData>(),
-        entity: if player { Entity(entity) } else { Entity(0) },
-        id: enshwick_core::abi::KnowledgeId::new(id),
-        value: new,
-    });
     Ok(())
 }
 
@@ -559,6 +718,31 @@ mod tests {
         assert_eq!(lowered(KnowledgeInfo::FLAGS, 0b111, 1), Some(0b101));
         assert_eq!(lowered(KnowledgeInfo::FLAGS, 1, 32), None);
         assert_eq!(lowered(9, 1, 0), None);
+    }
+
+    #[test]
+    fn a_shown_set_grants_what_it_gains_and_writes_what_it_loses() {
+        let (bool, counter, flags) = (
+            KnowledgeInfo::BOOL,
+            KnowledgeInfo::COUNTER,
+            KnowledgeInfo::FLAGS,
+        );
+        assert_eq!(shown(bool, 0, 1), (vec![0], None));
+        assert_eq!(shown(bool, 1, 0), (vec![], Some(0)));
+        assert_eq!(shown(bool, 1, 1), (vec![], None));
+        assert_eq!(shown(counter, 2, 7), (vec![5], None));
+        assert_eq!(shown(counter, 7, 2), (vec![], Some(2)));
+        assert_eq!(shown(flags, 0b0110, 0b1011), (vec![0, 3], Some(0b0010)));
+        assert_eq!(shown(flags, 0b01, 0b11), (vec![1], None));
+        assert_eq!(shown(flags, 0b11, 0b11), (vec![], None));
+        assert_eq!(shown(flags, 0, 1 << 31), (vec![31], None));
+    }
+
+    #[test]
+    fn a_loss_keeps_the_marks_of_flags_and_clears_a_bool_s_or_a_counter_s() {
+        assert_eq!(lost(KnowledgeInfo::FLAGS, 0b1010), 0b1010);
+        assert_eq!(lost(KnowledgeInfo::BOOL, SEEN), 0);
+        assert_eq!(lost(KnowledgeInfo::COUNTER, SEEN), 0);
     }
 
     fn change() -> Waiting {

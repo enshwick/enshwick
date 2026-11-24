@@ -80,6 +80,18 @@ pub fn blanked<T: crate::typed::runtime::Shaped>(
     crate::content::knowledge::blanked(template, &T::SHAPE.blank())
 }
 
+/// The knowledge ids each game query reads in the query database the game
+/// serves now, through `host`, by query id, sorted; for the loader's quest
+/// events.
+///
+/// # Errors
+///
+/// [`Off`] when the database does not read.
+#[cfg(feature = "typed")]
+pub fn game_query_knowledge(host: Host) -> Result<Vec<(u32, Vec<u32>)>, Off> {
+    crate::content::knowledge::served_knowledge_read(host)
+}
+
 /// Whether every id `new` derives fits; the reason when one does not.
 ///
 /// # Errors

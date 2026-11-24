@@ -252,6 +252,64 @@ fn indices_of(queries: &[Value], id: u32) -> Option<(u64, u64)> {
     Some((world.or(player)?, player.or(world)?))
 }
 
+/// The knowledge ids each query of the database `db` reads, its own parts'
+/// and those of the queries its parts name, by query id, sorted.
+fn knowledge_read(db: &Value) -> Vec<(u32, Vec<u32>)> {
+    let Some(Value::List(queries)) = db.field(QUERIES) else {
+        return Vec::new();
+    };
+    let mut direct: Vec<(u32, Vec<u32>, Vec<u32>)> = queries
+        .iter()
+        .filter_map(|query| {
+            let Some(Value::List(actions)) = query.field(ACTIONS) else {
+                return Some((query_id(query)?, Vec::new(), Vec::new()));
+            };
+            let (mut ids, mut named) = (Vec::new(), Vec::new());
+            for action in actions {
+                let id = action
+                    .field(QUERY)
+                    .and_then(|query| query.field(QUERY_DATA_ID))
+                    .and_then(key_of_hash);
+                match (id, names_query(action)) {
+                    (Some(id), true) => named.push(id),
+                    (Some(id), false) => ids.push(id),
+                    (None, _) => {}
+                }
+            }
+            Some((query_id(query)?, ids, named))
+        })
+        .collect();
+    direct.sort_unstable_by_key(|(id, _, _)| *id);
+    let find = |id: u32| direct.binary_search_by_key(&id, |(at, _, _)| *at).ok();
+    direct
+        .iter()
+        .map(|(id, _, _)| {
+            let (mut read, mut seen, mut next) = (Vec::new(), vec![*id], vec![*id]);
+            while let Some(query) = next.pop() {
+                let Some(at) = find(query) else { continue };
+                let (_, ids, named) = &direct[at];
+                read.extend_from_slice(ids);
+                for &other in named {
+                    if !seen.contains(&other) {
+                        seen.push(other);
+                        next.push(other);
+                    }
+                }
+            }
+            read.sort_unstable();
+            read.dedup();
+            (*id, read)
+        })
+        .collect()
+}
+
+/// The knowledge ids each game query reads in the database the game serves
+/// now, mods' queries in, by query id, sorted.
+pub(crate) fn served_knowledge_read(host: Host) -> Result<Vec<(u32, Vec<u32>)>, Off> {
+    let db = host.served_value(database(host)?)?;
+    Ok(knowledge_read(&db))
+}
+
 /// Gives the parts of the queries at `added` that name a query the indices
 /// of that query among `queries`, in their final places.
 fn resolve(queries: &mut [Value], added: impl Iterator<Item = usize>) {

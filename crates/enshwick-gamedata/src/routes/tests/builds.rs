@@ -8,6 +8,7 @@ use crate::{Side, Table, exact, kept};
 
 mod attributes;
 mod bindings;
+mod quests;
 
 /// Entries a route finds on a table build that its own table does not pin
 /// and no pattern of the newest table finds there either, by table name.
@@ -693,6 +694,7 @@ fn routed_only() -> impl Iterator<Item = (&'static str, &'static str, u64)> {
         .chain(ITEM_UI_SYMBOLS)
         .chain(SOUND_SYMBOLS)
         .chain(bindings::BINDING_SYMBOLS)
+        .chain(quests::QUEST_PAY_SYMBOLS)
         .chain(attributes::ATTRIBUTE_SYMBOLS)
         .copied()
         .chain(CLIENT_TABLES.into_iter().flat_map(|table| {

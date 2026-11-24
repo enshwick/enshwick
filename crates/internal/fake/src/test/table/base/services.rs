@@ -215,7 +215,7 @@ entries! {
             return Status::BAD_ARGS;
         };
         // The loader refuses an event it never raises, as on an older loader.
-        if !(Event::SETTINGS_CHANGED.0..=Event::WAYPOINT_CHANGED.0).contains(&event.0) {
+        if !enshwick_core::__fake::rules::is_loader_event(event) {
             return Status::MISSING;
         }
         crate::test::table::with_open(|s| {

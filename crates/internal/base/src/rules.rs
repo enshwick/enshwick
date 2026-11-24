@@ -1,6 +1,13 @@
 //! The rules the loader and the fake host both refuse a mod's requests by.
 
-use crate::abi::HookFlags;
+use crate::abi::{Event, HookFlags};
+
+/// Whether `event` is one the loader raises, so a mod may subscribe to it: an
+/// event past the last is one a newer loader raises.
+#[must_use]
+pub const fn is_loader_event(event: Event) -> bool {
+    event.0 >= Event::SETTINGS_CHANGED.0 && event.0 <= Event::QUEST_PROGRESSED.0
+}
 
 /// Whether a hook names both a target and a detour: without either it is a
 /// bad request.

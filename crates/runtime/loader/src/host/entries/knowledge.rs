@@ -53,6 +53,18 @@ entries! {
         )
     }
 
+    fn quest_reward_filter(
+        me as Mod,
+        callback as Callback<enshwick_core::abi::QuestRewardFilterFn>,
+        user: *mut core::ffi::c_void,
+    ) -> Status {
+        me.claim(
+            "quest reward filter",
+            Mode::Chained,
+            crate::knowledge::quest_pay::register(me.loader, me.index, callback, user),
+        )
+    }
+
     fn knowledge(loader as Caller, entity: Entity, id: KnowledgeId, out as HeadedOut<KnowledgeInfo>) -> Status {
         out.put(crate::knowledge::store::value(loader, entity, id.get())?)
     }
@@ -74,6 +86,17 @@ entries! {
             (account, 0) => crate::knowledge::store::changes::for_account(loader, account, id, kind, value, revoke)?,
             _ => return Err(Status::BAD_ARGS.into()),
         }
+        Ok(())
+    }
+
+    fn knowledge_set(loader as Caller, entity: Entity, id: KnowledgeId, value: u32, notice: u8) -> Status {
+        use crate::knowledge::store::changes::{Notice, set};
+        let notice = match notice {
+            api_frame::KnowledgeChange::QUIET => Notice::Quiet,
+            api_frame::KnowledgeChange::SHOWN => Notice::Shown,
+            _ => return Err(Status::BAD_ARGS.into()),
+        };
+        set(loader, entity.0, id.get(), value, notice)?;
         Ok(())
     }
 

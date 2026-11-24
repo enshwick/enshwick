@@ -62,7 +62,8 @@ A knowledge entry or a buff is its GUID.
 | `LevelUp(level)`   | `level_up = <level>`    | The player reaches the level; 0 for any    |
 | `Join`             | `join = true`           | The player joins the world                 |
 | `Loot`             | `loot = true`           | The player loots a container               |
-| `Quest`            | `quest = true`          | The player completes a quest               |
+| `Quest(None)`      | `quest = true`          | The player completes a quest               |
+| `Quest(Some(id))`  | none                    | The player completes the quest `id`        |
 | `Consume(item)`    | `consume = "<item>"`    | The game took the item of an allowed use   |
 | `Pickup(item)`     | `pickup = "<item>"`     | The player picks the item up               |
 

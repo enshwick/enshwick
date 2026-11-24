@@ -268,3 +268,5 @@ names every entry of the golden layout once, in that order.
 | `rekey_resource` | game | — | client |
 | `game_binding` | game | — | client |
 | `game_rebind` | game | — | client |
+| `quest_reward_filter` | game | — | with a player |
+| `knowledge_set` | game | — | with a player |

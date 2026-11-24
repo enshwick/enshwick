@@ -209,3 +209,37 @@ fn a_query_without_parts_or_one_of_more_than_two_is_refused() {
         "a count from 0"
     );
 }
+
+#[test]
+fn a_query_reads_its_own_knowledge_and_that_of_the_queries_it_names() {
+    let db = Value::Struct(vec![(
+        QUERIES.into(),
+        Value::List(vec![
+            query(
+                "a",
+                1,
+                false,
+                vec![action(0x10, None), action(2, Some((1, 1)))],
+            ),
+            query(
+                "b",
+                2,
+                false,
+                vec![action(0x20, None), action(1, Some((0, 0)))],
+            ),
+            query("c", 3, true, vec![action(0x30, None), action(0x10, None)]),
+            query("d", 4, false, Vec::new()),
+        ]),
+    )]);
+    assert_eq!(
+        knowledge_read(&db),
+        vec![
+            (1, vec![0x10, 0x20]),
+            (2, vec![0x10, 0x20]),
+            (3, vec![0x10, 0x30]),
+            (4, Vec::new()),
+        ],
+        "a named query's ids count, a cycle ends, and each id once"
+    );
+    assert!(knowledge_read(&Value::Struct(Vec::new())).is_empty());
+}
