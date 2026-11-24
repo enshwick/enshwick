@@ -7,7 +7,7 @@ use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use enshwick::resources::Value;
-use enshwick_gamedata::typed::{Catalogue, engine_name, newest_snapshot};
+use enshwick_gamedata::typed::{Catalogue, Relevance, engine_name, newest_snapshot};
 use enshwick_gamedata::{Side, Table, data_dir, kept};
 
 fn typed_cross(c: &mut Criterion) {
@@ -22,9 +22,10 @@ fn typed_cross(c: &mut Criterion) {
     else {
         return;
     };
-    let Ok(catalogue) = Catalogue::from_snapshot(&text) else {
+    let Ok(all) = Catalogue::from_snapshot(&text) else {
         return;
     };
+    let catalogue = all.covered(&Relevance::committed());
     let registry = catalogue.registry();
     let samples: Vec<Option<Value>> = enshwick::typed::NAMED
         .iter()

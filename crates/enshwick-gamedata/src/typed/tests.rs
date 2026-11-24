@@ -3,7 +3,7 @@ use crate::reflect::{Image, Layout};
 
 #[test]
 fn the_relevance_rule_reads() {
-    let relevance = Relevance::read();
+    let relevance = Relevance::committed();
     assert_eq!(
         relevance.roots.len() + relevance.suffixes.len(),
         Role::ALL.len()
@@ -446,10 +446,10 @@ fn every_id_of_the_committed_table_names_one_engine_type() {
     }
 }
 
-/// The snapshot the committed typed API was generated from, the newest
-/// server build's as `cargo enshwick generate` picks it, and that build's
-/// name; `None` without the game data folder, and the test that needs it
-/// skips.
+/// The catalogue the committed typed API was generated from: the newest
+/// server build's snapshot as `cargo enshwick generate` picks it, covered by
+/// this tree's rule, and that build's name; `None` without the game data
+/// folder or its snapshot, and the test that needs it skips.
 fn committed() -> Option<(Catalogue, String)> {
     let tables: Vec<crate::Table> = crate::kept()
         .unwrap()
@@ -459,7 +459,64 @@ fn committed() -> Option<(Catalogue, String)> {
     let path = newest_snapshot(&crate::data_dir()?, &tables, crate::Side::Server).unwrap()?;
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}"));
     let build = snapshot_build(&path, &tables);
-    Some((Catalogue::from_snapshot(&text).unwrap(), build))
+    let all = Catalogue::from_snapshot(&text).unwrap();
+    Some((all.covered(&Relevance::committed()), build))
+}
+
+/// A demo rule like `relevant.toml`, whose resources end in `suffixes`.
+fn demo_rule(suffixes: &str) -> Relevance {
+    Relevance::parse(&format!(
+        "[roots]\ncomponent = \"demo::ecs::Component\"\nevent = \"demo::ecs::Event\"\n\
+         [suffixes]\nresource = [{suffixes}]\n\
+         [left_out]\nnamespaces = []\nwords = []\nprefixes = []\n"
+    ))
+    .unwrap()
+}
+
+#[test]
+fn one_snapshot_of_every_type_covers_what_each_tree_s_own_rule_covers() {
+    let mut all = fixture();
+    all.types.insert(
+        "demo::LootResourceDb".to_owned(),
+        Ty {
+            name: "demo::LootResourceDb".to_owned(),
+            kind: Kind::Struct,
+            size: 4,
+            align: 4,
+            base: None,
+            inner: Some("demo::uint32".to_owned()),
+            count: None,
+            fields: Vec::new(),
+            values: Vec::new(),
+            attributes: Vec::new(),
+            roles: vec![Role::Component],
+        },
+    );
+    let snapshot = Catalogue::from_snapshot(&all.snapshot()).unwrap();
+    let main = snapshot.clone().covered(&demo_rule("\"Resource\""));
+    let branch = snapshot.covered(&demo_rule("\"Resource\", \"ResourceDb\""));
+    let named = |catalogue: &Catalogue, role| catalogue.names(role).collect::<Vec<_>>();
+    assert_eq!(named(&main, Role::Resource), ["demo::LootResource"]);
+    assert_eq!(
+        named(&branch, Role::Resource),
+        ["demo::LootResource", "demo::LootResourceDb"],
+        "the rule that adds a suffix covers more of the same snapshot"
+    );
+    for tree in [&main, &branch] {
+        assert_eq!(
+            named(tree, Role::Component),
+            ["demo::ecs::Fuel"],
+            "the snapshot's own roles go"
+        );
+        assert!(
+            tree.types.contains_key("demo::uint32"),
+            "a reached type stays"
+        );
+    }
+    assert!(
+        !main.types.contains_key("demo::LootResourceDb"),
+        "an uncovered type goes"
+    );
 }
 
 #[test]
@@ -480,7 +537,7 @@ fn the_newest_snapshot_ranks_kept_builds_by_steam_build_and_puts_an_untabled_one
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, "").unwrap();
     }
-    std::fs::write(dir.join("typed").join("notes.jsonl"), "").unwrap();
+    std::fs::write(dir.join(SNAPSHOTS).join("notes.jsonl"), "").unwrap();
     let newest = newest_snapshot(&dir, &tables, crate::Side::Server)
         .unwrap()
         .unwrap();
@@ -511,7 +568,7 @@ fn among_untabled_snapshots_the_one_written_last_wins_and_a_missing_folder_has_n
     let start = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1 << 30);
     let snapshot = |guid: &str, age: u32, hours: u64| {
         let path = dir
-            .join("typed")
+            .join(SNAPSHOTS)
             .join(format!("server-{}-{age}.jsonl", guid.repeat(16)));
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         let file = std::fs::File::create(&path).unwrap();
@@ -527,9 +584,9 @@ fn among_untabled_snapshots_the_one_written_last_wins_and_a_missing_folder_has_n
         Some(last)
     );
     drop(std::fs::remove_dir_all(&dir));
-    // A `typed` that is a file, not a folder, does not read.
+    // A snapshot folder that is a file, not a folder, does not read.
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("typed"), "").unwrap();
+    std::fs::write(dir.join(SNAPSHOTS), "").unwrap();
     assert!(newest_snapshot(&dir, &[], crate::Side::Server).is_err());
     drop(std::fs::remove_dir_all(&dir));
 }

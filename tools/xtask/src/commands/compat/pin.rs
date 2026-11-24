@@ -54,7 +54,7 @@ pub(crate) struct Args {
     repo: PathBuf,
     /// The game data folder outside the repository: the kept builds' tables
     /// in `tables/`, ported when one is for the old build, and the typed
-    /// snapshots in `typed/`, where `--write` keeps the new build's.
+    /// snapshots in `reflection/`, where `--write` keeps the new build's.
     #[arg(long, env = enshwick_gamedata::DATA_VAR)]
     data: Option<PathBuf>,
     /// The new build's Steam build id, for the report's name of the ported
@@ -150,6 +150,9 @@ struct Typed {
     report: String,
     settled: bool,
     side: enshwick_gamedata::Side,
+    /// Every reflected type of the new build, its snapshot.
+    reflected: enshwick_gamedata::typed::Catalogue,
+    /// The new build's types the repository's rule covers.
     after: enshwick_gamedata::typed::Catalogue,
     renames: enshwick_gamedata::typed::Renames,
 }
@@ -164,7 +167,9 @@ fn typed(
     new_fp: Fingerprint,
 ) -> anyhow::Result<Typed> {
     let before = generate::catalogue(old).context("the old executable")?;
-    let after = generate::catalogue(new).context("the new executable")?;
+    let before = generate::covered(&args.repo, before)?;
+    let reflected = generate::catalogue(new).context("the new executable")?;
+    let after = generate::covered(&args.repo, reflected.clone())?;
     let known = generate::renames(&args.repo)?;
     let diff = before.diff(&after, &known);
     Ok(Typed {
@@ -177,6 +182,7 @@ fn typed(
         settled: !diff.needs_person(),
         side,
         renames: known.clone().with(&diff),
+        reflected,
         after,
     })
 }
@@ -185,7 +191,7 @@ fn typed(
 /// the renames its diff found in the rename table and, for a server build,
 /// the typed API regenerated.
 fn write_typed(args: &Args, data: &Path, typed: &Typed, new_fp: Fingerprint) -> anyhow::Result<()> {
-    generate::write_snapshot(data, &typed.after, typed.side, new_fp)?;
+    generate::write_snapshot(data, &typed.reflected, typed.side, new_fp)?;
     let renames = args.repo.join(enshwick_gamedata::typed::RENAMES);
     if typed.renames != generate::renames(&args.repo)? {
         let text = typed.renames.to_toml().context("the rename table")?;

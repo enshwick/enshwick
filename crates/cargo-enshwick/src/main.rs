@@ -193,7 +193,7 @@ enum Command {
         #[arg(long, default_value = ".")]
         root: PathBuf,
         /// The game data folder outside the repository that holds the kept
-        /// builds' tables in `tables/` and their snapshots in `typed/`.
+        /// builds' tables in `tables/` and their snapshots in `reflection/`.
         #[arg(long, env = enshwick_gamedata::DATA_VAR)]
         data: PathBuf,
         /// Writes nothing and fails when the committed files differ.
