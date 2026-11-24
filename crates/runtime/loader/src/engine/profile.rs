@@ -791,6 +791,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn a_pack_s_callback_runs_as_the_pack_and_the_loader_s_callback_inside_it_as_the_loader() {
+        on_host(&crate::host::API);
         let pack = ModIndex::new(2).handle();
         let running = || enshwick_core::host().map(|host| host.handle());
         as_pack_or_loader(Some(pack), || {

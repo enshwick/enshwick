@@ -327,6 +327,7 @@ fn a_found_pack_counts_its_files_in_the_join_version_after_it_turns_off_too() {
         format!("id = \"{id}\"\nversion = \"1.0.0\"\n"),
     )
     .unwrap();
+    crate::base::join::client::on_pack_hash(crate::packs::data_packs::hash_of);
     let found = crate::packs::data_packs::discover(&mods);
     std::fs::remove_dir_all(&mods).unwrap();
     assert_eq!(

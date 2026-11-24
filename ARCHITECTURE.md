@@ -348,12 +348,16 @@ its own; these steps hold for one that grows inside core first.
   (seal, link, its work at a stage of the server step, a player's join and
   leave, a hosted game's start and end, the world's loaded, saved and
   shutdown events, the server's game events, a world's settings and its
-  poll, the status summary, a client's link to its server and a joining
-  client's data). The joins walk the layers in the order of `domains.toml`
-  and each list in its own order, so a domain's change touches its own list
-  only. Where base needs one part above it (the chat's lines, the
-  interface's dialogs, the take of a message kind), that part names itself
-  in base when it seals, so base names nothing above it. Each call the game's threads make runs under a fuse of its own. A
+  poll, the status summary, a client's link to its server, a joining
+  client's data, what it keeps of each mod, a mod turned off or back on,
+  and what it settles at each arming of code patches). The joins walk the
+  layers in the order of `domains.toml` and each list in its own order, so
+  a domain's change touches its own list only. Where base needs one part
+  above it (the chat's lines, the interface's dialogs, the take of a
+  message kind, a data pack's files hash), that part names itself in base
+  when it seals, so base names nothing above it; where the engine calls one
+  (the recipe list filter, the host table data packs run on), it is named
+  at its link or at the start. Each call the game's threads make runs under a fuse of its own. A
   snapshot test pins each phase's order; a change to it is made with its
   reason.
 - The `[loader]` table of `domains.toml` holds the layers to the domain
@@ -362,7 +366,10 @@ its own; these steps hold for one that grows inside core first.
   methods a module adds to another's type, and refuses a new edge up. The edges
   up still in the code are listed there, module by module, and only go.
 - `engine::loader` holds the one `Loader`, installed once at start: the
-  build, the mods' records, the hook chains and the subscriptions.
+  build, the mods' records, the hook chains and the subscriptions. A
+  mod's record keeps what the engine needs of it; what a layer above
+  keeps of a mod, or of the whole run, is a fact of a type that layer owns
+  (`engine::facts`), made by its part with the record or by the start.
 - `engine::detour`, `engine::mid` and `engine::chains` are the hooking
   engine: one detour per target, mods linked through atomic slots,
   mid-function hooks with the full CPU state.
