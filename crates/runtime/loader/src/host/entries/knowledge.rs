@@ -1,5 +1,5 @@
 //! Host functions for the knowledge domain: knowledge values, quests, game
-//! queries, skills, comfort and experience.
+//! queries, skills, comfort, experience and progress.
 
 use enshwick_core::abi::{KnowledgeId, KnowledgeInfo, Status};
 use enshwick_core::{Entity, abi as api_frame};
@@ -106,5 +106,10 @@ entries! {
             .map(KnowledgeId::new)
             .collect();
         out.put(&ids)
+    }
+
+    fn progress_write(me as Mod, entity: Entity, what: u32, value: u32) -> Status {
+        crate::knowledge::progress::write(me.loader, me.index, entity.0, what, value)?;
+        Ok(())
     }
 }

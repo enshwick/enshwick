@@ -4,15 +4,13 @@ use std::sync::atomic::Ordering;
 
 use enshwick_base::Relock;
 use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{
-    ContentRename, Header, Level, ManifestFlags, ModHandle, ModInfo, Side, Status, Str,
-};
+use enshwick_core::abi::{Header, Level, ManifestFlags, ModHandle, ModInfo, Side, Status, Str};
 use enshwick_core::mods::LOADER_FILE;
 
 use crate::engine::loader::{ModRecord, loader};
 use crate::host::LOADER_HANDLE;
-use crate::host::layer::guards::{before_delivery, declared_or_game, in_init, not_another_mods};
-use crate::host::layer::{AnyMod, Callback, List, Mod, Out, SizedListOut, Text, entries};
+use crate::host::layer::guards::in_init;
+use crate::host::layer::{AnyMod, Callback, Mod, Out, SizedListOut, Text, entries};
 use crate::host::memory::text;
 
 /// The listing entry of the loader itself.
@@ -91,18 +89,6 @@ entries! {
         }
         let content = crate::base::worlds::file_text(me.record, file);
         out.put(Str::new(settings.settings.relock().keep(&content).unwrap_or_default()))
-    }
-
-    fn rename_content(me as Mod, [renames, count] as List<ContentRename>) -> Status {
-        before_delivery(me.loader)?;
-        for rename in renames {
-            not_another_mods(me.record, rename.from)?;
-        }
-        // Only the end of each chain is new; `declare` refuses a cycle, which has none.
-        for rename in renames.iter().filter(|r| !renames.iter().any(|on| on.from == r.to)) {
-            declared_or_game(me.record, rename.to)?;
-        }
-        Ok(crate::content::content_renames::declare(me.index, renames)?)
     }
 
     fn mods(me as AnyMod, [out, entry_size, capacity, count] as SizedListOut<ModInfo>) -> Status {
