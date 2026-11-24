@@ -332,7 +332,7 @@ fn run(loader: Option<&Loader>, serving: &Serving, step: Step) {
                 .get()
                 .and_then(Option::as_ref)
                 .map(|_| RULES.grace);
-            let text = crate::engine::texts::for_player(key, || {
+            let text = crate::base::net::for_player(key, || {
                 let names = loader.map_or_else(|| serving.names.clone(), reader_names);
                 super::note(&needs, hello, &names, leaving)
             });
@@ -359,7 +359,7 @@ fn run(loader: Option<&Loader>, serving: &Serving, step: Step) {
                 INFO,
                 "join check: the game of {key:016x} said a matching hello late; it stays"
             );
-            crate::engine::texts::for_player(key, || {
+            crate::base::net::for_player(key, || {
                 crate::base::tell::line(key, &crate::engine::texts::fill("join.admitted", &[]))
             });
         }

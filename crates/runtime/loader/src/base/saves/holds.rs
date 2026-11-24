@@ -316,7 +316,7 @@ fn tell_admins(loader: &Loader, mods: &str) {
     };
     for player in players.iter().filter(|p| p.is_admin()) {
         let key = player.key.get();
-        let text = crate::engine::texts::for_player(key, || {
+        let text = crate::base::net::for_player(key, || {
             crate::engine::texts::fill("saves.held-long", &[("mods", mods)])
         });
         crate::base::tell::tell(loader, key, &text);

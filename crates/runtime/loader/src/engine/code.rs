@@ -92,12 +92,27 @@ struct State {
     patches: Registry<CodePatch>,
     /// Whether the workshop limit is lifted, settled at each arming round.
     lifted: AtomicBool,
+    /// What filters a workshop's recipe list after the lookup, named by the
+    /// part that links the lookup.
+    recipe_filter: OnceLock<RecipeFilter>,
 }
 
 static STATE: State = State {
     patches: Registry::new(),
     lifted: AtomicBool::new(false),
+    recipe_filter: OnceLock::new(),
 };
+
+/// Filters the recipe list the lookup wrote for a workshop.
+///
+/// # Safety
+///
+/// - `out` is readable and writable for a `[u64; 2]` span `[address, length]`
+///   for the call, and nothing else touches it during the call.
+/// - The span's `address` is 0 or the address of `length` readable `u64`
+///   recipe addresses, each 0 or a recipe of the game's live registry,
+///   unchanged during the call.
+pub(crate) type RecipeFilter = unsafe fn(workshop: u32, out: *mut [u64; 2]);
 static TEXT: OnceLock<Option<(usize, usize)>> = OnceLock::new();
 
 /// The `.text` section in PE `headers`: its offset from the image base and
@@ -812,8 +827,10 @@ fn lookup_address(loader: &'static Loader) -> Option<u64> {
     })
 }
 
-/// Links the per-workshop list lookup for disabled recipes; whether it is.
-pub(crate) fn link_recipe_lookup(loader: &'static Loader) -> bool {
+/// Links the per-workshop list lookup, whose lists `filter` then filters for
+/// disabled recipes; whether it is linked.
+pub(crate) fn link_recipe_lookup(loader: &'static Loader, filter: RecipeFilter) -> bool {
+    let _first = STATE.recipe_filter.set(filter);
     lookup_address(loader).is_some()
 }
 
@@ -828,7 +845,9 @@ pub(crate) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]
                 .any(|(p, v)| p.address == lift.patch && *v == Verdict::Write)
     });
     STATE.lifted.store(lifted, Ordering::Release);
-    crate::world::bases::arming(patches, verdicts, hooked);
+    if let Some(loader) = crate::engine::loader::loader() {
+        loader.parts.arming(patches, verdicts, hooked);
+    }
 }
 
 /// Turns off every feature that rests on a code patch, with plain stores
@@ -837,7 +856,9 @@ pub(crate) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]
 /// with its feature on. The next round's [`arming`] settles them again.
 pub(crate) fn disarm() {
     STATE.lifted.store(false, Ordering::Release);
-    crate::world::bases::disarm();
+    if let Some(loader) = crate::engine::loader::loader() {
+        loader.parts.disarm();
+    }
 }
 
 /// Whether the workshop limit is lifted.
@@ -945,12 +966,15 @@ crate::engine::chains::chain_detour! {
                 );
             };
         }
-        let _caught = LOOKUP_FUSE.run("the recipe list lookup", || {
-            // SAFETY: `out` is the lookup's non-null out span (checked
-            // earlier) for the call, which the game or the lift just filled
-            // with the address and length of a list of live registry recipes.
-            unsafe { crate::content::recipes::filter(id, out) };
-        });
+        if let Some(filter) = STATE.recipe_filter.get() {
+            let _caught = LOOKUP_FUSE.run("the recipe list lookup", || {
+                // SAFETY: `out` is the lookup's non-null out span (checked
+                // earlier) for the call, which the game or the lift just
+                // filled with the address and length of a list of live
+                // registry recipes, as `RecipeFilter` requires.
+                unsafe { filter(id, out) };
+            });
+        }
         result
     }
 }

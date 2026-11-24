@@ -167,6 +167,7 @@ pub(crate) fn start(missing_forwards: u32, release: extern "system" fn() -> u32)
     unsafe {
         enshwick_base::__internal::install_host(&raw const host::API, host::LOADER_HANDLE);
     }
+    crate::engine::profile::on_host(&host::API);
     attribute_crashes(loader, &order);
     initialise(loader, &order, watching.as_mut());
     seal(loader);

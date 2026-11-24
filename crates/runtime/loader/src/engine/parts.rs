@@ -7,9 +7,11 @@ use std::time::Instant;
 
 use enshwick_core::abi::{Event, PlayerData};
 
+use crate::engine::code::{CodePatch, Verdict};
 use crate::engine::diag::Summary;
+use crate::engine::facts::{Fact, Facts};
 use crate::engine::fuse::Fuse;
-use crate::engine::loader::Loader;
+use crate::engine::loader::{Loader, ModRecord};
 use crate::engine::mod_index::ModIndex;
 use crate::engine::part_order;
 
@@ -79,6 +81,13 @@ pub(crate) struct Part {
     /// said hello, the part's join data; false when some of it did not fit
     /// the link, so the whole goes again.
     pub(crate) handover: Option<fn(u64) -> bool>,
+    /// What the part keeps of each mod, made with the mod's record at the
+    /// start and read through [`ModRecord::fact`].
+    pub(crate) facts: Option<fn(&ModRecord) -> Box<dyn Fact>>,
+    /// A mod turned off, or back on: the part follows what it keeps of it.
+    pub(crate) turned: Option<fn(&Loader, &ModRecord)>,
+    /// What the part rests on code patches for, settled at each arming.
+    pub(crate) patches: Option<Patches>,
     /// The part as a whole, named after it: its hosting, end and forget run
     /// under it, and once a panic in one of them turns it off, the part's
     /// steps, joins, leaves, hellos and world events stop too, since they
@@ -112,6 +121,9 @@ impl Part {
             shared: None,
             server_link: None,
             handover: None,
+            facts: None,
+            turned: None,
+            patches: None,
             fuse,
         }
     }
@@ -178,6 +190,18 @@ impl<F: Copy> Fused<F> {
     pub(crate) fn call<R>(&self, site: &str, call: impl FnOnce(F) -> R) -> Option<R> {
         self.fuse.run(site, || call(self.run))
     }
+}
+
+/// What a part settles of the code patches it rests on, as
+/// [`crate::engine::code::arming`] and [`crate::engine::code::disarm`] do.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Patches {
+    /// Settles, before arming writes anything, whether the part's features
+    /// run: the patches, their verdicts and the targets hooked.
+    pub(crate) arming: fn(&[CodePatch], &[Verdict], &[u64]),
+    /// Turns the part's patch features off with plain stores, while the
+    /// other threads stand still.
+    pub(crate) disarm: fn(),
 }
 
 /// A call at a player's join or leave.
@@ -500,6 +524,46 @@ impl Parts {
         }
         for part in self.iter() {
             part.clear(loader);
+        }
+    }
+
+    /// What every part keeps of the mod `record` is for, made as its record
+    /// is.
+    pub(crate) fn facts(&self, record: &ModRecord) -> Facts {
+        Facts::new(
+            self.iter()
+                .filter_map(|part| part.facts)
+                .map(|make| make(record))
+                .collect(),
+        )
+    }
+
+    /// Tells every part that `record`'s mod turned off or back on, lowest
+    /// layer first, each under the part's fuse.
+    pub(crate) fn turned(&self, loader: &Loader, record: &ModRecord) {
+        for part in self.running() {
+            if let Some(turned) = part.turned {
+                let _ran = part.fuse.run("a mod turned off or on", || {
+                    turned(loader, record);
+                });
+            }
+        }
+    }
+
+    /// Lets every part that rests on code patches settle its features
+    /// before arming writes anything.
+    pub(crate) fn arming(&self, patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]) {
+        for settle in self.iter().filter_map(|part| part.patches) {
+            (settle.arming)(patches, verdicts, hooked);
+        }
+    }
+
+    /// Turns off every part's patch features with plain stores: it neither
+    /// allocates, locks nor logs, so it runs while the other threads stand
+    /// still.
+    pub(crate) fn disarm(&self) {
+        for settle in self.iter().filter_map(|part| part.patches) {
+            (settle.disarm)();
         }
     }
 

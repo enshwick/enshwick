@@ -193,9 +193,8 @@ mod live {
     /// Answers the player of account `key` the run from `path` refused for
     /// `refusal`.
     pub(crate) fn refuse(loader: &Loader, path: Path, key: u64, refusal: Refusal) {
-        let text = crate::engine::texts::for_player(key, || {
-            crate::engine::texts::text(refusal.text_key())
-        });
+        let text =
+            crate::base::net::for_player(key, || crate::engine::texts::text(refusal.text_key()));
         crate::actions::reply::answer(loader, path, key, text);
     }
 

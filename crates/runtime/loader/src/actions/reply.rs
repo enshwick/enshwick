@@ -45,7 +45,7 @@ mod live {
     /// Tells player `key` the loader's text `text_key` in the language
     /// they read.
     pub(crate) fn tell_text(loader: &Loader, key: u64, text_key: &'static str) {
-        let text = crate::engine::texts::for_player(key, || crate::engine::texts::text(text_key));
+        let text = crate::base::net::for_player(key, || crate::engine::texts::text(text_key));
         tell(loader, key, text);
     }
 

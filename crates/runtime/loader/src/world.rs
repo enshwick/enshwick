@@ -76,7 +76,7 @@ pub(crate) mod writes;
 #[cfg(windows)]
 use crate::base::remote::Message;
 #[cfg(windows)]
-use crate::engine::parts::{Part, fused, part, step};
+use crate::engine::parts::{Part, Patches, fused, part, step};
 
 /// The world domain's parts, in the order the joins call each of their
 /// phases.

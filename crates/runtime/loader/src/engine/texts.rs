@@ -83,14 +83,6 @@ pub(crate) fn for_nobody<R>(f: impl FnOnce() -> R) -> R {
     scoped(None, f)
 }
 
-/// Runs `f` with every text it fills in the language the game of player
-/// `key` reads, as its hello said; the loader's own for a game that said
-/// none.
-#[cfg(windows)]
-pub(crate) fn for_player<R>(key: u64, f: impl FnOnce() -> R) -> R {
-    for_reader(crate::base::net::language_of(key), f)
-}
-
 /// The language of the player the texts on this thread are for, inside
 /// [`for_reader`]; `None` outside.
 pub(crate) fn reader() -> Option<Language> {

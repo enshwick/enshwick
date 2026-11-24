@@ -246,15 +246,15 @@ pub(crate) fn pack_handle(
 }
 
 /// Runs `f` as the data pack `pack` in the loader's own copy of the API, or
-/// as the loader for `None`.
+/// as the loader for `None` and before the start named the host table.
 #[cfg(windows)]
 #[inline]
 fn as_pack_or_loader<R>(pack: Option<enshwick_core::abi::ModHandle>, f: impl FnOnce() -> R) -> R {
-    match pack {
-        // SAFETY: `API` is the loader's process-wide table, a static.
-        Some(pack) => unsafe {
-            enshwick_base::__internal::as_pack(&raw const crate::host::API, pack, f)
-        },
+    match pack.zip(STATE.host.get()) {
+        // SAFETY: the named table is the loader's process-wide one, a static
+        // borrowed for the process, aligned and readable for its header's
+        // size.
+        Some((pack, &api)) => unsafe { enshwick_base::__internal::as_pack(api, pack, f) },
         None => enshwick_base::__internal::as_loader(f),
     }
 }
@@ -326,12 +326,25 @@ struct State {
     tsc_hz: AtomicU64,
     /// Every mod's buckets, `FEATURES` per mod, once timing is on.
     buckets: OnceLock<Box<[Bucket]>>,
+    /// The host table data packs run on, the loader's own, named at the
+    /// start.
+    #[cfg(windows)]
+    host: OnceLock<&'static enshwick_core::abi::HostApi>,
 }
 
 static STATE: State = State {
     tsc_hz: AtomicU64::new(0),
     buckets: OnceLock::new(),
+    #[cfg(windows)]
+    host: OnceLock::new(),
 };
+
+/// Names `api`, the loader's process-wide host table, as the one data packs'
+/// code runs on; the first one named stays.
+#[cfg(windows)]
+pub(crate) fn on_host(api: &'static enshwick_core::abi::HostApi) {
+    let _first = STATE.host.set(api);
+}
 
 /// Keeps the time-stamp counter's rate, measured off the game thread, for
 /// [`nanos`].

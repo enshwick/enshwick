@@ -229,7 +229,7 @@ pub(crate) fn server_carried(key: u64, channel: u32, data: &[u8], looped: bool) 
         return;
     };
     if channel != CONTROL {
-        crate::engine::texts::for_player(key, || deliver(channel, key, data));
+        crate::base::net::for_player(key, || deliver(channel, key, data));
         return;
     }
     if let Some(hello) = read_hello(data) {

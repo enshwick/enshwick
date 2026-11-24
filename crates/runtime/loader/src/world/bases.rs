@@ -721,7 +721,7 @@ pub(crate) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]
 }
 
 /// Turns off bases past 16, which rests on code patches, with a plain store:
-/// see [`crate::engine::code::disarm`].
+/// see [`crate::engine::parts::Patches::disarm`].
 pub(crate) fn disarm() {
     past16::disarm();
 }

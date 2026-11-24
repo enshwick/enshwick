@@ -242,7 +242,7 @@ pub(crate) fn client(message: Message) {
 /// Takes a message a client sent, on the server's game thread; the
 /// answer is in the language the client's player reads.
 pub(crate) fn server(loader: &Loader, key: u64, message: Message) {
-    texts::for_player(key, || answer(loader, key, message));
+    crate::base::net::for_player(key, || answer(loader, key, message));
 }
 
 /// Answers a message the client `key` sent.

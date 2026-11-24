@@ -629,6 +629,14 @@ pub(crate) fn language_of(key: u64) -> Option<Language> {
     state(|s| language_in(s, key))
 }
 
+/// Runs `f` with every text it fills in the language the game of player
+/// `key` reads, as its hello said; the loader's own for a game that said
+/// none.
+#[cfg(windows)]
+pub(crate) fn for_player<R>(key: u64, f: impl FnOnce() -> R) -> R {
+    crate::engine::texts::for_reader(language_of(key), f)
+}
+
 /// `language` if the ABI lists it; a number read from the game or a peer
 /// that it does not list reads as unknown.
 fn known(language: Language) -> Option<Language> {

@@ -19,7 +19,8 @@ use crate::engine::pinned::{Constant, Symbol};
 use crate::engine::registry::JoinFeatureError;
 use enshwick_base::Relock;
 
-/// A loaded mod.
+/// A loaded mod: what the engine needs of it. What a layer above keeps of
+/// it is one of its facts, read through [`ModRecord::fact`].
 #[derive(Debug)]
 pub(crate) struct ModRecord {
     /// The mod id.
@@ -30,8 +31,6 @@ pub(crate) struct ModRecord {
     pub(crate) file: String,
     /// Its manifest, copied out of its DLL.
     pub(crate) manifest: &'static Manifest,
-    /// What its manifest tells players about it.
-    pub(crate) meta: crate::base::manifest::Meta,
     /// Set when the mod is off: refused at init or faulted later.
     pub(crate) off: AtomicBool,
     /// Why it is off, as the mod or the loader gave it: a text of the mod's
@@ -40,30 +39,24 @@ pub(crate) struct ModRecord {
     /// Set while one of its code patches waits for a thread to leave it: its
     /// detours and mid-function hooks are bypassed, the rest of it runs.
     pub(crate) waiting: AtomicBool,
-    /// The settings texts handed to the mod, kept for the process: the mod
-    /// may still read one on a thread of its own while another thread asks
-    /// for a newer one, and a file read over and over keeps one copy.
-    pub(crate) settings: Mutex<crate::engine::kept_text::KeptText>,
-    /// On a client in another's world, the settings its server sent for the
-    /// mod, every file seen as one.
-    pub(crate) server_values: Mutex<Option<String>>,
-    /// The settings files the mod declared, in the order it declared them.
-    pub(crate) settings_files: Mutex<Vec<crate::base::worlds::SettingsFile>>,
-    /// The mod's checks of new settings texts, by file: callback and pointer.
-    pub(crate) checks: Mutex<Vec<(String, api_frame::ConfigCheckFn, usize)>>,
-    /// The texts the mod handed the loader, for its settings' labels.
+    /// The texts the mod handed the loader, which its off reason and its
+    /// features' lines are read in.
     pub(crate) texts: Mutex<Option<enshwick_core::i18n::Texts>>,
-    /// Whether it is a data pack, a folder of data the loader runs.
+    /// Whether it is a data pack, whose code the loader's own copy of the
+    /// API runs.
     pub(crate) pack: bool,
     /// The features it reported on or off, in the order it named them.
     pub(crate) features: Mutex<Vec<crate::engine::features::Feature>>,
+    /// What the layers above keep of it, one fact per type, made by the
+    /// parts with the record.
+    pub(crate) facts: Facts,
 }
 
 impl ModRecord {
-    /// Its settings files seen as one, as the console and the Mods screen
-    /// show them; `None` for a mod without settings.
-    pub(crate) fn settings_schema(&self) -> Option<enshwick_core::config::Schema> {
-        crate::base::worlds::view_schema(&self.settings_files.relock())
+    /// What the layer that owns `T` keeps of the mod; `None` when no part
+    /// made one.
+    pub(crate) fn fact<T: Fact>(&self) -> Option<&T> {
+        self.facts.get()
     }
 
     /// Takes its report that its feature `name` is off for `off`, or on when
@@ -94,26 +87,6 @@ impl ModRecord {
 }
 
 impl ModRecord {
-    /// Whether its manifest requires the mod `id`.
-    pub(crate) fn requires(&self, id: &str) -> bool {
-        // SAFETY: a record's manifest is the loader's copy, kept for the
-        // process with every string and slice in it.
-        unsafe { crate::base::manifest::parse(self.manifest) }.is_ok_and(|candidate| {
-            candidate
-                .dependencies
-                .iter()
-                .any(|d| d.relation == api_frame::Relation::REQUIRES && d.id == id)
-        })
-    }
-
-    /// What its manifest exports for other mods to use, each
-    /// `<kind>:<local name>`.
-    pub(crate) fn exports(&self) -> Vec<&str> {
-        // SAFETY: a record's manifest is the loader's copy, kept for the
-        // process with every string and slice in it.
-        unsafe { crate::base::manifest::exports(self.manifest) }
-    }
-
     /// Why it is off, in the reader's language where its texts have the
     /// reason's text; `None` while it runs.
     pub(crate) fn off_reason_shown(&self) -> Option<String> {
@@ -122,29 +95,6 @@ impl ModRecord {
             self.texts.relock().as_ref(),
             &reason,
         ))
-    }
-
-    /// The name players read, from the mod's texts in their language, else
-    /// from its manifest; empty when neither names it.
-    pub(crate) fn name(&self) -> String {
-        self.meta.name_in(
-            self.texts.relock().as_ref(),
-            crate::engine::texts::language(),
-        )
-    }
-
-    /// The name players read, or the id when nothing names the mod.
-    pub(crate) fn label(&self) -> String {
-        enshwick_core::mods::label(&self.name(), &self.id)
-    }
-
-    /// What the mod does, from its texts in the player's language, else
-    /// from its manifest.
-    pub(crate) fn description(&self) -> String {
-        self.meta.description_in(
-            self.texts.relock().as_ref(),
-            crate::engine::texts::language(),
-        )
     }
 
     /// Whether it runs on both sides, so it takes part in the join check
@@ -156,19 +106,6 @@ impl ModRecord {
     /// Whether the mod runs and counts in the join check.
     pub(crate) fn joins(&self) -> bool {
         !self.off.load(Ordering::Acquire) && self.joins_when_on()
-    }
-
-    /// The version the join check compares: a pack's carries the hash of its
-    /// files, so other files of one version differ.
-    pub(crate) fn join_version(&self) -> String {
-        match self
-            .pack
-            .then(|| crate::packs::data_packs::hash_of(&self.id))
-            .flatten()
-        {
-            Some(hash) => format!("{}+{hash}", self.version),
-            None => self.version.clone(),
-        }
     }
 }
 
