@@ -677,6 +677,29 @@ side = "both""#
         assert!(input.client_command(&clear).is_ok());
     }
 
+    #[test]
+    fn a_joined_client_refuses_a_waypoint_or_ping_past_the_fixed_point_range() {
+        let (loader, input) = input(Side::CLIENT);
+        for action in [
+            CommandAction::SetWaypoint([1e300, 0.0, 0.0]),
+            CommandAction::Ping([0.0, -2_147_483_648.0, 0.0]),
+        ] {
+            assert!(
+                matches!(
+                    input.client_command(&ClientCommand::new(action.clone(), 1)),
+                    Err(WorldError::Refused)
+                ),
+                "{action:?}"
+            );
+        }
+        let far = ClientCommand::new(CommandAction::SetWaypoint([2_147_483_647.0, 0.0, 0.0]), 1);
+        assert!(input.client_command(&far).is_ok());
+        assert_eq!(
+            loader.client_commands(),
+            [(1, Raw::SET_WAYPOINT, String::new())]
+        );
+    }
+
     fn press_item(window: &str, item: &str) -> ClientCommand {
         let action = CommandAction::PressWindowItem {
             window: window.to_owned(),

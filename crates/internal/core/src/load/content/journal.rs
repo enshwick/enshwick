@@ -119,11 +119,14 @@ impl Load<'_> {
     /// server and the client alike, with its steps; its knowledge stays, so
     /// a save that holds its progress still opens. Mods change and remove a
     /// quest in load order. A removal is logged and left out when the
-    /// journal first builds while a step of another mod's quest earlier in
-    /// load order asks for the quest's or one of its steps' id, itself or
-    /// through a game query that reads it, such as one of
-    /// [`Load::add_query`], with the queries it names in turn; while the
-    /// game's queries do not read, every game query counts.
+    /// journal first builds while anything a mod earlier in load order put
+    /// in the journal asks for the quest's or one of its steps' id: a step
+    /// of its own quest, a step it inserted into a vanilla quest or whose
+    /// queries it changed, an entry of a lore page, or an item set. It asks
+    /// by the id itself or through a game query that reads it, such as one
+    /// of [`Load::add_query`], with the queries it names in turn; while the
+    /// game's queries do not read, every game query counts. The game's own
+    /// steps, entries and sets never hold a quest.
     ///
     /// # Errors
     ///

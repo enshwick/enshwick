@@ -556,15 +556,17 @@ step, and the server takes it as the player's own.
 
 | Command | Bounds | Observed |
 | --- | --- | --- |
-| `SetWaypoint` | a finite position, inside the map | the step's input carries it to the server |
+| `SetWaypoint` | a finite position below 2,147,483,648 metres on each axis, inside the map | the step's input carries it to the server |
 | `ClearWaypoint` | none | the same |
-| `Ping` | a finite position, inside the map | the same |
+| `Ping` | a finite position below 2,147,483,648 metres on each axis, inside the map | the same |
 
 A position that is not finite returns `WorldError::Refused`. So does a
-position outside the map's frame in a hosted world. The loader reads that
-frame shortly after a mod first takes a client snapshot or queues a client
-command. A client joined to a server has no frame, so there the loader
-checks only that the position is finite. The
+position whose metres on an axis reach 2,147,483,648 (2^31) either way, the
+range of the game's fixed-point world positions. So does a position outside
+the map's frame in a hosted world. The loader reads that frame shortly after
+a mod first takes a client snapshot or queues a client command. A client
+joined to a server has no frame, so there the loader checks only the
+fixed-point range. The
 server's waypoint follows the request.
 [`load.on_waypoint`](map.md#hearing-waypoints-and-pings) and
 [`map.waypoint`](map.md#waypoints) tell when it changed. They run on the

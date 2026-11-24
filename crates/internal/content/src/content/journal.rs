@@ -61,8 +61,10 @@ pub mod lore_category;
 #[cfg(feature = "typed")]
 pub(crate) mod objectives;
 
+use change::{
+    Found, Others, Reads, change_page_in, change_quest_in, remove_page_in, remove_quest_in,
+};
 pub use change::{PageChange, QuestChange, StepChange, StepEdit, StepInsert, StepMove};
-use change::{Reads, change_page_in, change_quest_in, remove_page_in, remove_quest_in};
 pub use item_sets::{
     ItemSetCategory, ItemSetChange, ItemSetEntry, ItemSetHint, ItemSetId, NewItemSet,
 };
@@ -710,8 +712,8 @@ pub(crate) enum Edit {
     /// A change of a vanilla page, its category's key checked.
     #[cfg(feature = "unstable")]
     ChangePage(EntryId, Option<u32>, PageChange),
-    /// A removal of a vanilla quest, with the game's quest ids, sorted.
-    Remove(KnowledgeId, Arc<[u32]>),
+    /// A removal of a vanilla quest.
+    Remove(KnowledgeId),
     /// A removal of a vanilla page.
     #[cfg(feature = "unstable")]
     RemovePage(EntryId),
@@ -720,21 +722,13 @@ pub(crate) enum Edit {
 }
 
 impl Edit {
-    /// The quest id of a quest of the mod's own.
-    fn own_quest(&self) -> Option<u32> {
-        match self {
-            Self::Quest(new) => Some(KnowledgeId::from_guid(new.id.guid()).get()),
-            _ => None,
-        }
-    }
-
     /// Makes the change in `registry`, which is left as it was on an error;
-    /// `own` holds the quest ids of the mod's own quests and `reads` the
-    /// knowledge each game query reads, read only when a removal needs it.
+    /// `found` tells another mod's changes from the game's, and `reads` holds
+    /// the knowledge each game query reads, read only when a removal needs it.
     fn apply(
         &self,
         registry: &mut Value,
-        own: &[u32],
+        found: &Found,
         reads: &LazyCell<Reads, impl FnOnce() -> Reads>,
     ) -> Result<(), Off> {
         match self {
@@ -746,7 +740,9 @@ impl Edit {
             Self::ChangePage(page, category, change) => {
                 change_page_in(registry, *page, *category, change)
             }
-            Self::Remove(quest, vanilla) => remove_quest_in(registry, *quest, vanilla, own, reads),
+            Self::Remove(quest) => Others::of(found)
+                .map_err(|off| Off::new(format!("quest {quest}: {off}")))
+                .and_then(|others| remove_quest_in(registry, *quest, others, reads)),
             #[cfg(feature = "unstable")]
             Self::RemovePage(page) => remove_page_in(registry, *page),
             Self::ItemSet(edit) => edit.apply(registry),
@@ -781,7 +777,10 @@ impl AddedJournal {
     /// a change that fails is logged and left out, and the rest are made.
     fn serve(host: Host, key: crate::abi::ResourceKey) -> Result<Self, Off> {
         let edits = serve_list(host, key, move |mut registry, edits: &[Edit]| {
-            let own: Vec<u32> = edits.iter().filter_map(Edit::own_quest).collect();
+            let found: Found = edits
+                .iter()
+                .any(|edit| matches!(edit, Edit::Remove(_)))
+                .then(|| (registry.clone(), host.game_value(key)));
             let reads = LazyCell::new(|| {
                 served_knowledge_read(host)
                     .inspect_err(|off| {
@@ -792,7 +791,7 @@ impl AddedJournal {
                     .ok()
             });
             for edit in edits {
-                if let Err(off) = edit.apply(&mut registry, &own, &reads) {
+                if let Err(off) = edit.apply(&mut registry, &found, &reads) {
                     host.log(Level::WARN, &off.to_string());
                 }
             }
@@ -934,7 +933,7 @@ impl LoadMethods for crate::BaseLoad {
                 "quest {quest}: no quest of the game's journal"
             )));
         }
-        self.edit_journal(key, Edit::Remove(quest, vanilla))
+        self.edit_journal(key, Edit::Remove(quest))
     }
 
     #[cfg(feature = "unstable")]

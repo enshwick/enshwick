@@ -3,6 +3,10 @@
 
 use crate::abi::{Entity, Header, RecipeId, Str};
 
+/// The metres a world position's axis stays below: 2^31, past which the
+/// engine's 32.32 fixed point saturates.
+const MAX_POSITION_METRES: f64 = 2_147_483_648.0;
+
 /// Cached diagnostics of the client's local gameplay-input sampler.
 /// Flags and age are weakly consistent observations, not world or session identity.
 /// Reading this does not request sampling. ABI 12.1.
@@ -389,9 +393,10 @@ impl ClientCommand {
     /// Whether the command's own bounds hold: a finite look of at most
     /// [`ClientCommand::MAX_LOOK`] each, a finite direction of length above 0 and
     /// at most 1 held 1 to [`ClientCommand::MAX_HOLD_MS`] ms, a press held 1
-    /// to [`ClientCommand::MAX_PRESS_MS`] ms, a non-zero recipe, a finite
-    /// position to mark, a host's world and character below
-    /// [`ClientCommand::MAX_SLOTS`].
+    /// to [`ClientCommand::MAX_PRESS_MS`] ms, a non-zero recipe, a position to
+    /// mark whose metres are finite and below 2^31 (2,147,483,648) on each
+    /// axis, the range of the engine's 32.32 fixed point, a host's world and
+    /// character below [`ClientCommand::MAX_SLOTS`].
     ///
     /// # Examples
     ///
@@ -420,7 +425,9 @@ impl ClientCommand {
             }
             Self::PRESS => (1..=Self::MAX_PRESS_MS).contains(&self.hold_ms),
             Self::HIGHLIGHT_RECIPE => self.recipe.0 != 0,
-            Self::SET_WAYPOINT | Self::PING => self.position.iter().all(|m| m.is_finite()),
+            Self::SET_WAYPOINT | Self::PING => {
+                self.position.iter().all(|m| m.abs() < MAX_POSITION_METRES)
+            }
             Self::HOST => {
                 self.session == 0
                     && self.world < Self::MAX_SLOTS
@@ -657,4 +664,38 @@ impl ClientWindowItem {
         label: Str::EMPTY,
         line: Str::EMPTY,
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "the test shows where the float-to-int cast saturates"
+    )]
+    fn a_mark_takes_a_position_below_the_fixed_point_range_and_refuses_one_at_it() {
+        let fixed = |metres: f64| (metres * 4_294_967_296.0) as i64;
+        let below = MAX_POSITION_METRES - 1.0;
+        assert!(fixed(below) < i64::MAX && fixed(-below) > i64::MIN);
+        assert_eq!(fixed(MAX_POSITION_METRES), i64::MAX, "saturated");
+        for kind in [ClientCommand::SET_WAYPOINT, ClientCommand::PING] {
+            let at = |position| ClientCommand {
+                kind,
+                position,
+                ..ClientCommand::EMPTY
+            };
+            assert!(at([below, -below, 0.0]).in_bounds());
+            for refused in [
+                [MAX_POSITION_METRES, 0.0, 0.0],
+                [0.0, -MAX_POSITION_METRES, 0.0],
+                [0.0, 0.0, 1e300],
+                [f64::INFINITY, 0.0, 0.0],
+                [f64::NAN, 0.0, 0.0],
+            ] {
+                assert!(!at(refused).in_bounds(), "{kind} {refused:?}");
+            }
+        }
+    }
 }
