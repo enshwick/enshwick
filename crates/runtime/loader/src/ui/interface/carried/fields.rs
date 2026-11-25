@@ -629,6 +629,59 @@ mod tests {
     }
 
     #[test]
+    fn an_item_a_command_picks_past_the_listed_rows_shows_from_the_next_draw_and_runs() {
+        let hair: Vec<(Guid, String)> = (0..80u8)
+            .map(|n| (Guid([n; 16]), format!("Hair {n:02}")))
+            .collect();
+        let torch = Guid([200; 16]);
+        let named = hair
+            .iter()
+            .map(|(guid, name)| (*guid, "", name.as_str()))
+            .chain([(torch, "", "Torch")]);
+        let list = std::sync::Arc::new(crate::content::names::List {
+            language: 0,
+            mods: 0,
+            items: crate::content::names::listed(named),
+        });
+        let arg = ArgView {
+            kind: ArgView::ITEM,
+            label: "Item".into(),
+            ..ArgView::default()
+        };
+        let mut state = Field::new(&arg);
+        let shown = |state: &mut Field| {
+            let paint = Recorder::default();
+            named_field(
+                &paint,
+                b"Item",
+                state,
+                Some(std::sync::Arc::clone(&list)),
+                "windows.item",
+            );
+            paint.drew().into_iter().find_map(|drew| match drew {
+                Drew::Dropdown { options, index, .. } => Some(
+                    usize::try_from(index)
+                        .ok()
+                        .and_then(|at| options.get(at).cloned()),
+                ),
+                _ => None,
+            })
+        };
+        assert_eq!(shown(&mut state), Some(None), "nothing picked yet");
+        assert!(pick_named(
+            &mut state,
+            Some(std::sync::Arc::clone(&list)),
+            "Torch"
+        ));
+        assert_eq!(
+            shown(&mut state),
+            Some(Some("Torch".to_owned())),
+            "past the 64 rows an empty search lists"
+        );
+        assert_eq!(value(&arg, &state), Some(Value::Item(torch)));
+    }
+
+    #[test]
     fn a_field_opens_with_its_argument_s_default() {
         let with = |kind: u8, default: Value| ArgView {
             kind,

@@ -444,10 +444,12 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
         crate::engine::screens::note_window(false);
         return;
     }
-    let shown = READS_FUSE
-        .run("the frame's screen", || screen(engine.app_state(context)))
-        .unwrap_or(UiFrame::MENU);
-    dialog::note_world(shown != UiFrame::MENU);
+    let read = READS_FUSE.run("the frame's screen", || screen(engine.app_state(context)));
+    // A screen that did not read is no leave: the world's windows stay.
+    if let Some(shown) = read {
+        note_world(shown != UiFrame::MENU);
+    }
+    let shown = read.unwrap_or(UiFrame::MENU);
     let [now, _] = WINDOWS.get();
     WINDOWS.set([false, now]);
     engine::caret_next_frame(now);
@@ -509,6 +511,16 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     // SAFETY: inside the frame on the interface thread, `context` non-zero
     // by the guard before it, after every window of the frame drew.
     unsafe { carried::pass_map(engine, context, true) };
+}
+
+/// Notes, each frame on the interface thread, whether the client shows a
+/// world: leaving one for the menu, however it leaves, ends its dialogs and
+/// the windows its server showed, which a link the carrier still holds
+/// would otherwise keep over the menu.
+fn note_world(in_world: bool) {
+    if dialog::note_world(in_world) {
+        let _forgot = CARRIED_FUSE.run("the carried windows' leave", carried::forget);
+    }
 }
 
 /// This frame's screen, prompt and host reads, or none once they are off.

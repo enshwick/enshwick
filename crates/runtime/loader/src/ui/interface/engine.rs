@@ -686,8 +686,9 @@ pub(crate) struct Engine {
 }
 
 /// The address of game function `name`, once its first eight bytes read as
-/// its `<name>.bytes` constant says, or, without one, an engine route found
-/// it whose own match checked its code.
+/// its `<name>.bytes` constant says, or, without one, once
+/// [`Loader::code_holds`] counts a check the anchors or an engine route made
+/// of its code, such as its pattern matched once where it starts.
 fn verify(loader: &Loader, name: Symbol) -> Result<usize, Missing> {
     let address = loader.address(name).ok_or(Missing::Entry(name.id()))?;
     let address = usize::try_from(address).map_err(|_| Missing::Entry(name.id()))?;
@@ -698,7 +699,7 @@ fn verify(loader: &Loader, name: Symbol) -> Result<usize, Missing> {
         // readable; code is not written while it runs.
         unsafe { crate::engine::memory::read::<u64>(address, 0) }
     };
-    if code_checks(expected, loader.build.routed(name.id()), read) {
+    if code_checks(expected, loader.code_holds(name), read) {
         Ok(address)
     } else {
         Err(Missing::Bytes(name.id()))
@@ -706,10 +707,10 @@ fn verify(loader: &Loader, name: Symbol) -> Result<usize, Missing> {
 }
 
 /// Whether a function's code holds: its first eight bytes, `read` only when
-/// needed, equal its `.bytes` when the table has them; without them, an
-/// engine route's own match must have checked it (`routed`).
-fn code_checks(expected: Option<u64>, routed: bool, read: impl FnOnce() -> u64) -> bool {
-    expected.map_or(routed, |want| read() == want)
+/// needed, equal its `.bytes` when the table has them; without them, a check
+/// made while it was found must hold (`held`).
+fn code_checks(expected: Option<u64>, held: bool, read: impl FnOnce() -> u64) -> bool {
+    expected.map_or(held, |want| read() == want)
 }
 
 /// Game function `name`, checked by [`verify`], as a function pointer of

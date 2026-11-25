@@ -232,6 +232,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::TEXT_FIELD_STATE_KEY.id(),
     pinned::ui::TEXT_FIELD_STATE_SIZE.id(),
     pinned::ui::TEXT_FIELD_START.id(),
+    pinned::ui::TEXT_FIELD_TAKE.id(),
     pinned::ui::TEXT_FIELD_TEXT.id(),
     pinned::ui::TOGGLE.id(),
     pinned::ui::TOGGLE_COUNT.id(),

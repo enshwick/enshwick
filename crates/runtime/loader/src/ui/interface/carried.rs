@@ -229,6 +229,9 @@ struct Drawn {
     map_tries: Option<u8>,
     /// The item a client command presses in this frame's draw.
     pressing: Option<Target>,
+    /// The field, by its action and argument, and the text a client command
+    /// put in it, answered once this frame's draw shows whether it holds it.
+    filling: Option<(String, usize, String)>,
 }
 
 /// How many frames a refused map open is tried again, about a second.
@@ -247,6 +250,7 @@ impl Drawn {
             map_opens: None,
             map_tries: None,
             pressing: None,
+            filling: None,
         }
     }
 
@@ -266,9 +270,9 @@ impl Drawn {
     }
 
     /// Takes in a client command `ask` on the window that shows, `view`, as
-    /// the player's input would: a field takes its pick, text or flip at
-    /// once, and a press of a button or a switch is left for the draw.
-    /// The answer, `None` for a press the draw makes.
+    /// the player's input would: a field takes its pick or flip at once and
+    /// its text for the draw to show, and a press of a button or a switch is
+    /// left for the draw. The answer, `None` for one the draw gives.
     fn take(&mut self, view: &View, ask: &Ask) -> Option<Answer> {
         let listed = items::list(view, self.form.as_ref(), self.map_opens.is_some());
         let Some(item) = listed.iter().find(|item| item.target == ask.target) else {
@@ -283,6 +287,10 @@ impl Drawn {
             let taken = arg.is_some_and(|arg| {
                 fields::take(arg, self.field(action, *index, arg), ask.act, &ask.text)
             });
+            if taken && ask.act == Act::Text {
+                self.filling = Some((action.clone(), *index, ask.text.clone()));
+                return None;
+            }
             return Some(if taken { Answer::Shown } else { Answer::Off });
         }
         if ask.act != Act::Press
@@ -293,6 +301,21 @@ impl Drawn {
         }
         self.pressing = Some(ask.target.clone());
         None
+    }
+
+    /// The answer to the text a command put in a field, once the window
+    /// drew: shown while the field holds it, off when the game's own text
+    /// won the draw.
+    fn filled(&mut self) -> Answer {
+        let Some((action, index, text)) = self.filling.take() else {
+            return Answer::Off;
+        };
+        let holds = self
+            .fields
+            .iter()
+            .find(|((a, i), _)| *a == action && *i == index)
+            .is_some_and(|(_, field)| field.text.text() == text);
+        if holds { Answer::Shown } else { Answer::Off }
     }
 
     /// Whether the press `ask` names a Run whose fields all hold a value, or
@@ -510,13 +533,16 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize, screen: Option<u8>) {
         // `context` and no other open window; `drawn` stays in the
         // thread-local `DRAWN`, borrowed and unmoved for the call.
         let click = unsafe { window(engine, context, &top.view, drawn) };
-        if let Some((id, target)) = pressed.zip(drawn.pressing.take()) {
-            // Another click, the player's or Back, won the frame: the press
-            // waits for the next one.
-            if made(&top.view, &target, &click) {
-                windows::answer(id, Answer::Shown);
-            } else {
-                windows::retry(id);
+        if let Some(id) = pressed {
+            let answer = match drawn.pressing.take() {
+                // Another click, the player's or Back, won the frame: the
+                // press waits for the next one.
+                Some(target) => made(&top.view, &target, &click).then_some(Answer::Shown),
+                None => Some(drawn.filled()),
+            };
+            match answer {
+                Some(answer) => windows::answer(id, answer),
+                None => windows::retry(id),
             }
         }
         drawn.after(&click);
