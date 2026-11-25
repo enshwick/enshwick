@@ -403,41 +403,50 @@ impl ClientCommand {
                 raw.dialog = *dialog;
                 raw.answer = response.to_raw();
             }
-            CommandAction::Craft {
-                recipe,
-                count,
-                station,
-            } => {
-                raw.kind = RawCommand::CRAFT;
-                raw.recipe = *recipe;
-                raw.amount = u32::from(*count);
-                raw.entity = station.unwrap_or(Entity(0));
-            }
-            CommandAction::MoveItem { from, to, count } => {
-                raw.kind = RawCommand::MOVE_ITEM;
-                raw.slot = from.0;
-                raw.target_slot = to.0;
-                raw.amount = count.map_or(0, u32::from);
-            }
-            CommandAction::Equip { slot, equipment } => {
-                raw.kind = RawCommand::EQUIP;
-                raw.slot = slot.0;
-                raw.target = Str::new(equipment);
-            }
-            CommandAction::TakeAll(from) => {
-                raw.kind = RawCommand::TAKE_ALL;
-                raw.entity = *from;
-            }
-            CommandAction::DepositAll(to) => {
-                raw.kind = RawCommand::DEPOSIT_ALL;
-                raw.entity = *to;
-            }
-            CommandAction::Trash(slot) => {
-                raw.kind = RawCommand::TRASH;
-                raw.slot = slot.0;
-            }
+            // The item commands, each filled by `item_raw`.
+            _ => item_raw(&self.action, &mut raw),
         }
         raw
+    }
+}
+
+/// Fills `raw` with the item command `action`; the others leave it.
+fn item_raw(action: &CommandAction, raw: &mut RawCommand) {
+    match action {
+        CommandAction::Craft {
+            recipe,
+            count,
+            station,
+        } => {
+            raw.kind = RawCommand::CRAFT;
+            raw.recipe = *recipe;
+            raw.amount = u32::from(*count);
+            raw.entity = station.unwrap_or(Entity(0));
+        }
+        CommandAction::MoveItem { from, to, count } => {
+            raw.kind = RawCommand::MOVE_ITEM;
+            raw.slot = from.0;
+            raw.target_slot = to.0;
+            raw.amount = count.map_or(0, u32::from);
+        }
+        CommandAction::Equip { slot, equipment } => {
+            raw.kind = RawCommand::EQUIP;
+            raw.slot = slot.0;
+            raw.target = Str::new(equipment);
+        }
+        CommandAction::TakeAll(from) => {
+            raw.kind = RawCommand::TAKE_ALL;
+            raw.entity = *from;
+        }
+        CommandAction::DepositAll(to) => {
+            raw.kind = RawCommand::DEPOSIT_ALL;
+            raw.entity = *to;
+        }
+        CommandAction::Trash(slot) => {
+            raw.kind = RawCommand::TRASH;
+            raw.slot = slot.0;
+        }
+        _ => {}
     }
 }
 

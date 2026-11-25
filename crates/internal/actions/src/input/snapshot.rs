@@ -798,6 +798,10 @@ mod tests {
     static NO_ACTIONS: [Option<crate::controls::GameAction>; super::super::BITS] =
         [None; super::super::BITS];
 
+    #[expect(
+        clippy::large_types_passed_by_value,
+        reason = "each test hands its literal over once"
+    )]
     fn snapshot(raw: Raw) -> ClientSnapshot {
         let held = (raw.available & Raw::HELD != 0).then_some(InputMask {
             bits: raw.held,

@@ -182,28 +182,9 @@ impl TryFrom<LuauCommand> for ClientCommand {
                 dialog: luau.dialog.ok_or_else(|| missing("a dialog"))?,
                 response: luau.answer.ok_or_else(|| missing("an answer"))?,
             },
-            "craft" => CommandAction::Craft {
-                recipe: luau.recipe.ok_or_else(|| missing("a recipe"))?,
-                count: luau.count.ok_or_else(|| missing("a count"))?,
-                station: luau.entity,
-            },
-            "move_item" => CommandAction::MoveItem {
-                from: luau.slot.ok_or_else(|| missing("a slot"))?,
-                to: luau.target_slot.ok_or_else(|| missing("a target slot"))?,
-                count: luau.count,
-            },
-            "equip" => CommandAction::Equip {
-                slot: luau.slot.ok_or_else(|| missing("a slot"))?,
-                equipment: luau
-                    .equipment
-                    .clone()
-                    .ok_or_else(|| missing("an equipment slot"))?,
-            },
-            "take_all" => CommandAction::TakeAll(luau.entity.ok_or_else(|| missing("an entity"))?),
-            "deposit_all" => {
-                CommandAction::DepositAll(luau.entity.ok_or_else(|| missing("an entity"))?)
+            "craft" | "move_item" | "equip" | "take_all" | "deposit_all" | "trash" => {
+                item_action(&luau)?
             }
-            "trash" => CommandAction::Trash(luau.slot.ok_or_else(|| missing("a slot"))?),
             other => {
                 return Err(crate::script::Error::new(format!(
                     "no client command kind {other:?}"
@@ -226,4 +207,35 @@ impl crate::script::FromScript for ClientCommand {
     fn from_value(value: crate::script::Value) -> Result<Self, crate::script::Error> {
         LuauCommand::from_value(value)?.try_into()
     }
+}
+
+/// The item command `luau` gives, by its kind.
+fn item_action(luau: &LuauCommand) -> Result<CommandAction, crate::script::Error> {
+    let missing =
+        |what: &str| crate::script::Error::new(format!("a {} command needs {what}", luau.kind));
+    Ok(match luau.kind.as_str() {
+        "craft" => CommandAction::Craft {
+            recipe: luau.recipe.ok_or_else(|| missing("a recipe"))?,
+            count: luau.count.ok_or_else(|| missing("a count"))?,
+            station: luau.entity,
+        },
+        "move_item" => CommandAction::MoveItem {
+            from: luau.slot.ok_or_else(|| missing("a slot"))?,
+            to: luau.target_slot.ok_or_else(|| missing("a target slot"))?,
+            count: luau.count,
+        },
+        "equip" => CommandAction::Equip {
+            slot: luau.slot.ok_or_else(|| missing("a slot"))?,
+            equipment: luau
+                .equipment
+                .clone()
+                .ok_or_else(|| missing("an equipment slot"))?,
+        },
+        "take_all" => CommandAction::TakeAll(luau.entity.ok_or_else(|| missing("an entity"))?),
+        "deposit_all" => {
+            CommandAction::DepositAll(luau.entity.ok_or_else(|| missing("an entity"))?)
+        }
+        // "trash", the one item kind left.
+        _ => CommandAction::Trash(luau.slot.ok_or_else(|| missing("a slot"))?),
+    })
 }

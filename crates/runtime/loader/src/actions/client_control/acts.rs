@@ -122,7 +122,7 @@ pub(crate) struct ActLayout {
     transfer_type: usize,
     transfer_flags: usize,
     transfer_amount: usize,
-    /// `InventoryActionType` All and CustomAmount.
+    /// `InventoryActionType` `All` and `CustomAmount`.
     all: u8,
     custom: u8,
     /// The flags byte that moves every stack.
@@ -356,7 +356,7 @@ mod tests {
         bytemuck::pod_read_unaligned(&input[from..from + size_of::<T>()])
     }
 
-    fn write(input: &mut [u8], act: Act) {
+    fn request(input: &mut [u8], act: Act) {
         // SAFETY: a record of the build's size, not shared.
         unsafe { TEST_LAYOUT.write(input.as_mut_ptr(), 77, act) };
     }
@@ -365,7 +365,7 @@ mod tests {
     fn a_hand_craft_names_the_player_as_its_station_and_moves_the_version_on() {
         let mut input = vec![0xaau8; 0x600];
         input[0xf0..0xf4].copy_from_slice(&5u32.to_ne_bytes());
-        write(
+        request(
             &mut input,
             Act::Craft {
                 station: 0,
@@ -380,7 +380,7 @@ mod tests {
         assert!(input[0xcc..0xec].iter().all(|b| *b == 0), "no choices");
         assert_eq!(input[0xf4], 0, "CraftRecipe");
         assert_eq!(at::<u32>(&input, 0xf0), 6 | LOADER_VERSION);
-        write(
+        request(
             &mut input,
             Act::Craft {
                 station: 900,
@@ -396,11 +396,11 @@ mod tests {
     fn a_move_names_both_slots_and_a_count_or_the_whole_stack() {
         let mut input = vec![0u8; 0x600];
         let (from, to) = (0x41 | 2 << 32, 0x42 | 5 << 32);
-        write(&mut input, Act::Move { from, to, count: 4 });
+        request(&mut input, Act::Move { from, to, count: 4 });
         assert_eq!((at::<u32>(&input, 4), at::<u32>(&input, 8)), (0x41, 0x42));
         assert_eq!((at::<u64>(&input, 12), at::<u64>(&input, 20)), (from, to));
         assert_eq!((input[28], at::<u16>(&input, 30)), (3, 4), "custom amount");
-        write(&mut input, Act::Move { from, to, count: 0 });
+        request(&mut input, Act::Move { from, to, count: 0 });
         assert_eq!(input[28], 2, "all");
         assert_eq!(at::<u32>(&input, 0), 2 | LOADER_VERSION);
     }
@@ -408,7 +408,7 @@ mod tests {
     #[test]
     fn take_all_moves_every_stack_into_the_player_s_own_inventory() {
         let mut input = vec![0xffu8; 0x600];
-        write(&mut input, Act::MoveAll { from: 500, to: 0 });
+        request(&mut input, Act::MoveAll { from: 500, to: 0 });
         assert_eq!((at::<u32>(&input, 4), at::<u32>(&input, 8)), (500, 77));
         assert_eq!(
             (at::<u64>(&input, 12), at::<u64>(&input, 20)),
@@ -421,7 +421,7 @@ mod tests {
     #[test]
     fn equip_and_trash_write_their_own_requests() {
         let mut input = vec![0u8; 0x600];
-        write(
+        request(
             &mut input,
             Act::Equip {
                 slot: 0x41 | 1 << 32,
@@ -431,7 +431,7 @@ mod tests {
         assert_eq!(at::<u64>(&input, 0x1c0), 0x41 | 1 << 32);
         assert_eq!((input[0x1cc], input[0x1cd]), (12, 0));
         assert_eq!(at::<u32>(&input, 0x1c8), 1 | LOADER_VERSION);
-        write(&mut input, Act::Trash { slot: 0x43 });
+        request(&mut input, Act::Trash { slot: 0x43 });
         assert_eq!((at::<u64>(&input, 0x1dc), input[0x1dc + 20]), (0x43, 2));
         assert_eq!(at::<u32>(&input, 0x1dc + 16), 1 | LOADER_VERSION);
     }

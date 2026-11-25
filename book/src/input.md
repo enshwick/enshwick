@@ -304,17 +304,16 @@ The local player's own parts read on any client, a joined one included:
 | `health()`, `stamina()` | a `Meter`: the value and its maximum, as the HUD draws them |
 | `actionbar_slot()` | the action bar's selected slot, from 0 |
 
-These come from the client's own copy of the world, read in its last step,
-so on a joined client they may trail the server by a step. While no step
-ran in the last second, as in a menu that stops the steps, they are `None`.
+These come from the client's own copy of the world, read in its last step.
+On a joined client they may trail the server by a step. While no step ran
+in the last second, as in a menu that stops the steps, they are `None`.
 
 `Input::client_slots()` lists every slot of the local player's inventory,
 empty ones included: the equipment, the action bar and the backpack. Each
-`PlayerSlot` holds the `Slot` the server's inventory reads name, with its
-`SlotRef`, category, item and count, and says whether the slot is one of the
-action bar's. The first call starts the reads, so it gives `None`; they then
-run each step until a few seconds after the last call, and cost nothing
-after.
+`PlayerSlot` holds a `Slot`, as the server's inventory reads name it: its
+place, category, item and count. It also says whether the slot is one of
+the action bar's. The first call starts the reads, so it gives `None`. The
+reads then run each step until a few seconds after the last call.
 
 ```rust
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -596,8 +595,8 @@ end
 
 ## Crafting and moving items
 
-These commands write the same requests the game's own screens send, so the
-server checks each one as it checks the player's: resources, recipes,
+These commands write the same requests the game's own screens send. The
+server checks each one as it checks the player's own: resources, recipes,
 stations and rights. Each is `Applied` once the request is written, and
 `Observed` once the client's copy of the player's inventory changes after
 it. A request the server refuses changes nothing, so the command ends timed
@@ -605,11 +604,14 @@ out. One of these commands runs at a time across all mods.
 
 | Action | Does |
 | --- | --- |
-| `Craft { recipe, count, station }` | crafts `count` times at a station, such as the one `ClientSnapshot::host` names, or by hand for `None` |
-| `MoveItem { from, to, count }` | moves `count` items, or the whole stack for `None`, from one slot to another; a count into an empty slot splits a stack, a move out of an equipment slot unequips |
+| `Craft { recipe, count, station }` | crafts the recipe at a station, such as the open screen's host, or by hand for `None` |
+| `MoveItem { from, to, count }` | moves items, or the whole stack for `None`, from one slot to another |
 | `Equip { slot, equipment }` | equips the slot's item into a member of the game's `EquipmentSlot`, such as `RangedWeapon` |
 | `TakeAll(inventory)`, `DepositAll(inventory)` | moves every stack between a storage and the player, as the storage window's buttons do |
 | `Trash(slot)` | destroys the slot's stack; the game has no drop on the ground |
+
+A count moved into an empty slot splits a stack. A move out of an equipment
+slot unequips the item.
 
 ```rust
 use enshwick::input::{ClientCommand, CommandAction, Input};

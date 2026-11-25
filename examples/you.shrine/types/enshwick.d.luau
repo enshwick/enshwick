@@ -535,7 +535,7 @@ export type ChunkData = {
 
 --- `ClientCommand` as Luau gives it; its `Debug` shows none of the password.
 export type ClientCommand = {
-	--- `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`, `"move"`, `"highlight_recipe"`, `"join"`, `"leave"`, `"press"`, `"set_waypoint"`, `"clear_waypoint"`, `"ping"`, `"host"`, `"open_mods"`, `"open_mod"`, `"open_mod_settings"`, `"press_window_item"`, `"pick_window_item"`, `"set_window_text"` or `"answer_dialog"`.
+	--- `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`, `"move"`, `"highlight_recipe"`, `"join"`, `"leave"`, `"press"`, `"set_waypoint"`, `"clear_waypoint"`, `"ping"`, `"host"`, `"open_mods"`, `"open_mod"`, `"open_mod_settings"`, `"press_window_item"`, `"pick_window_item"`, `"set_window_text"` or `"answer_dialog"`, `"craft"`, `"move_item"`, `"equip"`, `"take_all"`, `"deposit_all"` or `"trash"`.
 	kind: string,
 	--- The session, as `client_snapshot().session` gives it.
 	session: string,
@@ -573,6 +573,16 @@ export type ClientCommand = {
 	answer: Response?,
 	--- The dialog an answer answers, as `client_snapshot().dialog` numbers it.
 	dialog: number?,
+	--- A craft's count, or the items a move moves; a move without one moves the whole stack.
+	count: number?,
+	--- A craft's station, by hand without one; the inventory a take all takes from or a deposit all fills.
+	entity: number?,
+	--- The slot a move leaves, an equip takes from or a trash destroys.
+	slot: string?,
+	--- The slot a move fills.
+	target_slot: string?,
+	--- The equipment slot an equip fills, by the game's `EquipmentSlot` member.
+	equipment: string?,
 }
 
 --- The client's state in one copy, as `Input.client_snapshot` gives it to Luau.
@@ -585,7 +595,7 @@ export type ClientSnapshot = {
 	age_ms: string?,
 	--- The world's name.
 	scene: string?,
-	--- The parts the build reads: `"screens"`, `"menu_tab"`, `"held"`, `"player"`, `"recipe"`, `"loader_screen"`, `"dialog"`, `"prompt"` and `"character"`.
+	--- The parts the build reads: `"screens"`, `"menu_tab"`, `"held"`, `"player"`, `"recipe"`, `"loader_screen"`, `"dialog"`, `"prompt"`, `"character"`, `"position"`, `"look"`, `"vitals"` and `"actionbar"`.
 	reads: {string},
 	--- The open HUD screen.
 	hud_screen: string?,
@@ -619,6 +629,16 @@ export type ClientSnapshot = {
 	prompt_verb: number?,
 	--- The character the main menu has selected, by its place in the menu's list from 0, as `host` takes it; nil while none is and outside the main menu. When both save storages hold a character there, `host` plays the one in Steam's cloud.
 	selected_character: number?,
+	--- Where the local player stands, x, y and z in metres.
+	position: vector?,
+	--- Where the local player's camera looks, a quaternion x, y, z, w.
+	look: {number}?,
+	--- The local player's health and its maximum.
+	health: Meter?,
+	--- The local player's stamina and its maximum.
+	stamina: Meter?,
+	--- The action bar's selected slot, from 0.
+	actionbar_slot: number?,
 }
 
 --- `ClientWindowItem` as Luau gives it.
@@ -2629,6 +2649,14 @@ export type PlayerDeathData = {
 
 --- A permission the server grants a player through its user groups, one bit of the game's `PlayerPermissions` (server 26430253). The groups are `userGroups` in `enshrouded_server.json`, and a player holds the permissions of the group whose password they joined with.
 export type PlayerPermissions = "CanKickBan" | "CanAccessInventories" | "CanEditBase" | "CanEditWorld" | "CanExtendBase" | "CanReceiveExp"
+
+--- One slot of the local player's inventory, from `Input.client_slots`.
+export type PlayerSlot = {
+	--- The slot and what it holds, as the server's inventory reads name it.
+	slot: Slot,
+	--- Whether the slot is one of the action bar's.
+	actionbar: boolean,
+}
 
 --- A player's respawn point moved to another base or save point. The game raises it when the character stands in a spawn point, and `World.set_respawn_point` raises it too; the server's player record and the save follow it. Unstable: needs the `unstable` feature and may change in any release.
 export type PlayerSpawnInfoChangeEvent = {
@@ -5333,6 +5361,8 @@ declare enshwick: {
 		command_status: (id: string) -> CommandStatus,
 		--- The items of the windows the server's mods show this client, the newest window last, by the ids client commands name them; the items of a form while one is open. Any thread.
 		client_windows: () -> {ClientWindowItem},
+		--- Every slot of the local player's inventory, empty ones included, in the game's order: the equipment, the action bar and the backpack, as the client's last step read them; nil while no step read them in the last second. Any thread. The values are the client's own copy, the one its screens draw, so on a joined client they may trail the server by a step. The first call starts the reads, so it answers nil; they then run in each step until a few seconds after the last call, and cost nothing after.
+		client_slots: () -> {PlayerSlot}?,
 		--- The keys the player's keyboard and mouse bindings give `action`, a mod's rebind included. Client only, on any thread; the interface reads the bindings every few frames, so a change the player applies shows within a quarter second.
 		binding: (action: typed_input_mapping_runtime_GameplayAction) -> Binding,
 		--- Binds `key` as the first key of the game's control `action`, in the player's keyboard and mouse bindings, until `Input.reset_binding` gives it back or the mod turns off; the second key stays. The game's input and its key glyphs follow at the interface's next frame, and the loader writes the key again each time the game rebuilds its bindings from a change the player applies, so one call holds. The game's Controls page still shows the player's own key, and the game saves only that. Of the mods that rebind one action, the one that rebound it last wins, and asking again for the same rebind keeps a mod's place. Client only, on any thread.

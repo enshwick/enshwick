@@ -421,6 +421,10 @@ impl Installed {
     ///     ..ClientSnapshot::EMPTY
     /// });
     /// ```
+    #[expect(
+        clippy::large_types_passed_by_value,
+        reason = "a test hands its snapshot over once, as its struct literal reads"
+    )]
     pub fn set_client_snapshot(&self, snapshot: enshwick_core::abi::ClientSnapshot) {
         table::with((), |s| s.ui.client_snapshot = snapshot);
     }

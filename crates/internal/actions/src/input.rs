@@ -86,6 +86,7 @@ impl crate::script::Bound for Input {
         Self::SCRIPT_CLIENT_SNAPSHOT,
         Self::SCRIPT_CLIENT_COMMANDS,
         Self::SCRIPT_CLIENT_WINDOWS,
+        Self::SCRIPT_CLIENT_SLOTS,
         #[cfg(feature = "typed")]
         Self::SCRIPT_BINDINGS,
     ];

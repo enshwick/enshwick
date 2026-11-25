@@ -67,7 +67,7 @@ impl Input {
     ///     load.on_frame(move |frame| {
     ///         if let Ok(Some(slots)) = input.client_slots() {
     ///             let used = slots.iter().filter(|s| !s.slot.is_empty()).count();
-    ///             frame.label(&format!("{used} slots hold an item"));
+    ///             frame.label(format!("{used} slots hold an item").as_str());
     ///         }
     ///     })
     /// }

@@ -77,14 +77,14 @@ impl Read {
     fn pack(&self, at: u64) -> [u64; 8] {
         let [x, y, z] = self.position.map(i64::cast_unsigned);
         let [l0, l1, l2, l3] = self.look.map(|part| u64::from(part.to_bits()));
-        let [h, hm, s, sm] = self.vitals.map(u64::from);
+        let [health, health_max, stamina, stamina_max] = self.vitals.map(u64::from);
         [
             x,
             y,
             z,
             l0 | l1 << 32,
             l2 | l3 << 32,
-            h | hm << 16 | s << 32 | sm << 48,
+            health | health_max << 16 | stamina << 32 | stamina_max << 48,
             u64::from(self.actionbar) | u64::from(self.parts.0) << 8,
             at,
         ]
@@ -187,8 +187,10 @@ pub(crate) fn slots(now: u64) -> Option<Vec<ClientSlot>> {
     let count = usize::try_from(words[0]).unwrap_or(0).min(MAX_SLOTS);
     Some(
         words[2..2 + 3 * count]
-            .chunks_exact(3)
-            .map(|w| unpack_slot([w[0], w[1], w[2]]))
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .map(|words| unpack_slot(*words))
             .collect(),
     )
 }
@@ -266,10 +268,9 @@ impl Layout {
             ),
             look: at(catalogue::ids::CLIENT_PLAYER_INPUT_CAMERA_ORIENTATION),
             vitals: hash(catalogue::ids::NETWORK_PLAYER_ATTRIBUTES).zip(
-                health
-                    .zip(health_max)
-                    .zip(stamina.zip(stamina_max))
-                    .map(|((h, hm), (s, sm))| [h, hm, s, sm]),
+                health.zip(health_max).zip(stamina.zip(stamina_max)).map(
+                    |((health, max), (stamina, stamina_max))| [health, max, stamina, stamina_max],
+                ),
             ),
             actionbar: hash(catalogue::ids::SLOT_SELECTION)
                 .zip(at(catalogue::ids::SLOT_SELECTION_ACTIONBAR)),
@@ -343,12 +344,11 @@ pub(crate) unsafe fn read(
         read.parts = read.parts.with(Parts::VITALS);
     }
     let selection = layout.actionbar.and_then(|(hash, index)| {
-        component(player, hash).map(|data| {
+        component(player, hash).inspect(|&data| {
             // SAFETY: `data` is the player's live `SlotSelection`, whose
             // action bar index is a reflected `u8` at `index`.
             read.actionbar = unsafe { enshwick_core::raw::read_at(data, index) };
             read.parts = read.parts.with(Parts::ACTIONBAR);
-            data
         })
     });
     STATE.parts.write(read.pack(at));
@@ -431,17 +431,14 @@ fn walk(
         };
         for index in 0..SLOTS {
             let base = usize::from(index) * at.stack;
-            // SAFETY: `stacks` is the link's live `Inventory` of `SLOTS`
-            // reflected `ItemStack`s, `index < SLOTS`; each stack holds its
-            // u32 item id first, then its u32 count and u32 item entity at
-            // the reflected offsets.
-            let (item, count, pide) = unsafe {
-                (
-                    read_at::<u32>(stacks, base),
-                    read_at::<u32>(stacks, base + at.stack_count),
-                    read_at::<u32>(stacks, base + at.stack_pide),
-                )
+            let field = |offset: usize| {
+                // SAFETY: `stacks` is the link's live `Inventory` of `SLOTS`
+                // reflected `ItemStack`s, `index < SLOTS`; each stack holds
+                // its u32 item id first, then its u32 count and u32 item
+                // entity at the reflected offsets this is called with.
+                unsafe { read_at::<u32>(stacks, base + offset) }
             };
+            let (item, count, pide) = (field(0), field(at.stack_count), field(at.stack_pide));
             out(ClientSlot {
                 slot: u64::from(link) | u64::from(index) << 32,
                 item,

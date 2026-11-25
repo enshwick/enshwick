@@ -271,3 +271,4 @@ names every entry of the golden layout once, in that order.
 | `quest_reward_filter` | game | — | with a player |
 | `knowledge_set` | game | — | with a player |
 | `client_windows` | game | — | client |
+| `client_slots` | game | — | client |

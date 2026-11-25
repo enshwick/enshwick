@@ -146,8 +146,8 @@ mod tests {
                 layout,
                 input.as_mut_ptr(),
                 crate::actions::client_control::pass::FRAME,
-            )
-        };
+            );
+        }
         assert_eq!(progress(70), Some(Progress::Waiting));
         release(70);
         assert_eq!(progress(70), None);
