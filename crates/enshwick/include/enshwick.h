@@ -1281,6 +1281,32 @@ typedef struct EnshwickClientCommandStatus {
 // The join failed for a reason the client does not show.
 #define EnshwickClientCommandStatus_UNKNOWN 9
 
+// One slot of the local player's inventory as the client's world holds
+// it, which `EnshwickHostApi.client_slots` lists.
+// ABI 12.28.
+typedef struct EnshwickClientSlot {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The slot as the game packs it: the sub-inventory entity, then the
+  // index in it shifted left by 32.
+  uint64_t slot;
+  // The item's id, 0 for none.
+  uint32_t item;
+  // How many.
+  uint32_t count;
+  // The item's own entity, for items with durability or a level; 0 for
+  // none.
+  EnshwickEntity pide;
+  // The sub-inventory's `InventoryCategory`.
+  uint8_t category;
+  // `EnshwickClientSlot_ACTIONBAR`.
+  uint8_t flags;
+  // Zero.
+  uint16_t reserved;
+} EnshwickClientSlot;
+// The slot is one of the action bar's.
+#define EnshwickClientSlot_ACTIONBAR 1
+
 // The client's state in one copy, which
 // `EnshwickHostApi.client_snapshot` writes.
 //
@@ -3951,32 +3977,6 @@ typedef struct EnshwickSoundAudience {
 #define EnshwickSoundAudience_MAX_RADIUS 500.0
 // The most sounds one mod sends clients in one server step.
 #define EnshwickSoundAudience_MAX_PLAYS 32
-
-// One slot of the local player's inventory as the client's world holds
-// it, which `HostApi::client_slots` lists.
-// ABI 12.28.
-typedef struct EnshwickClientSlot {
-  // Size and version of this struct.
-  struct EnshwickHeader header;
-  // The slot as the game packs it: the sub-inventory entity, then the
-  // index in it shifted left by 32.
-  uint64_t slot;
-  // The item's id, 0 for none.
-  uint32_t item;
-  // How many.
-  uint32_t count;
-  // The item's own entity, for items with durability or a level; 0 for
-  // none.
-  EnshwickEntity pide;
-  // The sub-inventory's `InventoryCategory`.
-  uint8_t category;
-  // `ClientSlot::ACTIONBAR`.
-  uint8_t flags;
-  // Zero.
-  uint16_t reserved;
-} EnshwickClientSlot;
-// The slot is one of the action bar's.
-#define EnshwickClientSlot_ACTIONBAR 1
 
 
 // A player about to interact with an entity, as
@@ -7760,7 +7760,7 @@ typedef struct EnshwickHostApi {
   // included, in the game's order, as the client's last step read them
   // from its copy of the world, and how many there are, as every list
   // answers. Entries are `entry_size` bytes apart, the caller's
-  // `sizeof(ClientSlot)`. The first call starts the reads, which
+  // `sizeof(EnshwickClientSlot)`. The first call starts the reads, which
   // then run in each step for a few seconds after the last call; while
   // no step read them in the last second it answers
   // `EnshwickStatus_NOT_LOADED`. Client only: `EnshwickStatus_UNAVAILABLE` on a
@@ -8042,6 +8042,16 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, reserved) == 20, "o
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, age_ms) == 24, "offset of ClientCommandStatus.age_ms");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, phase) == 32, "offset of ClientCommandStatus.phase");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, failure) == 36, "offset of ClientCommandStatus.failure");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientSlot) == 32, "size of ClientSlot");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientSlot) == 8, "alignment of ClientSlot");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSlot, header) == 0, "offset of ClientSlot.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSlot, slot) == 8, "offset of ClientSlot.slot");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSlot, item) == 16, "offset of ClientSlot.item");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSlot, count) == 20, "offset of ClientSlot.count");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSlot, pide) == 24, "offset of ClientSlot.pide");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSlot, category) == 28, "offset of ClientSlot.category");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSlot, flags) == 29, "offset of ClientSlot.flags");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSlot, reserved) == 30, "offset of ClientSlot.reserved");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientSnapshot) == 264, "size of ClientSnapshot");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientSnapshot) == 8, "alignment of ClientSnapshot");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, header) == 0, "offset of ClientSnapshot.header");
@@ -8274,7 +8284,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, detour) == 16, "offset of Hook
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, next) == 24, "offset of HookSpec.next");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, priority) == 32, "offset of HookSpec.priority");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, flags) == 36, "offset of HookSpec.flags");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1872, "size of HostApi");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1880, "size of HostApi");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, header) == 0, "offset of HostApi.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, host_version) == 8, "offset of HostApi.host_version");
@@ -8509,6 +8519,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_rebind) == 1840, "offset o
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, quest_reward_filter) == 1848, "offset of HostApi.quest_reward_filter");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, knowledge_set) == 1856, "offset of HostApi.knowledge_set");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_windows) == 1864, "offset of HostApi.client_windows");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_slots) == 1872, "offset of HostApi.client_slots");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 96, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");
