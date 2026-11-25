@@ -687,7 +687,9 @@ end)
 `CommandAction::Host { world, character, online }` hosts one of the
 player's worlds from the main menu, as the menu's own Play does. `world`
 and `character` are places in the main menu's lists of worlds and
-characters, counted from 0 and below 16. `online` opens the world to other
+characters, counted from 0 and below 16. A place is played from the save
+storage that holds a save there, the local folder or Steam's cloud. When both
+hold one, the host plays the save in Steam's cloud. `online` opens the world to other
 players, and `false` plays it offline. A host starts at the main menu with
 session 0, as a join does. The loader refuses a host while a join, a host
 or a leave runs, or while the client is in a world.

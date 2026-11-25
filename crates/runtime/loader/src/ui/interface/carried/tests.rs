@@ -582,8 +582,15 @@ fn ask(item: &str, act: Act, text: &str) -> Ask {
 fn a_commanded_text_fills_the_field_and_a_commanded_run_sends_it() {
     let view = ban_and_say();
     let mut drawn = drawn();
+    let _first = items(&Recorder::default(), &view, &mut drawn);
     let typed = drawn.take(&view, &ask("say/0", Act::Text, "Restart soon"));
-    assert_eq!(typed, Some(windows::Answer::Shown));
+    assert_eq!(typed, None, "the draw shows it");
+    let _shown = items(&Recorder::default(), &view, &mut drawn);
+    assert_eq!(
+        drawn.filled(),
+        windows::Answer::Shown,
+        "the field drawn since holds it, though the game keeps its own text"
+    );
     assert_eq!(
         drawn.take(&view, &ask("say", Act::Press, "")),
         None,
@@ -592,6 +599,30 @@ fn a_commanded_text_fills_the_field_and_a_commanded_run_sends_it() {
     assert_eq!(
         items(&Recorder::default(), &view, &mut drawn),
         Click::Run("say".into(), vec![Value::Text("Restart soon".into())])
+    );
+}
+
+#[test]
+fn a_field_drawn_again_after_its_run_starts_empty_though_the_game_kept_the_last_text() {
+    let view = ban_and_say();
+    let mut drawn = drawn();
+    let typed = Recorder::default()
+        .answer(
+            texts::text("windows.text"),
+            Answer::Type("Restart soon".into()),
+        )
+        .answer(texts::text("windows.run"), Answer::Press);
+    let ran = items(&typed, &view, &mut drawn);
+    assert_eq!(
+        ran,
+        Click::Run("say".into(), vec![Value::Text("Restart soon".into())])
+    );
+    drawn.after(&ran);
+    let again = Recorder::default().answer(texts::text("windows.run"), Answer::Press);
+    assert_eq!(
+        items(&again, &view, &mut drawn),
+        Click::Nothing,
+        "the new field hands its empty text to the game's kept state, so Run stays off"
     );
 }
 
@@ -725,6 +756,21 @@ fn a_lost_link_forgets_the_windows_so_none_draws_over_the_menu() {
     let _running = crate::engine::loader::install_for_test(crate::start::tests::bare_loader());
     crate::base::net::link_lost();
     assert!(STATE.held.load().is_none());
+}
+
+#[test]
+fn leaving_the_world_for_the_menu_forgets_the_windows_while_the_link_still_stands() {
+    let _held = HELD.relock();
+    super::super::note_world(true);
+    heard("you.admin", "panel", true, "W\tPanel\n");
+    super::super::note_world(true);
+    assert_eq!(held().len(), 1, "the world goes on");
+    super::super::note_world(false);
+    assert!(
+        STATE.held.load().is_none(),
+        "a leave ends what the server showed"
+    );
+    assert!(listed(<[ClientWindowItem]>::is_empty));
 }
 
 #[test]

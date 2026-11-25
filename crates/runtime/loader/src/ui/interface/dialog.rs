@@ -386,17 +386,21 @@ pub(crate) fn queue(dialog: Pending) -> Result<(), DialogsFullError> {
 /// since the last frame: leaving a world for the menu ends it too. Each
 /// waiting one answers as closed here, on the thread a mod's answer comes
 /// on, so no mod waits for it; one on screen closes at its next draw.
-pub(super) fn note_world(in_world: bool) {
-    if STATE.in_world.swap(in_world, Ordering::AcqRel) && !in_world {
+///
+/// The answer is whether the client left a world for the menu since the
+/// last frame.
+pub(super) fn note_world(in_world: bool) -> bool {
+    let left = STATE.in_world.swap(in_world, Ordering::AcqRel) && !in_world;
+    if left {
         close_world_dialogs();
     }
     let ended = STATE.ended.load(Ordering::Acquire);
-    if STATE.closed.swap(ended, Ordering::AcqRel) == ended {
-        return;
+    if STATE.closed.swap(ended, Ordering::AcqRel) != ended {
+        for dialog in STATE.waiting.take_world() {
+            dialog.answerer.answer(UiDialog::CLOSED);
+        }
     }
-    for dialog in STATE.waiting.take_world() {
-        dialog.answerer.answer(UiDialog::CLOSED);
-    }
+    left
 }
 
 /// Ends the world the dialogs belong to, when a client's hosted game ends,
@@ -770,7 +774,9 @@ mod tests {
                 crate::engine::parts::Part::forget_in(crate::ui::PARTS, "ui", loader);
             }),
             ("a change of servers", &|| crate::base::net::joining(false)),
-            ("leaving a world for the menu", &|| note_world(true)),
+            ("leaving a world for the menu", &|| {
+                let _left = note_world(true);
+            }),
         ];
         for (end, run) in ends {
             let answers = Arc::new(Mutex::new(Vec::new()));

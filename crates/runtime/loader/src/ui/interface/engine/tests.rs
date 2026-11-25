@@ -115,6 +115,39 @@ fn a_function_s_bytes_are_checked_whenever_the_table_has_them() {
     assert!(!code_checks(None, false, || unreachable!()));
 }
 
+#[test]
+fn a_function_its_anchor_pattern_found_alone_verifies_without_bytes_or_a_route() {
+    let pattern = include_str!("../../../../../../enshwick-gamedata/anchors/patterns.toml")
+        .lines()
+        .find_map(|line| line.strip_prefix("\"ui.text_field_take\" = { pattern = \""))
+        .and_then(|rest| rest.split('"').next())
+        .expect("the take's anchored pattern");
+    let mut code = vec![0xCC_u8; 16];
+    code.extend(
+        pattern
+            .split(' ')
+            .map(|byte| u8::from_str_radix(byte, 16).unwrap_or(0)),
+    );
+    code.resize(code.len() + 16, 0xCC);
+    let build = crate::engine::builds::by_patterns(
+        enshwick_core::abi::Side::CLIENT,
+        "client".into(),
+        (&code, 0x1000),
+        |_| None,
+    )
+    .expect("the client's anchors read");
+    assert_eq!(build.symbol(pinned::ui::TEXT_FIELD_TAKE.id()), Some(0x1010));
+    let loader = Loader {
+        side: enshwick_core::abi::Side::CLIENT,
+        build: Box::leak(Box::new(build)),
+        ..crate::start::tests::bare_loader()
+    };
+    assert!(
+        verify(&loader, pinned::ui::TEXT_FIELD_TAKE).is_ok(),
+        "its pattern, matched once where its code starts, is its check"
+    );
+}
+
 /// The layouts of every client table fit the loader's buffers, and a
 /// build whose label grew past them keeps the interface off.
 #[test]

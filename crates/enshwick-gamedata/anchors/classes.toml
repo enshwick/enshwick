@@ -1007,6 +1007,11 @@ class = "engine"
 reason = "an engine route finds it on a client; a dedicated server keeps the code that uses it but never runs it, so a server needs no row"
 
 [[class]]
+entries = ["ui.text_field_take"]
+class = "pattern"
+reason = "the text field's take of its caller's text into its kept state, the constructor's first-use copy as a function of its own: no code calls it directly, and only the exception table names it"
+
+[[class]]
 entries = ["ui.input_hint"]
 class = "pattern"
 reason = "the game's key hint wrapper: its three callers pass a build's own action number and a label from a text id, and no string, system or routed function reaches it"

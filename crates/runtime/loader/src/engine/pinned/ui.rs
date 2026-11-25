@@ -251,6 +251,9 @@ pub(crate) const TEXT_FIELD_STATE: Symbol = Symbol::new("ui.text_field_state");
 pub(crate) const TEXT_FIELD_STATE_KEY: Constant = Constant::new("ui.text_field_state_key");
 pub(crate) const TEXT_FIELD_STATE_SIZE: Constant = Constant::new("ui.text_field_state_size");
 pub(crate) const TEXT_FIELD_START: Constant = Constant::new("ui.text_field_start");
+/// Takes a text field's caller text into its kept state, `(field)`
+/// (client 26430625, `0x140d60310`).
+pub(crate) const TEXT_FIELD_TAKE: Symbol = Symbol::new("ui.text_field_take");
 pub(crate) const TEXT_FIELD_TEXT: Constant = Constant::new("ui.text_field_text");
 pub(crate) const TOGGLE: Symbol = Symbol::new("ui.toggle");
 pub(crate) const TOGGLE_COUNT: Constant = Constant::new("ui.toggle_count");

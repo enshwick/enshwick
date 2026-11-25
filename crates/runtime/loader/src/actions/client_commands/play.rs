@@ -18,10 +18,16 @@
 //! of the chosen world (0x28, which starts play as 0x26 does), then the
 //! start of play as a join does. The phases follow as for a join.
 //!
-//! The host's own assumptions, also static: a slot id's storage 0 is the
-//! one the main menu lists first, and a world or character slot the save
-//! system does not take leaves the menu's last choice, so play then starts
-//! with that one.
+//! A slot id names a place in one of the save system's two storages, 0 the
+//! local folder and 1 Steam's cloud, which the game's storage window picks
+//! when no save was played yet (client 26430625, `0x140c6a050`). The main
+//! menu takes a character or world command only for a slot that holds a
+//! save and leaves its choice otherwise (`0x140e23800`, `0x140e23a50`), so
+//! a host posts each place in storage 0, then in storage 1: the storage
+//! that holds it is taken, storage 1 when both do.
+//!
+//! The host's own assumption, also static: a place no storage holds leaves
+//! the menu's last choice, so play then starts with that one.
 //!
 //! Assumptions the in-game check settles (static reads of client
 //! 26430625): the poster reaches the main menu's queue from the interface
@@ -123,12 +129,16 @@ pub(crate) struct Host {
     pub(crate) online: bool,
 }
 
-/// The game's slot id of the list place `at`: the place plus 1 in its low
-/// byte, 0 being no slot, and the storage in its high byte, here 0 (client
-/// 26430625, `0x140ea52c0`, `0x140e92870`, `0x140e95ce0`). Which storage
-/// 0 is, local or cloud, is not read yet: the in-game check settles it.
-const fn slot(at: u16) -> u16 {
-    at + 1
+/// The save system's storages a host posts a place in, the one taken when
+/// both hold it last.
+const STORAGES: [u16; 2] = [0, 1];
+
+/// The game's slot id of list place `at` in `storage`: the place plus 1 in
+/// its low byte, 0 being no slot, and the storage in its high byte (client
+/// 26430625, `0x140ea52c0`, `0x140e92870`, `0x140e95ce0`); the command's
+/// bounds keep `at` below `ClientCommand::MAX_SLOTS`.
+const fn slot(at: u16, storage: u16) -> u16 {
+    storage << 8 | (at + 1)
 }
 
 /// A password held only until the interface frame posts it, wiped then.
@@ -371,10 +381,13 @@ pub(crate) fn host(id: u64, host: Host, now: u64) -> Result<(), StartError> {
 }
 
 /// The menu commands a host posts, in order.
-const fn host_posts(host: Host) -> [Post<'static>; 4] {
+const fn host_posts(host: Host) -> [Post<'static>; 6] {
+    let [local, cloud] = STORAGES;
     [
-        Post::Character(slot(host.character)),
-        Post::World(slot(host.world)),
+        Post::Character(slot(host.character, local)),
+        Post::Character(slot(host.character, cloud)),
+        Post::World(slot(host.world, local)),
+        Post::World(slot(host.world, cloud)),
         Post::Session {
             online: host.online,
         },

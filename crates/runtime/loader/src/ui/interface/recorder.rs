@@ -48,6 +48,12 @@ pub(super) enum Answer {
     Type(String),
 }
 
+thread_local! {
+    /// The game's kept text of each text field by its hint, which outlives
+    /// the loader's buffers as the game's kept state does.
+    static KEPT: RefCell<Vec<(String, Option<String>)>> = const { RefCell::new(Vec::new()) };
+}
+
 /// Draws nothing: notes each widget, and answers the widget whose text,
 /// label or hint a test named with [`Recorder::answer`].
 #[derive(Debug, Default)]
@@ -149,9 +155,18 @@ impl Widgets for Recorder {
 
     fn text_field(&self, buffer: &mut TextBuffer, hint: &[u8], _ending: bool) -> Option<Typed> {
         let hint = text(hint);
-        if let Some(Answer::Type(typed)) = self.answer_of(&hint) {
-            buffer.set(typed);
-        }
+        let typed = match self.answer_of(&hint) {
+            Some(Answer::Type(typed)) => Some(typed.as_str()),
+            _ => None,
+        };
+        KEPT.with_borrow_mut(|fields| {
+            let at = fields.iter().position(|(of, _)| *of == hint);
+            let at = at.unwrap_or_else(|| {
+                fields.push((hint.clone(), None));
+                fields.len() - 1
+            });
+            buffer.draw_as_the_game(&mut fields[at].1, typed);
+        });
         self.note(Drew::TextField { hint });
         Some(Typed {
             entered: false,

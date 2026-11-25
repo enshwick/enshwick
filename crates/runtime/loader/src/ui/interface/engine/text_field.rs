@@ -5,6 +5,13 @@
 //! 64-byte buffer live: the field edits the caller's text as UTF-8 up to the
 //! buffer's capacity, cutting what does not fit; Enter sets the input's
 //! answer to 1; its kept state says whether it has the caret.
+//!
+//! The kept state also holds the text the field edits: the field takes the
+//! caller's text into it only at its first draw, and each input writes the
+//! kept text back over the caller's, so a text the loader puts in the
+//! buffer later reaches the field only through `ui.text_field_take`, which
+//! takes the caller's text again (client 26430625, `0x140b232c0`,
+//! `0x140d28050`, `0x140d60310`, decompiler).
 
 use super::{
     Buf, Engine, Loader, Lookup, Missing, NodeFloatFn, OneFn, Ptr, UiText, field, game_fn, stretch,
@@ -12,7 +19,14 @@ use super::{
 use core::cell::Cell;
 
 use crate::base::configure::rows::{ENTRY_BYTES, typed};
+use crate::engine::fuse::Fuse;
 use crate::engine::pinned;
+
+/// A text the loader or a client command puts in a field that drew reaches
+/// the game's field; off, only the player's typing and a field's first text
+/// do, and a commanded text answers off.
+static TAKE_FUSE: Fuse =
+    Fuse::new("texts given to drawn text fields (only typing and a field's first text reach them)");
 
 /// The text a field edits: the game's growable byte slice, here over the
 /// loader's fixed buffer and never grown.
@@ -132,6 +146,10 @@ pub(super) struct TextFields {
     focus: OneFn,
     hit: HitFn,
     min_height: NodeFloatFn,
+    /// Takes the caller's text into the field's kept state; `None` on a
+    /// build whose pattern misses, where only the player's typing and a
+    /// text given before the field first draws reach it.
+    take: Option<OneFn>,
     layout: TextLayout,
 }
 
@@ -154,6 +172,13 @@ impl TextFields {
             focus: function!(pinned::ui::FOCUS_REQUEST, OneFn),
             hit: function!(pinned::ui::FRAME_HIT, HitFn),
             min_height: function!(pinned::ui::NODE_MIN_HEIGHT, NodeFloatFn),
+            // SAFETY: `OneFn` is the signature of `ui.text_field_take`: the
+            // field object in, as its own body reads it (client 26430625).
+            take: unsafe { game_fn::<OneFn>(loader, pinned::ui::TEXT_FIELD_TAKE) }
+                .inspect_err(|why| {
+                    let _off = loader.fuse_off(&TAKE_FUSE, why.id(), &why.reason());
+                })
+                .ok(),
             layout,
         })
     }
@@ -168,6 +193,10 @@ pub(in crate::ui::interface) struct TextBuffer {
     typing: bool,
     /// The typing ends at the field's next draw, as Back asked.
     end: bool,
+    /// The loader put a text in since the field last drew, or the buffer is
+    /// new: its next draw hands it to the game's kept state, which outlives
+    /// the buffer of a field dropped and drawn again.
+    given: bool,
 }
 
 impl TextBuffer {
@@ -183,7 +212,28 @@ impl TextBuffer {
             bytes: [0; ENTRY_BYTES],
             typing: false,
             end: false,
+            given: true,
         })
+    }
+
+    /// Draws the field as the game does, for the test widgets: its `kept`
+    /// text takes the buffer's at the first draw or once the loader gave
+    /// one, then the player's `typed` text, and is written back over the
+    /// buffer.
+    #[cfg(test)]
+    pub(in crate::ui::interface) fn draw_as_the_game(
+        &mut self,
+        kept: &mut Option<String>,
+        typed: Option<&str>,
+    ) {
+        let given = core::mem::take(&mut self.given);
+        let text = match (kept.take(), typed) {
+            (_, Some(typed)) => typed.to_owned(),
+            (Some(kept), None) if !given => kept,
+            _ => self.text().to_owned(),
+        };
+        self.put(&text);
+        *kept = Some(text);
     }
 
     /// Whether the player clicked the field and has not ended the typing,
@@ -209,8 +259,14 @@ impl TextBuffer {
         typed(&self.bytes, usize::try_from(self.text.len).unwrap_or(0))
     }
 
-    /// Puts `text` into the buffer, cut to it on a whole character.
+    /// Puts `text` into the buffer, cut to it on a whole character; the
+    /// field shows it from its next draw.
     pub(in crate::ui::interface) fn set(&mut self, text: &str) {
+        self.put(text);
+        self.given = true;
+    }
+
+    fn put(&mut self, text: &str) {
         let kept = typed(text.as_bytes(), ENTRY_BYTES);
         self.bytes[..kept.len()].copy_from_slice(kept.as_bytes());
         self.text.len = kept.len() as u64;
@@ -370,6 +426,16 @@ impl Engine {
         // SAFETY: `fns.min_height` is the game's `ui.node_min_height`,
         // checked in `TextFields::resolve`, on the field's node.
         unsafe { (fns.min_height)(node, FIELD_HEIGHT) };
+        if core::mem::take(&mut buffer.given)
+            && let Some(take) = fns.take
+        {
+            // SAFETY: `take` is the game's `ui.text_field_take`, its pattern
+            // matched once, on the field built above; it reads the `GameText`
+            // at `ui.text_field_text`, which points at `buffer`, exclusively
+            // borrowed and unmoved, its length within its capacity, and copies
+            // the text into the field's kept state, which it looks up itself.
+            unsafe { take(field.ptr()) };
+        }
         // The game may make or move the field's kept state in its input, so
         // each use looks it up again rather than keep its address across it.
         let kept = |object: *mut u8| {

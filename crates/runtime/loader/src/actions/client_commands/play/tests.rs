@@ -378,12 +378,14 @@ fn a_host_posts_its_character_world_and_session_then_plays_the_world() {
             false,
             vec![
                 "character 1".to_owned(),
+                "character 257".to_owned(),
                 "world 3".to_owned(),
+                "world 259".to_owned(),
                 "session online true".to_owned(),
                 "play world".to_owned(),
             ]
         ),
-        "the list places as the game's slot ids, place plus 1"
+        "each place in both storages, the place plus 1 in the low byte and the storage in the high"
     );
     assert!(matches!(op.step, Step::Starting { .. }));
     assert_eq!(op.report, report(Progress::Taken, Status::PHASE_MENU, 0));
@@ -402,7 +404,7 @@ fn a_host_whose_posts_the_queue_refuses_goes_on_from_where_it_stopped() {
         online: false,
     };
     let mut op = join_op(Step::Hosting { host, posted: 0 });
-    let mut taken = 2;
+    let mut taken = 4;
     let mut posted = Vec::new();
     let done = step(&mut op, seen(Stage::Menu, false), 10, &mut |p| {
         posted.push(format!("{p:?}"));
@@ -411,7 +413,7 @@ fn a_host_whose_posts_the_queue_refuses_goes_on_from_where_it_stopped() {
     });
     assert!(!done);
     assert!(
-        matches!(op.step, Step::Hosting { posted: 2, .. }),
+        matches!(op.step, Step::Hosting { posted: 4, .. }),
         "{:?}",
         op.step
     );
