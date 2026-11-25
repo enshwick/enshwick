@@ -506,7 +506,8 @@ crate::engine::mid::mid_handler! {
         unsafe { note_target(registers) };
         if LINKS.client.get().is_some() {
             let _shown = TEXT_FUSE.run("the prompt's text", || {
-                // SAFETY: as for `note_target` just before.
+                // SAFETY: the stub calls the handler at `ui.prompt_site`
+                // with that site's registers, on `player_ui`'s thread.
                 unsafe { show_text(registers) };
             });
         }
