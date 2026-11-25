@@ -586,6 +586,62 @@ mod tests {
     }
 
     #[test]
+    fn a_script_reads_the_local_player_s_state_and_slots_and_crafts_once_at_a_time() {
+        use enshwick::abi::{ClientSlot, ClientSnapshot};
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r#"
+            local craft = enshwick.input.client_command({ kind = "craft", session = "1", recipe = 7, count = 2 })
+            local twice = pcall(enshwick.input.client_command, {
+                kind = "trash", session = "1", slot = "4294967361",
+            })
+            local bare = pcall(enshwick.input.client_command, { kind = "move_item", session = "1", slot = "65" })
+            enshwick.log.info(`queued {craft} twice {twice} bare {bare}`)
+            enshwick.ui.on_frame(function()
+                local s = enshwick.input.client_snapshot()
+                enshwick.log.info(`health {s.health.current}/{s.health.max} bar {s.actionbar_slot}`)
+                local slots = enshwick.input.client_slots()
+                if slots then
+                    for _, slot in slots do
+                        enshwick.log.info(`slot {slot.slot.item} x{slot.slot.count} bar {slot.actionbar}`)
+                    end
+                end
+            end)
+            "#,
+        );
+        assert_eq!(
+            loader.client_commands(),
+            [(1, enshwick::abi::ClientCommand::CRAFT, String::new())]
+        );
+        loader.set_client_snapshot(ClientSnapshot {
+            state: ClientSnapshot::FRESH,
+            available: ClientSnapshot::VITALS | ClientSnapshot::ACTIONBAR,
+            session: 1,
+            age_ms: 16,
+            health: 90,
+            health_max: 120,
+            actionbar_slot: 2,
+            ..ClientSnapshot::EMPTY
+        });
+        loader.set_client_slots(Some(vec![ClientSlot {
+            slot: 0x41,
+            item: 7,
+            count: 3,
+            category: 4,
+            flags: ClientSlot::ACTIONBAR,
+            ..ClientSlot::EMPTY
+        }]));
+        let _drawn = loader.draw_frame();
+        for line in [
+            "queued 1 twice false bare false",
+            "health 90/120 bar 2",
+            "slot 7 x3 bar true",
+        ] {
+            assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
+        }
+    }
+
+    #[test]
     fn a_script_hosts_a_world_by_its_list_place_and_reads_the_phase() {
         use enshwick::abi::ClientCommandStatus as Status;
         let loader = run(

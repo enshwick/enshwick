@@ -115,7 +115,13 @@ pub(super) unsafe fn drive(layout: &ActLayout, input: *mut u8, mode: u32) {
     let Some(act) = *REQUEST.act.relock() else {
         return;
     };
-    let before = player_state::slot_changes(local_held::now_ms());
+    let now = local_held::now_ms();
+    // The effect counts against a slot read of the last second: until one
+    // exists, the request waits, the reads its hand started running.
+    if !player_state::slots_fresh(now) {
+        return;
+    }
+    let before = player_state::slot_changes(now);
     REQUEST.written_at.store(before, Ordering::Relaxed);
     if REQUEST.handoff.advance(id, stage::WRITE, stage::WRITTEN) {
         // SAFETY: the caller's record, on the builder's thread.

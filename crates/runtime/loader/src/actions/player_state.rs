@@ -195,6 +195,16 @@ pub(crate) fn slots(now: u64) -> Option<Vec<ClientSlot>> {
     )
 }
 
+/// Whether a step read the slots within a second of `now`; asks the steps
+/// to go on reading them. Allocates nothing, for the builder's detour.
+pub(crate) fn slots_fresh(now: u64) -> bool {
+    STATE.slots_asked.store(now, Ordering::Relaxed);
+    STATE
+        .slots
+        .load()
+        .is_some_and(|words| super::local_held::fresh(words[1], now))
+}
+
 /// Whether a mod asked for the slots recently enough at `now` that a step
 /// reads them.
 fn slots_wanted(now: u64) -> bool {
@@ -378,16 +388,28 @@ pub(crate) unsafe fn read(
             }
         });
         words[0] = u64::try_from(count).unwrap_or(0);
-        let changed = STATE.slots.load().is_none_or(|last| {
-            let used = 2 + 3 * count;
-            last[0] != words[0] || last[2..used] != words[2..used]
-        });
-        if changed {
+        if changed(STATE.slots.load().as_ref(), &words, count, at) {
             STATE.slot_changes.fetch_add(1, Ordering::Relaxed);
         }
         words[1] = at;
         STATE.slots.write(words);
     }
+}
+
+/// Whether `words`, a read of `count` slots at `at`, differs from `last`. A
+/// read after none in the last second is the new baseline, not a change,
+/// so a command never takes stale slots for its effect.
+fn changed(
+    last: Option<&[u64; SLOT_WORDS]>,
+    words: &[u64; SLOT_WORDS],
+    count: usize,
+    at: u64,
+) -> bool {
+    last.is_some_and(|last| {
+        let used = 2 + 3 * count;
+        super::local_held::fresh(last[1], at)
+            && (last[0] != words[0] || last[2..used] != words[2..used])
+    })
 }
 
 /// Hands `out` every slot of the inventory `root` holds, its virtual links
@@ -497,6 +519,28 @@ mod tests {
                 slot.flags
             )
         );
+    }
+
+    #[test]
+    fn only_a_change_against_a_read_of_the_last_second_counts() {
+        let mut last = [0u64; SLOT_WORDS];
+        last[0] = 1;
+        last[1] = 1000;
+        last[3] = 7;
+        let mut now = last;
+        assert!(!changed(None, &now, 1, 1500), "no read before: a baseline");
+        assert!(!changed(Some(&last), &now, 1, 1500), "the same slots");
+        now[3] = 8;
+        assert!(changed(Some(&last), &now, 1, 1500), "a stack moved");
+        assert!(
+            !changed(Some(&last), &now, 1, 1000 + local_held_fresh_past()),
+            "the last read is stale: a baseline"
+        );
+    }
+
+    /// A time past the last read's freshness.
+    fn local_held_fresh_past() -> u64 {
+        crate::actions::local_held::FRESH_MS + 1
     }
 
     #[test]

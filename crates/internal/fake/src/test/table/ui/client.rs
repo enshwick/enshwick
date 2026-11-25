@@ -42,7 +42,7 @@ entries! {
                 unsafe { id.write(spec.cancels) };
                 return Status::OK;
             }
-            if !(Spec::OPEN_SCREEN..=Spec::ANSWER_DIALOG).contains(&spec.kind) || !spec.in_bounds() {
+            if !(Spec::OPEN_SCREEN..=Spec::TRASH).contains(&spec.kind) || !spec.in_bounds() {
                 return Status::BAD_ARGS;
             }
             // As the loader: an answer goes to the dialog it names while that
@@ -83,6 +83,21 @@ entries! {
                     .any(|(_, kind, _, status)| marks(*kind) && open(status))
             {
                 return Status::REFUSED;
+            }
+            // As the loader: one crafting or item request at a time.
+            let acts = |kind: u32| (Spec::CRAFT..=Spec::TRASH).contains(&kind);
+            if acts(spec.kind)
+                && s.ui
+                    .client_commands
+                    .iter()
+                    .any(|(_, kind, _, status)| acts(*kind) && open(status))
+            {
+                return Status::REFUSED;
+            }
+            // As the loader: an equip names its equipment slot.
+            // SAFETY: the mod's spec, its target borrowed for the call.
+            if spec.kind == Spec::EQUIP && unsafe { spec.target.as_str() }.is_none_or(str::is_empty) {
+                return Status::BAD_ARGS;
             }
             // SAFETY: the mod's spec, its target borrowed for the call; the
             // password is never read, kept or returned.
