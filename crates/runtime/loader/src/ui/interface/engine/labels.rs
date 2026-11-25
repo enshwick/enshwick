@@ -11,7 +11,10 @@ use crate::engine::pinned;
 /// of its label out, which the `_Tap`, `_Hold` and `_Release` forms share
 /// with their action, and the game's empty tag for an action past its
 /// cases. Client 26430625 `0x140d361a0`, from the key glyph's call of it;
-/// it reads the label from the bundle of the frame's live UI context.
+/// it reads the label from the bundle of the frame's live UI context, at
+/// `ui.context_bundle` (`0xc8`), the one the loader draws the Mods screen
+/// with at the main menu too and the game's Controls page reads through its
+/// own switch `0x140d355d0`, so the call holds wherever the screen draws.
 type ActionLabelFn = unsafe extern "system" fn(action: u8) -> u32;
 
 /// The game's label switch on this build.
@@ -23,19 +26,9 @@ pub(crate) struct ActionLabels {
 impl ActionLabels {
     /// The switch on this build, or what of its code is missing.
     pub(super) fn resolve(loader: &Loader) -> Result<Self, Missing> {
-        let id = pinned::ui::ACTION_LABEL.id();
-        // Called, not hooked: only a route that checked its code counts.
-        if !loader.code_holds(pinned::ui::ACTION_LABEL) {
-            return Err(Missing::Bytes(id));
-        }
-        let address = loader
-            .address(pinned::ui::ACTION_LABEL)
-            .and_then(|a| usize::try_from(a).ok())
-            .ok_or(Missing::Entry(id))?;
-        // SAFETY: `code_holds` found the game's label switch at `address`,
-        // its route checked the switch's head; the type is its signature from
-        // the key glyph's call of it on client 26430625.
-        let call = unsafe { core::mem::transmute::<usize, ActionLabelFn>(address) };
+        // SAFETY: the type is the label switch's signature from the key
+        // glyph's call of it on client 26430625.
+        let call = unsafe { super::game_fn::<ActionLabelFn>(loader, pinned::ui::ACTION_LABEL)? };
         Ok(Self { call })
     }
 
@@ -95,5 +88,19 @@ impl super::Engine {
             Err(cut) => core::str::from_utf8(copied.get(..cut.valid_up_to())?).ok()?,
         };
         (!whole.is_empty()).then(|| whole.to_owned())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_build_without_the_label_switch_names_its_entry_missing_not_its_bytes() {
+        let loader = crate::start::tests::bare_loader();
+        assert_eq!(
+            ActionLabels::resolve(&loader).map(|_| ()),
+            Err(Missing::Entry(pinned::ui::ACTION_LABEL.id()))
+        );
     }
 }

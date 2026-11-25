@@ -292,7 +292,8 @@ script compares the number. Both are `None` while no prompt shows.
 `selected_character()` names the character the main menu has selected, by
 its place in the menu's list, as [`CommandAction::Host`](#hosting-a-world-from-the-main-menu)
 takes it. It is `None` while no character is selected and outside the main
-menu.
+menu. The place does not name the save storage. When the local folder and
+Steam's cloud both hold a character there, the host plays the cloud one.
 
 The client reads the snapshot once a mod opens its input, as it does the
 held controls. So a mod's first frame in a game has it. The state is

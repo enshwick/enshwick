@@ -186,7 +186,8 @@ fn pack(read: &FrameRead) -> u64 {
 
 /// The prompt's word for a frame that read `shows`: what its site last
 /// kept while it shows, else 0, and the kept word cleared while it does
-/// not, so a prompt that shows next never names the last one's target.
+/// not, so a prompt that shows next never names the last one's target; a
+/// new session clears it too, before this.
 fn prompt_word(shows: Option<bool>, kept: &AtomicU64) -> u64 {
     match shows {
         Some(true) => kept.load(Ordering::Relaxed),
@@ -246,15 +247,21 @@ pub(crate) fn frame(
             local_held::player().map_or(0, |player| player.0),
             crate::base::saves::worlds(),
         );
+        let last = STATE.session.load(Ordering::Relaxed);
         let (session, player) = next_session(
             (
                 STATE.play.load(Ordering::Relaxed),
                 STATE.player.load(Ordering::Relaxed),
                 STATE.worlds.load(Ordering::Relaxed),
-                STATE.session.load(Ordering::Relaxed),
+                last,
             ),
             now,
         );
+        if session != last {
+            // A target the site kept in the last session names an entity of
+            // its world, not this one's.
+            STATE.prompt.store(0, Ordering::Relaxed);
+        }
         STATE.play.store(now.0, Ordering::Relaxed);
         STATE.player.store(player, Ordering::Relaxed);
         STATE.worlds.store(now.2, Ordering::Relaxed);
@@ -847,5 +854,21 @@ mod tests {
             || None,
         );
         assert_eq!(kept().session, 1, "the same session");
+        let facing = |play| FrameRead {
+            play,
+            prompt: Some(true),
+            ..read(4, TabRead::NoMenu)
+        };
+        note_prompt(1052, 0x4e82_e309);
+        frame(|| Some(facing(0x1000)), list, || None);
+        assert_eq!(kept().prompt_target, Entity(1052), "kept in its session");
+        frame(|| Some(facing(0x2000)), list, || None);
+        let next = kept();
+        assert_eq!(next.session, 2, "another game object");
+        assert_eq!(
+            next.prompt_target,
+            Entity(0),
+            "the last session's target is gone before the site runs again"
+        );
     }
 }

@@ -27,23 +27,14 @@ pub(crate) struct InputHints {
 impl InputHints {
     /// The hint on this build, or what of its code or reflection is missing.
     pub(super) fn resolve(loader: &Loader) -> Result<Self, Missing> {
-        let id = pinned::ui::INPUT_HINT.id();
-        if !loader.code_holds(pinned::ui::INPUT_HINT) {
-            return Err(Missing::Bytes(id));
-        }
+        // SAFETY: the type is the hint wrapper's signature from the game's
+        // own calls of it on client 26430625.
+        let call = unsafe { super::game_fn::<InputHintFn>(loader, pinned::ui::INPUT_HINT)? };
         let ty = catalogue::type_name(catalogue::ids::GAMEPLAY_ACTION);
         let info = loader
             .reflection
             .type_info(ty)
             .map_err(|_| Missing::Reflected(ty, catalogue::ids::GAMEPLAY_ACTION))?;
-        let address = loader
-            .address(pinned::ui::INPUT_HINT)
-            .and_then(|a| usize::try_from(a).ok())
-            .ok_or(Missing::Entry(id))?;
-        // SAFETY: `code_holds` found the game's hint wrapper at `address`,
-        // its pattern matched once where its code starts; the type is its
-        // signature from the game's own calls of it on client 26430625.
-        let call = unsafe { core::mem::transmute::<usize, InputHintFn>(address) };
         Ok(Self {
             call,
             actions: GameActions::new(info.enum_values().iter().map(|v| (v.name(), v.value()))),
@@ -68,5 +59,19 @@ impl InputHints {
         // the wrapper refuses one past the count as well; the open node and
         // the label's life are this function's `# Safety`.
         Some(unsafe { (self.call)(action.get(), label) } != 0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_build_without_the_hint_wrapper_names_its_entry_missing_not_its_bytes() {
+        let loader = crate::start::tests::bare_loader();
+        assert_eq!(
+            InputHints::resolve(&loader).map(|_| ()),
+            Err(Missing::Entry(pinned::ui::INPUT_HINT.id()))
+        );
     }
 }

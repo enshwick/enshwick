@@ -205,8 +205,9 @@ fn control(
 
 /// The warning under a control whose keys fire the game's `actions` too,
 /// naming each by its `label` in the player's language, a label shared by
-/// several actions once; without any label it says only that the game uses
-/// the key, so no reflected name reaches the player. `None` for no action.
+/// several actions once, and saying there are others when some action has
+/// no label; without any label it says only that the game uses the key, so
+/// no reflected name reaches the player. `None` for no action.
 fn game_clash(
     actions: &[ActionNumber],
     label: impl Fn(ActionNumber) -> Option<String>,
@@ -215,19 +216,20 @@ fn game_clash(
         return None;
     }
     let mut names: Vec<String> = Vec::new();
-    for name in actions.iter().filter_map(|&action| label(action)) {
-        if !names.contains(&name) {
-            names.push(name);
+    let mut unnamed = false;
+    for &action in actions {
+        match label(action) {
+            Some(name) if !names.contains(&name) => names.push(name),
+            Some(_) => {}
+            None => unnamed = true,
         }
     }
-    Some(if names.is_empty() {
-        texts::text("controls.game-clash").to_owned()
-    } else {
-        texts::fill(
-            "controls.game-clash.named",
-            &[("actions", &names.join(", "))],
-        )
-    })
+    let key = match (names.is_empty(), unnamed) {
+        (true, _) => return Some(texts::text("controls.game-clash").to_owned()),
+        (false, false) => "controls.game-clash.named",
+        (false, true) => "controls.game-clash.named-more",
+    };
+    Some(texts::fill(key, &[("actions", &names.join(", "))]))
 }
 
 /// One look of the capture: a key binds, Escape or a lost focus cancels.
@@ -295,8 +297,13 @@ mod tests {
         };
         assert_eq!(game_clash(&[], label), None);
         assert_eq!(
-            game_clash(&[interact, interact_tap, jump, unnamed], label).as_deref(),
+            game_clash(&[interact, interact_tap, jump], label).as_deref(),
             Some("The game also uses this key for Interact, Jump.")
+        );
+        assert_eq!(
+            game_clash(&[interact, interact_tap, jump, unnamed], label).as_deref(),
+            Some("The game also uses this key for Interact, Jump and other actions."),
+            "an action without a label is not left out unsaid"
         );
         assert_eq!(
             game_clash(&[unnamed], label).as_deref(),

@@ -100,15 +100,7 @@ impl MapKeys {
     /// The list's functions and fields on this build, or what of its code,
     /// table or reflection is missing.
     pub(super) fn resolve(loader: &Loader) -> Result<Self, Missing> {
-        let function = |name: Symbol| {
-            if !loader.code_holds(name) {
-                return Err(Missing::Bytes(name.id()));
-            }
-            loader
-                .address(name)
-                .and_then(|a| usize::try_from(a).ok())
-                .ok_or(Missing::Entry(name.id()))
-        };
+        let function = |name: Symbol| super::verify(loader, name);
         let offset = |id: Constant| loader.offset(id).ok_or(Missing::Entry(id.id()));
         let size = offset(pinned::ui::PASS_KEY_SIZE)?;
         if size == 0 || size > MOST_KEY_SIZE {

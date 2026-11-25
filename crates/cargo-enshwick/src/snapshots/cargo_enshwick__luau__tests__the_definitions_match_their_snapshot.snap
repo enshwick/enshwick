@@ -621,7 +621,7 @@ export type ClientSnapshot = {
 	prompt_target: number?,
 	--- The `LocaTagId` of that prompt's verb, as the object offers it; Luau has no `Verb.from_id`, so a script compares the number.
 	prompt_verb: number?,
-	--- The character the main menu has selected, by its place in the menu's list from 0, as `host` takes it; nil while none is and outside the main menu.
+	--- The character the main menu has selected, by its place in the menu's list from 0, as `host` takes it; nil while none is and outside the main menu. When both save storages hold a character there, `host` plays the one in Steam's cloud.
 	selected_character: number?,
 }
 

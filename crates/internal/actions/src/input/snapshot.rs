@@ -531,6 +531,10 @@ impl ClientSnapshot {
     /// [`CommandAction::Host`](super::CommandAction::Host) takes it; `None`
     /// while none is and outside the main menu.
     ///
+    /// The place does not say which save storage holds the character: when
+    /// the local folder and Steam's cloud both hold one there, `Host` plays
+    /// the cloud one, even if the local one is selected.
+    ///
     /// # Examples
     ///
     /// ```
@@ -699,7 +703,8 @@ struct LuauSnapshot {
     pub prompt_verb: Option<u32>,
     /// The character the main menu has selected, by its place in the menu's
     /// list from 0, as `host` takes it; nil while none is and outside the
-    /// main menu.
+    /// main menu. When both save storages hold a character there, `host`
+    /// plays the one in Steam's cloud.
     pub selected_character: Option<u16>,
 }
 
