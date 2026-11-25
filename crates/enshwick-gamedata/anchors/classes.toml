@@ -606,6 +606,7 @@ entries = [
   "textures.signal",
   "ui.action_bound",
   "ui.action_extent",
+  "ui.action_label",
   "ui.action_new",
   "ui.action_node",
   "ui.action_query",

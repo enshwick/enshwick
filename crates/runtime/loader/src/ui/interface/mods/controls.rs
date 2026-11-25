@@ -9,6 +9,7 @@ use enshwick_core::abi::UiWidget;
 use super::list::{listing, pages};
 use crate::actions::bindings::{self, Capture, Captured, clashes};
 use crate::actions::controls::{self, Row, SetKeyError, capture_keys, key_name};
+use crate::actions::game_bindings::{self, ActionNumber};
 use crate::engine::loader::Loader;
 use crate::engine::texts;
 use crate::ui::interface::{Painter, Widgets};
@@ -192,14 +193,41 @@ fn control(
         let line = texts::fill("controls.clash", &[("controls", &others.join(", "))]);
         paint.label(line.as_bytes(), UiWidget::STYLE_WARNING, true, false);
     }
-    if row
+    let actions: Vec<ActionNumber> = row
         .keys
         .iter()
-        .any(|&key| crate::actions::game_bindings::shares(key))
-    {
-        let line = texts::text("controls.game-clash");
+        .flat_map(|&key| game_bindings::sharing(key))
+        .collect();
+    if let Some(line) = game_clash(&actions, |action| paint.action_label(action)) {
         paint.label(line.as_bytes(), UiWidget::STYLE_WARNING, true, false);
     }
+}
+
+/// The warning under a control whose keys fire the game's `actions` too,
+/// naming each by its `label` in the player's language, a label shared by
+/// several actions once; without any label it says only that the game uses
+/// the key, so no reflected name reaches the player. `None` for no action.
+fn game_clash(
+    actions: &[ActionNumber],
+    label: impl Fn(ActionNumber) -> Option<String>,
+) -> Option<String> {
+    if actions.is_empty() {
+        return None;
+    }
+    let mut names: Vec<String> = Vec::new();
+    for name in actions.iter().filter_map(|&action| label(action)) {
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    Some(if names.is_empty() {
+        texts::text("controls.game-clash").to_owned()
+    } else {
+        texts::fill(
+            "controls.game-clash.named",
+            &[("actions", &names.join(", "))],
+        )
+    })
 }
 
 /// One look of the capture: a key binds, Escape or a lost focus cancels.
@@ -255,5 +283,25 @@ mod tests {
         view.yield_to(true);
         assert!(view.waiting.is_none(), "typing binds no key");
         assert!(view.back(), "and Back leaves the page at once");
+    }
+
+    #[test]
+    fn a_shared_key_names_each_game_action_by_its_label_once() {
+        let [interact, interact_tap, jump, unnamed] = [15, 16, 73, 99].map(ActionNumber::new);
+        let label = |action: ActionNumber| match action.get() {
+            15 | 16 => Some("Interact".to_owned()),
+            73 => Some("Jump".to_owned()),
+            _ => None,
+        };
+        assert_eq!(game_clash(&[], label), None);
+        assert_eq!(
+            game_clash(&[interact, interact_tap, jump, unnamed], label).as_deref(),
+            Some("The game also uses this key for Interact, Jump.")
+        );
+        assert_eq!(
+            game_clash(&[unnamed], label).as_deref(),
+            Some("The game also uses this key."),
+            "an action without a label is not named"
+        );
     }
 }

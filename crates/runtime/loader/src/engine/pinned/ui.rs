@@ -4,6 +4,9 @@ use super::{Constant, Symbol};
 
 pub(crate) const ACTION_BOUND: Constant = Constant::new("ui.action_bound");
 pub(crate) const ACTION_EXTENT: Constant = Constant::new("ui.action_extent");
+/// The game's label of a runtime `GameplayAction`, the action in, its
+/// `LocaTagId` out; the key glyph calls it (`0x140d361a0`, client 26430625).
+pub(crate) const ACTION_LABEL: Symbol = Symbol::new("ui.action_label");
 pub(crate) const ACTION_NEW: Symbol = Symbol::new("ui.action_new");
 pub(crate) const ACTION_NODE: Constant = Constant::new("ui.action_node");
 pub(crate) const ACTION_QUERY: Symbol = Symbol::new("ui.action_query");

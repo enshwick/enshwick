@@ -20,6 +20,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::map::REGISTRY_BLOB.id(),
     pinned::map::STATE_PLAY_DATA.id(),
     pinned::ui::ACTION_BOUND.id(),
+    pinned::ui::ACTION_LABEL.id(),
     pinned::ui::ACTION_EXTENT.id(),
     pinned::ui::ACTION_NEW.id(),
     pinned::ui::ACTION_NODE.id(),

@@ -10188,6 +10188,14 @@ take = "address"
 check = ["mov [rsp+0x8],rbx", "mov [rsp+0x10],rsi", "push rdi", "sub rsp,0x20", "movzx eax,r8l"]
 
 [[route]]
+id = "ui.action_label"
+sides = ["client"]
+callers = "~fn:input.binding_copy"
+shape = ["movzx ?1,cl", "je ?b", "call *", "test eax,eax", "jne ?b"]
+take = "address"
+check = ["cmp cl,?", "ja ?b", "lea rdx,[rip+?]", "movzx eax,cl", "mov eax,[rdx+rax*4+?]", "add rax,rdx"]
+
+[[route]]
 id = "input.binding_size"
 sides = ["client"]
 in = "~fn:input.binding_copy"
