@@ -36,6 +36,33 @@ pub(crate) struct FrameRead {
     pub(crate) tab: TabRead,
     /// The crafting menu's highlighted recipe.
     pub(crate) recipe: RecipeRead,
+    /// Whether the interaction prompt shows; `None` on a build without the
+    /// prompt's reads.
+    pub(crate) prompt: Option<bool>,
+}
+
+/// What a frame read of the main menu's selected character: `None` on a
+/// build without the read, else its place in the menu's list, `None`
+/// while none is selected and outside the main menu.
+pub(crate) type CharacterRead = Option<Option<u16>>;
+
+/// The bit of a read word a frame wrote, above the 32 bits of its value.
+const WORD_READ: u64 = 1 << 32;
+
+/// The character word of `read`: [`WORD_READ`] with the place plus 1, 0
+/// for none; 0 unread.
+fn pack_character(read: CharacterRead) -> u64 {
+    read.map_or(0, |place| {
+        WORD_READ | place.map_or(0, |at| u64::from(at) + 1)
+    })
+}
+
+/// The read a frame packed into `word`.
+fn unpack_character(word: u64) -> CharacterRead {
+    (word & WORD_READ != 0).then(|| {
+        let place = word & 0xffff_ffff;
+        place.checked_sub(1).and_then(|at| u16::try_from(at).ok())
+    })
 }
 
 /// What the loader's own Mods screen shows: its page, as
@@ -107,11 +134,18 @@ pub(crate) enum TabRead {
 struct State {
     asked: AtomicBool,
     /// The session, the screens' packed word, the highlighted recipe's
-    /// word and the frame's time as [`local_held::now_ms`] counts.
-    copy: Copied<4>,
+    /// word, the prompt's word and the frame's time as
+    /// [`local_held::now_ms`] counts.
+    copy: Copied<5>,
     /// The loader's own screen, packed: it reads in every frame, at the
     /// main menu too, apart from the game's reads.
     loader: AtomicU64,
+    /// The main menu's selected character, packed: it reads in every frame
+    /// as the loader's screen does.
+    character: AtomicU64,
+    /// The prompt's target and its verb above it, as its site last kept them
+    /// on the game's thread, 0 for none.
+    prompt: AtomicU64,
     /// The play data, the local player and the world count the session was
     /// counted on.
     play: AtomicU64,
@@ -124,6 +158,8 @@ static STATE: State = State {
     asked: AtomicBool::new(false),
     copy: Copied::new(),
     loader: AtomicU64::new(0),
+    character: AtomicU64::new(0),
+    prompt: AtomicU64::new(0),
     play: AtomicU64::new(0),
     player: AtomicU32::new(0),
     worlds: AtomicU64::new(0),
@@ -132,7 +168,8 @@ static STATE: State = State {
 static FUSE: Fuse = Fuse::new(FEATURE);
 
 /// The screens of `read` in one word: the screen, the return-to screen,
-/// the tab code ([`NO_TAB`] for none) and the tab-read bit, then the host.
+/// the tab code ([`NO_TAB`] for none), the tab-read bit and the prompt-read
+/// bit, then the host.
 fn pack(read: &FrameRead) -> u64 {
     let (tab, tab_read) = match read.tab {
         TabRead::NoMenu | TabRead::Other => (NO_TAB, 1),
@@ -143,7 +180,30 @@ fn pack(read: &FrameRead) -> u64 {
         | u64::from(read.return_to) << 8
         | tab << 16
         | tab_read << 24
+        | u64::from(read.prompt.is_some()) << 25
         | u64::from(read.host) << 32
+}
+
+/// The prompt's word for a frame that read `shows`: what its site last
+/// kept while it shows, else 0, and the kept word cleared while it does
+/// not, so a prompt that shows next never names the last one's target.
+fn prompt_word(shows: Option<bool>, kept: &AtomicU64) -> u64 {
+    match shows {
+        Some(true) => kept.load(Ordering::Relaxed),
+        Some(false) => {
+            kept.store(0, Ordering::Relaxed);
+            0
+        }
+        None => 0,
+    }
+}
+
+/// Keeps the target and the verb of the prompt that shows, as its site
+/// reads them on the game's thread, once a mod asked.
+pub(crate) fn note_prompt(target: u32, verb: u32) {
+    STATE
+        .prompt
+        .store(u64::from(target) | u64::from(verb) << 32, Ordering::Relaxed);
 }
 
 /// The session and the player it keeps for a frame on `play` with `player`
@@ -162,18 +222,22 @@ fn next_session(last: (u64, u32, u64, u64), now: (u64, u32, u64)) -> (u64, u32) 
     }
 }
 
-/// Keeps the frame's `read` of the game and the `loader`'s own screen once
-/// a mod asked; on the interface thread, inside its frame. Both run only
-/// then.
+/// Keeps the frame's `read` of the game, the `loader`'s own screen and the
+/// main menu's selected `character` once a mod asked; on the interface
+/// thread, inside its frame. Each runs only then.
 pub(crate) fn frame(
     read: impl FnOnce() -> Option<FrameRead>,
     loader: impl FnOnce() -> LoaderScreen,
+    character: impl FnOnce() -> CharacterRead,
 ) {
     if !STATE.asked.load(Ordering::Relaxed) {
         return;
     }
     let _kept = FUSE.run(FEATURE, || {
         STATE.loader.store(loader().pack(), Ordering::Relaxed);
+        STATE
+            .character
+            .store(pack_character(character()), Ordering::Relaxed);
         let Some(read) = read() else {
             return;
         };
@@ -199,6 +263,7 @@ pub(crate) fn frame(
             session,
             pack(&read),
             pack_recipe(read.recipe),
+            prompt_word(read.prompt, &STATE.prompt),
             local_held::now_ms(),
         ]);
     });
@@ -232,6 +297,7 @@ pub(crate) fn snapshot(loader: &Loader, scene: Option<&'static str>) -> ClientSn
         Kept {
             words: STATE.copy.load(),
             loader: STATE.loader.load(Ordering::Relaxed),
+            character: STATE.character.load(Ordering::Relaxed),
             off,
             held: local_held::sample(),
             player: local_held::player(),
@@ -259,12 +325,13 @@ pub(crate) fn snapshot(loader: &Loader, scene: Option<&'static str>) -> ClientSn
 }
 
 /// What a snapshot is made of: the frame's last whole copy, the loader's
-/// screen word, whether the reads are off, the held controls' sample, the
-/// local player and the world's name.
+/// screen word, the selected character's word, whether the reads are off,
+/// the held controls' sample, the local player and the world's name.
 #[derive(Clone, Copy, Debug)]
 struct Kept {
-    words: Option<[u64; 4]>,
+    words: Option<[u64; 5]>,
     loader: u64,
+    character: u64,
     off: bool,
     held: Sample,
     player: Option<Entity>,
@@ -299,8 +366,15 @@ fn compose(
         snapshot.loader_screen = screen.page;
         snapshot.loader_screen_mod = screen.mod_index.and_then(mod_id).unwrap_or(Str::EMPTY);
     }
+    // The main menu's selected character reads, as the loader's screen does.
+    if !kept.off
+        && let Some(place) = unpack_character(kept.character)
+    {
+        snapshot.available |= ClientSnapshot::CHARACTER;
+        snapshot.character = place.map_or(ClientSnapshot::NO_CHARACTER, u32::from);
+    }
     // A copy mid-write through every try keeps the screens out of this one.
-    let [session, screens, recipe, read] = kept.words.unwrap_or_default();
+    let [session, screens, recipe, prompt, read] = kept.words.unwrap_or_default();
     snapshot.state = if kept.off {
         ClientSnapshot::OFF
     } else if read == 0 {
@@ -336,6 +410,14 @@ fn compose(
         snapshot.available |= ClientSnapshot::RECIPE;
         snapshot.highlighted_recipe = RecipeId(u32::try_from(recipe & 0xffff_ffff).unwrap_or(0));
     }
+    if screens >> 25 & 1 == 1 {
+        snapshot.available |= ClientSnapshot::PROMPT;
+        let target = u32::try_from(prompt & 0xffff_ffff).unwrap_or(0);
+        if target != 0 {
+            snapshot.prompt_target = Entity(target);
+            snapshot.prompt_verb = u32::try_from(prompt >> 32).unwrap_or(0);
+        }
+    }
     snapshot
 }
 
@@ -366,10 +448,14 @@ mod tests {
         super::compose(kept, now, name, |_| None)
     }
 
+    /// What a snapshot keeps of a frame's session, screens, recipe and time,
+    /// with no prompt.
     fn kept(words: Option<[u64; 4]>) -> Kept {
         Kept {
-            words,
+            words: words
+                .map(|[session, screens, recipe, read]| [session, screens, recipe, 0, read]),
             loader: 0,
+            character: 0,
             off: false,
             held: Sample::Never { miss: None },
             player: None,
@@ -385,7 +471,103 @@ mod tests {
             host: 0,
             tab,
             recipe: RecipeRead::Unread,
+            prompt: None,
         }
+    }
+
+    #[test]
+    fn a_shown_prompt_names_its_target_and_verb_and_a_hidden_one_clears_it() {
+        let kept_word = AtomicU64::new(0);
+        kept_word.store(1052 | 0x4e82_e309 << 32, Ordering::Relaxed);
+        let shows = FrameRead {
+            prompt: Some(true),
+            ..read(1, TabRead::NoMenu)
+        };
+        let words =
+            |read: &FrameRead| Some([1, pack(read), 0, prompt_word(read.prompt, &kept_word), 100]);
+        let facing = compose(
+            Kept {
+                words: words(&shows),
+                ..kept(None)
+            },
+            150,
+            name,
+        );
+        assert_ne!(facing.available & ClientSnapshot::PROMPT, 0);
+        assert_eq!(
+            (facing.prompt_target, facing.prompt_verb),
+            (Entity(1052), 0x4e82_e309)
+        );
+        let hidden = FrameRead {
+            prompt: Some(false),
+            ..shows
+        };
+        let away = compose(
+            Kept {
+                words: words(&hidden),
+                ..kept(None)
+            },
+            150,
+            name,
+        );
+        assert_ne!(
+            away.available & ClientSnapshot::PROMPT,
+            0,
+            "read, none shows"
+        );
+        assert_eq!((away.prompt_target, away.prompt_verb), (Entity(0), 0));
+        assert_eq!(
+            kept_word.load(Ordering::Relaxed),
+            0,
+            "the last target is gone"
+        );
+        let again = compose(
+            Kept {
+                words: words(&shows),
+                ..kept(None)
+            },
+            150,
+            name,
+        );
+        assert_eq!(
+            again.prompt_target,
+            Entity(0),
+            "no stale target before the site runs"
+        );
+        let unread = compose(
+            kept(Some([1, pack(&read(1, TabRead::NoMenu)), 0, 100])),
+            150,
+            name,
+        );
+        assert_eq!(unread.available & ClientSnapshot::PROMPT, 0);
+    }
+
+    #[test]
+    fn the_selected_character_reads_by_its_place_and_none_outside_the_menu() {
+        let at = |read: CharacterRead| {
+            compose(
+                Kept {
+                    character: pack_character(read),
+                    ..kept(None)
+                },
+                150,
+                name,
+            )
+        };
+        let picked = at(Some(Some(2)));
+        assert_ne!(picked.available & ClientSnapshot::CHARACTER, 0);
+        assert_eq!(picked.character, 2);
+        let first = at(Some(Some(0)));
+        assert_eq!(first.character, 0, "the first place is no none");
+        let none = at(Some(None));
+        assert_ne!(none.available & ClientSnapshot::CHARACTER, 0);
+        assert_eq!(none.character, ClientSnapshot::NO_CHARACTER);
+        let unread = at(None);
+        assert_eq!(unread.available & ClientSnapshot::CHARACTER, 0);
+        assert_eq!(
+            unpack_character(pack_character(Some(Some(u16::MAX)))),
+            Some(Some(u16::MAX))
+        );
     }
 
     #[test]
@@ -615,6 +797,10 @@ mod tests {
                 ran.set(true);
                 LoaderScreen::default()
             },
+            || {
+                ran.set(true);
+                None
+            },
         );
         assert!(!ran.get(), "no read before an ask");
         // The frame's own copy, composed as `snapshot` does, without asking
@@ -640,18 +826,26 @@ mod tests {
             page: ClientSnapshot::MOD_LIST,
             mod_index: None,
         };
-        frame(|| None, list);
+        frame(|| None, list, || None);
         let menu = kept();
         assert_eq!(
             (menu.state, menu.loader_screen),
             (ClientSnapshot::NEVER, ClientSnapshot::MOD_LIST),
             "the main menu's Mods screen, before any game"
         );
-        frame(|| Some(read(4, TabRead::Shown(MenuTab::Map))), list);
+        frame(
+            || Some(read(4, TabRead::Shown(MenuTab::Map))),
+            list,
+            || None,
+        );
         let second = kept();
         assert_eq!(second.state, ClientSnapshot::FRESH);
         assert_eq!(second.session, 1);
-        frame(|| Some(read(4, TabRead::Shown(MenuTab::Map))), list);
+        frame(
+            || Some(read(4, TabRead::Shown(MenuTab::Map))),
+            list,
+            || None,
+        );
         assert_eq!(kept().session, 1, "the same session");
     }
 }

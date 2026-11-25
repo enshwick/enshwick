@@ -27,7 +27,7 @@ use enshwick_core::abi::{
 };
 
 pub(crate) use self::handoff::Handoff;
-pub(crate) use self::play::{Host, Post, server_str};
+pub(crate) use self::play::{Host, Post, place, server_str};
 #[cfg(test)]
 use self::spec::inside_frame;
 use self::spec::{expected_screen, kind, text, window_ask};
