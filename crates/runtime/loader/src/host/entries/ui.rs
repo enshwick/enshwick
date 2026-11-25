@@ -47,6 +47,18 @@ entries! {
         crate::ui::interface::carried::listed(|items| out.put(items))
     }
 
+    fn client_slots(
+        loader as Caller,
+        [out, entry_size, capacity, count] as SizedListOut<api_frame::ClientSlot>,
+    ) -> Status {
+        on_client(loader)?;
+        // The slots read inside the held controls' read, which this starts.
+        let _asked = crate::actions::local_held::sample();
+        let slots = crate::actions::player_state::slots(crate::actions::local_held::now_ms())
+            .ok_or(Status::NOT_LOADED)?;
+        out.put(&slots)
+    }
+
     fn sound_play(me as Mod, spec as Headed<api_frame::SoundPlay>, id as Out<u64>) -> Status {
         id.put(crate::ui::sound::play(me.loader, me.index, &spec)?)
     }

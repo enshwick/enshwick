@@ -395,6 +395,8 @@ ids! {
     SLOT_SELECTION = "slot_selection";
     /// The id of its `u8` index of the action bar's selected slot.
     SLOT_SELECTION_ACTIONBAR = "slot_selection.actionbar";
+    /// The id of its two action bar inventory entities.
+    SLOT_SELECTION_ACTIONBAR_ENTITIES = "slot_selection.actionbar_entities";
     /// The id of a waypoint request: set, clear or ping a position.
     WAYPOINT_ACTION = "waypoint_action";
     /// The id of its `WorldPosition`, three `i64` in 32.32 fixed point.

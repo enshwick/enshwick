@@ -1379,6 +1379,14 @@ pub const FACTS: &[(&str, Fact)] = &[
             holds: "keen::InventorySlotIndex",
         },
     ),
+    (
+        ids::SLOT_SELECTION_ACTIONBAR_ENTITIES,
+        offset(
+            SLOT_SELECTION,
+            "actionbarEntityIds",
+            "keen::StaticArray<keen::ecs::EntityId,2>",
+        ),
+    ),
     (ids::WAYPOINT_ACTION, Fact::Type(WAYPOINT_ACTION)),
     (
         ids::WAYPOINT_ACTION_POSITION,

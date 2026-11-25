@@ -402,6 +402,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     quest_reward_filter,
     knowledge_set,
     client_windows,
+    client_slots,
 };
 
 /// What the loader runs after each step's own work: the waits it ended.

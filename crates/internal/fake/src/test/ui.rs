@@ -450,6 +450,28 @@ impl Installed {
         table::with((), |s| s.ui.client_windows = items);
     }
 
+    /// Sets the local player's inventory slots the client's last step read,
+    /// as the loader lists them, or `None` for none read in the last second;
+    /// a server still answers unavailable.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{ClientSlot, Side};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+    /// loader.set_client_slots(Some(vec![ClientSlot {
+    ///     slot: 0x41,
+    ///     item: 7,
+    ///     count: 3,
+    ///     category: 4,
+    ///     ..ClientSlot::EMPTY
+    /// }]));
+    /// ```
+    pub fn set_client_slots(&self, slots: Option<Vec<enshwick_core::abi::ClientSlot>>) {
+        table::with((), |s| s.ui.client_slots = slots);
+    }
+
     /// The client commands mods queued, in order: each id, raw kind (such
     /// as [`ClientCommand::OPEN_SCREEN`](enshwick_core::abi::ClientCommand))
     /// and target.

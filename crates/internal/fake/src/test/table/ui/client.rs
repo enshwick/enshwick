@@ -328,4 +328,22 @@ entries! {
             Err(status) => status,
         }
     }
+
+    /// The local player's slots the test set, `NOT_LOADED` while it set
+    /// none; unavailable on a server, as the loader answers.
+    pub(crate) fn client_slots(
+        me as Caller,
+        [out: *mut enshwick_core::abi::ClientSlot, entry_size: u32, capacity: u32, count: *mut u32] as args::SizedListOut,
+    ) -> Status {
+        let slots = with(Err(Status::MISSING), |s| {
+            if s.host.base.side == Side::SERVER {
+                return Err(Status::UNAVAILABLE);
+            }
+            s.ui.client_slots.clone().ok_or(Status::NOT_LOADED)
+        });
+        match slots {
+            Ok(slots) => crate::test::table::base::io::list(&slots, out, entry_size, capacity, count),
+            Err(status) => status,
+        }
+    }
 }

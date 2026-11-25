@@ -51,6 +51,7 @@ use enshwick_world::__internal::world_status;
 #[cfg(feature = "typed")]
 mod bindings;
 mod commands;
+mod slots;
 mod snapshot;
 mod windows;
 
@@ -60,6 +61,7 @@ pub use commands::{
     CancelReason, ClientCommand, CommandAction, CommandId, CommandState, CommandStatus,
     JoinFailure, JoinPhase, Password,
 };
+pub use slots::PlayerSlot;
 pub use snapshot::{ClientSnapshot, LoaderPage, SnapshotPart, SnapshotState};
 pub use windows::{ClientWindowItem, WindowItemKind};
 

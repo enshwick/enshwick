@@ -8,7 +8,9 @@ mod client;
 mod sound;
 
 use crate::test::table::{Registered, State, text, with};
-pub(crate) use client::{client_command, client_command_status, client_snapshot, client_windows};
+pub(crate) use client::{
+    client_command, client_command_status, client_slots, client_snapshot, client_windows,
+};
 use enshwick_core::__fake::SCREENS;
 use enshwick_core::abi::{
     FogInfo, MapMarkerTypeInfo, ModHandle, Side, Status, UiAnswerFn, UiDialog, UiExtension,
@@ -88,6 +90,8 @@ pub(crate) struct UiState {
     /// The items of the carried windows the client holds, as the test set
     /// them.
     pub(crate) client_windows: Vec<enshwick_core::abi::ClientWindowItem>,
+    /// The local player's slots, `None` while unread.
+    pub(crate) client_slots: Option<Vec<enshwick_core::abi::ClientSlot>>,
     /// The slot of an inventory screen under the cursor, as the frames
     /// hear it: the packed slot, item, count and item entity.
     pub(crate) hovered: Option<(u64, enshwick_core::ItemId, u32, enshwick_core::Entity)>,
@@ -135,6 +139,7 @@ impl Default for UiState {
             snapshot_reads: (false, false),
             client_commands: Vec::new(),
             client_windows: Vec::new(),
+            client_slots: None,
             hovered: None,
             tooltips: Vec::new(),
             tooltip: None,

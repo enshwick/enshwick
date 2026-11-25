@@ -3952,6 +3952,32 @@ typedef struct EnshwickSoundAudience {
 // The most sounds one mod sends clients in one server step.
 #define EnshwickSoundAudience_MAX_PLAYS 32
 
+// One slot of the local player's inventory as the client's world holds
+// it, which `HostApi::client_slots` lists.
+// ABI 12.28.
+typedef struct EnshwickClientSlot {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The slot as the game packs it: the sub-inventory entity, then the
+  // index in it shifted left by 32.
+  uint64_t slot;
+  // The item's id, 0 for none.
+  uint32_t item;
+  // How many.
+  uint32_t count;
+  // The item's own entity, for items with durability or a level; 0 for
+  // none.
+  EnshwickEntity pide;
+  // The sub-inventory's `InventoryCategory`.
+  uint8_t category;
+  // `ClientSlot::ACTIONBAR`.
+  uint8_t flags;
+  // Zero.
+  uint16_t reserved;
+} EnshwickClientSlot;
+// The slot is one of the action bar's.
+#define EnshwickClientSlot_ACTIONBAR 1
+
 
 // A player about to interact with an entity, as
 // `EnshwickHostApi.interaction_filter` hands it
@@ -7730,6 +7756,20 @@ typedef struct EnshwickHostApi {
                                    uint32_t entry_size,
                                    uint32_t capacity,
                                    uint32_t *count);
+  // Up to `capacity` slots of the local player's inventory, empty ones
+  // included, in the game's order, as the client's last step read them
+  // from its copy of the world, and how many there are, as every list
+  // answers. Entries are `entry_size` bytes apart, the caller's
+  // `sizeof(ClientSlot)`. The first call starts the reads, which
+  // then run in each step for a few seconds after the last call; while
+  // no step read them in the last second it answers
+  // `EnshwickStatus_NOT_LOADED`. Client only: `EnshwickStatus_UNAVAILABLE` on a
+  // server. Any thread; it runs no mod callback. ABI 12.28.
+  EnshwickStatus (*client_slots)(EnshwickModHandle me,
+                                 struct EnshwickClientSlot *out,
+                                 uint32_t entry_size,
+                                 uint32_t capacity,
+                                 uint32_t *count);
 } EnshwickHostApi;
 
 // The layout the loader was built with, from its golden layout file.

@@ -79,6 +79,7 @@ macro_rules! headed {
             GameBinding,
             ClientSnapshot,
             ClientWindowItem,
+            ClientSlot,
             LoopWaitData,
             MapFrameInfo,
             MapMarkerInfo,

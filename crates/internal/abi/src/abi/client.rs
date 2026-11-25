@@ -721,6 +721,59 @@ pub struct ClientWindowItem {
 
 impl_headed!(ClientWindowItem);
 
+/// One slot of the local player's inventory as the client's world holds
+/// it, which [`HostApi::client_slots`](super::HostApi::client_slots) lists.
+/// ABI 12.28.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::ClientSlot;
+///
+/// let empty = ClientSlot::EMPTY;
+/// assert_eq!((empty.item, empty.count), (0, 0));
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct ClientSlot {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The slot as the game packs it: the sub-inventory entity, then the
+    /// index in it shifted left by 32.
+    pub slot: u64,
+    /// The item's id, 0 for none.
+    pub item: u32,
+    /// How many.
+    pub count: u32,
+    /// The item's own entity, for items with durability or a level; 0 for
+    /// none.
+    pub pide: Entity,
+    /// The sub-inventory's `InventoryCategory`.
+    pub category: u8,
+    /// [`ClientSlot::ACTIONBAR`].
+    pub flags: u8,
+    /// Zero.
+    pub reserved: u16,
+}
+
+impl_headed!(ClientSlot);
+
+impl ClientSlot {
+    /// The slot is one of the action bar's.
+    pub const ACTIONBAR: u8 = 1;
+    /// An empty slot, its header set.
+    pub const EMPTY: Self = Self {
+        header: Header::of::<Self>(),
+        slot: 0,
+        item: 0,
+        count: 0,
+        pide: Entity(0),
+        category: 0,
+        flags: 0,
+        reserved: 0,
+    };
+}
+
 impl ClientWindowItem {
     /// A button: a row's, an action's Run, a form's Cancel, the window's
     /// Close or its map's.

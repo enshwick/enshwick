@@ -32,6 +32,7 @@ pub mod linked_controls;
 pub(crate) mod local_held;
 #[cfg(windows)]
 pub(crate) mod player_actions;
+#[cfg(windows)]
 pub(crate) mod player_state;
 pub mod reply;
 #[cfg(windows)]
