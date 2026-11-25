@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 26
+#define ENSHWICK_ABI_MINOR 27
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -2767,6 +2767,9 @@ typedef struct EnshwickVoxel {
 // The end of the coordinates a box covers on any axis, in voxels:
 // every voxel of a box lies below it. 2³⁰, far past any world's edge.
 #define EnshwickVoxel_END (1 << 30)
+// Voxels per metre on every axis: a voxel is half a metre a side.
+// ABI 12.27.
+#define EnshwickVoxel_PER_METRE 2.0
 
 // One change of a transaction, handed to
 // `EnshwickHostApi.transaction_commit` in an
@@ -6338,9 +6341,8 @@ typedef struct EnshwickHostApi {
   // Writes how the weather weighs at `position`, in
   // metres, as the game's systems weigh it, as far as the `EnshwickHeader`
   // `out` starts with says the caller's struct reaches;
-  // `EnshwickStatus_BAD_ARGS` for a position outside
-  // `in_fixed_range`. On the server's game
-  // thread only.
+  // `EnshwickStatus_BAD_ARGS` for a position not finite or at 2^31 metres or
+  // more on an axis. On the server's game thread only.
   EnshwickStatus (*weather_at)(EnshwickModHandle me,
                                const EnshwickMetres *position,
                                struct EnshwickWeatherSample *out);
@@ -6439,9 +6441,10 @@ typedef struct EnshwickHostApi {
   // items: both corners inside the world's building area, and no strict
   // no-build zone the world places. A player not in game has no
   // permissions. `check` is borrowed for the call. `EnshwickStatus_BAD_ARGS`
-  // for a null `check`, an old header, a corner outside
-  // `in_fixed_range` or a `max` below `min`; `EnshwickStatus_UNAVAILABLE` while no world is loaded or
-  // on a build without the checks. On the server's game thread at a quiet
+  // for a null `check`, an old header, a corner not finite or at 2^31
+  // metres or more on an axis or a `max` below `min`;
+  // `EnshwickStatus_UNAVAILABLE` while no world is loaded or on a build
+  // without the checks. On the server's game thread at a quiet
   // moment only, outside a step or in a game event:
   // `EnshwickStatus_WRONG_THREAD` inside a step.
   EnshwickStatus (*build_rights)(EnshwickModHandle me, struct EnshwickBuildRights *check);
@@ -6515,8 +6518,8 @@ typedef struct EnshwickHostApi {
   // to `max`, in metres, and 0 when not: the game saves a world only
   // inside its bases' zones, so the box must lie wholly inside one, half
   // a metre in from its edges. `EnshwickStatus_BAD_ARGS` for a null pointer,
-  // a corner outside `in_fixed_range` or a
-  // `max` below `min`;
+  // a corner not finite or at 2^31 metres or more on an axis or a `max`
+  // below `min`;
   // `EnshwickStatus_UNAVAILABLE` while no world is loaded or on a build without
   // the zone list. On the server's game thread at a quiet moment only:
   // `EnshwickStatus_WRONG_THREAD` elsewhere or inside a step. The mod passes
@@ -6787,7 +6790,7 @@ typedef struct EnshwickHostApi {
   // the next step; `EnshwickStatus_MISSING` for an entity not in the world,
   // `EnshwickStatus_REFUSED` for one the game's teleport does not move, as a
   // prop: it moves actors and characters; `EnshwickStatus_BAD_ARGS` for a
-  // position outside `in_fixed_range`;
+  // position not finite or at 2^31 metres or more on an axis;
   // `EnshwickStatus_UNAVAILABLE` where no server runs or on a build without
   // teleports.
   // On the server's game thread only.
@@ -6795,8 +6798,8 @@ typedef struct EnshwickHostApi {
   // Asks the server to spawn an entity from a template, as its admin
   // spawn does, and writes the new entity's id to `out`; the entity is in
   // the world after the next step. `EnshwickStatus_BAD_ARGS` for a zero
-  // template or a position outside
-  // `in_fixed_range`; a template the game does not know spawns nothing. On the
+  // template or a position not finite or at 2^31 metres or more on an
+  // axis; a template the game does not know spawns nothing. On the
   // server's game thread only.
   EnshwickStatus (*spawn)(EnshwickModHandle me,
                           const struct EnshwickSpawnRequest *request,
@@ -6932,8 +6935,8 @@ typedef struct EnshwickHostApi {
   // the game spills loot; writes the new pickup's entity to `out`. The
   // game falls it to the ground and does not save it.
   // `EnshwickStatus_BAD_ARGS` for a null `request` or `out`, a count of 0 or over
-  // 65535, a rarity the game lacks or a position outside
-  // `in_fixed_range`; `EnshwickStatus_MISSING` for an item
+  // 65535, a rarity the game lacks or a position not finite or at 2^31
+  // metres or more on an axis; `EnshwickStatus_MISSING` for an item
   // the game does not know; `EnshwickStatus_WRONG_THREAD` off the server's
   // game thread; `EnshwickStatus_UNAVAILABLE` on a client, a build without
   // the pickup or the item lookup, or while no item registry or world
@@ -7227,8 +7230,8 @@ typedef struct EnshwickHostApi {
   // Replaces the mod's markers on the client's map with the `count` at
   // `markers`, copied; none clears them. Any thread. Client only
   // (`EnshwickStatus_UNAVAILABLE` on a server); `EnshwickStatus_BAD_ARGS` past 256
-  // markers or for a position outside
-  // `in_fixed_range`. A marker with a non-zero `EnshwickUiMarker.marker_type` has the
+  // markers or for a position not finite or at 2^31 metres or more on an
+  // axis. A marker with a non-zero `EnshwickUiMarker.marker_type` has the
   // loader read the registry as `EnshwickHostApi.map_marker_types` does, on
   // the calling thread at the first such call: `EnshwickStatus_BAD_ARGS` for
   // a type it does not list, `EnshwickStatus_UNAVAILABLE` when it does not

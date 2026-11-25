@@ -47,13 +47,19 @@ pub struct SoundMessage {
     pub op: SoundOp,
 }
 
-/// `at` as the message's `f32` metres.
+/// The largest `f32` below 2^31 metres, the edge of
+/// [`in_fixed_range`](enshwick_core::abi::in_fixed_range): `f32` rounds the
+/// last 64 metres below 2^31 up to it, which the client refuses.
+const EDGE: f64 = 2_147_483_520.0;
+
+/// `at` as the message's `f32` metres, a place the server took kept one
+/// the client takes.
 fn narrow(at: [f64; 3]) -> [f32; 3] {
     #[expect(
         clippy::cast_possible_truncation,
         reason = "a millimetre at 4 km is all a sound's place needs"
     )]
-    at.map(|axis| axis as f32)
+    at.map(|axis| axis.clamp(-EDGE, EDGE) as f32)
 }
 
 /// `message` as a control message, at most [`MAX_SOUND`] bytes. A place or
@@ -217,6 +223,45 @@ mod tests {
             (got.kind, got.volume, got.fade_ms, got.at),
             (steer.kind, steer.volume, steer.fade_ms, steer.at)
         );
+    }
+
+    #[test]
+    fn a_place_the_server_took_near_the_fixed_point_s_edge_reads_as_one_the_client_takes() {
+        let near = 2_147_483_600.0;
+        #[expect(clippy::cast_possible_truncation, reason = "the rounding under test")]
+        let rounded = near as f32;
+        assert_eq!(rounded, 2_147_483_648.0, "f32 rounds it up to 2^31");
+        let at = [near, -near, 0.0];
+        let play = SoundPlay {
+            place: SoundPlay::AT,
+            at,
+            ..SoundPlay::EMPTY
+        };
+        assert!(play.in_bounds());
+        let data = sound(&SoundMessage {
+            owner: 1,
+            id: 1,
+            op: SoundOp::Play(play),
+        });
+        let SoundOp::Play(got) = read_sound(&data[2..]).expect("a start").op else {
+            panic!("a start")
+        };
+        assert!(got.in_bounds(), "{:?}", got.at);
+        assert_eq!(got.at, [EDGE, -EDGE, 0.0]);
+        let steer = SoundSteer {
+            kind: SoundSteer::POSITION,
+            at,
+            ..SoundSteer::EMPTY
+        };
+        let data = sound(&SoundMessage {
+            owner: 1,
+            id: 2,
+            op: SoundOp::Steer(steer),
+        });
+        let SoundOp::Steer(got) = read_sound(&data[2..]).expect("a change").op else {
+            panic!("a change")
+        };
+        assert!(got.in_bounds(), "{:?}", got.at);
     }
 
     #[test]

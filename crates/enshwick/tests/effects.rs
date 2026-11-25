@@ -242,4 +242,30 @@ mod tests {
         assert_eq!(loader.teleports()[0].position, AT_THE_BOUND);
         assert_eq!(loader.emits().len(), 2);
     }
+
+    #[test]
+    fn without_entity_calls_a_far_spawn_or_teleport_is_unavailable_as_the_loader_answers() {
+        let loader = FakeHost::new()
+            .world()
+            .without_entity_commands()
+            .template(Entity(5), enshwick::content::Guid([5; 16]))
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Acting)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let effects = EFFECTS.get().unwrap();
+        for far in PAST_THE_FIXED_POINT {
+            assert_eq!(
+                effects.spawn(enshwick::content::Guid([7; 16]), far, Spawn::new()),
+                Err(WorldError::Unavailable),
+                "spawn {far:?}"
+            );
+            assert_eq!(
+                effects.teleport(Entity(5), far, Teleport::new()),
+                Err(WorldError::Unavailable),
+                "teleport {far:?}"
+            );
+        }
+    }
 }

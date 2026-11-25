@@ -638,7 +638,11 @@ Unstable: needs the `unstable` feature and may change in any release
 shows the mod's markers on the map, at most 256. Each has a position in
 metres, a label and one of the game's eight custom marker colours. The next
 call replaces them all, and `clear_markers` takes them off. It works from any
-thread and copies what it is handed. By default a marker uses one of the
+thread and copies what it is handed. A marker the engine's fixed point
+cannot hold refuses the whole call (`UiError::Refused`), as
+[Positions](ecs.md#positions) bounds it, and the markers stay as they were.
+A server window's map leaves such a marker off and shows the rest. By
+default a marker uses one of the
 game's custom marker types with a label. The compass does not show them. A
 mod of side `server` puts markers on players' maps through a
 [window's map](actions.md#a-map-in-a-window) instead.

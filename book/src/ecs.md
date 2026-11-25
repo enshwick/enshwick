@@ -140,12 +140,22 @@ metres. It is an `unsafe fn` over a raw component pointer. `ecs::metres` and
 `ecs::fixed` convert between the two:
 
 ```rust
-use enshwick::ecs::{FIXED_PER_METRE, fixed, metres};
+use enshwick::ecs::{FIXED_PER_METRE, checked_fixed, fixed, metres};
 
 let at = fixed([10.5, 2.0, -4.0]);
 assert_eq!(at[0], (10.5 * FIXED_PER_METRE) as i64);
 assert_eq!(metres(at), [10.5, 2.0, -4.0]);
+assert_eq!(checked_fixed([f64::NAN, 0.0, 0.0]), None);
 ```
+
+A position fits the fixed point only when each axis is finite and below
+2^31 metres either way, as `abi::in_fixed_range` tells.
+`ecs::checked_fixed` converts such a position, or gives `None` past the
+range. The calls that hand the
+engine a position refuse one past that range. These are spawns, teleports,
+drops, NPC orders, pings, notifiers, sounds, weather samples, map markers
+and build checks. A placed prop or block keeps to the smaller voxel range
+of [blocks](terrain.md#blocks-and-voxels).
 
 ## Attribute sets: `Attributes`
 

@@ -559,7 +559,9 @@ account without one.
 ## Build rights
 
 `world.can_build(&player, a, b)` tells whether the server lets a player edit
-a box. The box lies between the corners `a` and `b`, in metres. A mod that
+a box. The box lies between the corners `a` and `b`, in metres. A corner
+the engine's fixed point cannot hold is refused unchecked, as
+[Positions](ecs.md#positions) bounds it. A mod that
 digs, fills or pastes for a player asks before it changes the world. The
 server decides, so a client cannot talk its way past the check. The permissions follow the
 game's terrain tools:

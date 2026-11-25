@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn a_prop_outside_the_voxel_range_is_refused() {
         let (loader, world) = started();
-        let end = f64::from(enshwick::abi::Voxel::END);
+        let end = f64::from(enshwick::abi::Voxel::END) / enshwick::abi::Voxel::PER_METRE;
         for far in [
             [f64::NAN, 40.0, 100.0],
             [100.0, 1e300, 100.0],

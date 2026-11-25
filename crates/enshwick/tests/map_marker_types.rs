@@ -185,4 +185,15 @@ mod tests {
         ui.set_markers(&[Marker::new([0.0; 3])]).unwrap();
         assert_eq!(loader.markers().len(), 1);
     }
+
+    #[test]
+    fn without_a_registry_a_typed_marker_beside_a_far_one_is_unavailable_as_the_loader_answers() {
+        let (_loader, ui) = start(enshwick::test::FakeHost::new());
+        let typed = Marker::new([0.0; 3]).marker_type(MapMarkerTypeId::new(DUNGEON));
+        assert_eq!(
+            ui.set_markers(&[typed, Marker::new([1e300, 0.0, 0.0])]),
+            Err(UiError::Unavailable),
+            "the registry is read before the positions"
+        );
+    }
 }

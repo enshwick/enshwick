@@ -2563,6 +2563,7 @@ abi::Voxel
 abi::Voxel::AIR
 abi::Voxel::BUILDING
 abi::Voxel::END
+abi::Voxel::PER_METRE
 abi::Voxel::READ_MAX
 abi::Voxel::TERRAIN
 abi::Voxel::fill

@@ -386,4 +386,30 @@ mod tests {
         assert_eq!((request.count, request.level, request.rarity), (5, 3, 2));
         assert_eq!(request.position, [1.0, 2.0, -3.0]);
     }
+
+    #[test]
+    fn a_far_drop_of_an_item_the_game_does_not_know_is_missing_as_the_loader_answers() {
+        use enshwick::abi::{DropRequest, Header, Status};
+
+        let (loader, _, _) = started(FakeHost::new().item(ItemId(0x2a), 100, 0));
+        let answer = |item: u32| {
+            let request = DropRequest {
+                header: Header::of::<DropRequest>(),
+                item: ItemId(item),
+                count: 5,
+                position: [1e300, 0.0, 0.0],
+                level: 0,
+                rarity: 0,
+            };
+            let mut out = Entity::NONE;
+            // SAFETY: the fake's table is a static; `request` and `out` live
+            // for the call.
+            unsafe {
+                ((*loader.api()).drop_items)(loader.handle(), &raw const request, &raw mut out)
+            }
+        };
+        assert_eq!(answer(0x2b), Status::MISSING, "the item lookup comes first");
+        assert_eq!(answer(0x2a), Status::BAD_ARGS);
+        assert!(loader.drops().is_empty());
+    }
 }

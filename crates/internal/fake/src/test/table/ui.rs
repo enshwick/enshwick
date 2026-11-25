@@ -584,12 +584,6 @@ entries! {
         let Some(given) = super::get_headed_list(markers, count) else {
             return Status::BAD_ARGS;
         };
-        if !given
-            .iter()
-            .all(|m| enshwick_core::abi::in_fixed_range(m.position))
-        {
-            return Status::BAD_ARGS;
-        }
         let markers: Vec<crate::test::FakeMarker> = given
             .iter()
             .map(|m| crate::test::FakeMarker {
@@ -610,6 +604,12 @@ entries! {
                 if !types.iter().any(|t| t.marker_id == marker.marker_type) {
                     return Status::BAD_ARGS;
                 }
+            }
+            if !markers
+                .iter()
+                .all(|m| enshwick_core::abi::in_fixed_range(m.position))
+            {
+                return Status::BAD_ARGS;
             }
             s.ui.markers = markers;
             Status::OK

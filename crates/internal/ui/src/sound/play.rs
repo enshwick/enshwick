@@ -362,8 +362,9 @@ pub(super) fn loader() -> Result<Host, Off> {
 ///
 /// [`Off`] for a container neither the game's archive nor a mod holds, a
 /// volume outside 0 to 1, a fade past [`MAX_FADE`], a position not finite
-/// or at 2^31 metres or more on an axis, entity 0, past [`MAX_STARTS`] starts waiting for one frame, on
-/// a server and on a game build where the loader's playback is off.
+/// or at 2^31 metres or more on an axis, entity 0, past [`MAX_STARTS`]
+/// starts waiting for one frame, on a server and on a game build where the
+/// loader's playback is off.
 ///
 /// # Examples
 ///

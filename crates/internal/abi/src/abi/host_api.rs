@@ -1112,9 +1112,8 @@ pub struct HostApi {
     /// Writes how the weather weighs at `position`, in
     /// metres, as the game's systems weigh it, as far as the [`Header`]
     /// `out` starts with says the caller's struct reaches;
-    /// [`Status::BAD_ARGS`] for a position outside
-    /// [`in_fixed_range`](crate::abi::in_fixed_range). On the server's game
-    /// thread only.
+    /// [`Status::BAD_ARGS`] for a position not finite or at 2^31 metres or
+    /// more on an axis. On the server's game thread only.
     pub weather_at: extern "system" fn(
         me: ModHandle,
         position: *const Metres,
@@ -1224,9 +1223,10 @@ pub struct HostApi {
     /// items: both corners inside the world's building area, and no strict
     /// no-build zone the world places. A player not in game has no
     /// permissions. `check` is borrowed for the call. [`Status::BAD_ARGS`]
-    /// for a null `check`, an old header, a corner outside
-    /// [`in_fixed_range`](crate::abi::in_fixed_range) or a `max` below `min`; [`Status::UNAVAILABLE`] while no world is loaded or
-    /// on a build without the checks. On the server's game thread at a quiet
+    /// for a null `check`, an old header, a corner not finite or at 2^31
+    /// metres or more on an axis or a `max` below `min`;
+    /// [`Status::UNAVAILABLE`] while no world is loaded or on a build
+    /// without the checks. On the server's game thread at a quiet
     /// moment only, outside a step or in a game event:
     /// [`Status::WRONG_THREAD`] inside a step.
     pub build_rights: extern "system" fn(me: ModHandle, check: *mut BuildRights) -> Status,
@@ -1303,8 +1303,8 @@ pub struct HostApi {
     /// to `max`, in metres, and 0 when not: the game saves a world only
     /// inside its bases' zones, so the box must lie wholly inside one, half
     /// a metre in from its edges. [`Status::BAD_ARGS`] for a null pointer,
-    /// a corner outside [`in_fixed_range`](crate::abi::in_fixed_range) or a
-    /// `max` below `min`;
+    /// a corner not finite or at 2^31 metres or more on an axis or a `max`
+    /// below `min`;
     /// [`Status::UNAVAILABLE`] while no world is loaded or on a build without
     /// the zone list. On the server's game thread at a quiet moment only:
     /// [`Status::WRONG_THREAD`] elsewhere or inside a step. The mod passes
@@ -1588,7 +1588,7 @@ pub struct HostApi {
     /// the next step; [`Status::MISSING`] for an entity not in the world,
     /// [`Status::REFUSED`] for one the game's teleport does not move, as a
     /// prop: it moves actors and characters; [`Status::BAD_ARGS`] for a
-    /// position outside [`in_fixed_range`](crate::abi::in_fixed_range);
+    /// position not finite or at 2^31 metres or more on an axis;
     /// [`Status::UNAVAILABLE`] where no server runs or on a build without
     /// teleports.
     /// On the server's game thread only.
@@ -1596,8 +1596,8 @@ pub struct HostApi {
     /// Asks the server to spawn an entity from a template, as its admin
     /// spawn does, and writes the new entity's id to `out`; the entity is in
     /// the world after the next step. [`Status::BAD_ARGS`] for a zero
-    /// template or a position outside
-    /// [`in_fixed_range`](crate::abi::in_fixed_range); a template the game does not know spawns nothing. On the
+    /// template or a position not finite or at 2^31 metres or more on an
+    /// axis; a template the game does not know spawns nothing. On the
     /// server's game thread only.
     pub spawn:
         extern "system" fn(me: ModHandle, request: *const SpawnRequest, out: *mut Entity) -> Status,
@@ -1743,8 +1743,8 @@ pub struct HostApi {
     /// the game spills loot; writes the new pickup's entity to `out`. The
     /// game falls it to the ground and does not save it.
     /// [`Status::BAD_ARGS`] for a null `request` or `out`, a count of 0 or over
-    /// 65535, a rarity the game lacks or a position outside
-    /// [`in_fixed_range`](crate::abi::in_fixed_range); [`Status::MISSING`] for an item
+    /// 65535, a rarity the game lacks or a position not finite or at 2^31
+    /// metres or more on an axis; [`Status::MISSING`] for an item
     /// the game does not know; [`Status::WRONG_THREAD`] off the server's
     /// game thread; [`Status::UNAVAILABLE`] on a client, a build without
     /// the pickup or the item lookup, or while no item registry or world
@@ -2062,8 +2062,8 @@ pub struct HostApi {
     /// Replaces the mod's markers on the client's map with the `count` at
     /// `markers`, copied; none clears them. Any thread. Client only
     /// ([`Status::UNAVAILABLE`] on a server); [`Status::BAD_ARGS`] past 256
-    /// markers or for a position outside
-    /// [`in_fixed_range`](crate::abi::in_fixed_range). A marker with a non-zero [`UiMarker::marker_type`] has the
+    /// markers or for a position not finite or at 2^31 metres or more on an
+    /// axis. A marker with a non-zero [`UiMarker::marker_type`] has the
     /// loader read the registry as [`HostApi::map_marker_types`] does, on
     /// the calling thread at the first such call: [`Status::BAD_ARGS`] for
     /// a type it does not list, [`Status::UNAVAILABLE`] when it does not

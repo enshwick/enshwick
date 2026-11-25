@@ -9,15 +9,16 @@ pub const fn is_loader_event(event: Event) -> bool {
     event.0 >= Event::SETTINGS_CHANGED.0 && event.0 <= Event::QUEST_PROGRESSED.0
 }
 
-/// Whether a prop or block can stand at `position`: every axis finite, at
-/// 0 or more and below [`Voxel::END`](crate::abi::Voxel::END) metres, the
-/// world's voxel range, which [`in_fixed_range`](crate::abi::in_fixed_range)
-/// holds.
+/// Whether a prop or block can stand at `position`, in metres: every axis
+/// finite, at 0 or more and below [`Voxel::END`](crate::abi::Voxel::END)
+/// voxels (2^29 metres), the world's voxel range, which
+/// [`in_fixed_range`](crate::abi::in_fixed_range) holds.
 #[must_use]
 pub fn in_voxel_range(position: [f64; 3]) -> bool {
+    use crate::abi::Voxel;
     position
         .iter()
-        .all(|axis| (0.0..f64::from(crate::abi::Voxel::END)).contains(axis))
+        .all(|axis| (0.0..f64::from(Voxel::END) / Voxel::PER_METRE).contains(axis))
 }
 
 /// Whether `min` and `max` bound a box an edit can fill: both corners
@@ -478,11 +479,17 @@ mod tests {
 
     #[test]
     fn a_prop_or_block_stands_from_0_to_below_the_voxel_end_on_each_axis() {
-        let end = f64::from(crate::abi::Voxel::END);
+        let end = 536_870_912.0;
+        assert_eq!(
+            end * crate::abi::Voxel::PER_METRE,
+            f64::from(crate::abi::Voxel::END),
+            "2^29 metres are the voxel end"
+        );
         assert!(in_voxel_range([0.0, end - 0.5, 12.25]));
         for out in [
             [-0.5, 0.0, 0.0],
             [0.0, end, 0.0],
+            [8e8, 0.0, 0.0],
             [0.0, 0.0, 1e300],
             [f64::NAN, 0.0, 0.0],
             [f64::INFINITY, 0.0, 0.0],

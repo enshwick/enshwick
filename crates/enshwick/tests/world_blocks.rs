@@ -175,7 +175,7 @@ mod tests {
                 .commit(),
             Err(WorldError::Refused)
         );
-        let end = f64::from(enshwick::abi::Voxel::END);
+        let end = f64::from(enshwick::abi::Voxel::END) / enshwick::abi::Voxel::PER_METRE;
         for far in [
             [f64::NAN, 40.0, 100.0],
             [100.0, 1e300, 100.0],

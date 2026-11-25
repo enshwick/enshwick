@@ -177,6 +177,49 @@ mod tests {
     }
 
     #[test]
+    fn the_host_answers_a_box_past_the_fixed_point_or_inside_out_bad_args() {
+        use enshwick::abi::BuildRights;
+
+        let loader = installed();
+        let answers = |min: [f64; 3], max: [f64; 3]| {
+            let mut check = BuildRights {
+                header: Header::of::<BuildRights>(),
+                character: Entity(BUILDER),
+                refusal: 0,
+                min,
+                max,
+            };
+            let mut kept = 0;
+            // SAFETY: the fake's table is a static that outlives the test.
+            let api = unsafe { &*loader.api() };
+            (
+                (api.build_rights)(loader.handle(), &raw mut check),
+                (api.world_persists)(
+                    loader.handle(),
+                    &raw const min,
+                    &raw const max,
+                    &raw mut kept,
+                ),
+            )
+        };
+        for (min, max) in [
+            ([f64::NAN, 0.0, 0.0], [1.0; 3]),
+            ([0.0; 3], [1e300, 1.0, 1.0]),
+            ([-2_147_483_648.0, 0.0, 0.0], [1.0; 3]),
+            ([2.0, 0.0, 0.0], [1.0; 3]),
+        ] {
+            assert_eq!(
+                answers(min, max),
+                (Status::BAD_ARGS, Status::BAD_ARGS),
+                "{min:?} {max:?}"
+            );
+        }
+        let (rights, persists) = answers([1.0; 3], [2.0; 3]);
+        assert_ne!(rights, Status::BAD_ARGS);
+        assert_ne!(persists, Status::BAD_ARGS);
+    }
+
+    #[test]
     fn a_check_off_the_game_thread_is_refused_unchecked() {
         let _loader = installed();
         let world = *WORLD.get().unwrap();
