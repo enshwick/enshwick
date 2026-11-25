@@ -6,9 +6,15 @@
 /// `0x41b7e0` on client 26430625 (2026-11-24), each the one call of
 /// `sys.trigger_quest_rewards` to it. The older clients hold the same 200
 /// instructions as client 26430625's, their addresses aside, each with one
-/// direct call to it (2026-11-24).
+/// direct call to it (2026-11-24). The older servers hold the same code,
+/// each the one call of their `sys.trigger_quest_rewards` and missed by the
+/// newest table's patterns: `FUN_1401b5490` on 1269579, `FUN_1401b6340` on
+/// 26083076 and `FUN_1401bbbb0` on 26319703 in the decompiler (2026-11-25).
 pub(super) const QUEST_PAY_SYMBOLS: &[(&str, &str, u64)] = &[
     ("1.0 server (26430253)", "knowledge.quest_pay", 0x1b_bbb0),
+    ("1.0 server (26319703)", "knowledge.quest_pay", 0x1b_bbb0),
+    ("1.0 server (26083076)", "knowledge.quest_pay", 0x1b_6340),
+    ("1.0 server (1269579)", "knowledge.quest_pay", 0x1b_5490),
     ("1.0 client (26430625)", "knowledge.quest_pay", 0x41_b7e0),
     ("1.0 client (26320373)", "knowledge.quest_pay", 0x41_b700),
     ("1.0 client (26082781)", "knowledge.quest_pay", 0x41_4800),
