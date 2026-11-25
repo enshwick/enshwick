@@ -531,6 +531,32 @@ pub fn bench_prompt_site_idle() -> impl FnMut() -> bool {
     }
 }
 
+/// For the benchmark of what the prompt's site pays once a mod asked for the
+/// client snapshot: the gate, the play data's verb read and the store, on
+/// a play data of its own with the verb at its start. Asking stays on for
+/// the process, so a run takes it after [`bench_prompt_site_idle`]. Whether
+/// the snapshot kept the target.
+#[cfg(feature = "test")]
+#[doc(hidden)]
+pub fn bench_prompt_site_noted() -> impl FnMut() -> bool {
+    let play = Box::new([0x4e82_e309_u32; 4]);
+    let _first = LINKS.site.set(0);
+    crate::actions::client_snapshot::ask();
+    let mut registers = Registers {
+        rdi: 1052,
+        rsi: core::ptr::from_ref(&*play).expose_provenance() as u64,
+        ..Registers::default()
+    };
+    move || {
+        // SAFETY: the handler takes the stub's saved registers and its user
+        // pointer, which it ignores; `rsi` points at `play`, which the closure
+        // owns, with the verb's u32 at the site's offset 0, and no prompt
+        // text is linked, so it reads nothing else.
+        unsafe { prompt_site(&raw mut registers, core::ptr::null_mut()) };
+        play[0] != 0 && crate::actions::client_snapshot::asked()
+    }
+}
+
 /// Whether the prompt's site keeps its target for the client snapshot on
 /// this client: it linked and is on.
 pub(crate) fn site_reads() -> bool {

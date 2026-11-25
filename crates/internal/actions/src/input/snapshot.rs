@@ -694,7 +694,8 @@ struct LuauSnapshot {
     /// The entity the interaction prompt that shows targets; nil while none
     /// shows.
     pub prompt_target: Option<Entity>,
-    /// The `LocaTagId` of that prompt's verb, as the object offers it.
+    /// The `LocaTagId` of that prompt's verb, as the object offers it; Luau
+    /// has no `Verb::from_id`, so a script compares the number.
     pub prompt_verb: Option<u32>,
     /// The character the main menu has selected, by its place in the menu's
     /// list from 0, as `host` takes it; nil while none is and outside the

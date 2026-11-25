@@ -285,8 +285,9 @@ and while the open menu highlights no recipe.
 `prompt_target()` names the entity the interaction prompt that shows
 targets, in the client's world, such as the chest that a press of interact
 opens. `prompt_verb()` gives that prompt's verb as a `LocaTagId`, as the
-object offers it before a mod's text takes its place. `Verb::from_id` names
-the game's own verbs. Both are `None` while no prompt shows.
+object offers it before a mod's text takes its place. In Rust,
+`Verb::from_id` names the game's own verbs; Luau has no such call, so a
+script compares the number. Both are `None` while no prompt shows.
 
 `selected_character()` names the character the main menu has selected, by
 its place in the menu's list, as [`CommandAction::Host`](#hosting-a-world-from-the-main-menu)

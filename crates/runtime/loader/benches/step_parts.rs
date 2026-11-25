@@ -126,6 +126,9 @@ fn step_parts(c: &mut Criterion) {
             "nothing asks for the client snapshot without a loader"
         );
         group.bench_function("prompt_site_idle", |b| b.iter(&mut site));
+        let mut noted = enshwick_loader::bench::bench_prompt_site_noted();
+        assert!(noted(), "the site keeps the target once asked");
+        group.bench_function("prompt_site_noted", |b| b.iter(&mut noted));
     }
     group.finish();
 }
