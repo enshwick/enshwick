@@ -668,12 +668,16 @@ abi::ClientCommand::CANCEL
 abi::ClientCommand::CHOOSE_TAB
 abi::ClientCommand::CLEAR_WAYPOINT
 abi::ClientCommand::CLOSE_SCREEN
+abi::ClientCommand::CRAFT
+abi::ClientCommand::DEPOSIT_ALL
 abi::ClientCommand::EMPTY
+abi::ClientCommand::EQUIP
 abi::ClientCommand::HIGHLIGHT_RECIPE
 abi::ClientCommand::HOST
 abi::ClientCommand::JOIN
 abi::ClientCommand::LEAVE
 abi::ClientCommand::LOOK
+abi::ClientCommand::MAX_AMOUNT
 abi::ClientCommand::MAX_HOLD_MS
 abi::ClientCommand::MAX_LOOK
 abi::ClientCommand::MAX_PASSWORD
@@ -681,6 +685,7 @@ abi::ClientCommand::MAX_PRESS_MS
 abi::ClientCommand::MAX_SLOTS
 abi::ClientCommand::MAX_TEXT
 abi::ClientCommand::MOVE
+abi::ClientCommand::MOVE_ITEM
 abi::ClientCommand::OPEN_MOD
 abi::ClientCommand::OPEN_MODS
 abi::ClientCommand::OPEN_MOD_SETTINGS
@@ -688,14 +693,18 @@ abi::ClientCommand::OPEN_SCREEN
 abi::ClientCommand::PING
 abi::ClientCommand::PRESS
 abi::ClientCommand::SET_WAYPOINT
+abi::ClientCommand::TAKE_ALL
+abi::ClientCommand::TRASH
 abi::ClientCommand::WINDOW_PICK
 abi::ClientCommand::WINDOW_PRESS
 abi::ClientCommand::WINDOW_TEXT
+abi::ClientCommand::amount
 abi::ClientCommand::answer
 abi::ClientCommand::cancels
 abi::ClientCommand::character
 abi::ClientCommand::dialog
 abi::ClientCommand::direction
+abi::ClientCommand::entity
 abi::ClientCommand::expected_screen
 abi::ClientCommand::header
 abi::ClientCommand::hold_ms
@@ -709,7 +718,9 @@ abi::ClientCommand::position
 abi::ClientCommand::recipe
 abi::ClientCommand::reserved
 abi::ClientCommand::session
+abi::ClientCommand::slot
 abi::ClientCommand::target
+abi::ClientCommand::target_slot
 abi::ClientCommand::text
 abi::ClientCommand::world
 abi::ClientCommandStatus
@@ -752,7 +763,20 @@ abi::ClientCommandStatus::phase
 abi::ClientCommandStatus::reason
 abi::ClientCommandStatus::reserved
 abi::ClientCommandStatus::state
+abi::ClientSlot
+abi::ClientSlot::ACTIONBAR
+abi::ClientSlot::BORN
+abi::ClientSlot::EMPTY
+abi::ClientSlot::category
+abi::ClientSlot::count
+abi::ClientSlot::flags
+abi::ClientSlot::header
+abi::ClientSlot::item
+abi::ClientSlot::pide
+abi::ClientSlot::reserved
+abi::ClientSlot::slot
 abi::ClientSnapshot
+abi::ClientSnapshot::ACTIONBAR
 abi::ClientSnapshot::BORN
 abi::ClientSnapshot::CHARACTER
 abi::ClientSnapshot::DIALOG
@@ -760,6 +784,7 @@ abi::ClientSnapshot::EMPTY
 abi::ClientSnapshot::FRESH
 abi::ClientSnapshot::HELD
 abi::ClientSnapshot::LOADER_SCREEN
+abi::ClientSnapshot::LOOK
 abi::ClientSnapshot::MENU_TAB
 abi::ClientSnapshot::MOD_BINDINGS
 abi::ClientSnapshot::MOD_LIST
@@ -771,11 +796,14 @@ abi::ClientSnapshot::NO_CHARACTER
 abi::ClientSnapshot::NO_LOADER_SCREEN
 abi::ClientSnapshot::OFF
 abi::ClientSnapshot::PLAYER
+abi::ClientSnapshot::POSITION
 abi::ClientSnapshot::PROMPT
 abi::ClientSnapshot::RECIPE
 abi::ClientSnapshot::SCREENS
 abi::ClientSnapshot::SERVER_MOD_LIST
 abi::ClientSnapshot::STALE
+abi::ClientSnapshot::VITALS
+abi::ClientSnapshot::actionbar_slot
 abi::ClientSnapshot::age_ms
 abi::ClientSnapshot::available
 abi::ClientSnapshot::character
@@ -783,23 +811,30 @@ abi::ClientSnapshot::dialog
 abi::ClientSnapshot::dialog_buttons
 abi::ClientSnapshot::dialog_mod
 abi::ClientSnapshot::header
+abi::ClientSnapshot::health
+abi::ClientSnapshot::health_max
 abi::ClientSnapshot::held
 abi::ClientSnapshot::highlighted_recipe
 abi::ClientSnapshot::host
 abi::ClientSnapshot::hud_screen
 abi::ClientSnapshot::loader_screen
 abi::ClientSnapshot::loader_screen_mod
+abi::ClientSnapshot::look
 abi::ClientSnapshot::menu_tab
 abi::ClientSnapshot::player
+abi::ClientSnapshot::position
 abi::ClientSnapshot::prompt_target
 abi::ClientSnapshot::prompt_verb
 abi::ClientSnapshot::reserved
 abi::ClientSnapshot::reserved2
 abi::ClientSnapshot::reserved3
+abi::ClientSnapshot::reserved4
 abi::ClientSnapshot::return_screen
 abi::ClientSnapshot::scene
 abi::ClientSnapshot::server
 abi::ClientSnapshot::session
+abi::ClientSnapshot::stamina
+abi::ClientSnapshot::stamina_max
 abi::ClientSnapshot::state
 abi::ClientWindowItem
 abi::ClientWindowItem::BORN
@@ -1159,6 +1194,7 @@ abi::HostApi::chat_filter
 abi::HostApi::chat_muted
 abi::HostApi::client_command
 abi::HostApi::client_command_status
+abi::HostApi::client_slots
 abi::HostApi::client_snapshot
 abi::HostApi::client_windows
 abi::HostApi::code_range
@@ -5439,10 +5475,12 @@ input::ClientCommand::on_screen unstable
 input::ClientCommand::try_from unstable
 input::ClientSnapshot unstable
 input::ClientSnapshot::TY unstable
+input::ClientSnapshot::actionbar_slot unstable
 input::ClientSnapshot::age_ms unstable
 input::ClientSnapshot::dialog unstable
 input::ClientSnapshot::dialog_buttons unstable
 input::ClientSnapshot::dialog_mod unstable
+input::ClientSnapshot::health unstable
 input::ClientSnapshot::held unstable
 input::ClientSnapshot::highlighted_recipe unstable
 input::ClientSnapshot::host unstable
@@ -5450,8 +5488,10 @@ input::ClientSnapshot::hud_screen unstable
 input::ClientSnapshot::into_value unstable
 input::ClientSnapshot::loader_screen unstable
 input::ClientSnapshot::loader_screen_mod unstable
+input::ClientSnapshot::look unstable
 input::ClientSnapshot::menu_tab unstable
 input::ClientSnapshot::player unstable
+input::ClientSnapshot::position unstable
 input::ClientSnapshot::prompt_target unstable
 input::ClientSnapshot::prompt_verb unstable
 input::ClientSnapshot::reads unstable
@@ -5460,6 +5500,7 @@ input::ClientSnapshot::scene unstable
 input::ClientSnapshot::selected_character unstable
 input::ClientSnapshot::server unstable
 input::ClientSnapshot::session unstable
+input::ClientSnapshot::stamina unstable
 input::ClientSnapshot::state unstable
 input::ClientWindowItem unstable
 input::ClientWindowItem::TY unstable
@@ -5477,12 +5518,16 @@ input::CommandAction::AnswerDialog unstable
 input::CommandAction::ChooseTab unstable
 input::CommandAction::ClearWaypoint unstable
 input::CommandAction::CloseScreen unstable
+input::CommandAction::Craft unstable
+input::CommandAction::DepositAll unstable
+input::CommandAction::Equip unstable
 input::CommandAction::HighlightRecipe unstable
 input::CommandAction::Host unstable
 input::CommandAction::Join unstable
 input::CommandAction::Leave unstable
 input::CommandAction::Look unstable
 input::CommandAction::Move unstable
+input::CommandAction::MoveItem unstable
 input::CommandAction::OpenMod unstable
 input::CommandAction::OpenModSettings unstable
 input::CommandAction::OpenMods unstable
@@ -5493,6 +5538,8 @@ input::CommandAction::Press unstable
 input::CommandAction::PressWindowItem unstable
 input::CommandAction::SetWaypoint unstable
 input::CommandAction::SetWindowText unstable
+input::CommandAction::TakeAll unstable
+input::CommandAction::Trash unstable
 input::CommandId unstable
 input::CommandId::TY unstable
 input::CommandId::as_u64 unstable
@@ -5519,6 +5566,7 @@ input::Input::PARTS unstable
 input::Input::binding unstable
 input::Input::cancel_command unstable
 input::Input::client_command unstable
+input::Input::client_slots unstable
 input::Input::client_snapshot unstable
 input::Input::client_windows unstable
 input::Input::command_status unstable
@@ -5579,16 +5627,26 @@ input::LocalInputStatus::sample_present unstable
 input::Password unstable
 input::Password::fmt unstable
 input::Password::new unstable
+input::PlayerSlot unstable
+input::PlayerSlot::TY unstable
+input::PlayerSlot::actionbar unstable
+input::PlayerSlot::from_value unstable
+input::PlayerSlot::into_value unstable
+input::PlayerSlot::slot unstable
 input::SnapshotPart unstable
+input::SnapshotPart::Actionbar unstable
 input::SnapshotPart::Character unstable
 input::SnapshotPart::Dialog unstable
 input::SnapshotPart::Held unstable
 input::SnapshotPart::LoaderScreen unstable
+input::SnapshotPart::Look unstable
 input::SnapshotPart::MenuTab unstable
 input::SnapshotPart::Player unstable
+input::SnapshotPart::Position unstable
 input::SnapshotPart::Prompt unstable
 input::SnapshotPart::Recipe unstable
 input::SnapshotPart::Screens unstable
+input::SnapshotPart::Vitals unstable
 input::SnapshotState unstable
 input::SnapshotState::Fresh unstable
 input::SnapshotState::Never unstable
