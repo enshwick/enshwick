@@ -125,11 +125,12 @@ pub(crate) fn placement_info(
 /// that places a creature or a flame altar. Any thread: it reads only the
 /// item registry, through a pin on the server off its game thread.
 pub(crate) fn resolve(loader: &Loader, request: &PropPlace) -> Result<Prop, TransactionError> {
-    let position_ok = request.position.iter().all(|axis| {
-        axis.is_finite() && *axis >= 0.0 && *axis < f64::from(enshwick_core::abi::Voxel::END)
-    });
     let norm: f32 = request.orientation.iter().map(|v| v * v).sum();
-    if !position_ok || !norm.is_finite() || norm < 1e-6 || request.reserved != 0 {
+    if !enshwick_core::__private::rules::in_voxel_range(request.position)
+        || !norm.is_finite()
+        || norm < 1e-6
+        || request.reserved != 0
+    {
         return Err(TransactionError::BadPlace);
     }
     let access = crate::engine::world::access(&"prop transaction commit")

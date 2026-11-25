@@ -158,6 +158,11 @@ entries! {
         if position.is_null() {
             return Status::BAD_ARGS;
         }
+        // SAFETY: the safe layer passes `position` pointing at three live
+        // `f64` for the call, non-null by the check before it.
+        if !enshwick_core::abi::in_fixed_range(unsafe { position.read_unaligned() }) {
+            return Status::BAD_ARGS;
+        }
         let sample = with(None, |s| s.world.weather.as_ref().map(|w| w.0)).map(
             |[clear, rain, snow, blizzard]| WeatherSample {
                 header: Header::of::<WeatherSample>(),

@@ -258,6 +258,9 @@ pub(crate) enum MarkersError {
     /// More markers than a mod may set.
     #[error("too many markers")]
     TooMany,
+    /// A marker's position past the engine's fixed point.
+    #[error("a marker's position is past the engine's fixed point")]
+    BadPosition,
 }
 
 /// The set of the carried windows' markers, which the loader owns beside
@@ -292,14 +295,17 @@ fn set_under(
     }
     let copied: Vec<Owned> = given
         .iter()
-        .map(|m| Owned {
-            owner,
-            position: enshwick_core::ecs::fixed(m.position),
-            label: label(m),
-            color: u8::try_from(m.color.min(UiMarker::BLACK)).unwrap_or(0),
-            marker_type: NonZeroU32::new(m.marker_type),
+        .map(|m| {
+            Some(Owned {
+                owner,
+                position: enshwick_core::ecs::checked_fixed(m.position)?,
+                label: label(m),
+                color: u8::try_from(m.color.min(UiMarker::BLACK)).unwrap_or(0),
+                marker_type: NonZeroU32::new(m.marker_type),
+            })
         })
-        .collect();
+        .collect::<Option<_>>()
+        .ok_or(MarkersError::BadPosition)?;
     let mut sets = MARKERS.sets.relock();
     sets.retain(|(o, _)| *o != slot);
     if !copied.is_empty() {
@@ -621,6 +627,30 @@ mod tests {
             set_under(&feature, ModIndex::LOADER.get(), ModIndex::LOADER, &none),
             Err(MarkersError::Off)
         );
+    }
+
+    #[test]
+    fn markers_with_one_past_the_fixed_point_are_refused() {
+        let feature = Fuse::new("test markers range");
+        let at = |position| UiMarker {
+            header: enshwick_core::abi::Header::of::<UiMarker>(),
+            position,
+            label: enshwick_core::abi::Str::new("far"),
+            color: UiMarker::YELLOW,
+            marker_type: 0,
+        };
+        let loader = ModIndex::LOADER;
+        for far in [
+            [f64::NAN, 0.0, 0.0],
+            [1e300, 0.0, 0.0],
+            [0.0, -2_147_483_648.0, 0.0],
+        ] {
+            assert_eq!(
+                set_under(&feature, loader.get(), loader, &[at([1.0; 3]), at(far)]),
+                Err(MarkersError::BadPosition),
+                "{far:?}"
+            );
+        }
     }
 
     #[test]

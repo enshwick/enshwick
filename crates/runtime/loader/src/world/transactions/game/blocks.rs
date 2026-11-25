@@ -82,11 +82,11 @@ fn function(loader: &Loader, id: pinned::Symbol) -> Result<usize, TransactionErr
 /// itself is built again at the step, since a world that ends between the
 /// two frees what it points into.
 pub(crate) fn resolve(loader: &Loader, request: &BlockPlace) -> Result<Block, TransactionError> {
-    let position_ok = request.position.iter().all(|axis| {
-        axis.is_finite() && *axis >= 0.0 && *axis < f64::from(enshwick_core::abi::Voxel::END)
-    });
     let norm: f32 = request.rotation.iter().map(|v| v * v).sum();
-    if !position_ok || !norm.is_finite() || norm < 1e-6 {
+    if !enshwick_core::__private::rules::in_voxel_range(request.position)
+        || !norm.is_finite()
+        || norm < 1e-6
+    {
         return Err(TransactionError::BadPlace);
     }
     let access = crate::engine::world::access(&"block transaction commit")

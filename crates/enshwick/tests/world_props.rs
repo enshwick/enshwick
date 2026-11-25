@@ -124,6 +124,28 @@ mod tests {
     }
 
     #[test]
+    fn a_prop_outside_the_voxel_range_is_refused() {
+        let (loader, world) = started();
+        let end = f64::from(enshwick::abi::Voxel::END) / enshwick::abi::Voxel::PER_METRE;
+        for far in [
+            [f64::NAN, 40.0, 100.0],
+            [100.0, 1e300, 100.0],
+            [100.0, 40.0, end],
+            [-0.5, 40.0, 100.0],
+        ] {
+            assert_eq!(
+                world
+                    .transaction()
+                    .place_prop(CHEST, WorldTransform::at(far))
+                    .commit(),
+                Err(WorldError::Refused),
+                "{far:?}"
+            );
+        }
+        assert!(loader.transactions().is_empty());
+    }
+
+    #[test]
     fn a_prop_holding_each_kind_of_state_is_not_removed() {
         for kind in [
             HeldState::Inventory,
@@ -517,9 +539,21 @@ mod tests {
             "partly out"
         );
         assert_eq!(world.persists([100.0; 3], [101.0; 3]), Ok(false));
+        for far in [
+            [f64::NAN; 3],
+            [-1e300, 0.0, 0.0],
+            [-2_147_483_648.0, 0.0, 0.0],
+        ] {
+            assert_eq!(
+                world.persists(far, [1.0; 3]),
+                Err(WorldError::Refused),
+                "{far:?}"
+            );
+        }
         assert_eq!(
-            world.persists([f64::NAN; 3], [1.0; 3]),
-            Err(WorldError::Refused)
+            world.persists([-2_147_483_647.0, 0.0, 0.0], [1.0; 3]),
+            Ok(false),
+            "the last metre the fixed point holds"
         );
     }
 }

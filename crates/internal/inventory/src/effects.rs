@@ -451,7 +451,8 @@ impl Effects {
     ///
     /// [`WorldError::Unavailable`] on a build without the event,
     /// [`WorldError::WrongThread`] off the game thread and
-    /// [`WorldError::Refused`] when the step holds no room for more events.
+    /// [`WorldError::Refused`] when the step holds no room for more events
+    /// or for a position not finite or at 2^31 metres or more on an axis.
     ///
     /// # Examples
     ///
@@ -602,7 +603,8 @@ impl Effects {
     ///
     /// [`WorldError::Gone`] for an entity not in the world or without a
     /// place, [`WorldError::Refused`] for one the game's teleport does not
-    /// move, such as a prop (it moves actors and characters),
+    /// move, such as a prop (it moves actors and characters), or for a
+    /// position not finite or at 2^31 metres or more on an axis,
     /// [`WorldError::WrongThread`] off the game thread and
     /// [`WorldError::Unavailable`] where no server runs or on a build without
     /// teleports.
@@ -723,8 +725,9 @@ impl Effects {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] for a count of 0 or over 65535 or an item
-    /// the game does not know; [`WorldError::WrongThread`] off the game
+    /// [`WorldError::Refused`] for a count of 0 or over 65535, an item the
+    /// game does not know or a position not finite or at 2^31 metres or
+    /// more on an axis; [`WorldError::WrongThread`] off the game
     /// thread; [`WorldError::Unavailable`] on a client, a build without the
     /// pickup or the item lookup, or while no item registry or world exists
     /// yet, which a later call may find.
@@ -775,8 +778,9 @@ impl Effects {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] for a zero template or a request the world
-    /// turns away and [`WorldError::WrongThread`] off the game thread.
+    /// [`WorldError::Refused`] for a zero template, a position not finite or
+    /// at 2^31 metres or more on an axis, or a request the world turns away;
+    /// [`WorldError::WrongThread`] off the game thread.
     ///
     /// # Examples
     ///
@@ -849,7 +853,8 @@ fn put_at<T: Scalar>(bytes: &mut [u8], at: u64, value: T) -> Result<(), WorldErr
 }
 
 fn put_position(bytes: &mut [u8], at: u64, position: [f64; 3]) -> Result<(), WorldError> {
-    for (i, axis) in crate::ecs::fixed(position).into_iter().enumerate() {
+    let fixed = crate::ecs::checked_fixed(position).ok_or(WorldError::Refused)?;
+    for (i, axis) in fixed.into_iter().enumerate() {
         put_at(bytes, at + 8 * i as u64, axis)?;
     }
     Ok(())

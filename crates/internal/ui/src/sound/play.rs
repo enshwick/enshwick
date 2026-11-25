@@ -279,8 +279,8 @@ impl SoundHandle {
     ///
     /// # Errors
     ///
-    /// [`Off`] for a position that is not finite, when the mod's queue of
-    /// changes is full and on a server.
+    /// [`Off`] for a position not finite or at 2^31 metres or more on an
+    /// axis, when the mod's queue of changes is full and on a server.
     ///
     /// # Examples
     ///
@@ -361,9 +361,10 @@ pub(super) fn loader() -> Result<Host, Off> {
 /// # Errors
 ///
 /// [`Off`] for a container neither the game's archive nor a mod holds, a
-/// volume outside 0 to 1, a fade past [`MAX_FADE`], a position that is not
-/// finite or entity 0, past [`MAX_STARTS`] starts waiting for one frame, on
-/// a server and on a game build where the loader's playback is off.
+/// volume outside 0 to 1, a fade past [`MAX_FADE`], a position not finite
+/// or at 2^31 metres or more on an axis, entity 0, past [`MAX_STARTS`]
+/// starts waiting for one frame, on a server and on a game build where the
+/// loader's playback is off.
 ///
 /// # Examples
 ///

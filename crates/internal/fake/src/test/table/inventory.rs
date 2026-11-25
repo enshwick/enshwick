@@ -90,6 +90,10 @@ entries! {
             if !s.host.content.items.contains_key(&request.item.get()) {
                 return Some(Err(Status::MISSING));
             }
+            // The loader checks the position in the spawn after the lookup.
+            if !enshwick_core::abi::in_fixed_range(request.position) {
+                return Some(Err(Status::BAD_ARGS));
+            }
             // Above every spawn's id, so the two never share one.
             let entity = crate::test::table::world::FIRST_SPAWNED
                 + 0x1_0000
@@ -145,6 +149,9 @@ entries! {
             if crate::test::table::world::entity_calls_off(s) {
                 return Status::UNAVAILABLE;
             }
+            if !enshwick_core::abi::in_fixed_range(request.position) {
+                return Status::BAD_ARGS;
+            }
             if !s.host.content.templates.contains_key(&request.entity.0)
                 && !s
                     .host
@@ -168,12 +175,14 @@ entries! {
         let Some(request) = crate::test::table::get_headed(request) else {
             return Status::BAD_ARGS;
         };
-        if request.template == enshwick_core::content::Guid::NIL {
-            return Status::BAD_ARGS;
-        }
         let entity = with(Err(Status::MISSING), |s| {
             if crate::test::table::world::entity_calls_off(s) {
                 return Err(Status::UNAVAILABLE);
+            }
+            if request.template == enshwick_core::content::Guid::NIL
+                || !enshwick_core::abi::in_fixed_range(request.position)
+            {
+                return Err(Status::BAD_ARGS);
             }
             let entity = crate::test::table::world::FIRST_SPAWNED
                 + u32::try_from(s.world.spawns.len()).unwrap_or(0);

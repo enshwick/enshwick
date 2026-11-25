@@ -334,6 +334,28 @@ pub use crate::content::Guid;
 /// ABI passes; the loader converts the engine's own forms.
 pub type Metres = [f64; 3];
 
+/// The metres a position's axis stays below either way: 2^31, past which the
+/// engine's 32.32 fixed point saturates.
+pub(crate) const MAX_POSITION_METRES: f64 = 2_147_483_648.0;
+
+/// Whether the engine can hold `position`: every axis finite and below 2^31
+/// (2,147,483,648) metres either way, its 32.32 fixed point's range. The
+/// loader refuses a position past it with [`Status::BAD_ARGS`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::in_fixed_range;
+///
+/// assert!(in_fixed_range([2_147_483_647.0, -2_147_483_647.0, 0.0]));
+/// assert!(!in_fixed_range([2_147_483_648.0, 0.0, 0.0]));
+/// assert!(!in_fixed_range([f64::NAN, 0.0, 0.0]));
+/// ```
+#[must_use]
+pub fn in_fixed_range(position: Metres) -> bool {
+    position.iter().all(|m| m.abs() < MAX_POSITION_METRES)
+}
+
 /// A whole cell of the engine's 0.5 m grid, y up, as survivors and altar
 /// zones count them.
 pub type Cell = [i64; 3];
@@ -893,6 +915,21 @@ mod tests {
         // over `isize::MAX` before it reads, so neither view is dereferenced.
         let (null, huge) = (unsafe { null.as_str() }, unsafe { huge.as_str() });
         assert_eq!((null, huge), (None, None));
+    }
+
+    #[test]
+    fn a_position_in_range_is_finite_and_below_two_to_the_31_metres_on_each_axis() {
+        let below = MAX_POSITION_METRES - 1.0;
+        assert!(in_fixed_range([below, -below, 0.0]));
+        for out in [
+            [MAX_POSITION_METRES, 0.0, 0.0],
+            [0.0, -MAX_POSITION_METRES, 0.0],
+            [0.0, 0.0, 1e300],
+            [f64::NEG_INFINITY, 0.0, 0.0],
+            [0.0, f64::NAN, 0.0],
+        ] {
+            assert!(!in_fixed_range(out), "{out:?}");
+        }
     }
 
     #[test]

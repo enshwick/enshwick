@@ -818,13 +818,14 @@ impl Refusal for crate::base::saves::HoldSavesError {
 
 /// No events, world or teleport are unavailable; a type mods may not
 /// raise, the engine's no, a notifier past the step's bound or an entity it
-/// does not move refused; bad bytes or entity 0 bad arguments.
+/// does not move refused; bad bytes, entity 0 or a position past the fixed
+/// point bad arguments.
 impl Refusal for crate::base::emits::EmitError {
     fn status(&self) -> Status {
         match self {
             Self::Unread | Self::NoWorld | Self::Unavailable => Status::UNAVAILABLE,
             Self::NotAllowed | Self::Refused | Self::TooMany | Self::NotMovable => Status::REFUSED,
-            Self::BadSize | Self::NoEntity => Status::BAD_ARGS,
+            Self::BadSize | Self::NoEntity | Self::BadPosition => Status::BAD_ARGS,
             Self::World(error) => error.status(),
         }
     }
@@ -843,12 +844,13 @@ impl Refusal for crate::ui::windows::ShowWindowError {
     }
 }
 
-/// Markers that are off are unavailable; too many a bad argument.
+/// Markers that are off are unavailable; too many, or one past the fixed
+/// point, a bad argument.
 impl Refusal for crate::ui::interface::MarkersError {
     fn status(&self) -> Status {
         match self {
             Self::Off => Status::UNAVAILABLE,
-            Self::TooMany => Status::BAD_ARGS,
+            Self::TooMany | Self::BadPosition => Status::BAD_ARGS,
         }
     }
 }

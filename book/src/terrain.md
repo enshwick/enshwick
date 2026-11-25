@@ -348,7 +348,9 @@ names.
 
 `place_block` takes the shape's item, which has a `VoxelBlueprintItem`.
 It also takes the material's item, whose `ChangeVoxelData` places a building
-material. Anything else is refused at commit. The block is centred on the
+material. Anything else is refused at commit. So is a position outside the
+world's voxel range: not finite, below 0, or at 2^29 metres
+(`Voxel::END` voxels) or more on an axis. The block is centred on the
 transform's position. Its orientation is kept in quarter turns, as the
 game keeps it. As a player's building tool does, it writes over air. It also
 writes over ground and building voxels softer than `Unbreakable`, and leaves
@@ -363,7 +365,8 @@ event.
 The prop is the template the item places. It stands at the transform and
 keeps the item it came from. The game's `BuildingPlaceEvent` tells its listeners, and its
 `LogicEntityPlacedEvent` for a switch or another logic prop. An item that
-places nothing is refused at commit. A prop is in the world from the step
+places nothing is refused at commit, and so is a position outside a block's
+voxel range. A prop is in the world from the step
 after the one that placed it; `world.transaction_entities(id)` lists the
 props a transaction placed and still holds.
 
@@ -520,7 +523,9 @@ The game saves a world only inside its bases, the flame altars' build
 zones. A prop placed, a block written or terrain changed anywhere else is
 gone after a restart, whoever made it, a mod or a player.
 `world.persists(min, max)` tells whether a save keeps a box: it lies
-wholly inside one base's zone, half a metre in from its edges.
+wholly inside one base's zone, half a metre in from its edges. A corner
+the engine's fixed point cannot hold is refused, as
+[Positions](ecs.md#positions) bounds it.
 
 ```rust
 use enshwick::ItemId;

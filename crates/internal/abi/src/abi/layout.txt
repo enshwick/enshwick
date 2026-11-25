@@ -1,4 +1,4 @@
-abi 12.26
+abi 12.27
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 96 align 8 born 96
@@ -1930,6 +1930,7 @@ const UiWidget::WRAP = 2
 const Voxel::AIR = 0
 const Voxel::BUILDING = 2
 const Voxel::END = 1073741824
+const Voxel::PER_METRE = 2.0
 const Voxel::READ_MAX = 262144
 const Voxel::TERRAIN = 1
 const WINDOW_CLOSE = 1

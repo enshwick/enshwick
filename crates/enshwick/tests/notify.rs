@@ -42,6 +42,27 @@ mod tests {
     }
 
     #[test]
+    fn a_notifier_past_the_fixed_point_is_refused_and_one_at_the_bound_is_raised() {
+        let loader = FakeHost::new().world().effect_events().install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Chimes)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let effects = EFFECTS.get().unwrap();
+        let at = |position| Notify::new(BELL, NotifyAt::Position(position));
+        for far in [[0.0, 1e300, 0.0], [0.0, 0.0, -2_147_483_648.0]] {
+            assert_eq!(
+                effects.notify(&at(far)),
+                Err(WorldError::Refused),
+                "{far:?}"
+            );
+        }
+        assert!(loader.emits().is_empty());
+        effects.notify(&at([2_147_483_647.0, 0.0, 0.0])).unwrap();
+        assert_eq!(loader.emits().len(), 1);
+    }
+
+    #[test]
     fn a_notifier_lays_out_its_event_is_bounded_each_step_and_heard_without_effects() {
         let host = FakeHost::new().world().effect_events();
         let at = |fact: Fact| host.offset(fact.id()).unwrap();

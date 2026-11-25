@@ -157,8 +157,9 @@ impl Ui {
     ///
     /// # Errors
     ///
-    /// [`UiError::Refused`] past [`MAX_MARKERS`] or for a marker type the
-    /// registry does not list; [`UiError::Unavailable`] on a server, where
+    /// [`UiError::Refused`] past [`MAX_MARKERS`], for a marker type the
+    /// registry does not list or for a position not finite or at 2^31
+    /// metres or more on an axis; [`UiError::Unavailable`] on a server, where
     /// the map markers are off, or for a marker with a type where the
     /// registry does not read. The mod's markers stay as they were.
     ///

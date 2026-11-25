@@ -234,6 +234,9 @@ impl Voxel {
     /// The end of the coordinates a box covers on any axis, in voxels:
     /// every voxel of a box lies below it. 2³⁰, far past any world's edge.
     pub const END: u32 = 1 << 30;
+    /// Voxels per metre on every axis: a voxel is half a metre a side.
+    /// ABI 12.27.
+    pub const PER_METRE: f64 = 2.0;
 
     /// The voxels in the box of `size` from `min` when one
     /// [`HostApi::voxel_read`](super::HostApi::voxel_read) takes it: `None`

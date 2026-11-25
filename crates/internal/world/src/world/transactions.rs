@@ -406,8 +406,10 @@ impl Transaction {
     /// than `Unbreakable`, and leaves the rest. The game's
     /// `BuildingPlaceEvent` tells its listeners. It takes no cost from
     /// anyone. [`Transaction::commit`] refuses a `shape` with no
-    /// `VoxelBlueprintItem` and a `material` whose `ChangeVoxelData` places
-    /// no building material.
+    /// `VoxelBlueprintItem`, a `material` whose `ChangeVoxelData` places
+    /// no building material, and a position not finite, below 0 or at
+    /// 2^29 metres ([`Voxel::END`](crate::abi::Voxel::END) voxels) or more
+    /// on an axis.
     ///
     /// # Examples
     ///
@@ -439,10 +441,12 @@ impl Transaction {
     /// anyone. The prop is in the world from the step after it is placed,
     /// and the transaction is applied once it stands there;
     /// [`World::transaction_entities`] lists it. [`Transaction::commit`]
-    /// refuses an item that places nothing, and one that places a creature
-    /// or a flame altar, which founds a base, with
-    /// [`WorldError::NotAProp`]. Like a player's, a prop placed outside
-    /// every base is not saved; [`World::persists`] tells.
+    /// refuses a position not finite, below 0 or at 2^29 metres
+    /// ([`Voxel::END`](crate::abi::Voxel::END) voxels) or more on an axis,
+    /// and with [`WorldError::NotAProp`] an item that places nothing or one
+    /// that places a creature or a flame altar, which founds a base. Like a
+    /// player's, a prop placed outside every base is not saved;
+    /// [`World::persists`] tells.
     ///
     /// # Examples
     ///

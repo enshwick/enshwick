@@ -605,6 +605,12 @@ entries! {
                     return Status::BAD_ARGS;
                 }
             }
+            if !markers
+                .iter()
+                .all(|m| enshwick_core::abi::in_fixed_range(m.position))
+            {
+                return Status::BAD_ARGS;
+            }
             s.ui.markers = markers;
             Status::OK
         })

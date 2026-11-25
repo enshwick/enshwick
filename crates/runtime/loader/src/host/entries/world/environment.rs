@@ -69,7 +69,8 @@ entries! {
     }
 
     fn weather_at(loader as Caller, position as In<[f64; 3]>, out as HeadedOut<WeatherSample>) -> Status {
-        let [clear, rain, snow, blizzard] = crate::world::weather::sample(loader, enshwick_core::ecs::fixed(position))?;
+        let position = enshwick_core::ecs::checked_fixed(position).ok_or(Status::BAD_ARGS)?;
+        let [clear, rain, snow, blizzard] = crate::world::weather::sample(loader, position)?;
         out.put(WeatherSample { header: Header::of::<WeatherSample>(), clear, rain, snow, blizzard })
     }
 

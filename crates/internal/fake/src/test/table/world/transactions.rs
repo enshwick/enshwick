@@ -202,7 +202,7 @@ unsafe fn change(op: &TransactionOp) -> Option<FakeChange> {
                     <PropPlace as enshwick_core::abi::Headed>::BORN,
                 )
             }?;
-            let finite = prop.position.iter().all(|v| v.is_finite() && *v >= 0.0)
+            let finite = enshwick_core::__fake::rules::in_voxel_range(prop.position)
                 && prop.orientation.iter().all(|v| v.is_finite())
                 && prop.reserved == 0;
             finite.then_some(FakeChange::PlaceProp(prop))
@@ -226,7 +226,7 @@ unsafe fn change(op: &TransactionOp) -> Option<FakeChange> {
                     <BlockPlace as enshwick_core::abi::Headed>::BORN,
                 )
             }?;
-            let finite = block.position.iter().all(|v| v.is_finite() && *v >= 0.0)
+            let finite = enshwick_core::__fake::rules::in_voxel_range(block.position)
                 && block.rotation.iter().all(|v| v.is_finite())
                 && block.rotation.iter().any(|v| *v != 0.0);
             finite.then_some(FakeChange::Block(block))

@@ -72,6 +72,8 @@ is not the type's. Each call fails with a
 - `WrongThread` off the game thread;
 - `Refused` for a type the loader does not allow, or when the step has no
   room for more events;
+- `Refused` for a position the engine's fixed point cannot hold, as
+  [Positions](ecs.md#positions) bounds it;
 - `Missing` on a build without the event.
 
 ```rust
@@ -106,8 +108,9 @@ Two methods change the teleport:
 
 It fails with `Gone` for an entity not in the world or without a place. It
 fails with `Refused` for one the game's teleport does not move: it moves
-actors and characters, not props. It fails with `Missing` where no server
-runs or on a build without teleports.
+actors and characters, not props. So does a position the engine's fixed
+point cannot hold, as [Positions](ecs.md#positions) bounds it. It fails
+with `Missing` where no server runs or on a build without teleports.
 
 ### Teleport a player
 
@@ -168,7 +171,9 @@ game's admin spawn does: an enemy, an animal, a survivor or a prop. The
 template is a GUID as `World::template` gives it, so a mod can spawn copies of
 what it finds in the world. The new entity's id comes back at once. The
 entity is in the world after the next step. A template the game does not
-know spawns nothing. `Spawn::new()` takes the template as it is. Three
+know spawns nothing. A position the engine's fixed point cannot hold is
+refused (`Refused`), as [Positions](ecs.md#positions) bounds it.
+`Spawn::new()` takes the template as it is. Three
 methods change the spawn:
 
 - `.level(n)` scales the entity as the game scales enemies;
@@ -214,7 +219,8 @@ change it:
 - `.level(n)` gives the item a level, as the game levels weapons and armour;
 - `.rarity(rarity)` gives it an `ItemRarity`.
 
-An item the game does not know is refused (`WorldError::Refused`). A drop
+An item the game does not know is refused (`WorldError::Refused`), and so
+is a position the engine's fixed point cannot hold. A drop
 before the game's items or its world exist answers `WorldError::Missing`, and
 a later drop may succeed. The loader
 reads the pickup on a thread of its own as the server starts, before its

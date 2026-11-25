@@ -92,7 +92,19 @@ mod tests {
         let _loader = client();
         assert!(sound::play(Play::new(BELL, Place::Screen).volume(1.5)).is_err());
         assert!(sound::play(Play::new(BELL, Place::On(Entity::NONE))).is_err());
-        assert!(sound::play(Play::new(BELL, Place::At([f64::NAN; 3]))).is_err());
+        for far in [
+            [f64::NAN; 3],
+            [1e300, 0.0, 0.0],
+            [0.0, -2_147_483_648.0, 0.0],
+        ] {
+            assert!(
+                sound::play(Play::new(BELL, Place::At(far))).is_err(),
+                "{far:?}"
+            );
+        }
+        let edge = sound::play(Play::new(BELL, Place::At([2_147_483_647.0, 0.0, 0.0]))).unwrap();
+        assert!(edge.set_position([0.0, 0.0, 2_147_483_648.0]).is_err());
+        assert!(edge.set_position([0.0, 0.0, -2_147_483_647.0]).is_ok());
         let long =
             Play::new(BELL, Place::Music).fade_in(sound::MAX_FADE + Duration::from_millis(1));
         assert!(sound::play(long).is_err());

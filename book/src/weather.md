@@ -66,7 +66,8 @@ the server's `weatherFrequency` game setting.
 `at(position)` weighs a place, in metres, as the game's own systems do, such
 as for fires going out and characters getting wet. It returns a `WeatherAt`
 with weights for clear, rain, snow and blizzard that add up to 1. Its
-`state()` names the strongest.
+`state()` names the strongest. A place the engine's fixed point cannot
+hold gives `None`, as [Positions](ecs.md#positions) bounds it.
 
 `fronts()` lists the current fronts. For each it gives:
 

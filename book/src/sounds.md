@@ -262,7 +262,8 @@ settings group it; the default is any sound effect.
 
 A mod raises at most 32 notifiers in one server step
 (`MAX_NOTIFIES_PER_STEP`). The call past that bound is refused, and so is
-entity 0 or a position that is not finite. The call belongs on the server's
+entity 0. A position not finite or at 2^31 metres or more on an axis is
+refused too. The call belongs on the server's
 game thread, in a handler, never at the top of `init`. A notifier that
 misleads players in a fight does not belong in a mod.
 

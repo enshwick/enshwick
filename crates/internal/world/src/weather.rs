@@ -207,7 +207,8 @@ pub struct Weather {
 #[crate::script(sky)]
 impl Weather {
     /// How the weather is at `position`, in metres; `None` off the game
-    /// thread or while no world runs.
+    /// thread, while no world runs or for a position not finite or at 2^31
+    /// metres or more on an axis.
     ///
     /// # Examples
     ///

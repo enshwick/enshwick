@@ -53,7 +53,7 @@ pub const READ_MAX: u64 = abi::Voxel::READ_MAX;
 
 /// Voxels per metre on every axis, for turning a size in metres into
 /// voxels.
-pub const PER_METRE: f64 = 2.0;
+pub const PER_METRE: f64 = abi::Voxel::PER_METRE;
 
 /// A voxel's place in the world: its index on each axis from the world's
 /// corner, half a metre a step, with y up.

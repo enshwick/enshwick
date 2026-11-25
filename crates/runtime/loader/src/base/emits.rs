@@ -225,6 +225,9 @@ pub(crate) enum EmitError {
     /// Entity 0, which names none.
     #[error("no entity")]
     NoEntity,
+    /// A position past the engine's fixed point.
+    #[error("the position is past the engine's fixed point")]
+    BadPosition,
     /// An entity the game's teleport does not move.
     #[error("the game's teleport does not move the entity")]
     NotMovable,
@@ -331,6 +334,8 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
     if request.entity == Entity(0) {
         return Err(EmitError::NoEntity);
     }
+    let position =
+        enshwick_core::ecs::checked_fixed(request.position).ok_or(EmitError::BadPosition)?;
     let current = crate::engine::world::component(loader, request.entity, layout.transform)?;
     // The game's teleport moves only what counts its teleports, actors and
     // characters; a prop would keep the component and stay.
@@ -353,10 +358,7 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
             out.copy_from_slice(bytes);
         }
     };
-    for (i, axis) in enshwick_core::ecs::fixed(request.position)
-        .iter()
-        .enumerate()
-    {
+    for (i, axis) in position.iter().enumerate() {
         put(teleport.position + i * 8, &axis.to_le_bytes());
     }
     for (i, part) in orientation.iter().enumerate() {

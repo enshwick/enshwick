@@ -130,10 +130,10 @@ impl World {
     /// # Errors
     ///
     /// The [`BuildRefusal`]; [`BuildRefusal::Unchecked`] off the server's
-    /// game thread, while no world is loaded, for a corner that is not
-    /// finite and on a game build without the checks. On the game thread
-    /// at a quiet moment only, outside a step or in a game event: refused
-    /// inside a step.
+    /// game thread, while no world is loaded, for a corner not finite or at
+    /// 2^31 metres or more on an axis and on a game build without the
+    /// checks. On the game thread at a quiet moment only, outside a step or
+    /// in a game event: refused inside a step.
     ///
     /// # Examples
     ///
@@ -153,15 +153,13 @@ impl World {
     /// ```
     #[script]
     pub fn can_build(self, player: &Player, a: [f64; 3], b: [f64; 3]) -> Result<(), BuildRefusal> {
-        if !a.iter().chain(&b).all(|v| v.is_finite()) {
-            return Err(BuildRefusal::Unchecked(WorldError::Refused));
-        }
+        let (min, max) = edit_box(a, b).ok_or(BuildRefusal::Unchecked(WorldError::Refused))?;
         let mut check = BuildRights {
             header: Header::of::<BuildRights>(),
             character: player.entity,
             refusal: BuildRights::ALLOWED,
-            min: [0, 1, 2].map(|i| a[i].min(b[i])),
-            max: [0, 1, 2].map(|i| a[i].max(b[i])),
+            min,
+            max,
         };
         let status = (self.0.host.api().build_rights)(self.0.host.handle(), &raw mut check);
         WorldError::from_status(status)?;
@@ -176,7 +174,8 @@ impl World {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] for a corner that is not finite;
+    /// [`WorldError::Refused`] for a corner not finite or at 2^31 metres or
+    /// more on an axis;
     /// [`WorldError::WrongThread`] off the server's game thread or inside a
     /// step; [`WorldError::Unavailable`] while no world is loaded or on a game
     /// build without the zone list.
@@ -194,11 +193,7 @@ impl World {
     /// ```
     #[script]
     pub fn persists(self, a: [f64; 3], b: [f64; 3]) -> Result<bool, WorldError> {
-        if !a.iter().chain(&b).all(|v| v.is_finite()) {
-            return Err(WorldError::Refused);
-        }
-        let min = [0, 1, 2].map(|i| a[i].min(b[i]));
-        let max = [0, 1, 2].map(|i| a[i].max(b[i]));
+        let (min, max) = edit_box(a, b).ok_or(WorldError::Refused)?;
         let mut kept = 0u8;
         let status = (self.0.host.api().world_persists)(
             self.0.host.handle(),
@@ -275,5 +270,37 @@ impl BuildRefusal {
             }
             _ => Self::Unchecked(WorldError::Refused),
         })
+    }
+}
+
+/// The box between corners `a` and `b`, lowest corner first, when the
+/// loader takes it (`rules::is_edit_box`): `None` for a corner not finite
+/// or at 2^31 metres or more on an axis.
+fn edit_box(a: [f64; 3], b: [f64; 3]) -> Option<([f64; 3], [f64; 3])> {
+    // A comparison, not `f64::min`, which would drop a NaN for the other
+    // corner's axis and pass the box.
+    let pick = |low: bool| [0, 1, 2].map(|i| if (a[i] <= b[i]) == low { a[i] } else { b[i] });
+    let (min, max) = (pick(true), pick(false));
+    enshwick_base::rules::is_edit_box(min, max).then_some((min, max))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::edit_box;
+
+    #[test]
+    fn an_edit_box_sorts_its_corners_and_refuses_one_past_the_fixed_point() {
+        assert_eq!(
+            edit_box([2.0, 0.0, 5.0], [1.0, 3.0, 5.0]),
+            Some(([1.0, 0.0, 5.0], [2.0, 3.0, 5.0]))
+        );
+        for (a, b) in [
+            ([f64::NAN, 0.0, 0.0], [1.0; 3]),
+            ([1.0; 3], [0.0, f64::NAN, 0.0]),
+            ([0.0; 3], [1e300, 0.0, 0.0]),
+            ([-2_147_483_648.0, 0.0, 0.0], [1.0; 3]),
+        ] {
+            assert_eq!(edit_box(a, b), None, "{a:?} {b:?}");
+        }
     }
 }
