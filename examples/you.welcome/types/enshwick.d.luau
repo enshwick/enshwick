@@ -585,7 +585,7 @@ export type ClientSnapshot = {
 	age_ms: string?,
 	--- The world's name.
 	scene: string?,
-	--- The parts the build reads: `"screens"`, `"menu_tab"`, `"held"`, `"player"`, `"recipe"`, `"loader_screen"` and `"dialog"`.
+	--- The parts the build reads: `"screens"`, `"menu_tab"`, `"held"`, `"player"`, `"recipe"`, `"loader_screen"`, `"dialog"`, `"prompt"` and `"character"`.
 	reads: {string},
 	--- The open HUD screen.
 	hud_screen: string?,
@@ -613,6 +613,12 @@ export type ClientSnapshot = {
 	dialog_mod: string?,
 	--- The number of the dialog that shows, which `answer_dialog` names; 0 while none does.
 	dialog: number,
+	--- The entity the interaction prompt that shows targets; nil while none shows.
+	prompt_target: number?,
+	--- The `LocaTagId` of that prompt's verb, as the object offers it.
+	prompt_verb: number?,
+	--- The character the main menu has selected, by its place in the menu's list from 0, as `host` takes it; nil while none is and outside the main menu.
+	selected_character: number?,
 }
 
 --- `ClientWindowItem` as Luau gives it.
