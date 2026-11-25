@@ -7978,6 +7978,10 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, reserved2) == 156, "offs
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, dialog_mod) == 160, "offset of ClientSnapshot.dialog_mod");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, dialog_buttons) == 176, "offset of ClientSnapshot.dialog_buttons");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, dialog) == 180, "offset of ClientSnapshot.dialog");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, prompt_target) == 184, "offset of ClientSnapshot.prompt_target");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, prompt_verb) == 188, "offset of ClientSnapshot.prompt_verb");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, character) == 192, "offset of ClientSnapshot.character");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, reserved3) == 196, "offset of ClientSnapshot.reserved3");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientWindowItem) == 88, "size of ClientWindowItem");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientWindowItem) == 8, "alignment of ClientWindowItem");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientWindowItem, header) == 0, "offset of ClientWindowItem.header");
