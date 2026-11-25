@@ -260,6 +260,10 @@ ClientSnapshot size 200 align 8 born 120
     dialog_mod at 160 size 16 type Str
     dialog_buttons at 176 size 4 type u32
     dialog at 180 size 4 type u32
+    prompt_target at 184 size 4 type Entity
+    prompt_verb at 188 size 4 type u32
+    character at 192 size 4 type u32
+    reserved3 at 196 size 4 type u32
 ClientWindowItem size 88 align 8 born 88
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
