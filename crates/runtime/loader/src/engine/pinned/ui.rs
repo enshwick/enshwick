@@ -121,6 +121,13 @@ pub(crate) const POST_PLAY_WORLD: Symbol = Symbol::new("ui.post_play_world");
 pub(crate) const POST_CHARACTER_SLOT: Constant = Constant::new("ui.post_character_slot");
 pub(crate) const POST_WORLD_SLOT: Constant = Constant::new("ui.post_world_slot");
 pub(crate) const POST_SESSION_KIND: Constant = Constant::new("ui.post_session_kind");
+/// The way from the interface state to the main menu's save system (client
+/// 26430625, seen live on 2026-11-25): the state's place in the object that
+/// owns it, the menu object the owner holds (the command switch
+/// `0x140873710` takes it) and the menu's save system.
+pub(crate) const STATE_OWNER: Constant = Constant::new("ui.state_owner");
+pub(crate) const OWNER_MENU: Constant = Constant::new("ui.owner_menu");
+pub(crate) const MENU_SAVE: Constant = Constant::new("ui.menu_save");
 /// Where the main menu reads a posted command's payload (`0x140873710`,
 /// client 26430625): the password's text and its `u16` length, the join's
 /// area byte (its target follows it) and the address's last `u16`.

@@ -108,11 +108,15 @@ pub enum SnapshotPart {
     LoaderScreen,
     /// The loader's dialog that shows, its mod and its buttons.
     Dialog,
+    /// The interaction prompt that shows: its target and its verb.
+    Prompt,
+    /// The character the main menu has selected.
+    Character,
 }
 
 impl SnapshotPart {
     /// Every part, in the order the Luau API lists them.
-    const ALL: [Self; 7] = [
+    const ALL: [Self; 9] = [
         Self::Screens,
         Self::MenuTab,
         Self::Held,
@@ -120,6 +124,8 @@ impl SnapshotPart {
         Self::Recipe,
         Self::LoaderScreen,
         Self::Dialog,
+        Self::Prompt,
+        Self::Character,
     ];
 
     const fn bit(self) -> u32 {
@@ -131,6 +137,8 @@ impl SnapshotPart {
             Self::Recipe => Raw::RECIPE,
             Self::LoaderScreen => Raw::LOADER_SCREEN,
             Self::Dialog => Raw::DIALOG,
+            Self::Prompt => Raw::PROMPT,
+            Self::Character => Raw::CHARACTER,
         }
     }
 
@@ -143,6 +151,8 @@ impl SnapshotPart {
             Self::Recipe => "recipe",
             Self::LoaderScreen => "loader_screen",
             Self::Dialog => "dialog",
+            Self::Prompt => "prompt",
+            Self::Character => "character",
         }
     }
 }
@@ -475,6 +485,69 @@ impl ClientSnapshot {
             0
         }
     }
+
+    /// The entity the interaction prompt that shows targets in the client's
+    /// world, such as the chest a press of interact opens; `None` while no
+    /// prompt shows.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::Entity;
+    /// use enshwick::input::ClientSnapshot;
+    ///
+    /// fn faces(snapshot: &ClientSnapshot, chest: Entity) -> bool {
+    ///     snapshot.prompt_target() == Some(chest)
+    /// }
+    /// ```
+    #[must_use]
+    pub fn prompt_target(&self) -> Option<Entity> {
+        (self.reads(SnapshotPart::Prompt) && self.raw.prompt_target.0 != 0)
+            .then_some(self.raw.prompt_target)
+    }
+
+    /// The `LocaTagId` of the verb the shown prompt offers, as the object
+    /// gives it before a mod's text takes its place;
+    /// [`Verb::from_id`](crate::interactions::Verb::from_id) names the
+    /// game's own. `None` while no prompt shows.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::input::ClientSnapshot;
+    /// use enshwick::interactions::Verb;
+    ///
+    /// fn offers_open(snapshot: &ClientSnapshot) -> bool {
+    ///     snapshot.prompt_verb().and_then(Verb::from_id) == Some(Verb::Open)
+    /// }
+    /// ```
+    #[must_use]
+    pub fn prompt_verb(&self) -> Option<u32> {
+        self.prompt_target().map(|_| self.raw.prompt_verb)
+    }
+
+    /// The character the main menu has selected, by its place in the menu's
+    /// list from 0, as
+    /// [`CommandAction::Host`](super::CommandAction::Host) takes it; `None`
+    /// while none is and outside the main menu.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::input::{ClientSnapshot, CommandAction};
+    ///
+    /// fn host_first_world(snapshot: &ClientSnapshot) -> Option<CommandAction> {
+    ///     let character = snapshot.selected_character()?;
+    ///     Some(CommandAction::Host { world: 0, character, online: false })
+    /// }
+    /// ```
+    #[must_use]
+    pub fn selected_character(&self) -> Option<u16> {
+        if !self.reads(SnapshotPart::Character) {
+            return None;
+        }
+        u16::try_from(self.raw.character).ok()
+    }
 }
 
 /// A page of the loader's own Mods screen, from
@@ -585,7 +658,8 @@ struct LuauSnapshot {
     /// The world's name.
     pub scene: Option<String>,
     /// The parts the build reads: `"screens"`, `"menu_tab"`, `"held"`,
-    /// `"player"`, `"recipe"`, `"loader_screen"` and `"dialog"`.
+    /// `"player"`, `"recipe"`, `"loader_screen"`, `"dialog"`, `"prompt"`
+    /// and `"character"`.
     pub reads: Vec<String>,
     /// The open HUD screen.
     pub hud_screen: Option<String>,
@@ -617,6 +691,15 @@ struct LuauSnapshot {
     /// The number of the dialog that shows, which `answer_dialog` names; 0
     /// while none does.
     pub dialog: u32,
+    /// The entity the interaction prompt that shows targets; nil while none
+    /// shows.
+    pub prompt_target: Option<Entity>,
+    /// The `LocaTagId` of that prompt's verb, as the object offers it.
+    pub prompt_verb: Option<u32>,
+    /// The character the main menu has selected, by its place in the menu's
+    /// list from 0, as `host` takes it; nil while none is and outside the
+    /// main menu.
+    pub selected_character: Option<u16>,
 }
 
 impl From<ClientSnapshot> for LuauSnapshot {
@@ -647,6 +730,9 @@ impl From<ClientSnapshot> for LuauSnapshot {
             dialog_buttons: snapshot.dialog_buttons(),
             dialog_mod: owned(snapshot.dialog_mod()),
             dialog: snapshot.dialog(),
+            prompt_target: snapshot.prompt_target(),
+            prompt_verb: snapshot.prompt_verb(),
+            selected_character: snapshot.selected_character(),
         }
     }
 }
@@ -725,5 +811,50 @@ mod tests {
         assert_eq!(luau.held, Some(Vec::new()), "a bit the build names none of");
         assert_eq!(luau.player, Some(Entity(12)));
         assert_eq!(luau.scene.as_deref(), Some("world1"));
+    }
+
+    #[test]
+    fn a_read_prompt_names_its_target_and_verb_and_none_while_none_shows() {
+        let facing = snapshot(Raw {
+            state: Raw::FRESH,
+            available: Raw::PROMPT,
+            prompt_target: Entity(1052),
+            prompt_verb: 0x4e82_e309,
+            ..Raw::EMPTY
+        });
+        assert_eq!(facing.prompt_target(), Some(Entity(1052)));
+        assert_eq!(facing.prompt_verb(), Some(0x4e82_e309));
+        let nothing = snapshot(Raw {
+            available: Raw::PROMPT,
+            ..Raw::EMPTY
+        });
+        assert!(nothing.reads(SnapshotPart::Prompt));
+        assert_eq!(
+            (nothing.prompt_target(), nothing.prompt_verb()),
+            (None, None)
+        );
+        let unread = snapshot(Raw {
+            prompt_target: Entity(1052),
+            ..Raw::EMPTY
+        });
+        assert_eq!(unread.prompt_target(), None, "the build lacks the read");
+    }
+
+    #[test]
+    fn the_selected_character_is_its_place_and_none_without_one() {
+        let menu = |character| {
+            snapshot(Raw {
+                available: Raw::CHARACTER,
+                character,
+                ..Raw::EMPTY
+            })
+        };
+        assert_eq!(menu(2).selected_character(), Some(2));
+        assert_eq!(menu(Raw::NO_CHARACTER).selected_character(), None);
+        assert!(menu(Raw::NO_CHARACTER).reads(SnapshotPart::Character));
+        let luau = LuauSnapshot::from(menu(0));
+        assert_eq!(luau.selected_character, Some(0));
+        assert_eq!(luau.reads, ["character"]);
+        assert_eq!(snapshot(Raw::EMPTY).selected_character(), None);
     }
 }

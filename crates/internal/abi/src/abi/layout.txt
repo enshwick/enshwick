@@ -1,4 +1,4 @@
-abi 12.25
+abi 12.26
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 96 align 8 born 96
@@ -238,7 +238,7 @@ ClientCommandStatus size 40 align 8 born 32
     age_ms at 24 size 8 type u64
     phase at 32 size 4 type u32
     failure at 36 size 4 type u32
-ClientSnapshot size 184 align 8 born 120
+ClientSnapshot size 200 align 8 born 120
     header at 0 size 8 type Header
     state at 8 size 4 type u32
     available at 12 size 4 type u32
@@ -1477,6 +1477,7 @@ const ClientCommandStatus::UNKNOWN = 9
 const ClientCommandStatus::UNREACHABLE = 8
 const ClientCommandStatus::VERSION_MISMATCH = 5
 const ClientCommandStatus::WRONG_PASSWORD = 1
+const ClientSnapshot::CHARACTER = 256
 const ClientSnapshot::DIALOG = 64
 const ClientSnapshot::FRESH = 3
 const ClientSnapshot::HELD = 4
@@ -1488,9 +1489,11 @@ const ClientSnapshot::MOD_MISMATCH = 6
 const ClientSnapshot::MOD_PAGE = 2
 const ClientSnapshot::MOD_SERVER_SETTINGS = 3
 const ClientSnapshot::NEVER = 0
+const ClientSnapshot::NO_CHARACTER = 4294967295
 const ClientSnapshot::NO_LOADER_SCREEN = 0
 const ClientSnapshot::OFF = 1
 const ClientSnapshot::PLAYER = 8
+const ClientSnapshot::PROMPT = 128
 const ClientSnapshot::RECIPE = 16
 const ClientSnapshot::SCREENS = 1
 const ClientSnapshot::SERVER_MOD_LIST = 4
