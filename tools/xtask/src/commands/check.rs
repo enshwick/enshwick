@@ -21,7 +21,10 @@
 //! ([`super::fuzz`]). `--part trybuild` runs the trybuild test only when
 //! the API crate's tests are in scope, and `--part semver` runs
 //! cargo-semver-checks for the packages `--semver` names.
+//! A local check runs on past a failure and lists every one at its end;
+//! CI stops at the first ([`failures`]).
 
+use std::collections::BTreeSet;
 use std::io::Write as _;
 use std::path::Path;
 use std::process::Command;
@@ -30,6 +33,7 @@ use std::thread;
 use crate::affected::{self, Lane, Package, Scope, WIDE_PACKAGES};
 use crate::commands::{fuzz, header, public_paths, wine};
 use crate::{FACADE, packages, say, workspace_root};
+use failures::Failures;
 use part::{
     Part, due_parts, facade_code_reached, stable_api_due, stable_api_out_of_scope,
     stable_examples_left_to_ci, trybuild_due, windows_features_due,
@@ -140,22 +144,15 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
     }
     let packages = packages()?;
     let root = workspace_root();
-    if parts.contains(&Part::Host) && !listing {
-        let mut problems = crate::check::problems(&root, &packages)?;
-        problems.extend(
-            merge_base
-                .as_deref()
-                .and_then(name_status)
-                .iter()
-                .flat_map(|status| crate::check::changelog::edited(status))
-                .map(|problem| format!("changelog: {problem}")),
-        );
-        for problem in &problems {
-            say(problem);
-        }
-        if !problems.is_empty() {
-            return Ok(false);
-        }
+    let mut failures = Failures::new(Lane::current());
+    if parts.contains(&Part::Host)
+        && !listing
+        && !failures.note(
+            tree_rules_hold(&root, &packages, merge_base.as_deref())?,
+            "the tree's rules",
+        )
+    {
+        return Ok(failures.report());
     }
     let tree = merge_base.map(|merge_base| Tree {
         merge_base,
@@ -184,44 +181,83 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
         return Ok(true);
     }
     // It compiles nothing, so it runs wherever the change reaches the facade.
-    if parts.contains(&Part::Host) && reaches(&scope, header::PACKAGE) {
-        let problems = header::check(&root);
-        for problem in &problems {
-            say(&format!("C header: {problem}"));
-        }
-        if !problems.is_empty() {
-            return Ok(false);
-        }
+    if parts.contains(&Part::Host)
+        && reaches(&scope, header::PACKAGE)
+        && !failures.note(header_holds(&root), "the C header")
+    {
+        return Ok(failures.report());
     }
     if parts.contains(&Part::Host)
-        && !public_paths_hold(&scope, changed.as_deref(), &root, &packages)
+        && !failures.note(
+            public_paths_hold(&scope, changed.as_deref(), &root, &packages),
+            "the public paths",
+        )
     {
-        return Ok(false);
+        return Ok(failures.report());
     }
     if parts.contains(&Part::Trybuild) && !trybuild_due(&scope) {
-        say(&if touches(&scope, FACADE) {
-            format!(
-                "the trybuild test is left to CI: the change reaches {WIDE_PACKAGES} or more packages"
-            )
-        } else if matches!(&scope, Scope::Some { tested, .. } if tested.contains(FACADE)) {
-            format!("the trybuild test is left to CI: only {FACADE}'s tests run here")
-        } else if reaches(&scope, FACADE) {
-            format!("the trybuild test is left to CI: {FACADE} is only built here")
-        } else {
-            format!("the trybuild test is out of scope: the change does not reach {FACADE}")
-        });
+        say(&trybuild_left(&scope));
     }
     let alone = feature_lints(&scope, changed.as_deref(), tree.as_ref(), &packages);
-    let checked = check(&scope, &packages, args.all, &parts, &alone)
-        && (!parts.contains(&Part::Semver) || semver(&args.semver));
-    if !(checked && parts.contains(&Part::WindowsTests)) {
-        return Ok(checked);
+    check(&scope, &packages, args.all, &parts, &alone, &mut failures);
+    if parts.contains(&Part::Semver) && !failures.stopped() {
+        failures.note(semver(&args.semver), "cargo-semver-checks");
     }
-    if windows_tests.is_empty() {
-        say("no package with Windows tests changed; no tests under Wine");
-        return Ok(true);
+    if parts.contains(&Part::WindowsTests) && !failures.stopped() {
+        if windows_tests.is_empty() {
+            say("no package with Windows tests changed; no tests under Wine");
+        } else {
+            failures.note(wine::run(&windows_tests, args.windows), "the Windows tests");
+        }
     }
-    Ok(wine::run(&windows_tests, args.windows))
+    Ok(failures.report())
+}
+
+/// Whether the tree's rules ([`crate::check::problems`]) hold at `root`, and
+/// no changelog already on `main` was edited since `merge_base`; each
+/// problem said on its line.
+fn tree_rules_hold(
+    root: &Path,
+    packages: &[Package],
+    merge_base: Option<&str>,
+) -> Result<bool, String> {
+    let mut problems = crate::check::problems(root, packages)?;
+    problems.extend(
+        merge_base
+            .and_then(name_status)
+            .iter()
+            .flat_map(|status| crate::check::changelog::edited(status))
+            .map(|problem| format!("changelog: {problem}")),
+    );
+    for problem in &problems {
+        say(problem);
+    }
+    Ok(problems.is_empty())
+}
+
+/// Whether the committed C header at `root` matches the ABI
+/// ([`header::check`]); each problem said on its line.
+fn header_holds(root: &Path) -> bool {
+    let problems = header::check(root);
+    for problem in &problems {
+        say(&format!("C header: {problem}"));
+    }
+    problems.is_empty()
+}
+
+/// Why a check of `scope` runs no trybuild test.
+fn trybuild_left(scope: &Scope) -> String {
+    if touches(scope, FACADE) {
+        format!(
+            "the trybuild test is left to CI: the change reaches {WIDE_PACKAGES} or more packages"
+        )
+    } else if matches!(scope, Scope::Some { tested, .. } if tested.contains(FACADE)) {
+        format!("the trybuild test is left to CI: only {FACADE}'s tests run here")
+    } else if reaches(scope, FACADE) {
+        format!("the trybuild test is left to CI: {FACADE} is only built here")
+    } else {
+        format!("the trybuild test is out of scope: the change does not reach {FACADE}")
+    }
 }
 
 /// The names of the `parts` with a step for the change `scope` to the
@@ -538,7 +574,7 @@ fn stable_api_steps(lint: bool, examples: bool, stable: &[String]) -> Vec<Step> 
 /// The check of the links rustdoc does not check in the facade's pages it
 /// just wrote ([`super::doc_links`]).
 fn doc_links_step() -> Step {
-    Step::xtask(&["doc-links"])
+    Step::xtask(&["doc-links"]).after_previous()
 }
 
 /// Whether the workspace's rustdoc runs: whenever code changed, since a
@@ -646,11 +682,16 @@ fn linux_std_installed() -> bool {
 }
 
 /// The ast-grep rules' own tests, the rules over the repository
-/// ([`crate::check::rules`]), then the dependencies no crate uses.
-fn source_checks() -> bool {
-    Step::tool("ast-grep", &["test", "--skip-snapshot-tests"]).run(false)
-        && crate::check::rules::scan(&workspace_root())
-        && Step::tool("cargo-machete", &[]).run(false)
+/// ([`crate::check::rules`]), then the dependencies no crate uses, into
+/// `failures`.
+fn source_checks(failures: &mut Failures) {
+    let _going = failures.note(
+        Step::tool("ast-grep", &["test", "--skip-snapshot-tests"]).run(false),
+        "the ast-grep rules' tests",
+    ) && failures.note(
+        crate::check::rules::scan(&workspace_root()),
+        "the ast-grep scan",
+    ) && failures.note(Step::tool("cargo-machete", &[]).run(false), "cargo-machete");
 }
 
 /// Cargo's flag that leaves a package out of a `--workspace` build.
@@ -760,18 +801,22 @@ fn host_steps(
 /// workspace 64 s, 2026-11-14), while the workspace's rustdoc redoes only the
 /// changed packages and their dependents. Host steps run one
 /// after another (they share the build lock); the Windows lint runs beside
-/// them.
+/// them. What fails goes into `failures` ([`failures::run_steps`]).
 fn check(
     scope: &Scope,
     packages: &[Package],
     full: bool,
     parts: &[Part],
     alone: &features::Alone,
-) -> bool {
+    failures: &mut Failures,
+) {
     // The source checks read every file in about a second without compiling,
     // so they run whatever changed: a change to a rule alone touches no package.
-    if parts.contains(&Part::Host) && !source_checks() {
-        return false;
+    if parts.contains(&Part::Host) {
+        source_checks(failures);
+        if failures.stopped() {
+            return;
+        }
     }
     let on_windows = cfg!(windows);
     let host_ok =
@@ -786,7 +831,7 @@ fn check(
     {
         if code.is_empty() && docs.is_empty() && tested.is_empty() && built.is_empty() {
             say("no package changed; nothing to check");
-            return true;
+            return;
         }
         let names: Vec<&str> = code.iter().chain(docs).map(String::as_str).collect();
         if !names.is_empty() {
@@ -829,8 +874,8 @@ fn check(
     });
     let workspace = host_args(packages, on_windows);
     let stable = stable_api(packages);
-    // The feature lints go first: they are cheap, and the first failing
-    // step ends the host checks.
+    // The feature lints go first: they are cheap, and in CI the first
+    // failing step ends the host checks.
     let mut host_run = if parts.contains(&Part::Features) {
         features::steps(scope, packages, |p| host_ok(&p.name), &["clippy"], alone)
     } else {
@@ -840,7 +885,9 @@ fn check(
         Ok(step) => host_run.extend(step),
         Err(problem) => {
             say(&problem);
-            return false;
+            if !failures.note(false, "the Linux lint") {
+                return;
+            }
         }
     }
     host_run.extend(host_steps(
@@ -859,20 +906,53 @@ fn check(
         Vec::new()
     };
 
+    run_sides(host_run, windows, (&separate, &workspace), failures);
+}
+
+/// Runs the `host` steps, then the tests of the `separate` packages one
+/// process per binary built with the `workspace` arguments, while the
+/// `windows` steps run beside them; what fails goes into `failures`.
+fn run_sides(
+    host: Vec<Step>,
+    windows: Vec<Step>,
+    (separate, workspace): (&BTreeSet<String>, &[String]),
+    failures: &mut Failures,
+) {
+    let keep_going = failures.keep_going();
+    let ready = |steps: Vec<Step>| -> Vec<Step> {
+        if keep_going {
+            steps.into_iter().map(Step::keep_going).collect()
+        } else {
+            steps
+        }
+    };
+    let (host_run, windows) = (ready(host), ready(windows));
     for step in &windows {
         say(&format!("> {} (beside the host checks)", step.line()));
     }
     thread::scope(|scope| {
-        // The first failing step of either side ends that side's checks.
-        let windows = (!windows.is_empty())
-            .then(|| scope.spawn(|| windows.iter().all(|step| step.run(true))));
-        let host_passed = host_run.iter().all(|step| step.run(false))
-            && (separate.is_empty() || in_process::run(&separate, &workspace));
-        let windows_passed = windows.is_none_or(|handle| handle.join().unwrap_or(false));
-        host_passed && windows_passed
-    })
+        // In CI the first failing step of either side ends that side's checks.
+        let windows = (!windows.is_empty()).then(|| {
+            scope.spawn(|| failures::run_steps(&windows, keep_going, |step| step.run(true)))
+        });
+        failures.extend(failures::run_steps(&host_run, keep_going, |step| {
+            step.run(false)
+        }));
+        if !separate.is_empty() && !failures.stopped() {
+            failures.note(
+                in_process::run(separate, workspace, keep_going),
+                "the dependents' tests in one process per binary",
+            );
+        }
+        failures.extend(windows.map_or_else(Vec::new, |handle| {
+            handle
+                .join()
+                .unwrap_or_else(|_| vec!["the Windows lint (its thread panicked)".to_owned()])
+        }));
+    });
 }
 
+mod failures;
 mod features;
 mod in_process;
 mod part;

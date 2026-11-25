@@ -16,6 +16,9 @@ pub(crate) struct Step {
     pub(super) program: Option<String>,
     pub(super) args: Vec<String>,
     pub(super) env: Vec<(&'static str, String)>,
+    /// Whether it reads what the step before it wrote, so it runs only when
+    /// that one passed ([`super::failures::run_steps`]).
+    pub(super) needs_previous: bool,
 }
 
 impl Step {
@@ -24,7 +27,39 @@ impl Step {
             program: None,
             args: words.iter().map(|w| (*w).to_owned()).collect(),
             env: Vec::new(),
+            needs_previous: false,
         }
+    }
+
+    /// The step, run only when the step before it passed.
+    pub(super) const fn after_previous(mut self) -> Self {
+        self.needs_previous = true;
+        self
+    }
+
+    /// The step with cargo's flag that reports every failure instead of the
+    /// first: `--no-fail-fast` for the tests, `--keep-going` for the builds,
+    /// before the arguments cargo passes on; other steps as they are.
+    pub(super) fn keep_going(mut self) -> Self {
+        let cargo_words = if self.runs("xwin") {
+            &self.args[1..]
+        } else if self.program.is_none() {
+            &self.args[..]
+        } else {
+            return self;
+        };
+        let flag = match cargo_words.first().map(String::as_str) {
+            Some("test" | "nextest") => "--no-fail-fast",
+            Some("clippy" | "doc") => "--keep-going",
+            _ => return self,
+        };
+        let at = self
+            .args
+            .iter()
+            .position(|arg| arg == "--")
+            .unwrap_or(self.args.len());
+        self.args.insert(at, flag.to_owned());
+        self
     }
 
     /// A step that runs `program` instead of cargo.

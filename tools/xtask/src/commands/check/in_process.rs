@@ -142,9 +142,9 @@ fn finish(mut command: Command, limit: Duration) -> Option<(bool, String)> {
 }
 
 /// Runs the tests of `names`, built with the cargo arguments `workspace`,
-/// one process per binary, then each failed test again under nextest;
-/// whether they all passed.
-pub(super) fn run(names: &BTreeSet<String>, workspace: &[String]) -> bool {
+/// one process per binary, then each failed test again under nextest, all of
+/// them when `keep_going` ([`Step::keep_going`]); whether they all passed.
+pub(super) fn run(names: &BTreeSet<String>, workspace: &[String], keep_going: bool) -> bool {
     let started = Instant::now();
     let Some(binaries) = binaries(workspace, names) else {
         return false;
@@ -189,10 +189,15 @@ pub(super) fn run(names: &BTreeSet<String>, workspace: &[String]) -> bool {
         "running {} again under nextest, one process per test",
         retry_filter(&again)
     ));
-    Step::new(&["nextest", "run", "--no-tests=fail"])
+    let retry = Step::new(&["nextest", "run", "--no-tests=fail"])
         .then_owned(workspace)
-        .then(&["-E", &retry_filter(&again)])
-        .run(false)
+        .then(&["-E", &retry_filter(&again)]);
+    if keep_going {
+        retry.keep_going()
+    } else {
+        retry
+    }
+    .run(false)
 }
 
 /// The run's test threads: `RUST_TEST_THREADS`, the run's share of the
