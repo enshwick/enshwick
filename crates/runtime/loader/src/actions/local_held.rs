@@ -17,6 +17,7 @@ use enshwick_core::Entity;
 use enshwick_core::abi::{HookFlags, Side};
 use enshwick_gamedata::catalogue;
 
+use crate::actions::player_state;
 use crate::engine::copied::Copied;
 use crate::engine::ecs::{Components, Walk};
 use crate::engine::fuse::Fuse;
@@ -96,6 +97,8 @@ struct Layout {
     /// The iterator word `player_ui` hands its local player check with each
     /// row's entity.
     local_player: usize,
+    /// Where the local player's own state reads, on the same row.
+    state: player_state::Layout,
 }
 
 /// Where the open screen host's template and position are read.
@@ -301,6 +304,7 @@ fn layout(loader: &Loader) -> Result<Layout, &'static str> {
         local_player_id: loader
             .offset(pinned::ecs::LOCAL_PLAYER_ID)
             .ok_or(pinned::ecs::LOCAL_PLAYER_ID.id())?,
+        state: player_state::Layout::resolve(loader),
     })
 }
 
@@ -415,7 +419,15 @@ unsafe fn read(ctx: *mut u64, layout: &Layout) {
     STATE.players.store(players, Ordering::Relaxed);
     STATE.player.store(player.0, Ordering::Relaxed);
     STATE.miss.store(0, Ordering::Relaxed);
-    STATE.read_ms.store(now_ms(), Ordering::Release);
+    let at = now_ms();
+    let _kept = player_state::FUSE.run(player_state::FEATURE, || {
+        // SAFETY: the caller's live context at the system's entry on its
+        // thread, and `input` the local player's live `ClientPlayerInput`.
+        unsafe {
+            player_state::read(ctx, &layout.components, &layout.state, player.0, input, at);
+        }
+    });
+    STATE.read_ms.store(at, Ordering::Release);
 }
 
 /// Keeps why a step found no mask, logging a new cause once.

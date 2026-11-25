@@ -6,6 +6,9 @@ use crate::abi::{ClientSnapshot as Raw, Str};
 use crate::{Entity, RecipeId, WorldError};
 use enshwick_base::ui::Response;
 use enshwick_world::__internal::world_status;
+use enshwick_world::world::Meter;
+
+mod player;
 
 /// How old the interface's reads in a [`ClientSnapshot`] are.
 ///
@@ -112,11 +115,19 @@ pub enum SnapshotPart {
     Prompt,
     /// The character the main menu has selected.
     Character,
+    /// Where the local player stands, read in the last second.
+    Position,
+    /// Where the local player's camera looks, read in the last second.
+    Look,
+    /// The local player's health and stamina, read in the last second.
+    Vitals,
+    /// The action bar's selected slot, read in the last second.
+    Actionbar,
 }
 
 impl SnapshotPart {
     /// Every part, in the order the Luau API lists them.
-    const ALL: [Self; 9] = [
+    const ALL: [Self; 13] = [
         Self::Screens,
         Self::MenuTab,
         Self::Held,
@@ -126,6 +137,10 @@ impl SnapshotPart {
         Self::Dialog,
         Self::Prompt,
         Self::Character,
+        Self::Position,
+        Self::Look,
+        Self::Vitals,
+        Self::Actionbar,
     ];
 
     const fn bit(self) -> u32 {
@@ -139,6 +154,10 @@ impl SnapshotPart {
             Self::Dialog => Raw::DIALOG,
             Self::Prompt => Raw::PROMPT,
             Self::Character => Raw::CHARACTER,
+            Self::Position => Raw::POSITION,
+            Self::Look => Raw::LOOK,
+            Self::Vitals => Raw::VITALS,
+            Self::Actionbar => Raw::ACTIONBAR,
         }
     }
 
@@ -153,6 +172,10 @@ impl SnapshotPart {
             Self::Dialog => "dialog",
             Self::Prompt => "prompt",
             Self::Character => "character",
+            Self::Position => "position",
+            Self::Look => "look",
+            Self::Vitals => "vitals",
+            Self::Actionbar => "actionbar",
         }
     }
 }
@@ -650,7 +673,7 @@ impl Input {
 }
 
 /// The client's state in one copy, as [`Input::client_snapshot`] gives it to Luau.
-#[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+#[derive(Clone, Debug, PartialEq, crate::Script)]
 #[script(name = "ClientSnapshot")]
 struct LuauSnapshot {
     /// `"never"`, `"off"`, `"stale"` or `"fresh"`.
@@ -662,8 +685,8 @@ struct LuauSnapshot {
     /// The world's name.
     pub scene: Option<String>,
     /// The parts the build reads: `"screens"`, `"menu_tab"`, `"held"`,
-    /// `"player"`, `"recipe"`, `"loader_screen"`, `"dialog"`, `"prompt"`
-    /// and `"character"`.
+    /// `"player"`, `"recipe"`, `"loader_screen"`, `"dialog"`, `"prompt"`,
+    /// `"character"`, `"position"`, `"look"`, `"vitals"` and `"actionbar"`.
     pub reads: Vec<String>,
     /// The open HUD screen.
     pub hud_screen: Option<String>,
@@ -706,6 +729,16 @@ struct LuauSnapshot {
     /// main menu. When both save storages hold a character there, `host`
     /// plays the one in Steam's cloud.
     pub selected_character: Option<u16>,
+    /// Where the local player stands, x, y and z in metres.
+    pub position: Option<[f64; 3]>,
+    /// Where the local player's camera looks, a quaternion x, y, z, w.
+    pub look: Option<[f32; 4]>,
+    /// The local player's health and its maximum.
+    pub health: Option<Meter>,
+    /// The local player's stamina and its maximum.
+    pub stamina: Option<Meter>,
+    /// The action bar's selected slot, from 0.
+    pub actionbar_slot: Option<u8>,
 }
 
 impl From<ClientSnapshot> for LuauSnapshot {
@@ -739,6 +772,11 @@ impl From<ClientSnapshot> for LuauSnapshot {
             prompt_target: snapshot.prompt_target(),
             prompt_verb: snapshot.prompt_verb(),
             selected_character: snapshot.selected_character(),
+            position: snapshot.position(),
+            look: snapshot.look(),
+            health: snapshot.health(),
+            stamina: snapshot.stamina(),
+            actionbar_slot: snapshot.actionbar_slot(),
         }
     }
 }
@@ -844,6 +882,52 @@ mod tests {
             ..Raw::EMPTY
         });
         assert_eq!(unread.prompt_target(), None, "the build lacks the read");
+    }
+
+    #[test]
+    fn the_local_player_s_parts_answer_only_while_read() {
+        let read = snapshot(Raw {
+            state: Raw::FRESH,
+            available: Raw::POSITION | Raw::VITALS | Raw::ACTIONBAR,
+            position: [1.5, 20.0, -3.0],
+            health: 90,
+            health_max: 120,
+            stamina: 0,
+            stamina_max: 100,
+            actionbar_slot: 3,
+            ..Raw::EMPTY
+        });
+        assert_eq!(read.position(), Some([1.5, 20.0, -3.0]));
+        assert_eq!(
+            read.health(),
+            Some(Meter {
+                current: 90,
+                max: 120
+            })
+        );
+        assert_eq!(
+            read.stamina(),
+            Some(Meter {
+                current: 0,
+                max: 100
+            })
+        );
+        assert_eq!(read.actionbar_slot(), Some(3));
+        assert_eq!(read.look(), None, "the look is unread");
+        let luau = LuauSnapshot::from(read);
+        assert_eq!(luau.reads, ["position", "vitals", "actionbar"]);
+        assert_eq!(
+            luau.health,
+            Some(Meter {
+                current: 90,
+                max: 120
+            })
+        );
+        let empty = snapshot(Raw::EMPTY);
+        assert_eq!(
+            (empty.position(), empty.health(), empty.actionbar_slot()),
+            (None, None, None)
+        );
     }
 
     #[test]

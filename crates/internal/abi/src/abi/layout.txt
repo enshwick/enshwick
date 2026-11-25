@@ -1,4 +1,4 @@
-abi 12.27
+abi 12.28
 AccountActionType size 1 align 1
     0 at 0 size 1 type u8
 ActionCall size 96 align 8 born 96
@@ -238,7 +238,7 @@ ClientCommandStatus size 40 align 8 born 32
     age_ms at 24 size 8 type u64
     phase at 32 size 4 type u32
     failure at 36 size 4 type u32
-ClientSnapshot size 200 align 8 born 120
+ClientSnapshot size 264 align 8 born 120
     header at 0 size 8 type Header
     state at 8 size 4 type u32
     available at 12 size 4 type u32
@@ -264,6 +264,14 @@ ClientSnapshot size 200 align 8 born 120
     prompt_verb at 188 size 4 type u32
     character at 192 size 4 type u32
     reserved3 at 196 size 4 type u32
+    position at 200 size 24 type [f64; 3]
+    look at 224 size 16 type [f32; 4]
+    health at 240 size 4 type u32
+    health_max at 244 size 4 type u32
+    stamina at 248 size 4 type u32
+    stamina_max at 252 size 4 type u32
+    actionbar_slot at 256 size 4 type u32
+    reserved4 at 260 size 4 type u32
 ClientWindowItem size 88 align 8 born 88
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
@@ -1481,11 +1489,13 @@ const ClientCommandStatus::UNKNOWN = 9
 const ClientCommandStatus::UNREACHABLE = 8
 const ClientCommandStatus::VERSION_MISMATCH = 5
 const ClientCommandStatus::WRONG_PASSWORD = 1
+const ClientSnapshot::ACTIONBAR = 4096
 const ClientSnapshot::CHARACTER = 256
 const ClientSnapshot::DIALOG = 64
 const ClientSnapshot::FRESH = 3
 const ClientSnapshot::HELD = 4
 const ClientSnapshot::LOADER_SCREEN = 32
+const ClientSnapshot::LOOK = 1024
 const ClientSnapshot::MENU_TAB = 2
 const ClientSnapshot::MOD_BINDINGS = 5
 const ClientSnapshot::MOD_LIST = 1
@@ -1497,11 +1507,13 @@ const ClientSnapshot::NO_CHARACTER = 4294967295
 const ClientSnapshot::NO_LOADER_SCREEN = 0
 const ClientSnapshot::OFF = 1
 const ClientSnapshot::PLAYER = 8
+const ClientSnapshot::POSITION = 512
 const ClientSnapshot::PROMPT = 128
 const ClientSnapshot::RECIPE = 16
 const ClientSnapshot::SCREENS = 1
 const ClientSnapshot::SERVER_MOD_LIST = 4
 const ClientSnapshot::STALE = 2
+const ClientSnapshot::VITALS = 2048
 const ClientWindowItem::BUTTON = 1
 const ClientWindowItem::CHOICE = 2
 const ClientWindowItem::FIELD = 3

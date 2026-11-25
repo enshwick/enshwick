@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 27
+#define ENSHWICK_ABI_MINOR 28
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -1378,6 +1378,30 @@ typedef struct EnshwickClientSnapshot {
   uint32_t character;
   // Zero.
   uint32_t reserved3;
+  // Where the local player stands, x, y and z in metres, as the
+  // client's world holds it; group `EnshwickClientSnapshot_POSITION`.
+  // ABI 12.28.
+  double position[3];
+  // Where the local player's camera looks, a unit quaternion x, y, z, w
+  // in the world's axes; group `EnshwickClientSnapshot_LOOK`. ABI 12.28.
+  float look[4];
+  // The local player's health; group `EnshwickClientSnapshot_VITALS`.
+  // ABI 12.28.
+  uint32_t health;
+  // The local player's maximum health; group `EnshwickClientSnapshot_VITALS`.
+  // ABI 12.28.
+  uint32_t health_max;
+  // The local player's stamina; group `EnshwickClientSnapshot_VITALS`.
+  // ABI 12.28.
+  uint32_t stamina;
+  // The local player's maximum stamina; group
+  // `EnshwickClientSnapshot_VITALS`. ABI 12.28.
+  uint32_t stamina_max;
+  // The action bar's selected slot, from 0; group
+  // `EnshwickClientSnapshot_ACTIONBAR`. ABI 12.28.
+  uint32_t actionbar_slot;
+  // Zero.
+  uint32_t reserved4;
 } EnshwickClientSnapshot;
 // No interface read yet.
 #define EnshwickClientSnapshot_NEVER 0
@@ -1412,6 +1436,18 @@ typedef struct EnshwickClientSnapshot {
 // `character`: the main menu's selected character
 // reads on this build. ABI 12.26.
 #define EnshwickClientSnapshot_CHARACTER 256
+// `position`, read in the client's last step.
+// ABI 12.28.
+#define EnshwickClientSnapshot_POSITION 512
+// `look`, read in the client's last step. ABI 12.28.
+#define EnshwickClientSnapshot_LOOK 1024
+// `health`, `health_max`,
+// `stamina` and `stamina_max`,
+// read in the client's last step. ABI 12.28.
+#define EnshwickClientSnapshot_VITALS 2048
+// `actionbar_slot`, read in the client's last
+// step. ABI 12.28.
+#define EnshwickClientSnapshot_ACTIONBAR 4096
 // `character` while no character is selected or no
 // main menu shows. ABI 12.26.
 #define EnshwickClientSnapshot_NO_CHARACTER UINT32_MAX
@@ -7966,7 +8002,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, reserved) == 20, "o
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, age_ms) == 24, "offset of ClientCommandStatus.age_ms");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, phase) == 32, "offset of ClientCommandStatus.phase");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, failure) == 36, "offset of ClientCommandStatus.failure");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientSnapshot) == 200, "size of ClientSnapshot");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientSnapshot) == 264, "size of ClientSnapshot");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientSnapshot) == 8, "alignment of ClientSnapshot");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, header) == 0, "offset of ClientSnapshot.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, state) == 8, "offset of ClientSnapshot.state");
@@ -7993,6 +8029,14 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, prompt_target) == 184, "
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, prompt_verb) == 188, "offset of ClientSnapshot.prompt_verb");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, character) == 192, "offset of ClientSnapshot.character");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, reserved3) == 196, "offset of ClientSnapshot.reserved3");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, position) == 200, "offset of ClientSnapshot.position");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, look) == 224, "offset of ClientSnapshot.look");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, health) == 240, "offset of ClientSnapshot.health");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, health_max) == 244, "offset of ClientSnapshot.health_max");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, stamina) == 248, "offset of ClientSnapshot.stamina");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, stamina_max) == 252, "offset of ClientSnapshot.stamina_max");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, actionbar_slot) == 256, "offset of ClientSnapshot.actionbar_slot");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, reserved4) == 260, "offset of ClientSnapshot.reserved4");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientWindowItem) == 88, "size of ClientWindowItem");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientWindowItem) == 8, "alignment of ClientWindowItem");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientWindowItem, header) == 0, "offset of ClientWindowItem.header");

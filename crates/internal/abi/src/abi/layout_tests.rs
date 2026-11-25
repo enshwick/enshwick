@@ -266,7 +266,7 @@ shapes! {
         LoaderOff { header, name, reason, at },
         ClientCommand { header, kind, hold_ms, session, expected_screen, target, look, direction, recipe, reserved, cancels, password, position, world, character, online, item, text, answer, dialog },
         ClientCommandStatus { header, state, reason, kind, reserved, age_ms, phase, failure },
-        ClientSnapshot { header, state, available, session, age_ms, scene, hud_screen, return_screen, menu_tab, held, player, host, highlighted_recipe, reserved, server, loader_screen_mod, loader_screen, reserved2, dialog_mod, dialog_buttons, dialog, prompt_target, prompt_verb, character, reserved3 },
+        ClientSnapshot { header, state, available, session, age_ms, scene, hud_screen, return_screen, menu_tab, held, player, host, highlighted_recipe, reserved, server, loader_screen_mod, loader_screen, reserved2, dialog_mod, dialog_buttons, dialog, prompt_target, prompt_verb, character, reserved3, position, look, health, health_max, stamina, stamina_max, actionbar_slot, reserved4 },
         ClientWindowItem { header, kind, field, flags, reserved, window, item, label, line },
         UiFrame { header, token, screen, reserved, hud_screen, prompt_title, prompt_verb, screen_host, screen_host_template, screen_host_position, hovered_slot, hovered_item, hovered_count, hovered_pide, reserved_hovered },
         UiTooltipItem { header, token, item, pide },

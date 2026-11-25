@@ -377,6 +377,24 @@ ids! {
     /// The id of the local player's waypoint request in its input, a
     /// [`WAYPOINT_ACTION`] the server takes when its version changes.
     CLIENT_PLAYER_INPUT_WAYPOINT = "client_player_input.waypoint";
+    /// The id of the `Quaternion` of the camera the local player's input
+    /// reports, where it looks.
+    CLIENT_PLAYER_INPUT_CAMERA_ORIENTATION = "client_player_input.camera_orientation";
+    /// The id of a player's replicated attributes, the copy the client's
+    /// interface draws health and stamina from.
+    NETWORK_PLAYER_ATTRIBUTES = "network_player_attributes";
+    /// The id of its `u16` health.
+    NETWORK_PLAYER_ATTRIBUTES_HEALTH = "network_player_attributes.health";
+    /// The id of its `u16` maximum health.
+    NETWORK_PLAYER_ATTRIBUTES_HEALTH_MAX = "network_player_attributes.health_max";
+    /// The id of its `u16` stamina.
+    NETWORK_PLAYER_ATTRIBUTES_STAMINA = "network_player_attributes.stamina";
+    /// The id of its `u16` maximum stamina.
+    NETWORK_PLAYER_ATTRIBUTES_STAMINA_MAX = "network_player_attributes.stamina_max";
+    /// The id of a player's selected equipment and action bar slot.
+    SLOT_SELECTION = "slot_selection";
+    /// The id of its `u8` index of the action bar's selected slot.
+    SLOT_SELECTION_ACTIONBAR = "slot_selection.actionbar";
     /// The id of a waypoint request: set, clear or ping a position.
     WAYPOINT_ACTION = "waypoint_action";
     /// The id of its `WorldPosition`, three `i64` in 32.32 fixed point.

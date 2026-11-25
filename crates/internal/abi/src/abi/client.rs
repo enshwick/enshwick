@@ -161,6 +161,30 @@ pub struct ClientSnapshot {
     pub character: u32,
     /// Zero.
     pub reserved3: u32,
+    /// Where the local player stands, x, y and z in metres, as the
+    /// client's world holds it; group [`ClientSnapshot::POSITION`].
+    /// ABI 12.28.
+    pub position: [f64; 3],
+    /// Where the local player's camera looks, a unit quaternion x, y, z, w
+    /// in the world's axes; group [`ClientSnapshot::LOOK`]. ABI 12.28.
+    pub look: [f32; 4],
+    /// The local player's health; group [`ClientSnapshot::VITALS`].
+    /// ABI 12.28.
+    pub health: u32,
+    /// The local player's maximum health; group [`ClientSnapshot::VITALS`].
+    /// ABI 12.28.
+    pub health_max: u32,
+    /// The local player's stamina; group [`ClientSnapshot::VITALS`].
+    /// ABI 12.28.
+    pub stamina: u32,
+    /// The local player's maximum stamina; group
+    /// [`ClientSnapshot::VITALS`]. ABI 12.28.
+    pub stamina_max: u32,
+    /// The action bar's selected slot, from 0; group
+    /// [`ClientSnapshot::ACTIONBAR`]. ABI 12.28.
+    pub actionbar_slot: u32,
+    /// Zero.
+    pub reserved4: u32,
 }
 
 impl_headed!(ClientSnapshot, born = 120);
@@ -199,6 +223,18 @@ impl ClientSnapshot {
     /// [`character`](Self::character): the main menu's selected character
     /// reads on this build. ABI 12.26.
     pub const CHARACTER: u32 = 256;
+    /// [`position`](Self::position), read in the client's last step.
+    /// ABI 12.28.
+    pub const POSITION: u32 = 512;
+    /// [`look`](Self::look), read in the client's last step. ABI 12.28.
+    pub const LOOK: u32 = 1024;
+    /// [`health`](Self::health), [`health_max`](Self::health_max),
+    /// [`stamina`](Self::stamina) and [`stamina_max`](Self::stamina_max),
+    /// read in the client's last step. ABI 12.28.
+    pub const VITALS: u32 = 2048;
+    /// [`actionbar_slot`](Self::actionbar_slot), read in the client's last
+    /// step. ABI 12.28.
+    pub const ACTIONBAR: u32 = 4096;
     /// [`character`](Self::character) while no character is selected or no
     /// main menu shows. ABI 12.26.
     pub const NO_CHARACTER: u32 = u32::MAX;
@@ -246,6 +282,14 @@ impl ClientSnapshot {
         prompt_verb: 0,
         character: Self::NO_CHARACTER,
         reserved3: 0,
+        position: [0.0; 3],
+        look: [0.0, 0.0, 0.0, 1.0],
+        health: 0,
+        health_max: 0,
+        stamina: 0,
+        stamina_max: 0,
+        actionbar_slot: 0,
+        reserved4: 0,
     };
 }
 

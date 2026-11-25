@@ -1337,6 +1337,48 @@ pub const FACTS: &[(&str, Fact)] = &[
             holds: WAYPOINT_ACTION,
         },
     ),
+    (
+        ids::CLIENT_PLAYER_INPUT_CAMERA_ORIENTATION,
+        Fact::Path {
+            steps: &[
+                ("keen::ecs::ClientPlayerInput", "data"),
+                ("keen::ecs::ClientPlayerInputData", "camera"),
+                ("keen::ecs::ClientCamera", "orientation"),
+            ],
+            holds: QUATERNION,
+        },
+    ),
+    (
+        ids::NETWORK_PLAYER_ATTRIBUTES,
+        Fact::Type(NETWORK_PLAYER_ATTRIBUTES),
+    ),
+    (
+        ids::NETWORK_PLAYER_ATTRIBUTES_HEALTH,
+        offset(NETWORK_PLAYER_ATTRIBUTES, "health", UINT16),
+    ),
+    (
+        ids::NETWORK_PLAYER_ATTRIBUTES_HEALTH_MAX,
+        offset(NETWORK_PLAYER_ATTRIBUTES, "healthMax", UINT16),
+    ),
+    (
+        ids::NETWORK_PLAYER_ATTRIBUTES_STAMINA,
+        offset(NETWORK_PLAYER_ATTRIBUTES, "stamina", UINT16),
+    ),
+    (
+        ids::NETWORK_PLAYER_ATTRIBUTES_STAMINA_MAX,
+        offset(NETWORK_PLAYER_ATTRIBUTES, "staminaMax", UINT16),
+    ),
+    (ids::SLOT_SELECTION, Fact::Type(SLOT_SELECTION)),
+    (
+        ids::SLOT_SELECTION_ACTIONBAR,
+        Fact::Path {
+            steps: &[
+                (SLOT_SELECTION, "actionbarSlotSelection"),
+                ("keen::ActionbarSlotSelection", "index"),
+            ],
+            holds: "keen::InventorySlotIndex",
+        },
+    ),
     (ids::WAYPOINT_ACTION, Fact::Type(WAYPOINT_ACTION)),
     (
         ids::WAYPOINT_ACTION_POSITION,
@@ -2739,6 +2781,12 @@ const FLOAT32: &str = "keen::float32";
 
 /// Three 32-bit floats, such as a position or a size.
 const FLOAT3: &str = "keen::float3";
+/// The rotation every reflected orientation holds.
+const QUATERNION: &str = "keen::Quaternion";
+/// A player's replicated attributes.
+const NETWORK_PLAYER_ATTRIBUTES: &str = "keen::ecs::NetworkPlayerAttributes";
+/// A player's selected equipment and action bar slot.
+const SLOT_SELECTION: &str = "keen::ecs::SlotSelection";
 
 /// Four 32-bit floats, such as an orientation.
 const FLOAT4: &str = "keen::float4";
