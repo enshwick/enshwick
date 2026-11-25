@@ -17,6 +17,7 @@ fn seen(stage: Stage, game: bool) -> Seen {
         stage,
         game,
         refusals: 0,
+        popup: false,
     }
 }
 
@@ -122,6 +123,7 @@ fn a_join_the_game_never_starts_times_out_and_goes_back_until_the_menu_settles()
     let mut op = join_op(Step::Starting {
         posted_ms: 0,
         last_ms: 0,
+        clear: false,
     });
     assert!(!frame(&mut op, seen(Stage::Menu, false), START_MS).0);
     let (done, posted) = frame(&mut op, seen(Stage::Menu, false), START_MS + 1);
@@ -175,6 +177,7 @@ fn a_join_the_join_check_refuses_before_play_starts_fails_as_refused() {
     let mut op = join_op(Step::Starting {
         posted_ms: 0,
         last_ms: 0,
+        clear: false,
     });
     let refused = Seen {
         refusals: 1,
@@ -242,6 +245,7 @@ fn a_join_runs_only_where_the_address_fits_the_join_command() {
 fn an_idle_frame_reads_no_play_data_and_posts_nothing() {
     super::frame(
         Stage::Menu,
+        true,
         10,
         || panic!("read the play data"),
         |_| panic!("posted"),
@@ -394,6 +398,123 @@ fn a_host_posts_its_character_world_and_session_then_plays_the_world() {
     assert_eq!(op.report.phase, Status::PHASE_LOADING);
     assert!(frame(&mut op, seen(Stage::InGame, true), 900).0);
     assert_eq!(op.report, report(Progress::Done, Status::PHASE_IN_WORLD, 0));
+}
+
+fn with_popup(stage: Stage) -> Seen {
+    Seen {
+        popup: true,
+        ..seen(stage, false)
+    }
+}
+
+fn posted_host() -> Op {
+    let host = Host {
+        world: 10,
+        character: 0,
+        online: false,
+    };
+    let mut op = Op {
+        info: None,
+        password_given: false,
+        ..join_op(Step::Hosting { host, posted: 0 })
+    };
+    frame(&mut op, seen(Stage::Menu, false), 10);
+    op
+}
+
+#[test]
+fn a_host_the_game_cannot_create_fails_at_the_menu_once_its_popup_shows() {
+    let mut op = posted_host();
+    assert!(matches!(op.step, Step::Starting { clear: false, .. }));
+    assert_eq!(frame(&mut op, seen(Stage::Menu, false), 300).1, ["start"]);
+    assert!(matches!(op.step, Step::Starting { clear: true, .. }));
+    let (done, posted) = frame(&mut op, with_popup(Stage::Menu), 600);
+    assert_eq!(
+        op.report,
+        report(
+            Progress::Failed(Status::UNKNOWN),
+            Status::PHASE_MENU,
+            Status::UNKNOWN
+        ),
+        "the popup at the menu ends it in a frame"
+    );
+    assert!(!done, "a start posted just before may still be taken");
+    assert_eq!(posted, ["back"], "no start of play over the popup");
+    assert_eq!(
+        frame(&mut op, seen(Stage::Loading, false), 1_000),
+        (false, vec!["back".to_owned()]),
+        "play that started late is backed out of"
+    );
+    assert!(frame(&mut op, seen(Stage::Menu, false), 1_600).0);
+}
+
+#[test]
+fn a_join_the_game_cannot_create_fails_at_the_menu_with_what_the_client_knows() {
+    let mut op = Op {
+        info: Some(ServerInfo {
+            players: 16,
+            max_players: 16,
+            ..ServerInfo::default()
+        }),
+        ..join_op(posting())
+    };
+    frame(&mut op, seen(Stage::Menu, false), 10);
+    assert_eq!(frame(&mut op, seen(Stage::Menu, false), 300).1, ["start"]);
+    let (done, posted) = frame(&mut op, with_popup(Stage::Menu), 600);
+    assert!(!done);
+    assert_eq!(posted, ["back"]);
+    assert_eq!(
+        op.report,
+        report(
+            Progress::Failed(Status::FULL),
+            Status::PHASE_MENU,
+            Status::FULL
+        ),
+        "a full server is named, as when play falls back to the menu"
+    );
+}
+
+#[test]
+fn a_popup_before_the_game_takes_a_start_of_play_never_ends_the_host() {
+    let mut op = posted_host();
+    let mut refuse = |_: Post<'_>| false;
+    assert!(!step(&mut op, seen(Stage::Menu, false), 300, &mut refuse));
+    assert!(
+        matches!(op.step, Step::Starting { clear: false, .. }),
+        "a start the queue refused is no start"
+    );
+    let (done, posted) = frame(&mut op, with_popup(Stage::Menu), 600);
+    assert!(!done && posted.is_empty());
+    assert_eq!(op.report.progress, Progress::Taken);
+}
+
+#[test]
+fn a_popup_already_shown_when_the_posts_land_never_ends_the_host() {
+    let host = Host {
+        world: 0,
+        character: 0,
+        online: false,
+    };
+    let mut op = Op {
+        info: None,
+        password_given: false,
+        ..join_op(Step::Hosting { host, posted: 0 })
+    };
+    let (done, _) = frame(&mut op, with_popup(Stage::Menu), 10);
+    assert!(!done);
+    for now in [300, 600, 900] {
+        let (done, posted) = frame(&mut op, with_popup(Stage::Menu), now);
+        assert!(!done, "a popup the posts did not make, at {now}");
+        assert!(posted.is_empty(), "nothing posted over it, at {now}");
+    }
+    assert_eq!(
+        frame(&mut op, seen(Stage::Menu, false), 1_200).1,
+        ["start"],
+        "once it is gone the start of play goes"
+    );
+    let (done, _) = frame(&mut op, with_popup(Stage::Loading), 1_500);
+    assert!(!done, "a popup while play loads is play's, not the menu's");
+    assert!(matches!(op.step, Step::Playing));
 }
 
 #[test]

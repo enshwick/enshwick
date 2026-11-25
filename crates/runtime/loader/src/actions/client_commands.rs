@@ -783,11 +783,13 @@ pub(crate) fn frame(
 }
 
 /// Notes the client's app stage `byte` and runs a join or leave in the
-/// interface frame: `game` answers whether the frame reads the client's
-/// play data, `post` hands a menu command to the game. A panic in it turns
-/// off only the commands, never the interface frame.
+/// interface frame, the game's own popup showing or not: `game` answers
+/// whether the frame reads the client's play data, `post` hands a menu
+/// command to the game. A panic in it turns off only the commands, never
+/// the interface frame.
 pub(crate) fn play_frame(
     byte: impl FnOnce() -> u8,
+    popup: bool,
     game: impl FnOnce() -> bool,
     post: impl FnMut(Post<'_>) -> bool,
 ) {
@@ -801,7 +803,7 @@ pub(crate) fn play_frame(
         }
         #[cfg(not(windows))]
         let _ = edge;
-        play::frame(play::Stage::of(byte), now, game, post);
+        play::frame(play::Stage::of(byte), popup, now, game, post);
     });
 }
 

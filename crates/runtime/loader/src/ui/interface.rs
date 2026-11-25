@@ -456,21 +456,21 @@ unsafe fn frame(state: *mut u8, next: PopupFn, onward: &Onward<(), impl Fn()>) {
     crate::engine::screens::note_window(window_shown());
     crate::actions::controls::frame(context);
     crate::actions::game_bindings::frame(context);
-    // SAFETY: inside the frame on the interface thread, `context` non-zero
-    // by the guard before it.
-    unsafe { snapshot::note(engine, context) };
-    // After the session's count for this frame, so a sound started in a
-    // world that just changed is not ended with the old world's.
-    // SAFETY: inside the frame on the interface thread, with the frame's
-    // own non-zero context.
-    unsafe { crate::ui::sound::frame(context) };
-    engine.restore_nav(context, nav);
     // SAFETY: `state` is non-null, checked by the guard before it, and is the
     // popup state the game passed to `ui.popup`; its active byte sits at the
     // table's `ui.popup_active`.
     let vanilla = unsafe {
         crate::engine::memory::read::<u8>(state.expose_provenance(), engine.layout.popup_active)
     } != 0;
+    // SAFETY: inside the frame on the interface thread, `context` non-zero
+    // by the guard before it.
+    unsafe { snapshot::note(engine, context, vanilla) };
+    // After the session's count for this frame, so a sound started in a
+    // world that just changed is not ended with the old world's.
+    // SAFETY: inside the frame on the interface thread, with the frame's
+    // own non-zero context.
+    unsafe { crate::ui::sound::frame(context) };
+    engine.restore_nav(context, nav);
     if vanilla {
         // SAFETY: inside the frame on the interface thread, `context`
         // non-zero by the guard before it; no loader window draws.

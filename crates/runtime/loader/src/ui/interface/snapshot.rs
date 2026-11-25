@@ -30,13 +30,14 @@ unsafe fn view(engine: &Engine, context: usize) -> Option<(extensions::ScreenVie
 }
 
 /// Gives the client snapshot this frame's screens and runs the open client
-/// commands, each only once a mod asked; the frame is read at most once.
+/// commands, each only once a mod asked, the game's own `popup` showing or
+/// not; the frame is read at most once.
 ///
 /// # Safety
 ///
 /// - Called inside a frame on the interface thread, with `context` the
 ///   frame's own and non-zero.
-pub(super) unsafe fn note(engine: &Engine, context: usize) {
+pub(super) unsafe fn note(engine: &Engine, context: usize, popup: bool) {
     let read = OnceCell::new();
     // SAFETY: the caller's contract.
     let view = || *read.get_or_init(|| unsafe { view(engine, context) });
@@ -95,7 +96,7 @@ pub(super) unsafe fn note(engine: &Engine, context: usize) {
     );
     // SAFETY: the caller's contract: inside the frame on the interface
     // thread, with its own non-zero context.
-    unsafe { play(engine, context, || view().is_some()) };
+    unsafe { play(engine, context, popup, || view().is_some()) };
 }
 
 /// Notes the app's stage and runs a join or leave in this frame, posting
@@ -106,9 +107,10 @@ pub(super) unsafe fn note(engine: &Engine, context: usize) {
 ///
 /// - Called inside a frame on the interface thread, with `context` the
 ///   frame's own and non-zero.
-unsafe fn play(engine: &Engine, context: usize, game: impl FnOnce() -> bool) {
+unsafe fn play(engine: &Engine, context: usize, popup: bool, game: impl FnOnce() -> bool) {
     crate::actions::client_commands::play_frame(
         || engine.app_state(context),
+        popup,
         game,
         |post| {
             // SAFETY: inside the frame on the interface thread, with its own

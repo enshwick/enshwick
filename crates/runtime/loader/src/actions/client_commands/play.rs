@@ -189,8 +189,14 @@ enum Step {
     /// A host: its menu commands go one after another at the menu, `posted`
     /// of them taken so far.
     Hosting { host: Host, posted: u8 },
-    /// Posted: the start of play goes again until play starts.
-    Starting { posted_ms: u64, last_ms: u64 },
+    /// Posted: the start of play goes again until play starts. `clear` once
+    /// the game took a start of play with none of its popups showing, so
+    /// only a popup that start made ends it.
+    Starting {
+        posted_ms: u64,
+        last_ms: u64,
+        clear: bool,
+    },
     /// Play started: the phases follow the game's own pace.
     Playing,
     /// A leave: back goes again until the menu shows.
@@ -231,6 +237,9 @@ struct Seen {
     game: bool,
     /// The join check's refusals so far.
     refusals: u64,
+    /// Whether the game's own popup shows: at the menu, its error that it
+    /// could not start the play a host or join asked for.
+    popup: bool,
 }
 
 /// The one join or leave and the server it joined.
@@ -546,12 +555,14 @@ pub(crate) fn server() -> Option<&'static str> {
 }
 
 /// Runs the join or leave in the interface frame at `now`, the client at
-/// `stage`: `game` answers whether the frame reads the client's play data,
-/// and `post` hands a command to the game and answers whether its queue
-/// took it. Two atomic loads while none runs and no server is named; the
-/// joined server is forgotten once the menu shows.
+/// `stage` with the game's own popup showing or not: `game` answers whether
+/// the frame reads the client's play data, and `post` hands a command to the
+/// game and answers whether its queue took it. Two atomic loads while none
+/// runs and no server is named; the joined server is forgotten once the
+/// menu shows.
 pub(crate) fn frame(
     stage: Stage,
+    popup: bool,
     now: u64,
     game: impl FnOnce() -> bool,
     mut post: impl FnMut(Post<'_>) -> bool,
@@ -570,6 +581,7 @@ pub(crate) fn frame(
         stage,
         game: game(),
         refusals: crate::base::join::refusals(),
+        popup,
     };
     let mut play = STATE.play.relock();
     let answer = play.answer.take();
@@ -675,6 +687,7 @@ fn step(op: &mut Op, seen: Seen, now: u64, post: &mut impl FnMut(Post<'_>) -> bo
             op.step = Step::Starting {
                 posted_ms: now,
                 last_ms: 0,
+                clear: false,
             };
             op.report = report(Progress::Taken, Status::PHASE_MENU, 0);
             false
@@ -759,15 +772,28 @@ fn hosting(op: &mut Op, seen: Seen, now: u64, post: &mut impl FnMut(Post<'_>) ->
     op.step = Step::Starting {
         posted_ms: op.started_ms,
         last_ms: 0,
+        clear: false,
     };
     op.report = report(Progress::Taken, Status::PHASE_MENU, 0);
     false
 }
 
 /// Posts the start of play for `op` at the menu until play starts; whether
-/// it ended: refused by the join check, or timed out and going back.
+/// it ended: refused by the join check, or failed by the game's popup or
+/// timed out and going back.
+///
+/// A play the game cannot create (a world place no storage holds, a host
+/// setting the save refuses) passes the loading stage between two frames
+/// and comes back to the menu with the game's error popup (client 26430625:
+/// `Play::Failed` from the creation step `Session`, `0x140854250`), so a
+/// popup at the menu after the game took a start of play is the failure.
 fn starting(op: &mut Op, seen: Seen, now: u64, post: &mut impl FnMut(Post<'_>) -> bool) -> bool {
-    let Step::Starting { posted_ms, last_ms } = &mut op.step else {
+    let Step::Starting {
+        posted_ms,
+        last_ms,
+        clear,
+    } = op.step
+    else {
         return false;
     };
     if seen.refusals > op.refusals {
@@ -778,12 +804,15 @@ fn starting(op: &mut Op, seen: Seen, now: u64, post: &mut impl FnMut(Post<'_>) -
         );
         return true;
     }
-    if now.saturating_sub(*posted_ms) > START_MS {
-        op.report = report(
-            Progress::Failed(Status::JOIN_TIMED_OUT),
-            Status::PHASE_MENU,
-            Status::JOIN_TIMED_OUT,
-        );
+    let failed = if seen.stage == Stage::Menu && seen.popup && clear {
+        Some(failure(op, seen.refusals))
+    } else if now.saturating_sub(posted_ms) > START_MS {
+        Some(Status::JOIN_TIMED_OUT)
+    } else {
+        None
+    };
+    if let Some(failure) = failed {
+        op.report = report(Progress::Failed(failure), Status::PHASE_MENU, failure);
         // A start of play posted just before may still be taken: back goes
         // on as for a cancel.
         op.step = Step::Backing {
@@ -793,10 +822,15 @@ fn starting(op: &mut Op, seen: Seen, now: u64, post: &mut impl FnMut(Post<'_>) -
         return back(op, seen, now, post);
     }
     if seen.stage == Stage::Menu
-        && now.saturating_sub(*last_ms) >= REPOST_MS
+        && !seen.popup
+        && now.saturating_sub(last_ms) >= REPOST_MS
         && post(Post::StartPlay)
     {
-        *last_ms = now;
+        op.step = Step::Starting {
+            posted_ms,
+            last_ms: now,
+            clear: true,
+        };
     }
     false
 }
