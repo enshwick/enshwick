@@ -65,6 +65,14 @@ mod tests {
             weather.at([1.0, 2.0, 3.0]).unwrap().state(),
             WeatherState::Snow
         );
+        for far in [
+            [f64::NAN, 0.0, 0.0],
+            [0.0, 1e300, 0.0],
+            [0.0, 0.0, 2_147_483_648.0],
+        ] {
+            assert_eq!(weather.at(far), None, "past the fixed point: {far:?}");
+        }
+        assert!(weather.at([0.0, 0.0, -2_147_483_647.0]).is_some());
         let fronts = weather.fronts();
         assert_eq!(fronts.len(), 1);
         assert_eq!(fronts[0].kind, WeatherPhenomenonEffect::Blizzard);

@@ -553,12 +553,7 @@ entries! {
         let Some(mut request) = super::get_headed::<BuildRights>(check.cast_const()) else {
             return Status::BAD_ARGS;
         };
-        let finite = request
-            .min
-            .iter()
-            .chain(&request.max)
-            .all(|v| v.is_finite());
-        if !finite || (0..3).any(|a| request.max[a] < request.min[a]) {
+        if !enshwick_core::__fake::rules::is_edit_box(request.min, request.max) {
             return Status::BAD_ARGS;
         }
         if !crate::test::table::on_game_thread() {
@@ -660,8 +655,7 @@ entries! {
         // SAFETY: the safe layer passes `max` pointing at three live `f64` for
         // the call, non-null by the check before it.
         let high = unsafe { max.read_unaligned() };
-        let finite = low.iter().chain(&high).all(|v| v.is_finite());
-        if !finite || (0..3).any(|a| high[a] < low[a]) {
+        if !enshwick_core::__fake::rules::is_edit_box(low, high) {
             return Status::BAD_ARGS;
         }
         if !crate::test::table::on_game_thread() {

@@ -3847,9 +3847,9 @@ export type Transaction = {
 	write_voxels: (self: Transaction, voxels: VoxelBox) -> Transaction,
 	--- Tears down the building blocks in the box of `size` voxels from `min`: their voxels turn to air, and the ground stays. The game's `BuildingTearDownEvent` tells its listeners.
 	erase_block: (self: Transaction, min: VoxelPos, size: {number}) -> Transaction,
-	--- Places a building block as a player's building tool does: the `VoxelBlueprintItem` of `shape` in the building material `material` places, centred on `at`'s position and turned by its orientation, which the game keeps in quarter turns. As a player's building tool does, it writes over air and over ground and building voxels softer than `Unbreakable`, and leaves the rest. The game's `BuildingPlaceEvent` tells its listeners. It takes no cost from anyone. `Transaction.commit` refuses a `shape` with no `VoxelBlueprintItem` and a `material` whose `ChangeVoxelData` places no building material.
+	--- Places a building block as a player's building tool does: the `VoxelBlueprintItem` of `shape` in the building material `material` places, centred on `at`'s position and turned by its orientation, which the game keeps in quarter turns. As a player's building tool does, it writes over air and over ground and building voxels softer than `Unbreakable`, and leaves the rest. The game's `BuildingPlaceEvent` tells its listeners. It takes no cost from anyone. `Transaction.commit` refuses a `shape` with no `VoxelBlueprintItem`, a `material` whose `ChangeVoxelData` places no building material, and a position not finite, below 0 or at `Voxel.END` metres or more on an axis.
 	place_block: (self: Transaction, shape: number, material: number, at: WorldTransform) -> Transaction,
-	--- Places a prop as a player places one from `item`: the template the item places, with the item it came from, standing at `at`. The game's `BuildingPlaceEvent` tells its listeners, and its `LogicEntityPlacedEvent` for a logic prop. It takes no cost from anyone. The prop is in the world from the step after it is placed, and the transaction is applied once it stands there; `World.transaction_entities` lists it. `Transaction.commit` refuses an item that places nothing, and one that places a creature or a flame altar, which founds a base, with `WorldError.NotAProp`. Like a player's, a prop placed outside every base is not saved; `World.persists` tells.
+	--- Places a prop as a player places one from `item`: the template the item places, with the item it came from, standing at `at`. The game's `BuildingPlaceEvent` tells its listeners, and its `LogicEntityPlacedEvent` for a logic prop. It takes no cost from anyone. The prop is in the world from the step after it is placed, and the transaction is applied once it stands there; `World.transaction_entities` lists it. `Transaction.commit` refuses an item that places nothing, a position not finite, below 0 or at `Voxel.END` metres or more on an axis, and an item that places a creature or a flame altar, which founds a base, with `WorldError.NotAProp`. Like a player's, a prop placed outside every base is not saved; `World.persists` tells.
 	place_prop: (self: Transaction, item: number, at: WorldTransform) -> Transaction,
 	--- Removes the prop `entity` as the game tears one down, without loot, and raises the game's `BuildingTearDownEvent`. A prop that holds state a player would lose is refused: items, any plant, a production queue, assigned survivors, written text, fuel a player put in a prop that does not refill itself, logic wiring or a logic trigger (each a `HeldState`). The transaction fails with `WorldError.HoldsState` before it writes anything; empty it first, or use `Transaction.remove_prop_discarding_state`. The loader keeps players from the prop for the step before it goes and checks again then, so nothing put in meanwhile is lost. A creature or a flame altar fails with `WorldError.NotAProp`.
 	remove_prop: (self: Transaction, entity: number) -> Transaction,
@@ -4355,6 +4355,8 @@ declare enshwick: {
 		metres: (fixed: {number}) -> vector,
 		--- Metres in the engine's fixed-point coordinates, as `fixed` converts them.
 		fixed: (metres: vector) -> {number},
+		--- Metres in the engine's fixed-point coordinates, or none past their range, as `checked_fixed` converts them.
+		checked_fixed: (metres: vector) -> {number}?,
 	},
 	--- The mod's store `name` for the world running now, of game data a script keeps, as `Load.world_store` opens a Rust mod's.
 	--- Only while the mod starts, at the top level of main.luau.
@@ -4816,7 +4818,7 @@ declare enshwick: {
 	},
 	--- The weather of the server's world: what it is where, its fronts, and setting it.
 	weather: {
-		--- How the weather is at `position`, in metres; nil off the game thread or while no world runs.
+		--- How the weather is at `position`, in metres; nil off the game thread, while no world runs or for a position not finite or at 2^31 metres or more on an axis.
 		at: (position: vector) -> WeatherAt?,
 		--- The fronts now, one per weather layer that has one; empty off the game thread or while no world runs.
 		fronts: () -> {Front},

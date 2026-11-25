@@ -713,6 +713,26 @@ pub fn fixed(metres: [f64; 3]) -> [i64; 3] {
     metres.map(|m| (m * FIXED_PER_METRE) as i64)
 }
 
+/// [`fixed`] for a position the engine can hold, `None` for one past it.
+///
+/// Past it means an axis not finite or at 2^31 metres or more either way,
+/// as [`in_fixed_range`](crate::abi::in_fixed_range) bounds it; every call
+/// that takes a world position refuses such a one.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::ecs::checked_fixed;
+///
+/// assert_eq!(checked_fixed([3.0, -0.5, 0.0]), Some([3_i64 << 32, -(1_i64 << 31), 0]));
+/// assert_eq!(checked_fixed([f64::NAN, 0.0, 0.0]), None);
+/// assert_eq!(checked_fixed([1e300, 0.0, 0.0]), None);
+/// ```
+#[must_use]
+pub fn checked_fixed(metres: [f64; 3]) -> Option<[i64; 3]> {
+    crate::abi::in_fixed_range(metres).then(|| fixed(metres))
+}
+
 /// The free functions of [`ecs`](self) a script reaches, as its namespace
 /// `ecs`: the world's fixed-point coordinates and metres.
 #[doc(hidden)]
@@ -749,6 +769,14 @@ impl EcsFns {
     #[must_use]
     pub fn fixed(self, metres: [f64; 3]) -> [i64; 3] {
         fixed(metres)
+    }
+
+    /// Metres in the engine's fixed-point coordinates, or none past their
+    /// range, as [`checked_fixed`] converts them.
+    #[script]
+    #[must_use]
+    pub fn checked_fixed(self, metres: [f64; 3]) -> Option<[i64; 3]> {
+        checked_fixed(metres)
     }
 }
 

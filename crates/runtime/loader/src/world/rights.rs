@@ -95,17 +95,16 @@ pub(crate) enum RightsError {
 }
 
 impl EditBox {
-    /// The box of `check`; [`RightsError::BadBox`] for a corner that is not
-    /// finite or a `max` below `min`.
+    /// The box of `check`; [`RightsError::BadBox`] for one that is not an
+    /// edit box.
     pub(crate) fn new(check: &BuildRights) -> Result<Self, RightsError> {
         Self::between(check.min, check.max)
     }
 
-    /// The box from `min` to `max`; [`RightsError::BadBox`] for a corner that
-    /// is not finite or a `max` below `min`.
+    /// The box from `min` to `max`; [`RightsError::BadBox`] for one that is
+    /// not an edit box, which `rules::is_edit_box` states.
     pub(crate) fn between(min: [f64; 3], max: [f64; 3]) -> Result<Self, RightsError> {
-        let finite = min.iter().chain(&max).all(|v| v.is_finite());
-        if !finite || (0..3).any(|a| max[a] < min[a]) {
+        if !enshwick_core::__private::rules::is_edit_box(min, max) {
             return Err(RightsError::BadBox);
         }
         Ok(Self { min, max })
@@ -519,19 +518,18 @@ mod tests {
     }
 
     #[test]
-    fn a_box_that_is_not_finite_or_inside_out_is_refused() {
-        assert_eq!(
-            EditBox::new(&check([0.0, f64::NAN, 0.0], [1.0; 3])),
-            Err(RightsError::BadBox)
-        );
-        assert_eq!(
-            EditBox::new(&check([0.0; 3], [1.0, f64::INFINITY, 1.0])),
-            Err(RightsError::BadBox)
-        );
-        assert_eq!(
-            EditBox::new(&check([2.0, 0.0, 0.0], [1.0; 3])),
-            Err(RightsError::BadBox)
-        );
+    fn a_box_past_the_fixed_point_range_or_inside_out_is_refused() {
+        for (min, max) in [
+            ([0.0, f64::NAN, 0.0], [1.0; 3]),
+            ([0.0; 3], [1.0, f64::INFINITY, 1.0]),
+            ([0.0; 3], [1e300, 1.0, 1.0]),
+            ([-2_147_483_648.0, 0.0, 0.0], [1.0; 3]),
+            ([2.0, 0.0, 0.0], [1.0; 3]),
+        ] {
+            assert_eq!(EditBox::new(&check(min, max)), Err(RightsError::BadBox));
+            assert_eq!(EditBox::between(min, max), Err(RightsError::BadBox));
+        }
+        assert!(EditBox::between([-2_147_483_647.0; 3], [2_147_483_647.0; 3]).is_ok());
     }
 
     #[test]

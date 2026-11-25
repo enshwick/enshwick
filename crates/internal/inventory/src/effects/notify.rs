@@ -111,8 +111,8 @@ impl Effects {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] for entity 0 or a position that is not
-    /// finite, past the step's bound or when the step holds no room for
+    /// [`WorldError::Refused`] for entity 0, a position not finite or at
+    /// 2^31 metres or more on an axis, past the step's bound or when the step holds no room for
     /// more events, [`WorldError::WrongThread`] off the game thread and
     /// [`WorldError::Unavailable`] where no server world runs or on a build
     /// without notifiers.
@@ -136,7 +136,7 @@ impl Effects {
         let (source, position) = match notify.at {
             NotifyAt::Entity(entity) if entity.is_none() => return Err(WorldError::Refused),
             NotifyAt::Entity(entity) => (entity, None),
-            NotifyAt::Position(at) if !at.iter().all(|axis| axis.is_finite()) => {
+            NotifyAt::Position(at) if !crate::abi::in_fixed_range(at) => {
                 return Err(WorldError::Refused);
             }
             NotifyAt::Position(at) => (Entity::NONE, Some(at)),

@@ -2634,6 +2634,7 @@ abi::exports::INIT
 abi::exports::QUERY
 abi::exports::READY
 abi::guid
+abi::in_fixed_range
 abi::is_valid_id
 abi::read_headed
 abi::write_headed
@@ -4649,6 +4650,7 @@ ecs::Worlds
 ecs::Worlds::hosting
 ecs::Worlds::is_server
 ecs::Worlds::resolve
+ecs::checked_fixed
 ecs::fixed
 ecs::metres
 ecs::server_role

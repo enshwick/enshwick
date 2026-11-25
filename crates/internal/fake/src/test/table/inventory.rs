@@ -80,6 +80,7 @@ entries! {
         }
         let rarity = u8::try_from(request.rarity).ok();
         if !(1..=u32::from(u16::MAX)).contains(&request.count)
+            || !enshwick_core::abi::in_fixed_range(request.position)
             || rarity
                 .and_then(enshwick_core::affixes::ItemRarity::from_raw)
                 .is_none()
@@ -141,6 +142,9 @@ entries! {
         let Some(request) = crate::test::table::get_headed(request) else {
             return Status::BAD_ARGS;
         };
+        if !enshwick_core::abi::in_fixed_range(request.position) {
+            return Status::BAD_ARGS;
+        }
         with(Status::MISSING, |s| {
             if crate::test::table::world::entity_calls_off(s) {
                 return Status::UNAVAILABLE;
@@ -168,7 +172,9 @@ entries! {
         let Some(request) = crate::test::table::get_headed(request) else {
             return Status::BAD_ARGS;
         };
-        if request.template == enshwick_core::content::Guid::NIL {
+        if request.template == enshwick_core::content::Guid::NIL
+            || !enshwick_core::abi::in_fixed_range(request.position)
+        {
             return Status::BAD_ARGS;
         }
         let entity = with(Err(Status::MISSING), |s| {

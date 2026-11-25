@@ -135,7 +135,8 @@ impl RemoteSound {
     ///
     /// # Errors
     ///
-    /// [`Off`] for a position that is not finite and where no server runs.
+    /// [`Off`] for a position not finite or at 2^31 metres or more on an
+    /// axis, and where no server runs.
     ///
     /// # Examples
     ///

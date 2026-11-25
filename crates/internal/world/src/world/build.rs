@@ -130,8 +130,8 @@ impl World {
     /// # Errors
     ///
     /// The [`BuildRefusal`]; [`BuildRefusal::Unchecked`] off the server's
-    /// game thread, while no world is loaded, for a corner that is not
-    /// finite and on a game build without the checks. On the game thread
+    /// game thread, while no world is loaded, for a corner not finite or at
+    /// 2^31 metres or more on an axis and on a game build without the checks. On the game thread
     /// at a quiet moment only, outside a step or in a game event: refused
     /// inside a step.
     ///
@@ -153,7 +153,7 @@ impl World {
     /// ```
     #[script]
     pub fn can_build(self, player: &Player, a: [f64; 3], b: [f64; 3]) -> Result<(), BuildRefusal> {
-        if !a.iter().chain(&b).all(|v| v.is_finite()) {
+        if !(crate::abi::in_fixed_range(a) && crate::abi::in_fixed_range(b)) {
             return Err(BuildRefusal::Unchecked(WorldError::Refused));
         }
         let mut check = BuildRights {
@@ -176,7 +176,8 @@ impl World {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] for a corner that is not finite;
+    /// [`WorldError::Refused`] for a corner not finite or at 2^31 metres or
+    /// more on an axis;
     /// [`WorldError::WrongThread`] off the server's game thread or inside a
     /// step; [`WorldError::Unavailable`] while no world is loaded or on a game
     /// build without the zone list.
@@ -194,7 +195,7 @@ impl World {
     /// ```
     #[script]
     pub fn persists(self, a: [f64; 3], b: [f64; 3]) -> Result<bool, WorldError> {
-        if !a.iter().chain(&b).all(|v| v.is_finite()) {
+        if !(crate::abi::in_fixed_range(a) && crate::abi::in_fixed_range(b)) {
             return Err(WorldError::Refused);
         }
         let min = [0, 1, 2].map(|i| a[i].min(b[i]));

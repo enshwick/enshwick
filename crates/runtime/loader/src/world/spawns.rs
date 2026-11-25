@@ -165,7 +165,8 @@ pub(crate) enum SpawnError {
     /// No entity world, or no command buffer in it, yet.
     #[error("no entity world runs")]
     NoWorld,
-    /// No template, or a lifetime past what the game keeps.
+    /// No template, a position past the engine's fixed point, or a lifetime
+    /// past what the game keeps.
     #[error("the spawn request is malformed")]
     BadRequest,
     /// The engine refused the spawn.
@@ -211,6 +212,8 @@ pub(crate) fn spawn_with(
     if request.template == enshwick_core::content::Guid::NIL {
         return Err(SpawnError::BadRequest);
     }
+    let position =
+        enshwick_core::ecs::checked_fixed(request.position).ok_or(SpawnError::BadRequest)?;
     // SAFETY: `world::server` checked the caller is on the server's game
     // thread and `world` is non-null; the entity world lies inside the World
     // at the table's `world.entities`, so the subtraction gives the World the
@@ -220,7 +223,7 @@ pub(crate) fn spawn_with(
             world - layout.world_entities,
         ))
     };
-    let position: Vec<u8> = enshwick_core::ecs::fixed(request.position)
+    let position: Vec<u8> = position
         .iter()
         .flat_map(|axis| axis.to_le_bytes())
         .collect();

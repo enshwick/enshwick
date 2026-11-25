@@ -3,10 +3,6 @@
 
 use crate::abi::{Entity, Header, RecipeId, Str};
 
-/// The metres a world position's axis stays below: 2^31, past which the
-/// engine's 32.32 fixed point saturates.
-const MAX_POSITION_METRES: f64 = 2_147_483_648.0;
-
 /// Cached diagnostics of the client's local gameplay-input sampler.
 /// Flags and age are weakly consistent observations, not world or session identity.
 /// Reading this does not request sampling. ABI 12.1.
@@ -486,9 +482,7 @@ impl ClientCommand {
             }
             Self::PRESS => (1..=Self::MAX_PRESS_MS).contains(&self.hold_ms),
             Self::HIGHLIGHT_RECIPE => self.recipe.0 != 0,
-            Self::SET_WAYPOINT | Self::PING => {
-                self.position.iter().all(|m| m.abs() < MAX_POSITION_METRES)
-            }
+            Self::SET_WAYPOINT | Self::PING => crate::abi::in_fixed_range(self.position),
             Self::HOST => {
                 self.session == 0
                     && self.world < Self::MAX_SLOTS
@@ -736,6 +730,7 @@ impl ClientWindowItem {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::abi::MAX_POSITION_METRES;
 
     #[test]
     #[expect(

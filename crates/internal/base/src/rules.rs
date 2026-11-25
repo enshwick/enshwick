@@ -9,6 +9,27 @@ pub const fn is_loader_event(event: Event) -> bool {
     event.0 >= Event::SETTINGS_CHANGED.0 && event.0 <= Event::QUEST_PROGRESSED.0
 }
 
+/// Whether a prop or block can stand at `position`: every axis finite, at
+/// 0 or more and below [`Voxel::END`](crate::abi::Voxel::END) metres, the
+/// world's voxel range, which [`in_fixed_range`](crate::abi::in_fixed_range)
+/// holds.
+#[must_use]
+pub fn in_voxel_range(position: [f64; 3]) -> bool {
+    position
+        .iter()
+        .all(|axis| (0.0..f64::from(crate::abi::Voxel::END)).contains(axis))
+}
+
+/// Whether `min` and `max` bound a box an edit can fill: both corners
+/// [`in_fixed_range`](crate::abi::in_fixed_range) and `max` nowhere below
+/// `min`.
+#[must_use]
+pub fn is_edit_box(min: [f64; 3], max: [f64; 3]) -> bool {
+    crate::abi::in_fixed_range(min)
+        && crate::abi::in_fixed_range(max)
+        && min.iter().zip(&max).all(|(low, high)| low <= high)
+}
+
 /// Whether a hook names both a target and a detour: without either it is a
 /// bad request.
 #[must_use]
@@ -453,6 +474,39 @@ mod tests {
         }
         let long = format!("content:{}", "a".repeat(129));
         assert_eq!(bad_export(&[long.as_str()]), Some(long.as_str()));
+    }
+
+    #[test]
+    fn a_prop_or_block_stands_from_0_to_below_the_voxel_end_on_each_axis() {
+        let end = f64::from(crate::abi::Voxel::END);
+        assert!(in_voxel_range([0.0, end - 0.5, 12.25]));
+        for out in [
+            [-0.5, 0.0, 0.0],
+            [0.0, end, 0.0],
+            [0.0, 0.0, 1e300],
+            [f64::NAN, 0.0, 0.0],
+            [f64::INFINITY, 0.0, 0.0],
+        ] {
+            assert!(!in_voxel_range(out), "{out:?}");
+        }
+        assert!(
+            crate::abi::in_fixed_range([end; 3]),
+            "inside the fixed point"
+        );
+    }
+
+    #[test]
+    fn an_edit_box_has_both_corners_in_range_and_max_nowhere_below_min() {
+        assert!(is_edit_box([0.0; 3], [0.0; 3]));
+        assert!(is_edit_box([-2e9, 0.0, 1.0], [2e9, 0.0, 2.0]));
+        for (min, max) in [
+            ([1.0, 0.0, 0.0], [0.0, 1.0, 1.0]),
+            ([f64::NAN, 0.0, 0.0], [1.0; 3]),
+            ([0.0; 3], [1e300, 1.0, 1.0]),
+            ([-2_147_483_648.0, 0.0, 0.0], [1.0; 3]),
+        ] {
+            assert!(!is_edit_box(min, max), "{min:?} {max:?}");
+        }
     }
 
     #[test]

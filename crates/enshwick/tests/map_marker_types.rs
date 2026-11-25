@@ -96,6 +96,26 @@ mod tests {
     }
 
     #[test]
+    fn a_marker_past_the_fixed_point_is_refused_and_the_last_set_stays() {
+        let (loader, ui) = start(enshwick::test::FakeHost::new());
+        let edge = [2_147_483_647.0, 0.0, -2_147_483_647.0];
+        ui.set_markers(&[Marker::new(edge)]).unwrap();
+        for far in [
+            [f64::NAN, 0.0, 0.0],
+            [0.0, 1e300, 0.0],
+            [0.0, 0.0, -2_147_483_648.0],
+        ] {
+            assert_eq!(
+                ui.set_markers(&[Marker::new([1.0; 3]), Marker::new(far)]),
+                Err(UiError::Refused),
+                "{far:?}"
+            );
+        }
+        let kept: Vec<[f64; 3]> = loader.markers().iter().map(|m| m.position).collect();
+        assert_eq!(kept, [edge]);
+    }
+
+    #[test]
     fn a_marker_takes_a_listed_type_and_an_unlisted_one_is_refused() {
         let (loader, ui) = start(enshwick::test::FakeHost::new().map_marker_types(registry()));
         let altar = MapMarkerTypeId::new(ALTAR);

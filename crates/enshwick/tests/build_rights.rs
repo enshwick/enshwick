@@ -155,12 +155,24 @@ mod tests {
     }
 
     #[test]
-    fn a_corner_that_is_not_finite_is_refused_unchecked() {
+    fn a_corner_past_the_fixed_point_is_refused_unchecked() {
         let _loader = installed();
         let world = WORLD.get().unwrap();
-        assert_eq!(
-            world.can_build(&player(BUILDER), [f64::NAN, 0.0, 0.0], [1.0; 3]),
-            Err(BuildRefusal::Unchecked(WorldError::Refused))
+        for far in [
+            [f64::NAN, 0.0, 0.0],
+            [0.0, 1e300, 0.0],
+            [0.0, 0.0, 2_147_483_648.0],
+        ] {
+            assert_eq!(
+                world.can_build(&player(BUILDER), far, [1.0; 3]),
+                Err(BuildRefusal::Unchecked(WorldError::Refused)),
+                "{far:?}"
+            );
+        }
+        assert_ne!(
+            world.can_build(&player(BUILDER), [0.0, 0.0, 2_147_483_647.0], [1.0; 3]),
+            Err(BuildRefusal::Unchecked(WorldError::Refused)),
+            "the last metre the fixed point holds"
         );
     }
 

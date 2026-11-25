@@ -175,6 +175,22 @@ mod tests {
                 .commit(),
             Err(WorldError::Refused)
         );
+        let end = f64::from(enshwick::abi::Voxel::END);
+        for far in [
+            [f64::NAN, 40.0, 100.0],
+            [100.0, 1e300, 100.0],
+            [100.0, 40.0, end],
+            [-0.5, 40.0, 100.0],
+        ] {
+            assert_eq!(
+                world
+                    .transaction()
+                    .place_block(SHAPE, STONE, WorldTransform::at(far))
+                    .commit(),
+                Err(WorldError::Refused),
+                "{far:?}"
+            );
+        }
         assert!(loader.transactions().is_empty());
     }
 

@@ -180,4 +180,66 @@ mod tests {
         assert_eq!(teleports[0].flags, TeleportRequest::BEST_SPAWN);
         assert_eq!(teleports[0].position, [10.0, 20.0, 30.0]);
     }
+
+    /// Positions past the engine's 32.32 fixed point: NaN, huge and 2^31
+    /// metres, the first value it cannot hold.
+    const PAST_THE_FIXED_POINT: [[f64; 3]; 3] = [
+        [f64::NAN, 0.0, 0.0],
+        [1e300, 0.0, 0.0],
+        [0.0, -2_147_483_648.0, 0.0],
+    ];
+
+    /// The last metres on each axis the fixed point holds.
+    const AT_THE_BOUND: [f64; 3] = [2_147_483_647.0, -2_147_483_647.0, 0.0];
+
+    #[test]
+    fn a_spawn_teleport_order_or_ping_past_the_fixed_point_is_refused_and_reaches_nothing() {
+        let loader = FakeHost::new()
+            .world()
+            .effect_events()
+            .template(Entity(5), enshwick::content::Guid([5; 16]))
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Acting)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let effects = EFFECTS.get().unwrap();
+        let template = enshwick::content::Guid([7; 16]);
+        for far in PAST_THE_FIXED_POINT {
+            assert_eq!(
+                effects.spawn(template, far, Spawn::new()),
+                Err(WorldError::Refused),
+                "spawn {far:?}"
+            );
+            assert_eq!(
+                effects.teleport(Entity(5), far, Teleport::new()),
+                Err(WorldError::Refused),
+                "teleport {far:?}"
+            );
+            assert_eq!(
+                effects.npc_command(42, NpcCommandType::GoToPosition(far)),
+                Err(WorldError::Refused),
+                "order {far:?}"
+            );
+            assert_eq!(
+                effects.ping(Entity(6), far),
+                Err(WorldError::Refused),
+                "ping {far:?}"
+            );
+        }
+        assert!(loader.spawns().is_empty() && loader.teleports().is_empty());
+        assert!(loader.emits().is_empty());
+
+        effects.spawn(template, AT_THE_BOUND, Spawn::new()).unwrap();
+        effects
+            .teleport(Entity(5), AT_THE_BOUND, Teleport::new())
+            .unwrap();
+        effects
+            .npc_command(42, NpcCommandType::GoToPosition(AT_THE_BOUND))
+            .unwrap();
+        effects.ping(Entity(6), AT_THE_BOUND).unwrap();
+        assert_eq!(loader.spawns()[0].1.position, AT_THE_BOUND);
+        assert_eq!(loader.teleports()[0].position, AT_THE_BOUND);
+        assert_eq!(loader.emits().len(), 2);
+    }
 }

@@ -367,6 +367,17 @@ mod tests {
             effects.drop_items(ItemId(0x2a), 65_536, [0.0; 3], ItemDrop::new()),
             Err(WorldError::Refused)
         );
+        for far in [
+            [f64::NAN, 0.0, 0.0],
+            [1e300, 0.0, 0.0],
+            [0.0, 0.0, -2_147_483_648.0],
+        ] {
+            assert_eq!(
+                effects.drop_items(ItemId(0x2a), 5, far, ItemDrop::new()),
+                Err(WorldError::Refused),
+                "a position past the fixed point: {far:?}"
+            );
+        }
         let drops = loader.drops();
         assert_eq!(drops.len(), 1, "{drops:?}");
         let (handed, request) = drops[0];

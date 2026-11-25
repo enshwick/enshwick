@@ -103,6 +103,30 @@ mod tests {
     }
 
     #[test]
+    fn a_near_audience_or_a_place_past_the_fixed_point_is_refused() {
+        let loader = server();
+        for far in [
+            [f64::NAN, 0.0, 0.0],
+            [0.0, 1e300, 0.0],
+            [2_147_483_648.0, 0.0, 0.0],
+        ] {
+            let near = Audience::Near {
+                at: far,
+                radius: Some(5.0),
+            };
+            assert!(
+                sound::play_for(near, Play::new(HORN, Place::Screen)).is_err(),
+                "centre {far:?}"
+            );
+            assert!(
+                sound::play_for(Audience::Everyone, Play::new(HORN, Place::At(far))).is_err(),
+                "place {far:?}"
+            );
+        }
+        assert!(loader.sent_sounds().is_empty());
+    }
+
+    #[test]
     fn a_change_reaches_the_sound_on_its_clients() -> Result<(), Off> {
         let loader = server();
         let horn = sound::play_for(Audience::Everyone, Play::new(HORN, Place::Screen))?;

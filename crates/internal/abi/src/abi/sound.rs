@@ -70,8 +70,9 @@ impl SoundPlay {
     };
 
     /// Whether the loader takes this play: a known place, a volume of 0 to
-    /// 1, a fade of at most [`SoundPlay::MAX_FADE_MS`], a finite position
-    /// for [`SoundPlay::AT`] and an entity for [`SoundPlay::ON`].
+    /// 1, a fade of at most [`SoundPlay::MAX_FADE_MS`], a position
+    /// [`in_fixed_range`](crate::abi::in_fixed_range) for [`SoundPlay::AT`]
+    /// and an entity for [`SoundPlay::ON`].
     ///
     /// # Examples
     ///
@@ -86,7 +87,7 @@ impl SoundPlay {
     pub fn in_bounds(&self) -> bool {
         let placed = match self.place {
             Self::SCREEN | Self::MUSIC => true,
-            Self::AT => self.at.iter().all(|axis| axis.is_finite()),
+            Self::AT => crate::abi::in_fixed_range(self.at),
             Self::ON => self.entity != Entity::NONE,
             _ => false,
         };
@@ -149,7 +150,8 @@ impl SoundSteer {
     };
 
     /// Whether the loader takes this steer: a known kind, a volume of 0 to
-    /// 1 for [`SoundSteer::VOLUME`], a finite position for
+    /// 1 for [`SoundSteer::VOLUME`], a position
+    /// [`in_fixed_range`](crate::abi::in_fixed_range) for
     /// [`SoundSteer::POSITION`] and a fade of at most
     /// [`SoundPlay::MAX_FADE_MS`].
     ///
@@ -166,7 +168,7 @@ impl SoundSteer {
         let kind = match self.kind {
             Self::STOP | Self::STOP_ALL => true,
             Self::VOLUME => (0.0..=1.0).contains(&self.volume),
-            Self::POSITION => self.at.iter().all(|axis| axis.is_finite()),
+            Self::POSITION => crate::abi::in_fixed_range(self.at),
             _ => false,
         };
         kind && self.fade_ms <= SoundPlay::MAX_FADE_MS
@@ -226,7 +228,8 @@ impl SoundAudience {
     };
 
     /// Whether the loader takes this audience: a known kind, a player for
-    /// [`SoundAudience::PLAYER`], a finite centre and a radius of 0 to
+    /// [`SoundAudience::PLAYER`], a centre
+    /// [`in_fixed_range`](crate::abi::in_fixed_range) and a radius of 0 to
     /// [`SoundAudience::MAX_RADIUS`] for [`SoundAudience::NEAR`].
     ///
     /// # Examples
@@ -244,7 +247,7 @@ impl SoundAudience {
             Self::PLAYER => self.player.0 != 0,
             Self::EVERYONE => true,
             Self::NEAR => {
-                self.at.iter().all(|axis| axis.is_finite())
+                crate::abi::in_fixed_range(self.at)
                     && (0.0..=Self::MAX_RADIUS).contains(&self.radius)
             }
             _ => false,
