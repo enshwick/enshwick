@@ -34,6 +34,7 @@ use crate::affected::{self, Lane, Package, Scope, WIDE_PACKAGES};
 use crate::commands::{fuzz, header, public_paths, wine};
 use crate::{FACADE, packages, say, workspace_root};
 use failures::Failures;
+pub(crate) use failures::{Ran, run_steps};
 use part::{
     Part, due_parts, facade_code_reached, stable_api_due, stable_api_out_of_scope,
     stable_examples_left_to_ci, trybuild_due, windows_features_due,
@@ -138,17 +139,22 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
     let listing = args.list.is_some();
     let mut failures = Failures::new(Lane::current());
     if parts.contains(&Part::Fuzz) && !listing {
-        let going = failures.note(fuzz_part(changed.as_deref(), args.all), "the fuzz part");
-        if !going || parts.len() == 1 {
+        failures.extend(fuzz_part(
+            changed.as_deref(),
+            args.all,
+            failures.keep_going(),
+        ));
+        if failures.stopped() || parts.len() == 1 {
             return Ok(failures.report());
         }
     }
-    let packages = packages()?;
+    let packages = packages().map_err(|error| failures.end_with(error))?;
     let root = workspace_root();
     if parts.contains(&Part::Host)
         && !listing
         && !failures.note(
-            tree_rules_hold(&root, &packages, merge_base.as_deref())?,
+            tree_rules_hold(&root, &packages, merge_base.as_deref())
+                .map_err(|error| failures.end_with(error))?,
             "the tree's rules",
         )
     {
@@ -207,7 +213,10 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
         if windows_tests.is_empty() {
             say("no package with Windows tests changed; no tests under Wine");
         } else {
-            failures.note(wine::run(&windows_tests, args.windows), "the Windows tests");
+            failures.note(
+                wine::run(&windows_tests, args.windows, failures.keep_going()),
+                "the Windows tests",
+            );
         }
     }
     Ok(failures.report())
@@ -390,12 +399,12 @@ fn semver_step(packages: &[String]) -> Option<Step> {
 
 /// The fuzz part: the targets the `changed` files reach, or every target in
 /// the full suite or without a merge base; whether none crashed.
-fn fuzz_part(changed: Option<&[String]>, all: bool) -> bool {
+fn fuzz_part(changed: Option<&[String]>, all: bool, keep_going: bool) -> Ran {
     let targets = match changed {
         Some(files) if !all => fuzz::reached(files),
         _ => fuzz::all(),
     };
-    fuzz::run(&targets)
+    fuzz::run(&targets, keep_going)
 }
 
 /// Files changed between `merge_base` and the working tree, untracked ones
@@ -598,10 +607,10 @@ fn changed_rustdoc(scope: &Scope, workspace: &[String]) -> Vec<Step> {
     let Scope::Some { code, .. } = scope else {
         return Vec::new();
     };
-    let excluded = |name: &String| {
+    let excluded = |name: &str| {
         workspace
             .windows(2)
-            .any(|pair| pair[0] == EXCLUDE && &pair[1] == name)
+            .any(|pair| pair[0] == EXCLUDE && pair[1] == name)
     };
     let mut step = Step::new(&["doc", "--no-deps"]).env("RUSTDOCFLAGS", "-D warnings");
     let mut any = false;
@@ -609,7 +618,9 @@ fn changed_rustdoc(scope: &Scope, workspace: &[String]) -> Vec<Step> {
         step = step.then(&["-p", name.as_str()]);
         any = true;
     }
-    let facade = touches(scope, FACADE);
+    // The link check reads the pages this step writes, so it needs the
+    // facade documented here.
+    let facade = touches(scope, FACADE) && !excluded(FACADE);
     if facade {
         step = step.then(&["--features", FACADE_FEATURES]);
     }
@@ -920,11 +931,10 @@ fn run_sides(
 ) {
     let keep_going = failures.keep_going();
     let ready = |steps: Vec<Step>| -> Vec<Step> {
-        if keep_going {
-            steps.into_iter().map(Step::keep_going).collect()
-        } else {
-            steps
-        }
+        steps
+            .into_iter()
+            .map(|step| step.keep_going_when(keep_going))
+            .collect()
     };
     let (host_run, windows) = (ready(host), ready(windows));
     for step in &windows {
@@ -932,22 +942,19 @@ fn run_sides(
     }
     thread::scope(|scope| {
         // In CI the first failing step of either side ends that side's checks.
-        let windows = (!windows.is_empty()).then(|| {
-            scope.spawn(|| failures::run_steps(&windows, keep_going, |step| step.run(true)))
-        });
-        failures.extend(failures::run_steps(&host_run, keep_going, |step| {
-            step.run(false)
-        }));
+        let windows = (!windows.is_empty())
+            .then(|| scope.spawn(|| run_steps(&windows, keep_going, |step| step.run(true))));
+        failures.extend(run_steps(&host_run, keep_going, |step| step.run(false)));
         if !separate.is_empty() && !failures.stopped() {
             failures.note(
                 in_process::run(separate, workspace, keep_going),
                 "the dependents' tests in one process per binary",
             );
         }
-        failures.extend(windows.map_or_else(Vec::new, |handle| {
+        failures.extend(windows.map_or_else(Ran::default, |handle| {
             handle
                 .join()
-                .unwrap_or_else(|_| vec!["the Windows lint (its thread panicked)".to_owned()])
+                .unwrap_or_else(|_| Ran::failed("the Windows lint (its thread panicked)"))
         }));
     });
 }

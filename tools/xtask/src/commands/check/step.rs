@@ -40,7 +40,7 @@ impl Step {
     /// The step with cargo's flag that reports every failure instead of the
     /// first: `--no-fail-fast` for the tests, `--keep-going` for the builds,
     /// before the arguments cargo passes on; other steps as they are.
-    pub(super) fn keep_going(mut self) -> Self {
+    pub(crate) fn keep_going(mut self) -> Self {
         let cargo_words = if self.runs("xwin") {
             &self.args[1..]
         } else if self.program.is_none() {
@@ -60,6 +60,11 @@ impl Step {
             .unwrap_or(self.args.len());
         self.args.insert(at, flag.to_owned());
         self
+    }
+
+    /// The step with [`Self::keep_going`] when `keep_going`, else as it is.
+    pub(crate) fn keep_going_when(self, keep_going: bool) -> Self {
+        if keep_going { self.keep_going() } else { self }
     }
 
     /// A step that runs `program` instead of cargo.
@@ -147,7 +152,7 @@ impl Step {
         Some(doc.join("doc").join("search.index"))
     }
 
-    pub(super) fn line(&self) -> String {
+    pub(crate) fn line(&self) -> String {
         format!(
             "{} {}",
             self.program.as_deref().unwrap_or("cargo"),

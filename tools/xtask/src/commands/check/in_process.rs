@@ -189,15 +189,11 @@ pub(super) fn run(names: &BTreeSet<String>, workspace: &[String], keep_going: bo
         "running {} again under nextest, one process per test",
         retry_filter(&again)
     ));
-    let retry = Step::new(&["nextest", "run", "--no-tests=fail"])
+    Step::new(&["nextest", "run", "--no-tests=fail"])
         .then_owned(workspace)
-        .then(&["-E", &retry_filter(&again)]);
-    if keep_going {
-        retry.keep_going()
-    } else {
-        retry
-    }
-    .run(false)
+        .then(&["-E", &retry_filter(&again)])
+        .keep_going_when(keep_going)
+        .run(false)
 }
 
 /// The run's test threads: `RUST_TEST_THREADS`, the run's share of the

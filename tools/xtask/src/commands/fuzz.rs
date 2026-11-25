@@ -3,7 +3,7 @@
 //! seconds, built by cargo-fuzz with the nightly compiler
 //! [`TOOLCHAIN_VAR`] names. Longer runs stay local, as `fuzz/README.md` says.
 
-use crate::commands::check::Step;
+use crate::commands::check::{Ran, Step, run_steps};
 
 /// Seconds of fuzzing shared by the targets a run fuzzes, so the part fits
 /// the pull request lane however many a change reaches.
@@ -148,12 +148,12 @@ fn host() -> Option<String> {
         .map(str::to_owned)
 }
 
-/// Runs each of `targets` for its share of the budget over its seed corpus;
-/// whether none found a crash.
-pub(crate) fn run(targets: &[&str]) -> bool {
+/// Runs each of `targets` for its share of the budget over its seed corpus,
+/// every one when `keep_going`, else up to the first that found a crash.
+pub(crate) fn run(targets: &[&str], keep_going: bool) -> Ran {
     if targets.is_empty() {
         crate::say("no fuzz target reached; nothing to fuzz");
-        return true;
+        return Ran::default();
     }
     // cargo-fuzz builds for the target it was itself built for, which for
     // its release binary is musl, without a standard library to sanitize.
@@ -162,40 +162,52 @@ pub(crate) fn run(targets: &[&str]) -> bool {
             "rustc {toolchain} names no host; is that toolchain installed?",
             toolchain = toolchain()
         ));
-        return false;
+        return Ran::failed("the fuzz part: no host for its toolchain");
     };
     let seconds = format!("-max_total_time={}", share(targets.len()));
     let toolchain = toolchain();
-    targets.iter().all(|target| {
-        let found = format!("target/fuzz/corpus/{target}");
+    let mut steps = Vec::new();
+    for target in targets {
+        let found = found(target);
         if let Err(error) = std::fs::create_dir_all(&found) {
             crate::say(&format!("creating {found}: {error}"));
-            return false;
+            return Ran::failed(format!("the fuzz part: creating {found}"));
         }
-        Step::tool(
-            "cargo",
-            &[
-                &toolchain,
-                "fuzz",
-                "run",
-                // The workspace crates build anew in every CI run, since a
-                // checkout gives their files new times; unoptimized they
-                // build in about a quarter of the time, which a short run
-                // needs more than speed per input.
-                "--dev",
-                "--target",
-                &host,
-                "--target-dir",
-                "target/fuzz",
-                target,
-                &found,
-                &format!("fuzz/corpus/{target}"),
-                "--",
-                &seconds,
-            ],
-        )
-        .run(false)
-    })
+        steps.push(step(&toolchain, &host, target, &seconds));
+    }
+    run_steps(&steps, keep_going, |step| step.run(false))
+}
+
+/// The folder a run of `target` adds the inputs it finds to.
+fn found(target: &str) -> String {
+    format!("target/fuzz/corpus/{target}")
+}
+
+/// The cargo-fuzz run of `target` built with `toolchain` for `host`, for
+/// `seconds` (a `-max_total_time=` argument).
+fn step(toolchain: &str, host: &str, target: &str, seconds: &str) -> Step {
+    Step::tool(
+        "cargo",
+        &[
+            toolchain,
+            "fuzz",
+            "run",
+            // The workspace crates build anew in every CI run, since a
+            // checkout gives their files new times; unoptimized they build
+            // in about a quarter of the time, which a short run needs more
+            // than speed per input.
+            "--dev",
+            "--target",
+            host,
+            "--target-dir",
+            "target/fuzz",
+            target,
+            &found(target),
+            &format!("fuzz/corpus/{target}"),
+            "--",
+            seconds,
+        ],
+    )
 }
 
 #[cfg(test)]
@@ -204,6 +216,26 @@ mod tests {
 
     fn files(paths: &[&str]) -> Vec<String> {
         paths.iter().map(|path| (*path).to_owned()).collect()
+    }
+
+    #[test]
+    fn a_local_fuzz_part_runs_every_target_and_names_each_that_found_a_crash() {
+        let steps: Vec<Step> = ["a", "b", "c"]
+            .map(|target| {
+                step(
+                    "+nightly",
+                    "x86_64-unknown-linux-gnu",
+                    target,
+                    "-max_total_time=2",
+                )
+            })
+            .into();
+        let passes = |step: &Step| !step.line().contains(" c ") && !step.line().contains(" a ");
+        let ran = run_steps(&steps, true, passes);
+        assert_eq!(ran.failed.len(), 2);
+        assert!(ran.failed[0].contains("fuzz run --dev"));
+        assert!(ran.failed[1].contains(" target/fuzz/corpus/c "));
+        assert_eq!(run_steps(&steps, false, passes).failed.len(), 1);
     }
 
     #[test]
