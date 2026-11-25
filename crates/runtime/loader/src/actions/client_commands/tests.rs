@@ -884,7 +884,7 @@ fn a_server_queues_nothing() {
 
 #[test]
 fn a_panic_in_a_join_or_leave_turns_off_only_the_commands() {
-    play_frame(|| panic!("a test"), || false, |_| false);
+    play_frame(|| panic!("a test"), false, || false, |_| false);
     assert!(FUSE.is_off(), "the commands, not the interface frame");
 }
 

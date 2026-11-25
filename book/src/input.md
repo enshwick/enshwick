@@ -648,7 +648,9 @@ limit cancels a join:
 | `Left` | the client left play, back to the main menu |
 
 A join that ends back at the main menu is `CommandState::Failed(failure)`.
-The failure is what the client can tell:
+A join whose play the game cannot create shows the game's own error at the
+main menu. The join then fails in phase `Menu` within a frame or two. The
+failure is what the client can tell:
 
 | Failure | Means |
 | --- | --- |
@@ -711,7 +713,9 @@ or a leave runs, or while the client is in a world.
 
 `CommandStatus::phase` follows play through the phases of a
 [join](#joining-a-server-and-leaving-it). Once it reaches `InWorld`, the
-host is `Observed`. A host that ends back at the main menu is `Failed(Unknown)`. A
+host is `Observed`. A host that ends back at the main menu is `Failed(Unknown)`.
+The game may fail to create the play and show its own error at the main menu.
+The host is then `Failed(Unknown)` in phase `Menu` within a frame or two. A
 host that does not start play within 20 seconds is `Failed(TimedOut)`.
 
 These posts are the main menu's own commands, read on client 26430625.
