@@ -50,6 +50,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::POST_CHARACTER_SLOT.id(),
     pinned::ui::POST_WORLD_SLOT.id(),
     pinned::ui::POST_SESSION_KIND.id(),
+    pinned::ui::CONTEXT_STATE.id(),
     pinned::ui::STATE_OWNER.id(),
     pinned::ui::OWNER_MENU.id(),
     pinned::ui::MENU_SAVE.id(),
