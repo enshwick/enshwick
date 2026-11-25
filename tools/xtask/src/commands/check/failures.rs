@@ -44,10 +44,11 @@ impl Failures {
         self.failed.extend(failed);
     }
 
-    /// Lists every failure when there is more than one; whether none failed.
+    /// Lists every failure, so one far up the output is not lost; whether
+    /// none failed.
     pub(crate) fn report(&self) -> bool {
-        if self.failed.len() > 1 {
-            say(&format!("{} steps failed:", self.failed.len()));
+        if !self.failed.is_empty() {
+            say(&format!("failed steps ({}):", self.failed.len()));
             for what in &self.failed {
                 say(&format!("  {what}"));
             }

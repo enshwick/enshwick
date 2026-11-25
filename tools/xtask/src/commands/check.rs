@@ -136,15 +136,15 @@ pub(crate) fn run(args: &Args) -> Result<bool, String> {
     let merge_base = merge_base(&args.base);
     let changed = merge_base.as_deref().and_then(changed_files);
     let listing = args.list.is_some();
+    let mut failures = Failures::new(Lane::current());
     if parts.contains(&Part::Fuzz) && !listing {
-        let fuzzed = fuzz_part(changed.as_deref(), args.all);
-        if !fuzzed || parts.len() == 1 {
-            return Ok(fuzzed);
+        let going = failures.note(fuzz_part(changed.as_deref(), args.all), "the fuzz part");
+        if !going || parts.len() == 1 {
+            return Ok(failures.report());
         }
     }
     let packages = packages()?;
     let root = workspace_root();
-    let mut failures = Failures::new(Lane::current());
     if parts.contains(&Part::Host)
         && !listing
         && !failures.note(
