@@ -74,6 +74,7 @@ pub(super) fn arm(loader: &Loader, frame: Option<FrameSlot>) {
             );
         }
     }
+    crate::actions::interaction_prompts::follow_site(loader);
     crate::inventory::damage::settle();
     crate::log!(INFO, "{armed} hook targets armed");
     if crate::engine::diag::timing() {

@@ -21,6 +21,8 @@
 "controls.clear" = "Відв'язати"
 "controls.clash" = "Та сама клавіша запускає {controls}."
 "controls.game-clash" = "Гра теж використовує цю клавішу."
+"controls.game-clash.named" = "Гра теж використовує цю клавішу для дій: {actions}."
+"controls.game-clash.named-more" = "Гра теж використовує цю клавішу для дій: {actions} та інших."
 "controls.game-keys" = "Клавіша, яку гра теж використовує, робить обидва."
 "controls.off" = "Клавіші модів вимкнені на цій збірці гри."
 "controls.saved" = "Збережено."

@@ -472,14 +472,20 @@ impl State {
         Ok(())
     }
 
-    fn shares(&self, control: u32) -> bool {
-        self.running().is_ok_and(|layout| {
-            self.keys
-                .iter()
-                .take(layout.actions.count())
-                .flatten()
+    fn sharing(&self, control: u32) -> Vec<ActionNumber> {
+        let Ok(layout) = self.running() else {
+            return Vec::new();
+        };
+        let fires = |keys: &[AtomicU32; 2]| {
+            keys.iter()
                 .any(|game| keys::fires_with(control, game.load(Ordering::Relaxed)))
-        })
+        };
+        (0..=u8::MAX)
+            .zip(&self.keys)
+            .take(layout.actions.count())
+            .filter(|(_, keys)| fires(keys))
+            .map(|(number, _)| ActionNumber::new(number))
+            .collect()
     }
 }
 
@@ -508,11 +514,11 @@ pub(crate) fn rebind(owner: ModIndex, action: &str, key: u32) -> Result<(), Bind
     STATE.rebind(owner, action, key)
 }
 
-/// Whether one of the game's actions, as the interface last read them, has
-/// a key that fires the mod control on `control` too; for the clashes the
-/// mods' key bindings show.
-pub(crate) fn shares(control: u32) -> bool {
-    STATE.shares(control)
+/// The game's actions, as the interface last read them, with a key that
+/// fires the mod control on `control` too, in their numbers' order; for the
+/// clashes the mods' key bindings name.
+pub(crate) fn sharing(control: u32) -> Vec<ActionNumber> {
+    STATE.sharing(control)
 }
 
 #[cfg(test)]
@@ -670,14 +676,14 @@ mod tests {
     }
 
     #[test]
-    fn a_mod_control_shares_a_game_key_it_fires_on() {
+    fn a_mod_control_names_each_game_action_whose_key_it_fires_on() {
         let (state, game, mut f) = (linked(), Game::new(&[]), Frame::default());
-        assert!(!state.shares(key("E")), "nothing read yet");
+        assert_eq!(state.sharing(key("E")), [], "nothing read yet");
         look_at(&state, &mut f, &game, |_| true);
-        assert!(state.shares(key("E")));
-        assert!(state.shares(key("Space")));
-        assert!(!state.shares(key("Shift+E")));
-        assert!(!state.shares(key("F")));
-        assert!(!state.shares(0));
+        assert_eq!(state.sharing(key("E")), [ActionNumber::new(1)]);
+        assert_eq!(state.sharing(key("Space")), [ActionNumber::new(0)]);
+        assert_eq!(state.sharing(key("Shift+E")), []);
+        assert_eq!(state.sharing(key("F")), []);
+        assert_eq!(state.sharing(0), []);
     }
 }

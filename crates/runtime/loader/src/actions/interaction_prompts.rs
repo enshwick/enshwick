@@ -57,6 +57,15 @@ static PROMPTS_FUSE: Fuse = Fuse::new("interaction prompts");
 static REPLACE_FUSE: Fuse = Fuse::new("replaced interaction actions");
 /// The mods' texts in the prompt on this client.
 static TEXT_FUSE: Fuse = Fuse::new("interaction prompt texts");
+/// The client snapshot's read of the shown prompt's target and verb.
+static TARGET_FUSE: Fuse = Fuse::new("the interaction prompt's target");
+/// The prompt's site on this client, the one link both [`TARGET_FUSE`] and
+/// [`TEXT_FUSE`] run in: once it is off, so is each of them that linked
+/// ([`follow_site`]), while a panic in either turns off only its own.
+static SITE_FUSE: Fuse = Fuse::new("the interaction prompt's site");
+/// Why the site's features are off once the site is: its own line names
+/// the cause.
+const SITE_OFF: &str = "is not hooked";
 
 /// What the server's writes read, from the build.
 #[derive(Debug, Clone, Copy)]
@@ -85,11 +94,15 @@ struct Links {
     /// sequence id, `None` when the game's data lacks it.
     server: OnceLock<(ServerLayout, &'static [Prompt], Option<u32>)>,
     client: OnceLock<(ClientLayout, &'static [Prompt])>,
+    /// Where the play data keeps the prompt's verb, for the client
+    /// snapshot's read at the site on this client.
+    site: OnceLock<usize>,
 }
 
 static LINKS: Links = Links {
     server: OnceLock::new(),
     client: OnceLock::new(),
+    site: OnceLock::new(),
 };
 
 /// One mod's prompt on the objects placed from `item`.
@@ -203,7 +216,7 @@ pub(crate) fn link(loader: &'static Loader) {
     if prompts.iter().any(|p| p.verb != 0 || p.replace) {
         link_server(loader, prompts);
     }
-    if loader.side == Side::CLIENT && prompts.iter().any(|p| p.text != 0) {
+    if loader.side == Side::CLIENT {
         link_client(loader, prompts);
     }
 }
@@ -254,21 +267,53 @@ fn link_server(loader: &'static Loader, prompts: &'static [Prompt]) {
     }
 }
 
-/// Links the prompt's site on this client.
+/// Links the prompt's site on this client, for the client snapshot's read
+/// of its target, which a mod may ask for at any time, and for the mods'
+/// texts where a prompt has one.
 fn link_client(loader: &'static Loader, prompts: &'static [Prompt]) {
-    match client_layout(loader) {
-        Ok(layout) => {
-            let _first = LINKS.client.set((layout, prompts));
-            loader.link_mid(
-                &TEXT_FUSE,
-                Target::Pinned(pinned::ui::PROMPT_SITE),
-                prompt_site,
-                HookFlags::NONE,
-            );
+    if prompts.iter().any(|p| p.text != 0) {
+        match client_layout(loader) {
+            Ok(layout) => {
+                let _first = LINKS.client.set((layout, prompts));
+            }
+            Err(id) => {
+                loader.fuse_off(&TEXT_FUSE, id, ABSENT);
+            }
         }
-        Err(id) => {
-            loader.fuse_off(&TEXT_FUSE, id, ABSENT);
+    }
+    match loader.offset(pinned::ui::PROMPT_VERB) {
+        Some(verb_at) => {
+            let _first = LINKS.site.set(verb_at);
         }
+        None => {
+            loader.fuse_off(&TARGET_FUSE, pinned::ui::PROMPT_VERB.id(), ABSENT);
+        }
+    }
+    if LINKS.site.get().is_none() && LINKS.client.get().is_none() {
+        return;
+    }
+    let _linked = loader.link_mid(
+        &SITE_FUSE,
+        Target::Pinned(pinned::ui::PROMPT_SITE),
+        prompt_site,
+        HookFlags::NONE,
+    );
+    follow_site(loader);
+}
+
+/// Turns off the target read and the texts that linked at the prompt's
+/// site once the site is off, so the log and the Mods screen name each part
+/// it took with it; after the link and again after arming, which may fail.
+pub(crate) fn follow_site(loader: &Loader) {
+    if !SITE_FUSE.is_off() {
+        return;
+    }
+    let site = pinned::ui::PROMPT_SITE.id();
+    if LINKS.site.get().is_some() {
+        let _off = loader.fuse_off(&TARGET_FUSE, site, SITE_OFF);
+    }
+    if LINKS.client.get().is_some() {
+        let _off = loader.fuse_off(&TEXT_FUSE, site, SITE_OFF);
     }
 }
 
@@ -464,9 +509,14 @@ unsafe fn write_prompts(ctx: *mut u64) {
 crate::engine::mid::mid_handler! {
     /// The table's `ui.prompt_site` in `player_ui`, after the prompt's
     /// title and verb are stored and before a lock may put its reason in the
-    /// verb's place: shows a mod's text there for its objects.
+    /// verb's place: keeps its target and verb for the client snapshot once
+    /// a mod asked for it, then shows a mod's text there for its objects.
     ///
-    /// It runs once a frame while any prompt shows and never otherwise.
+    /// It runs once a frame while any prompt shows and never otherwise, on
+    /// every client, as a mod may ask for the snapshot at any time; until
+    /// one asks and while no prompt has a text, the handler is its gate's two
+    /// atomic loads, but the stub's save and restore of the vector state and
+    /// its dispatch run before it on every hit, and no benchmark times them.
     /// Timed live on client 26430625 (2026-11-17, release build) at 106 to
     /// 109 frames a second, around [`show_text`] only, without the stub's
     /// save and restore of the vector state and its dispatch: about 440 ns
@@ -474,12 +524,107 @@ crate::engine::mid::mid_handler! {
     /// it writes the text, at most 6 to 20 µs, so about 40 µs a second,
     /// under 0.01% of a 60 Hz step.
     fn prompt_site;
-    fuse TEXT_FUSE, "the prompt's text";
+    gate wanted();
+    fuse SITE_FUSE, "the prompt's site";
     |registers| {
-        // SAFETY: the stub calls the handler at `ui.prompt_site` with that
-        // site's registers, on `player_ui`'s thread.
-        unsafe { show_text(registers) };
+        let _noted = TARGET_FUSE.run("the prompt's target", || {
+            // SAFETY: the stub calls the handler at `ui.prompt_site` with
+            // that site's registers, on `player_ui`'s thread.
+            unsafe { note_target(registers) };
+        });
+        if LINKS.client.get().is_some() {
+            let _shown = TEXT_FUSE.run("the prompt's text", || {
+                // SAFETY: the stub calls the handler at `ui.prompt_site`
+                // with that site's registers, on `player_ui`'s thread.
+                unsafe { show_text(registers) };
+            });
+        }
     }
+}
+
+/// For the benchmark of what every client pays at the prompt's site once a
+/// frame while a prompt shows, with no mod asking for the client snapshot
+/// and no prompt text: the handler's gate, as the stub calls it, past which
+/// it reads nothing. Whether the snapshot stayed unasked.
+#[cfg(feature = "test")]
+#[doc(hidden)]
+pub fn bench_prompt_site_idle() -> impl FnMut() -> bool {
+    let mut registers = Registers::default();
+    move || {
+        // SAFETY: the handler takes the stub's saved registers and its user
+        // pointer, which it ignores; these are a live set on this thread,
+        // and with nothing asked its gate returns before it reads them.
+        unsafe { prompt_site(&raw mut registers, core::ptr::null_mut()) };
+        !crate::actions::client_snapshot::asked()
+    }
+}
+
+/// For the benchmark of what the prompt's site pays once a mod asked for the
+/// client snapshot: the gate, the play data's verb read and the store, on
+/// a play data of its own with the verb at its start. Asking stays on for
+/// the process, so a run takes it after [`bench_prompt_site_idle`]. Whether
+/// the snapshot kept the target.
+#[cfg(feature = "test")]
+#[doc(hidden)]
+pub fn bench_prompt_site_noted() -> impl FnMut() -> bool {
+    let play = Box::new([0x4e82_e309_u32; 4]);
+    let _first = LINKS.site.set(0);
+    crate::actions::client_snapshot::ask();
+    let mut registers = Registers {
+        rdi: 1052,
+        rsi: core::ptr::from_ref(&*play).expose_provenance() as u64,
+        ..Registers::default()
+    };
+    move || {
+        // SAFETY: the handler takes the stub's saved registers and its user
+        // pointer, which it ignores; `rsi` points at `play`, which the closure
+        // owns, with the verb's u32 at the site's offset 0, and no prompt
+        // text is linked, so it reads nothing else.
+        unsafe { prompt_site(&raw mut registers, core::ptr::null_mut()) };
+        play[0] != 0 && crate::actions::client_snapshot::asked()
+    }
+}
+
+/// Whether the prompt's site keeps its target for the client snapshot on
+/// this client: the read linked, and neither it nor the site is off.
+pub(crate) fn site_reads() -> bool {
+    LINKS.site.get().is_some() && !SITE_FUSE.is_off() && !TARGET_FUSE.is_off()
+}
+
+/// Whether the prompt's site has work: a mod asked for the client snapshot,
+/// or a prompt has a text.
+fn wanted() -> bool {
+    crate::actions::client_snapshot::asked() || LINKS.client.get().is_some()
+}
+
+/// Keeps the prompt's target and the verb its object offers, before a mod's
+/// text takes the verb's place, for the client snapshot once a mod asked
+/// for it.
+///
+/// # Safety
+///
+/// - `registers` are those at `ui.prompt_site` in `player_ui`, on its
+///   thread: `rsi` the interface's play data, `edi` the prompt's target in
+///   the client's world (client 26430625, seen live on 2026-11-25).
+unsafe fn note_target(registers: &Registers) {
+    let Some(&verb_at) = LINKS.site.get() else {
+        return;
+    };
+    if !crate::actions::client_snapshot::asked() {
+        return;
+    }
+    #[expect(clippy::cast_possible_truncation, reason = "the target is `edi`")]
+    let target = registers.rdi as u32;
+    let play =
+        core::ptr::with_exposed_provenance::<u8>(usize::try_from(registers.rsi).unwrap_or(0));
+    if play.is_null() {
+        return;
+    }
+    // SAFETY: `play` is the interface's non-null play data at the site (the
+    // caller's contract), which `player_ui` writes on this thread; its u32
+    // verb sits at the table's `ui.prompt_verb`.
+    let verb: u32 = unsafe { read_at(play, verb_at) };
+    crate::actions::client_snapshot::note_prompt(target, verb);
 }
 
 /// Puts the mod's text tag in the verb's place when the prompt's target
@@ -666,6 +811,26 @@ mod tests {
             register(&loader, mine, &spec(0xC0DE_0564, 7, 9, 0)),
             Err(PromptError::Register(JoinFeatureError::Unavailable))
         );
+    }
+
+    #[test]
+    fn a_prompt_site_that_fails_to_arm_takes_the_target_read_off_with_it() {
+        let loader = crate::start::tests::bare_loader();
+        let _first = LINKS.site.set(0);
+        let site = pinned::ui::PROMPT_SITE.id();
+        assert!(loader.link_mid(
+            &SITE_FUSE,
+            Target::Found(site, Some(0x7000)),
+            prompt_site,
+            HookFlags::NONE
+        ));
+        follow_site(&loader);
+        assert!(site_reads(), "linked, and arming has not failed");
+        loader.unarmed(0x7000, site, "could not be armed: a test");
+        assert!(!TARGET_FUSE.is_off(), "only the site's own fuse so far");
+        follow_site(&loader);
+        assert!(TARGET_FUSE.is_off());
+        assert!(!site_reads());
     }
 
     #[test]

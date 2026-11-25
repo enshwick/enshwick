@@ -373,6 +373,35 @@ mod tests {
     }
 
     #[test]
+    fn a_script_reads_the_prompt_s_target_and_verb_and_the_selected_character() {
+        use enshwick::abi::ClientSnapshot;
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r"
+            enshwick.ui.on_frame(function(frame)
+                local s = enshwick.input.client_snapshot()
+                enshwick.log.info(`prompt {s.prompt_target} {s.prompt_verb} character {s.selected_character}`)
+            end)
+            ",
+        );
+        let _drawn = loader.draw_frame();
+        loader.set_client_snapshot(ClientSnapshot {
+            state: ClientSnapshot::FRESH,
+            available: ClientSnapshot::PROMPT | ClientSnapshot::CHARACTER,
+            prompt_target: enshwick::Entity(1052),
+            prompt_verb: 7,
+            character: 1,
+            ..ClientSnapshot::EMPTY
+        });
+        let _drawn = loader.draw_frame();
+        assert!(
+            logged(&loader, "prompt 1052 7 character 1"),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
     fn a_script_reads_a_fresh_snapshot_in_its_first_drawn_frame() {
         use enshwick::abi::{ClientSnapshot, Str};
         let loader = run(

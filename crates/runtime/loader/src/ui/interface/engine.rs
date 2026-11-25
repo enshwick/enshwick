@@ -633,6 +633,8 @@ pub(crate) struct Engine {
     text_fields: Option<text_field::TextFields>,
     /// The game's key hint; `None` refuses mods' input hints.
     pub(super) hint: Option<hint::InputHints>,
+    /// The game's action labels; `None` leaves a shared key's action unnamed.
+    labels: Option<labels::ActionLabels>,
     /// The keys the game's modal windows let through; `None` leaves the
     /// map's to the carried windows' button.
     pub(super) map_keys: Option<pass::MapKeys>,
@@ -683,6 +685,15 @@ pub(crate) struct Engine {
     /// The look of the main menu's version line; `None` keeps the loader's
     /// line off.
     legal: Option<Legal>,
+}
+
+/// The address of site `name` when its code holds on this build, else 0.
+fn held_site(loader: &Loader, name: Symbol) -> u64 {
+    if loader.code_holds(name) {
+        loader.address(name).unwrap_or(0)
+    } else {
+        0
+    }
 }
 
 /// The address of game function `name`, once its first eight bytes read as
@@ -779,6 +790,7 @@ impl Engine {
             scroll,
             text_fields,
             hint,
+            labels,
             map_keys,
             rows,
         } = Optional::resolve(loader, &mut parts_off);
@@ -814,6 +826,7 @@ impl Engine {
             scroll,
             text_fields,
             hint,
+            labels,
             map_keys,
             rows,
             window_begin: function!(pinned::ui::WINDOW_BEGIN, WindowBeginFn),
@@ -865,11 +878,7 @@ impl Engine {
             action_query: part_fn!(loader, menus, pinned::ui::ACTION_QUERY, ActionQueryFn),
             main_menu_site: site(Part::MAIN_MENU, pinned::ui::MAIN_MENU_SITE),
             pause_menu_site: site(Part::PAUSE_MENU, pinned::ui::PAUSE_MENU_SITE),
-            legal_line_site: if loader.code_holds(pinned::ui::LEGAL_LINE_SITE) {
-                loader.address(pinned::ui::LEGAL_LINE_SITE).unwrap_or(0)
-            } else {
-                0
-            },
+            legal_line_site: held_site(loader, pinned::ui::LEGAL_LINE_SITE),
             legal: Legal::find(loader),
         })
     }
@@ -957,6 +966,7 @@ fn stretch(x: f32, y: f32) -> u64 {
 
 mod hint;
 mod hud;
+mod labels;
 mod looks;
 mod menus;
 mod optional;

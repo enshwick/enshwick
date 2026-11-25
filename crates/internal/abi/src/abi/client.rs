@@ -150,6 +150,21 @@ pub struct ClientSnapshot {
     /// dialogs show, 0 while none shows; an answer names it in
     /// [`ClientCommand::dialog`]. Group [`ClientSnapshot::DIALOG`]. ABI 12.25.
     pub dialog: u32,
+    /// The entity the interaction prompt that shows targets, in the
+    /// client's world, such as the chest it opens; 0 while none shows. Group
+    /// [`ClientSnapshot::PROMPT`]. ABI 12.26.
+    pub prompt_target: Entity,
+    /// The `LocaTagId` of that prompt's verb, as the object offers it before
+    /// a mod's text takes its place; 0 while none shows. Group
+    /// [`ClientSnapshot::PROMPT`]. ABI 12.26.
+    pub prompt_verb: u32,
+    /// The character the main menu has selected, by its place in the menu's
+    /// list from 0, as [`ClientCommand::character`] takes it;
+    /// [`ClientSnapshot::NO_CHARACTER`] while none is and outside the main
+    /// menu. Group [`ClientSnapshot::CHARACTER`]. ABI 12.26.
+    pub character: u32,
+    /// Zero.
+    pub reserved3: u32,
 }
 
 impl_headed!(ClientSnapshot, born = 120);
@@ -181,6 +196,16 @@ impl ClientSnapshot {
     /// [`dialog_buttons`](Self::dialog_buttons): the loader's dialogs show
     /// in game on this build. ABI 12.25.
     pub const DIALOG: u32 = 64;
+    /// [`prompt_target`](Self::prompt_target) and
+    /// [`prompt_verb`](Self::prompt_verb): the prompt reads on this build.
+    /// ABI 12.26.
+    pub const PROMPT: u32 = 128;
+    /// [`character`](Self::character): the main menu's selected character
+    /// reads on this build. ABI 12.26.
+    pub const CHARACTER: u32 = 256;
+    /// [`character`](Self::character) while no character is selected or no
+    /// main menu shows. ABI 12.26.
+    pub const NO_CHARACTER: u32 = u32::MAX;
     /// The loader's Mods screen does not show. ABI 12.23.
     pub const NO_LOADER_SCREEN: u32 = 0;
     /// The list of mods shows. ABI 12.23.
@@ -221,6 +246,10 @@ impl ClientSnapshot {
         dialog_mod: Str::EMPTY,
         dialog_buttons: 0,
         dialog: 0,
+        prompt_target: Entity(0),
+        prompt_verb: 0,
+        character: Self::NO_CHARACTER,
+        reserved3: 0,
     };
 }
 

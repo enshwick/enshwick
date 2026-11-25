@@ -754,6 +754,7 @@ abi::ClientCommandStatus::reserved
 abi::ClientCommandStatus::state
 abi::ClientSnapshot
 abi::ClientSnapshot::BORN
+abi::ClientSnapshot::CHARACTER
 abi::ClientSnapshot::DIALOG
 abi::ClientSnapshot::EMPTY
 abi::ClientSnapshot::FRESH
@@ -766,15 +767,18 @@ abi::ClientSnapshot::MOD_MISMATCH
 abi::ClientSnapshot::MOD_PAGE
 abi::ClientSnapshot::MOD_SERVER_SETTINGS
 abi::ClientSnapshot::NEVER
+abi::ClientSnapshot::NO_CHARACTER
 abi::ClientSnapshot::NO_LOADER_SCREEN
 abi::ClientSnapshot::OFF
 abi::ClientSnapshot::PLAYER
+abi::ClientSnapshot::PROMPT
 abi::ClientSnapshot::RECIPE
 abi::ClientSnapshot::SCREENS
 abi::ClientSnapshot::SERVER_MOD_LIST
 abi::ClientSnapshot::STALE
 abi::ClientSnapshot::age_ms
 abi::ClientSnapshot::available
+abi::ClientSnapshot::character
 abi::ClientSnapshot::dialog
 abi::ClientSnapshot::dialog_buttons
 abi::ClientSnapshot::dialog_mod
@@ -787,8 +791,11 @@ abi::ClientSnapshot::loader_screen
 abi::ClientSnapshot::loader_screen_mod
 abi::ClientSnapshot::menu_tab
 abi::ClientSnapshot::player
+abi::ClientSnapshot::prompt_target
+abi::ClientSnapshot::prompt_verb
 abi::ClientSnapshot::reserved
 abi::ClientSnapshot::reserved2
+abi::ClientSnapshot::reserved3
 abi::ClientSnapshot::return_screen
 abi::ClientSnapshot::scene
 abi::ClientSnapshot::server
@@ -5442,9 +5449,12 @@ input::ClientSnapshot::loader_screen unstable
 input::ClientSnapshot::loader_screen_mod unstable
 input::ClientSnapshot::menu_tab unstable
 input::ClientSnapshot::player unstable
+input::ClientSnapshot::prompt_target unstable
+input::ClientSnapshot::prompt_verb unstable
 input::ClientSnapshot::reads unstable
 input::ClientSnapshot::return_screen unstable
 input::ClientSnapshot::scene unstable
+input::ClientSnapshot::selected_character unstable
 input::ClientSnapshot::server unstable
 input::ClientSnapshot::session unstable
 input::ClientSnapshot::state unstable
@@ -5567,11 +5577,13 @@ input::Password unstable
 input::Password::fmt unstable
 input::Password::new unstable
 input::SnapshotPart unstable
+input::SnapshotPart::Character unstable
 input::SnapshotPart::Dialog unstable
 input::SnapshotPart::Held unstable
 input::SnapshotPart::LoaderScreen unstable
 input::SnapshotPart::MenuTab unstable
 input::SnapshotPart::Player unstable
+input::SnapshotPart::Prompt unstable
 input::SnapshotPart::Recipe unstable
 input::SnapshotPart::Screens unstable
 input::SnapshotState unstable

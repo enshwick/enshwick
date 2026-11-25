@@ -282,6 +282,19 @@ shows. It follows a click on a tile and the arrow keys; the mouse pointer
 over a tile does not move it. It is `None` while no crafting menu draws,
 and while the open menu highlights no recipe.
 
+`prompt_target()` names the entity the interaction prompt that shows
+targets, in the client's world, such as the chest that a press of interact
+opens. `prompt_verb()` gives that prompt's verb as a `LocaTagId`, as the
+object offers it before a mod's text takes its place. In Rust,
+`Verb::from_id` names the game's own verbs; Luau has no such call, so a
+script compares the number. Both are `None` while no prompt shows.
+
+`selected_character()` names the character the main menu has selected, by
+its place in the menu's list, as [`CommandAction::Host`](#hosting-a-world-from-the-main-menu)
+takes it. It is `None` while no character is selected and outside the main
+menu. The place does not name the save storage. When the local folder and
+Steam's cloud both hold a character there, the host plays the cloud one.
+
 The client reads the snapshot once a mod opens its input, as it does the
 held controls. So a mod's first frame in a game has it. The state is
 `Never` in two cases:
@@ -291,8 +304,10 @@ held controls. So a mod's first frame in a game has it. The state is
   world.
 
 The reads cost one look at the interface's screen state and menu tab per
-frame, which client commands share, and a copy of four words. The held
-controls cost their own row, as for `local_held()`. A part the running
+frame, which client commands share, and a copy of five words. The
+prompt's target comes from the game's prompt code, which keeps it once a
+frame while a prompt shows. The held controls cost their own row, as for
+`local_held()`. A part the running
 build lacks returns `None`, and `reads(part)` tells "none now" from
 "unread". The call returns `WorldError::Unavailable` on a server.
 

@@ -43,6 +43,64 @@ pub(crate) struct HostPosts {
     session_kind: usize,
 }
 
+/// Where the main menu keeps the character it has selected, from the
+/// interface state (client 26430625, seen live on 2026-11-25): the state
+/// sits in an object that also holds the menu object the main menu's
+/// command switch `0x140873710` takes, whose save system holds the selected
+/// slot id, a `u16`, and the byte that says one is set.
+#[derive(Debug)]
+pub(crate) struct SelectedCharacter {
+    /// The interface state in the UI context.
+    context_state: usize,
+    /// The menu object's pointer from the state: its place in their owner
+    /// less the state's.
+    state_menu: usize,
+    /// The menu's save system, and its slot id and set byte.
+    menu_save: usize,
+    slot: usize,
+    slot_set: usize,
+}
+
+impl SelectedCharacter {
+    pub(super) fn resolve(loader: &Loader) -> Result<Self, &'static str> {
+        let state_owner = offset(loader, pinned::ui::STATE_OWNER)?;
+        let owner_menu = offset(loader, pinned::ui::OWNER_MENU)?;
+        Ok(Self {
+            context_state: offset(loader, pinned::ui::CONTEXT_STATE)?,
+            state_menu: owner_menu
+                .checked_sub(state_owner)
+                .ok_or(pinned::ui::OWNER_MENU.id())?,
+            menu_save: offset(loader, pinned::ui::MENU_SAVE)?,
+            slot: offset(loader, pinned::save::SELECTED_CHARACTER)?,
+            slot_set: offset(loader, pinned::save::SELECTED_CHARACTER_SET)?,
+        })
+    }
+
+    /// The selected character's place in the main menu's list, as a host
+    /// posts it, in the frame of the UI context `context`; `None` while none
+    /// is set. Every step reads through the kernel's copy, so a way that
+    /// reads wrong on a new build gives none rather than a fault.
+    pub(crate) fn read(&self, context: usize) -> Option<u16> {
+        let pointer = |at: usize| {
+            let mut word = [0u8; size_of::<usize>()];
+            let at =
+                crate::engine::pages::copy_into(at, &mut word).then(|| usize::from_ne_bytes(word));
+            at.filter(|&at| at != 0)
+        };
+        let state = pointer(context.checked_add(self.context_state)?)?;
+        let menu = pointer(state.checked_add(self.state_menu)?)?;
+        let save = pointer(menu.checked_add(self.menu_save)?)?;
+        let mut set = [0u8; 1];
+        let mut slot = [0u8; size_of::<u16>()];
+        let read = crate::engine::pages::copy_into(save.checked_add(self.slot_set)?, &mut set)
+            && crate::engine::pages::copy_into(save.checked_add(self.slot)?, &mut slot);
+        if !read || set[0] == 0 {
+            return None;
+        }
+        crate::actions::client_commands::place(u16::from_ne_bytes(slot))
+    }
+}
+
 /// A poster: the UI context in, its command or null out.
 type PostFn = unsafe extern "system" fn(context: usize) -> *mut u8;
 

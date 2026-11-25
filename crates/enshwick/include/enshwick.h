@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 25
+#define ENSHWICK_ABI_MINOR 26
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -1363,6 +1363,21 @@ typedef struct EnshwickClientSnapshot {
   // dialogs show, 0 while none shows; an answer names it in
   // `EnshwickClientCommand.dialog`. Group `EnshwickClientSnapshot_DIALOG`. ABI 12.25.
   uint32_t dialog;
+  // The entity the interaction prompt that shows targets, in the
+  // client's world, such as the chest it opens; 0 while none shows. Group
+  // `EnshwickClientSnapshot_PROMPT`. ABI 12.26.
+  EnshwickEntity prompt_target;
+  // The `LocaTagId` of that prompt's verb, as the object offers it before
+  // a mod's text takes its place; 0 while none shows. Group
+  // `EnshwickClientSnapshot_PROMPT`. ABI 12.26.
+  uint32_t prompt_verb;
+  // The character the main menu has selected, by its place in the menu's
+  // list from 0, as `EnshwickClientCommand.character` takes it;
+  // `EnshwickClientSnapshot_NO_CHARACTER` while none is and outside the main
+  // menu. Group `EnshwickClientSnapshot_CHARACTER`. ABI 12.26.
+  uint32_t character;
+  // Zero.
+  uint32_t reserved3;
 } EnshwickClientSnapshot;
 // No interface read yet.
 #define EnshwickClientSnapshot_NEVER 0
@@ -1390,6 +1405,16 @@ typedef struct EnshwickClientSnapshot {
 // `dialog_buttons`: the loader's dialogs show
 // in game on this build. ABI 12.25.
 #define EnshwickClientSnapshot_DIALOG 64
+// `prompt_target` and
+// `prompt_verb`: the prompt reads on this build.
+// ABI 12.26.
+#define EnshwickClientSnapshot_PROMPT 128
+// `character`: the main menu's selected character
+// reads on this build. ABI 12.26.
+#define EnshwickClientSnapshot_CHARACTER 256
+// `character` while no character is selected or no
+// main menu shows. ABI 12.26.
+#define EnshwickClientSnapshot_NO_CHARACTER UINT32_MAX
 // The loader's Mods screen does not show. ABI 12.23.
 #define EnshwickClientSnapshot_NO_LOADER_SCREEN 0
 // The list of mods shows. ABI 12.23.
@@ -7930,7 +7955,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, reserved) == 20, "o
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, age_ms) == 24, "offset of ClientCommandStatus.age_ms");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, phase) == 32, "offset of ClientCommandStatus.phase");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, failure) == 36, "offset of ClientCommandStatus.failure");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientSnapshot) == 184, "size of ClientSnapshot");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientSnapshot) == 200, "size of ClientSnapshot");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientSnapshot) == 8, "alignment of ClientSnapshot");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, header) == 0, "offset of ClientSnapshot.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, state) == 8, "offset of ClientSnapshot.state");
@@ -7953,6 +7978,10 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, reserved2) == 156, "offs
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, dialog_mod) == 160, "offset of ClientSnapshot.dialog_mod");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, dialog_buttons) == 176, "offset of ClientSnapshot.dialog_buttons");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, dialog) == 180, "offset of ClientSnapshot.dialog");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, prompt_target) == 184, "offset of ClientSnapshot.prompt_target");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, prompt_verb) == 188, "offset of ClientSnapshot.prompt_verb");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, character) == 192, "offset of ClientSnapshot.character");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, reserved3) == 196, "offset of ClientSnapshot.reserved3");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientWindowItem) == 88, "size of ClientWindowItem");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientWindowItem) == 8, "alignment of ClientWindowItem");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientWindowItem, header) == 0, "offset of ClientWindowItem.header");

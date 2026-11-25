@@ -468,6 +468,14 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     ("1.0 client (26320373)", "ui.prompt_context", 0x2_d5e0),
     ("1.0 client (26082781)", "ui.prompt_context", 0x2_d570),
     ("1.0 client (1269579)", "ui.prompt_context", 0x2_d570),
+    // The label of a runtime `GameplayAction`, a byte switch the key glyph
+    // calls, whose `_Tap`, `_Hold` and `_Release` forms share their action's
+    // case; read in the decompiler on 26430625 (2026-11-25), the older
+    // clients' the glyph's call by the same route.
+    ("1.0 client (26430625)", "ui.action_label", 0xd3_61a0),
+    ("1.0 client (26320373)", "ui.action_label", 0xd3_60e0),
+    ("1.0 client (26082781)", "ui.action_label", 0xd2_2fc0),
+    ("1.0 client (1269579)", "ui.action_label", 0xd2_1530),
     // The put of one stack into one slot, which every player's move reaches;
     // read in the decompiler on server 26430253 and client 26430625, found
     // by the route, its start checked, on the other kept builds.

@@ -19,7 +19,7 @@ pub mod rebinds;
 pub mod written;
 
 #[cfg(windows)]
-pub(crate) use live::{BindingError, TABLE_IDS, binding, frame, link, rebind, shares};
+pub(crate) use live::{BindingError, TABLE_IDS, binding, frame, link, rebind, sharing};
 
 /// The reflected sentinel after the last game action.
 const COUNT: &str = "Count";

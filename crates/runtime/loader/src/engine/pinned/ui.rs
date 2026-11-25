@@ -4,6 +4,9 @@ use super::{Constant, Symbol};
 
 pub(crate) const ACTION_BOUND: Constant = Constant::new("ui.action_bound");
 pub(crate) const ACTION_EXTENT: Constant = Constant::new("ui.action_extent");
+/// The game's label of a runtime `GameplayAction`, the action in, its
+/// `LocaTagId` out; the key glyph calls it (`0x140d361a0`, client 26430625).
+pub(crate) const ACTION_LABEL: Symbol = Symbol::new("ui.action_label");
 pub(crate) const ACTION_NEW: Symbol = Symbol::new("ui.action_new");
 pub(crate) const ACTION_NODE: Constant = Constant::new("ui.action_node");
 pub(crate) const ACTION_QUERY: Symbol = Symbol::new("ui.action_query");
@@ -118,6 +121,13 @@ pub(crate) const POST_PLAY_WORLD: Symbol = Symbol::new("ui.post_play_world");
 pub(crate) const POST_CHARACTER_SLOT: Constant = Constant::new("ui.post_character_slot");
 pub(crate) const POST_WORLD_SLOT: Constant = Constant::new("ui.post_world_slot");
 pub(crate) const POST_SESSION_KIND: Constant = Constant::new("ui.post_session_kind");
+/// The way from the interface state to the main menu's save system (client
+/// 26430625, seen live on 2026-11-25): the state's place in the object that
+/// owns it, the menu object the owner holds (the command switch
+/// `0x140873710` takes it) and the menu's save system.
+pub(crate) const STATE_OWNER: Constant = Constant::new("ui.state_owner");
+pub(crate) const OWNER_MENU: Constant = Constant::new("ui.owner_menu");
+pub(crate) const MENU_SAVE: Constant = Constant::new("ui.menu_save");
 /// Where the main menu reads a posted command's payload (`0x140873710`,
 /// client 26430625): the password's text and its `u16` length, the join's
 /// area byte (its target follows it) and the address's last `u16`.

@@ -109,6 +109,18 @@ impl<'a> Painter<'a> {
         unsafe { self.engine.button_slot(height) };
     }
 
+    /// The game's label of `action` in the player's language; `None` on a
+    /// build without the game's labels.
+    pub(super) fn action_label(
+        &self,
+        action: crate::actions::game_bindings::ActionNumber,
+    ) -> Option<String> {
+        // SAFETY: the painter draws inside the frame on this thread, by the
+        // contract of `Painter::new`, so the UI context global holds its live
+        // context.
+        unsafe { self.engine.action_label(action) }
+    }
+
     /// A settings slider that takes its value when the player lets go; one
     /// of a `whole` setting shows its value without decimals.
     pub(super) fn setting_slider(

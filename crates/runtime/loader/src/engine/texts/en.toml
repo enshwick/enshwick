@@ -21,6 +21,8 @@
 "controls.clear" = "Unbind"
 "controls.clash" = "The same key fires {controls}."
 "controls.game-clash" = "The game also uses this key."
+"controls.game-clash.named" = "The game also uses this key for {actions}."
+"controls.game-clash.named-more" = "The game also uses this key for {actions} and other actions."
 "controls.game-keys" = "A key the game also uses does both."
 "controls.off" = "Mod keys are off on this game build."
 "controls.saved" = "Saved."

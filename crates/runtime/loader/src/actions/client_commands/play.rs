@@ -141,6 +141,12 @@ const fn slot(at: u16, storage: u16) -> u16 {
     storage << 8 | (at + 1)
 }
 
+/// The list place of the game's slot id `slot`, whatever its storage, as a
+/// host posts it in [`slot`]; `None` for no slot.
+pub(crate) const fn place(slot: u16) -> Option<u16> {
+    (slot & 0xff).checked_sub(1)
+}
+
 /// A password held only until the interface frame posts it, wiped then.
 struct Secret(Vec<u8>);
 
