@@ -1387,6 +1387,210 @@ pub const FACTS: &[(&str, Fact)] = &[
             "keen::StaticArray<keen::ecs::EntityId,2>",
         ),
     ),
+    (
+        ids::CLIENT_PLAYER_INPUT_CRAFTING,
+        Fact::Path {
+            steps: &[
+                ("keen::ecs::ClientPlayerInput", "data"),
+                ("keen::ecs::ClientPlayerInputData", "playerCraftingAction"),
+            ],
+            holds: CRAFTING_ACTION,
+        },
+    ),
+    (ids::CRAFTING_ACTION, Fact::Type(CRAFTING_ACTION)),
+    (
+        ids::CRAFTING_ACTION_STATION,
+        offset(CRAFTING_ACTION, "craftingStationId", ENTITY_ID),
+    ),
+    (
+        ids::CRAFTING_ACTION_RECIPE,
+        offset(CRAFTING_ACTION, "recipeId", RECIPE_ID),
+    ),
+    (
+        ids::CRAFTING_ACTION_ITEM,
+        offset(CRAFTING_ACTION, "itemId", ITEM_ID),
+    ),
+    (
+        ids::CRAFTING_ACTION_AMOUNT,
+        offset(CRAFTING_ACTION, "amount", UINT16),
+    ),
+    (
+        ids::CRAFTING_ACTION_SELECTIONS,
+        offset(
+            CRAFTING_ACTION,
+            "inputCategorySelections",
+            "keen::RecipeInputCategorySelections",
+        ),
+    ),
+    (
+        ids::CRAFTING_ACTION_VERSION,
+        offset(CRAFTING_ACTION, "versionData", VERSIONED_DATA),
+    ),
+    (
+        ids::CRAFTING_ACTION_TYPE,
+        offset(CRAFTING_ACTION, "type", CRAFTING_ACTION_TYPE),
+    ),
+    (
+        ids::CRAFTING_ACTION_CRAFT_RECIPE,
+        Fact::Constant {
+            ty: CRAFTING_ACTION_TYPE,
+            name: "CraftRecipe",
+        },
+    ),
+    (
+        ids::CLIENT_PLAYER_INPUT_TRANSFER,
+        Fact::Path {
+            steps: &[
+                ("keen::ecs::ClientPlayerInput", "data"),
+                (
+                    "keen::ecs::ClientPlayerInputData",
+                    "inventoryTransferAction",
+                ),
+            ],
+            holds: TRANSFER_ACTION,
+        },
+    ),
+    (ids::TRANSFER_ACTION, Fact::Type(TRANSFER_ACTION)),
+    (
+        ids::TRANSFER_ACTION_VERSION,
+        offset(TRANSFER_ACTION, "versionData", VERSIONED_DATA),
+    ),
+    (
+        ids::TRANSFER_ACTION_SOURCE,
+        offset(TRANSFER_ACTION, "sourceEntityId", ENTITY_ID),
+    ),
+    (
+        ids::TRANSFER_ACTION_TARGET,
+        offset(TRANSFER_ACTION, "targetEntityId", ENTITY_ID),
+    ),
+    (
+        ids::TRANSFER_ACTION_SOURCE_SLOT,
+        offset(TRANSFER_ACTION, "sourceSlotId", INVENTORY_SLOT_ID),
+    ),
+    (
+        ids::TRANSFER_ACTION_TARGET_SLOT,
+        offset(TRANSFER_ACTION, "targetSlotId", INVENTORY_SLOT_ID),
+    ),
+    (
+        ids::TRANSFER_ACTION_TYPE,
+        offset(TRANSFER_ACTION, "type", INVENTORY_ACTION_TYPE),
+    ),
+    (
+        ids::TRANSFER_ACTION_FLAGS,
+        offset(
+            TRANSFER_ACTION,
+            "flags",
+            "keen::ecs::TransferItemToInventoryFlags",
+        ),
+    ),
+    (
+        ids::TRANSFER_ACTION_AMOUNT,
+        offset(TRANSFER_ACTION, "amount", UINT16),
+    ),
+    (
+        ids::INVENTORY_ACTION_ONE,
+        Fact::Constant {
+            ty: INVENTORY_ACTION_TYPE,
+            name: "One",
+        },
+    ),
+    (
+        ids::INVENTORY_ACTION_HALF,
+        Fact::Constant {
+            ty: INVENTORY_ACTION_TYPE,
+            name: "Half",
+        },
+    ),
+    (
+        ids::INVENTORY_ACTION_ALL,
+        Fact::Constant {
+            ty: INVENTORY_ACTION_TYPE,
+            name: "All",
+        },
+    ),
+    (
+        ids::INVENTORY_ACTION_CUSTOM_AMOUNT,
+        Fact::Constant {
+            ty: INVENTORY_ACTION_TYPE,
+            name: "CustomAmount",
+        },
+    ),
+    (
+        ids::TRANSFER_FLAG_MOVE_ALL_STACKS,
+        Fact::Constant {
+            ty: "keen::ecs::TransferItemToInventoryFlag",
+            name: "MoveAllStacks",
+        },
+    ),
+    (
+        ids::CLIENT_PLAYER_INPUT_EQUIPMENT,
+        Fact::Path {
+            steps: &[
+                ("keen::ecs::ClientPlayerInput", "data"),
+                ("keen::ecs::ClientPlayerInputData", "changeEquipmentAction"),
+            ],
+            holds: EQUIPMENT_ACTION,
+        },
+    ),
+    (ids::EQUIPMENT_ACTION, Fact::Type(EQUIPMENT_ACTION)),
+    (
+        ids::EQUIPMENT_ACTION_SLOT,
+        offset(EQUIPMENT_ACTION, "inventorySlotId", INVENTORY_SLOT_ID),
+    ),
+    (
+        ids::EQUIPMENT_ACTION_VERSION,
+        offset(EQUIPMENT_ACTION, "versionData", VERSIONED_DATA),
+    ),
+    (
+        ids::EQUIPMENT_ACTION_EQUIPMENT_SLOT,
+        offset(EQUIPMENT_ACTION, "equipmentSlot", EQUIPMENT_SLOT),
+    ),
+    (
+        ids::EQUIPMENT_ACTION_TYPE,
+        offset(EQUIPMENT_ACTION, "type", CHANGE_EQUIPMENT),
+    ),
+    (
+        ids::CHANGE_EQUIPMENT_EQUIP,
+        Fact::Constant {
+            ty: CHANGE_EQUIPMENT,
+            name: "Equip",
+        },
+    ),
+    (ids::EQUIPMENT_SLOT, Fact::Type(EQUIPMENT_SLOT)),
+    (
+        ids::RECIPE_INPUT_SELECTIONS,
+        Fact::Type("keen::RecipeInputCategorySelections"),
+    ),
+    (
+        ids::CLIENT_PLAYER_INPUT_ITEM,
+        Fact::Path {
+            steps: &[
+                ("keen::ecs::ClientPlayerInput", "data"),
+                ("keen::ecs::ClientPlayerInputData", "itemAction"),
+            ],
+            holds: ITEM_ACTION,
+        },
+    ),
+    (ids::ITEM_ACTION, Fact::Type(ITEM_ACTION)),
+    (
+        ids::ITEM_ACTION_SLOT,
+        offset(ITEM_ACTION, "inventorySlotId", INVENTORY_SLOT_ID),
+    ),
+    (
+        ids::ITEM_ACTION_VERSION,
+        offset(ITEM_ACTION, "versionData", VERSIONED_DATA),
+    ),
+    (
+        ids::ITEM_ACTION_TYPE,
+        offset(ITEM_ACTION, "type", "keen::ecs::ItemActionType"),
+    ),
+    (
+        ids::ITEM_ACTION_TRASH,
+        Fact::Constant {
+            ty: "keen::ecs::ItemActionType",
+            name: "Trash",
+        },
+    ),
     (ids::WAYPOINT_ACTION, Fact::Type(WAYPOINT_ACTION)),
     (
         ids::WAYPOINT_ACTION_POSITION,
@@ -2795,6 +2999,24 @@ const QUATERNION: &str = "keen::Quaternion";
 const NETWORK_PLAYER_ATTRIBUTES: &str = "keen::ecs::NetworkPlayerAttributes";
 /// A player's selected equipment and action bar slot.
 const SLOT_SELECTION: &str = "keen::ecs::SlotSelection";
+/// A player input request's version, a `u32` first.
+const VERSIONED_DATA: &str = "keen::VersionedData";
+/// A slot: an inventory entity and an index in it.
+const INVENTORY_SLOT_ID: &str = "keen::InventorySlotId";
+/// A player's crafting request.
+const CRAFTING_ACTION: &str = "keen::ecs::PlayerCraftingAction";
+/// What a crafting request asks.
+const CRAFTING_ACTION_TYPE: &str = "keen::ecs::CraftingActionType";
+/// A player's item transfer request.
+const TRANSFER_ACTION: &str = "keen::ecs::InventoryTransferAction";
+/// How much an item transfer moves.
+const INVENTORY_ACTION_TYPE: &str = "keen::InventoryActionType";
+/// A player's equipment request.
+const EQUIPMENT_ACTION: &str = "keen::ecs::ChangeEquipmentAction";
+/// Whether an equipment request equips or unequips.
+const CHANGE_EQUIPMENT: &str = "keen::ecs::ChangeEquipment";
+/// A player's item request.
+const ITEM_ACTION: &str = "keen::ecs::ItemAction";
 
 /// Four 32-bit floats, such as an orientation.
 const FLOAT4: &str = "keen::float4";

@@ -264,7 +264,7 @@ shapes! {
         LocalInputInfo { header, flags, reserved, age_ms },
         GameBinding { header, first, second },
         LoaderOff { header, name, reason, at },
-        ClientCommand { header, kind, hold_ms, session, expected_screen, target, look, direction, recipe, reserved, cancels, password, position, world, character, online, item, text, answer, dialog },
+        ClientCommand { header, kind, hold_ms, session, expected_screen, target, look, direction, recipe, reserved, cancels, password, position, world, character, online, item, text, answer, dialog, slot, target_slot, entity, amount },
         ClientCommandStatus { header, state, reason, kind, reserved, age_ms, phase, failure },
         ClientSnapshot { header, state, available, session, age_ms, scene, hud_screen, return_screen, menu_tab, held, player, host, highlighted_recipe, reserved, server, loader_screen_mod, loader_screen, reserved2, dialog_mod, dialog_buttons, dialog, prompt_target, prompt_verb, character, reserved3, position, look, health, health_max, stamina, stamina_max, actionbar_slot, reserved4 },
         ClientWindowItem { header, kind, field, flags, reserved, window, item, label, line },

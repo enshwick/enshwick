@@ -392,6 +392,21 @@ pub struct ClientCommand {
     /// [`ClientSnapshot::dialog`] gives it; a command for a dialog that no
     /// longer shows ends unavailable. ABI 12.25.
     pub dialog: u32,
+    /// The slot an item command acts on, packed as the game packs one: the
+    /// inventory entity, then its index shifted left by 32; the source of
+    /// [`ClientCommand::MOVE_ITEM`]. ABI 12.28.
+    pub slot: u64,
+    /// The slot [`ClientCommand::MOVE_ITEM`] moves into, packed as `slot`.
+    /// ABI 12.28.
+    pub target_slot: u64,
+    /// The station [`ClientCommand::CRAFT`] crafts at, 0 to craft by hand;
+    /// the inventory [`ClientCommand::TAKE_ALL`] takes from or
+    /// [`ClientCommand::DEPOSIT_ALL`] deposits into. ABI 12.28.
+    pub entity: Entity,
+    /// How many: crafts of [`ClientCommand::CRAFT`], 1 to
+    /// [`ClientCommand::MAX_AMOUNT`]; items [`ClientCommand::MOVE_ITEM`]
+    /// moves, 0 for the whole stack. ABI 12.28.
+    pub amount: u32,
 }
 
 impl_headed!(ClientCommand, born = 88);
@@ -453,6 +468,26 @@ impl ClientCommand {
     /// Answers the loader's dialog that shows with `answer`, as its button
     /// would. ABI 12.25.
     pub const ANSWER_DIALOG: u32 = 21;
+    /// Crafts `recipe` `amount` times at `entity` or by hand, through the
+    /// game's own crafting request; the server checks it. ABI 12.28.
+    pub const CRAFT: u32 = 22;
+    /// Moves `amount` items, or the whole stack, from `slot` to
+    /// `target_slot`, through the game's own item transfer. ABI 12.28.
+    pub const MOVE_ITEM: u32 = 23;
+    /// Equips the item in `slot` into the equipment slot `target` names, a
+    /// member of the game's `EquipmentSlot` such as `RangedWeapon`.
+    /// ABI 12.28.
+    pub const EQUIP: u32 = 24;
+    /// Takes every stack from the inventory `entity` into the player's, as
+    /// a storage window's take all does. ABI 12.28.
+    pub const TAKE_ALL: u32 = 25;
+    /// Moves every stack of the player's into the inventory `entity`, as a
+    /// storage window's deposit all does. ABI 12.28.
+    pub const DEPOSIT_ALL: u32 = 26;
+    /// Destroys the stack in `slot`, as the game's trash does. ABI 12.28.
+    pub const TRASH: u32 = 27;
+    /// The most crafts or items one command asks for. ABI 12.28.
+    pub const MAX_AMOUNT: u32 = 0xffff;
     /// The longest text, in bytes, a window's field takes. ABI 12.24.
     pub const MAX_TEXT: usize = 255;
     /// How many worlds and characters the main menu lists at most.
@@ -488,6 +523,10 @@ impl ClientCommand {
         text: Str::EMPTY,
         answer: 0,
         dialog: 0,
+        slot: 0,
+        target_slot: 0,
+        entity: Entity(0),
+        amount: 0,
     };
 
     /// Whether the command's own bounds hold: a finite look of at most
@@ -497,7 +536,11 @@ impl ClientCommand {
     /// mark whose metres are finite and below 2^31 (2,147,483,648) on each
     /// axis, the range of the engine's 32.32 fixed point, a host's world and
     /// character below [`ClientCommand::MAX_SLOTS`], an answer a dialog's
-    /// button can give to a dialog named by its number.
+    /// button can give to a dialog named by its number, a craft of a
+    /// non-zero recipe 1 to [`ClientCommand::MAX_AMOUNT`] times, a move
+    /// between two different slots of at most that many items, an
+    /// inventory to take from or deposit into, and a slot to equip from or
+    /// trash.
     ///
     /// # Examples
     ///
@@ -543,6 +586,15 @@ impl ClientCommand {
             Self::WINDOW_PRESS | Self::WINDOW_PICK | Self::WINDOW_TEXT => {
                 self.text.len() <= Self::MAX_TEXT
             }
+            Self::CRAFT => self.recipe.0 != 0 && (1..=Self::MAX_AMOUNT).contains(&self.amount),
+            Self::MOVE_ITEM => {
+                self.slot != 0
+                    && self.target_slot != 0
+                    && self.slot != self.target_slot
+                    && self.amount <= Self::MAX_AMOUNT
+            }
+            Self::TAKE_ALL | Self::DEPOSIT_ALL => self.entity.0 != 0,
+            Self::EQUIP | Self::TRASH => self.slot != 0,
             _ => true,
         }
     }

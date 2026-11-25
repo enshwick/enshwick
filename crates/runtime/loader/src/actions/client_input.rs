@@ -10,6 +10,7 @@
 //! blocks the input. Until a mod hands one over and with no window, its
 //! detour adds five atomic loads.
 
+mod acts;
 mod presses;
 mod waypoints;
 
@@ -97,6 +98,7 @@ pub(crate) fn presses_run() -> bool {
     runs() && GROUPS.buttons.get().is_some()
 }
 
+pub(crate) use acts::{hand as act, progress as act_progress, release as unact};
 pub(crate) use presses::{hand as press, progress as press_progress, release as unpress, written};
 pub(crate) use waypoints::{hand as mark, progress as mark_progress, release as unmark};
 
@@ -104,6 +106,12 @@ pub(crate) use waypoints::{hand as mark, progress as mark_progress, release as u
 /// is linked and on, and the build reflects the request.
 pub(crate) fn marks_run() -> bool {
     runs() && GROUPS.waypoint.get().is_some()
+}
+
+/// Whether the build runs crafting and item commands: the builder's detour
+/// runs and the build reflects their requests.
+pub(crate) fn acts_run() -> bool {
+    runs() && GROUPS.acts.get().is_some()
 }
 
 /// What a command hands the builder.
@@ -339,6 +347,14 @@ crate::engine::chains::chain_detour! {
             // SAFETY: the builder's own non-null input record, right after
             // its pass on its thread.
             unsafe { waypoints::drive(waypoint, input, mode) };
+        }
+        if acts::pending()
+            && !input.is_null()
+            && let Some(acts) = GROUPS.acts.get()
+        {
+            // SAFETY: the builder's own non-null input record, right after
+            // its pass on its thread.
+            unsafe { acts::drive(acts, input, mode) };
         }
     }
 }

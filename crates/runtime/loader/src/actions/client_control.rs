@@ -18,9 +18,13 @@ use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 use crate::engine::pinned;
 
+mod acts;
 mod menu;
 mod waypoint;
 
+#[cfg(test)]
+pub(crate) use acts::TEST_LAYOUT as ACT_TEST_LAYOUT;
+pub(crate) use acts::{Act, ActLayout};
 pub(crate) use menu::{HostPosts, MenuPosts, SelectedCharacter, post as post_menu};
 #[cfg(test)]
 pub(crate) use waypoint::TEST_LAYOUT as WAYPOINT_TEST_LAYOUT;
@@ -150,6 +154,8 @@ pub(crate) struct Groups {
     /// The waypoint request in the input, which waypoint and ping commands
     /// write.
     pub(crate) waypoint: Group<WaypointLayout>,
+    /// The local player's crafting, item and equipment requests.
+    pub(crate) acts: Group<ActLayout>,
     /// The main menu's selected character, which the client snapshot reads.
     pub(crate) character: Group<SelectedCharacter>,
 }
@@ -164,6 +170,7 @@ pub(crate) static GROUPS: Groups = Groups {
     menu: Group::new("the menu's join and leave commands"),
     host: Group::new("the menu's host commands"),
     waypoint: Group::new("the client's waypoint and ping commands"),
+    acts: Group::new("the client's crafting and item commands"),
     character: Group::new("the main menu's selected character"),
 };
 
@@ -631,6 +638,7 @@ pub(crate) fn link(loader: &Loader) {
     GROUPS
         .waypoint
         .link(loader, WaypointLayout::resolve(loader));
+    GROUPS.acts.link(loader, ActLayout::resolve(loader));
     GROUPS
         .character
         .link(loader, SelectedCharacter::resolve(loader));

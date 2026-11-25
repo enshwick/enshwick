@@ -1109,6 +1109,21 @@ typedef struct EnshwickClientCommand {
   // `EnshwickClientSnapshot.dialog` gives it; a command for a dialog that no
   // longer shows ends unavailable. ABI 12.25.
   uint32_t dialog;
+  // The slot an item command acts on, packed as the game packs one: the
+  // inventory entity, then its index shifted left by 32; the source of
+  // `EnshwickClientCommand_MOVE_ITEM`. ABI 12.28.
+  uint64_t slot;
+  // The slot `EnshwickClientCommand_MOVE_ITEM` moves into, packed as `slot`.
+  // ABI 12.28.
+  uint64_t target_slot;
+  // The station `EnshwickClientCommand_CRAFT` crafts at, 0 to craft by hand;
+  // the inventory `EnshwickClientCommand_TAKE_ALL` takes from or
+  // `EnshwickClientCommand_DEPOSIT_ALL` deposits into. ABI 12.28.
+  EnshwickEntity entity;
+  // How many: crafts of `EnshwickClientCommand_CRAFT`, 1 to
+  // `EnshwickClientCommand_MAX_AMOUNT`; items `EnshwickClientCommand_MOVE_ITEM`
+  // moves, 0 for the whole stack. ABI 12.28.
+  uint32_t amount;
 } EnshwickClientCommand;
 // Opens `target`, one of the screens the game opens from a key in the
 // world.
@@ -1166,6 +1181,26 @@ typedef struct EnshwickClientCommand {
 // Answers the loader's dialog that shows with `answer`, as its button
 // would. ABI 12.25.
 #define EnshwickClientCommand_ANSWER_DIALOG 21
+// Crafts `recipe` `amount` times at `entity` or by hand, through the
+// game's own crafting request; the server checks it. ABI 12.28.
+#define EnshwickClientCommand_CRAFT 22
+// Moves `amount` items, or the whole stack, from `slot` to
+// `target_slot`, through the game's own item transfer. ABI 12.28.
+#define EnshwickClientCommand_MOVE_ITEM 23
+// Equips the item in `slot` into the equipment slot `target` names, a
+// member of the game's `EquipmentSlot` such as `RangedWeapon`.
+// ABI 12.28.
+#define EnshwickClientCommand_EQUIP 24
+// Takes every stack from the inventory `entity` into the player's, as
+// a storage window's take all does. ABI 12.28.
+#define EnshwickClientCommand_TAKE_ALL 25
+// Moves every stack of the player's into the inventory `entity`, as a
+// storage window's deposit all does. ABI 12.28.
+#define EnshwickClientCommand_DEPOSIT_ALL 26
+// Destroys the stack in `slot`, as the game's trash does. ABI 12.28.
+#define EnshwickClientCommand_TRASH 27
+// The most crafts or items one command asks for. ABI 12.28.
+#define EnshwickClientCommand_MAX_AMOUNT 65535
 // The longest text, in bytes, a window's field takes. ABI 12.24.
 #define EnshwickClientCommand_MAX_TEXT 255
 // How many worlds and characters the main menu lists at most.
@@ -8010,7 +8045,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, header) == 0, "offset of Chun
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, x) == 8, "offset of ChunkData.x");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, z) == 12, "offset of ChunkData.z");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, size) == 16, "offset of ChunkData.size");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientCommand) == 176, "size of ClientCommand");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientCommand) == 200, "size of ClientCommand");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientCommand) == 8, "alignment of ClientCommand");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, header) == 0, "offset of ClientCommand.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, kind) == 8, "offset of ClientCommand.kind");
@@ -8032,6 +8067,10 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, item) == 136, "offset of 
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, text) == 152, "offset of ClientCommand.text");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, answer) == 168, "offset of ClientCommand.answer");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, dialog) == 172, "offset of ClientCommand.dialog");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, slot) == 176, "offset of ClientCommand.slot");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, target_slot) == 184, "offset of ClientCommand.target_slot");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, entity) == 192, "offset of ClientCommand.entity");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, amount) == 196, "offset of ClientCommand.amount");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientCommandStatus) == 40, "size of ClientCommandStatus");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientCommandStatus) == 8, "alignment of ClientCommandStatus");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, header) == 0, "offset of ClientCommandStatus.header");

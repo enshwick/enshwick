@@ -397,6 +397,92 @@ ids! {
     SLOT_SELECTION_ACTIONBAR = "slot_selection.actionbar";
     /// The id of its two action bar inventory entities.
     SLOT_SELECTION_ACTIONBAR_ENTITIES = "slot_selection.actionbar_entities";
+    /// The id of the local player's crafting request in its input, a
+    /// [`CRAFTING_ACTION`] the server takes when its version changes.
+    CLIENT_PLAYER_INPUT_CRAFTING = "client_player_input.crafting";
+    /// The id of a crafting request.
+    CRAFTING_ACTION = "crafting_action";
+    /// The id of its station entity, the player's own for a hand craft.
+    CRAFTING_ACTION_STATION = "crafting_action.station";
+    /// The id of its recipe.
+    CRAFTING_ACTION_RECIPE = "crafting_action.recipe";
+    /// The id of its item, 0 for a recipe's own.
+    CRAFTING_ACTION_ITEM = "crafting_action.item";
+    /// The id of its `u16` count of crafts.
+    CRAFTING_ACTION_AMOUNT = "crafting_action.amount";
+    /// The id of its ingredient choices per input category.
+    CRAFTING_ACTION_SELECTIONS = "crafting_action.selections";
+    /// The id of the ingredient choices' type, which a craft of the
+    /// recipe's own ingredients writes zero.
+    RECIPE_INPUT_SELECTIONS = "recipe_input_selections";
+    /// The id of its version, a `u32` first in its versioned data.
+    CRAFTING_ACTION_VERSION = "crafting_action.version";
+    /// The id of its `CraftingActionType` byte.
+    CRAFTING_ACTION_TYPE = "crafting_action.type";
+    /// The id of the crafting request type that crafts a recipe.
+    CRAFTING_ACTION_CRAFT_RECIPE = "crafting_action.craft_recipe";
+    /// The id of the local player's item transfer request in its input, a
+    /// [`TRANSFER_ACTION`] the server takes when its version changes.
+    CLIENT_PLAYER_INPUT_TRANSFER = "client_player_input.transfer";
+    /// The id of an item transfer request.
+    TRANSFER_ACTION = "transfer_action";
+    /// The id of its version.
+    TRANSFER_ACTION_VERSION = "transfer_action.version";
+    /// The id of its source inventory entity.
+    TRANSFER_ACTION_SOURCE = "transfer_action.source";
+    /// The id of its target inventory entity.
+    TRANSFER_ACTION_TARGET = "transfer_action.target";
+    /// The id of its source slot, an entity and an index.
+    TRANSFER_ACTION_SOURCE_SLOT = "transfer_action.source_slot";
+    /// The id of its target slot, an entity and an index.
+    TRANSFER_ACTION_TARGET_SLOT = "transfer_action.target_slot";
+    /// The id of its `InventoryActionType` byte.
+    TRANSFER_ACTION_TYPE = "transfer_action.type";
+    /// The id of its flags byte, a bit per `TransferItemToInventoryFlag`.
+    TRANSFER_ACTION_FLAGS = "transfer_action.flags";
+    /// The id of its `u16` amount.
+    TRANSFER_ACTION_AMOUNT = "transfer_action.amount";
+    /// The id of the transfer type that moves one item.
+    INVENTORY_ACTION_ONE = "inventory_action.one";
+    /// The id of the transfer type that moves half the stack.
+    INVENTORY_ACTION_HALF = "inventory_action.half";
+    /// The id of the transfer type that moves the whole stack.
+    INVENTORY_ACTION_ALL = "inventory_action.all";
+    /// The id of the transfer type that moves its amount.
+    INVENTORY_ACTION_CUSTOM_AMOUNT = "inventory_action.custom_amount";
+    /// The id of the transfer flag's bit index that moves every stack.
+    TRANSFER_FLAG_MOVE_ALL_STACKS = "transfer_flag.move_all_stacks";
+    /// The id of the local player's equipment request in its input, an
+    /// [`EQUIPMENT_ACTION`] the server takes when its version changes.
+    CLIENT_PLAYER_INPUT_EQUIPMENT = "client_player_input.equipment";
+    /// The id of an equipment request.
+    EQUIPMENT_ACTION = "equipment_action";
+    /// The id of its inventory slot.
+    EQUIPMENT_ACTION_SLOT = "equipment_action.slot";
+    /// The id of its version.
+    EQUIPMENT_ACTION_VERSION = "equipment_action.version";
+    /// The id of its `EquipmentSlot` byte.
+    EQUIPMENT_ACTION_EQUIPMENT_SLOT = "equipment_action.equipment_slot";
+    /// The id of its `ChangeEquipment` byte.
+    EQUIPMENT_ACTION_TYPE = "equipment_action.type";
+    /// The id of the equipment request type that equips.
+    CHANGE_EQUIPMENT_EQUIP = "change_equipment.equip";
+    /// The id of the game's enum of equipment slots, which commands name by
+    /// member.
+    EQUIPMENT_SLOT = "equipment_slot";
+    /// The id of the local player's item request in its input, an
+    /// [`ITEM_ACTION`] the server takes when its version changes.
+    CLIENT_PLAYER_INPUT_ITEM = "client_player_input.item";
+    /// The id of an item request.
+    ITEM_ACTION = "item_action";
+    /// The id of its inventory slot.
+    ITEM_ACTION_SLOT = "item_action.slot";
+    /// The id of its version.
+    ITEM_ACTION_VERSION = "item_action.version";
+    /// The id of its `ItemActionType` byte.
+    ITEM_ACTION_TYPE = "item_action.type";
+    /// The id of the item request type that destroys the slot's stack.
+    ITEM_ACTION_TRASH = "item_action.trash";
     /// The id of a waypoint request: set, clear or ping a position.
     WAYPOINT_ACTION = "waypoint_action";
     /// The id of its `WorldPosition`, three `i64` in 32.32 fixed point.

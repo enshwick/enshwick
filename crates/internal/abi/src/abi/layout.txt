@@ -208,7 +208,7 @@ ChunkData size 20 align 4 born 20
     x at 8 size 4 type u32
     z at 12 size 4 type u32
     size at 16 size 4 type u32
-ClientCommand size 176 align 8 born 88
+ClientCommand size 200 align 8 born 88
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
     hold_ms at 12 size 4 type u32
@@ -229,6 +229,10 @@ ClientCommand size 176 align 8 born 88
     text at 152 size 16 type Str
     answer at 168 size 4 type u32
     dialog at 172 size 4 type u32
+    slot at 176 size 8 type u64
+    target_slot at 184 size 8 type u64
+    entity at 192 size 4 type Entity
+    amount at 196 size 4 type u32
 ClientCommandStatus size 40 align 8 born 32
     header at 0 size 8 type Header
     state at 8 size 4 type u32
@@ -1448,11 +1452,15 @@ const ClientCommand::CANCEL = 4
 const ClientCommand::CHOOSE_TAB = 3
 const ClientCommand::CLEAR_WAYPOINT = 12
 const ClientCommand::CLOSE_SCREEN = 2
+const ClientCommand::CRAFT = 22
+const ClientCommand::DEPOSIT_ALL = 26
+const ClientCommand::EQUIP = 24
 const ClientCommand::HIGHLIGHT_RECIPE = 7
 const ClientCommand::HOST = 14
 const ClientCommand::JOIN = 8
 const ClientCommand::LEAVE = 9
 const ClientCommand::LOOK = 5
+const ClientCommand::MAX_AMOUNT = 65535
 const ClientCommand::MAX_HOLD_MS = 250
 const ClientCommand::MAX_LOOK = 1.5707964
 const ClientCommand::MAX_PASSWORD = 1024
@@ -1460,6 +1468,7 @@ const ClientCommand::MAX_PRESS_MS = 2000
 const ClientCommand::MAX_SLOTS = 16
 const ClientCommand::MAX_TEXT = 255
 const ClientCommand::MOVE = 6
+const ClientCommand::MOVE_ITEM = 23
 const ClientCommand::OPEN_MOD = 16
 const ClientCommand::OPEN_MODS = 15
 const ClientCommand::OPEN_MOD_SETTINGS = 17
@@ -1467,6 +1476,8 @@ const ClientCommand::OPEN_SCREEN = 1
 const ClientCommand::PING = 13
 const ClientCommand::PRESS = 10
 const ClientCommand::SET_WAYPOINT = 11
+const ClientCommand::TAKE_ALL = 25
+const ClientCommand::TRASH = 27
 const ClientCommand::WINDOW_PICK = 19
 const ClientCommand::WINDOW_PRESS = 18
 const ClientCommand::WINDOW_TEXT = 20

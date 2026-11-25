@@ -149,13 +149,24 @@ struct State {
     slots: Copied<SLOT_WORDS>,
     /// When a mod last asked for the slots, as `now_ms` counts; 0 never.
     slots_asked: AtomicU64,
+    /// How many reads found the slots changed from the read before.
+    slot_changes: AtomicU64,
 }
 
 static STATE: State = State {
     parts: Copied::new(),
     slots: Copied::new(),
     slots_asked: AtomicU64::new(0),
+    slot_changes: AtomicU64::new(0),
 };
+
+/// How many step reads found the inventory's slots changed, so a command
+/// that changes them sees its effect as a later count; asks the steps to
+/// read them at `now`.
+pub(crate) fn slot_changes(now: u64) -> u64 {
+    STATE.slots_asked.store(now, Ordering::Relaxed);
+    STATE.slot_changes.load(Ordering::Relaxed)
+}
 
 /// The last whole read of the player's parts and when it was taken; `None`
 /// before a step read one, or while a write stays mid-way through every
@@ -367,6 +378,13 @@ pub(crate) unsafe fn read(
             }
         });
         words[0] = u64::try_from(count).unwrap_or(0);
+        let changed = STATE.slots.load().is_none_or(|last| {
+            let used = 2 + 3 * count;
+            last[0] != words[0] || last[2..used] != words[2..used]
+        });
+        if changed {
+            STATE.slot_changes.fetch_add(1, Ordering::Relaxed);
+        }
         words[1] = at;
         STATE.slots.write(words);
     }
