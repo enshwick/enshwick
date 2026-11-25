@@ -849,6 +849,23 @@ fn a_wide_change_to_the_facade_documents_it_with_the_features_of_a_workspace_bui
 }
 
 #[test]
+fn a_wide_change_with_the_facade_left_out_of_the_build_checks_no_links_of_unwritten_pages() {
+    let scope = Scope::Some {
+        code: [FACADE, "enshwick-base"].map(str::to_owned).into(),
+        docs: BTreeSet::new(),
+        tested: BTreeSet::new(),
+        built: BTreeSet::new(),
+        wide: true,
+    };
+    let workspace = ["--workspace", "--exclude", FACADE].map(str::to_owned);
+    let lines: Vec<String> = changed_rustdoc(&scope, &workspace)
+        .iter()
+        .map(Step::line)
+        .collect();
+    assert_eq!(lines, ["cargo doc --no-deps -p enshwick-base"]);
+}
+
+#[test]
 fn the_public_paths_list_is_written_again_only_when_its_writer_or_the_list_changes() {
     let scope = |code: &[&str]| Scope::Some {
         code: code.iter().map(|name| (*name).to_owned()).collect(),
