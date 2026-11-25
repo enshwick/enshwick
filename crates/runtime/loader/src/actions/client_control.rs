@@ -21,7 +21,7 @@ use crate::engine::pinned;
 mod menu;
 mod waypoint;
 
-pub(crate) use menu::{HostPosts, MenuPosts, post as post_menu};
+pub(crate) use menu::{HostPosts, MenuPosts, SelectedCharacter, post as post_menu};
 #[cfg(test)]
 pub(crate) use waypoint::TEST_LAYOUT as WAYPOINT_TEST_LAYOUT;
 pub(crate) use waypoint::{Mark, WaypointLayout};
@@ -50,6 +50,11 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::POST_CHARACTER_SLOT.id(),
     pinned::ui::POST_WORLD_SLOT.id(),
     pinned::ui::POST_SESSION_KIND.id(),
+    pinned::ui::STATE_OWNER.id(),
+    pinned::ui::OWNER_MENU.id(),
+    pinned::ui::MENU_SAVE.id(),
+    pinned::save::SELECTED_CHARACTER.id(),
+    pinned::save::SELECTED_CHARACTER_SET.id(),
     pinned::ui::RECIPE_DIRECTORY.id(),
     pinned::ui::RECIPE_HIGHLIGHTED.id(),
     pinned::ui::RECIPE_SELECT.id(),
@@ -144,6 +149,8 @@ pub(crate) struct Groups {
     /// The waypoint request in the input, which waypoint and ping commands
     /// write.
     pub(crate) waypoint: Group<WaypointLayout>,
+    /// The main menu's selected character, which the client snapshot reads.
+    pub(crate) character: Group<SelectedCharacter>,
 }
 
 /// The groups of this process.
@@ -156,6 +163,7 @@ pub(crate) static GROUPS: Groups = Groups {
     menu: Group::new("the menu's join and leave commands"),
     host: Group::new("the menu's host commands"),
     waypoint: Group::new("the client's waypoint and ping commands"),
+    character: Group::new("the main menu's selected character"),
 };
 
 /// Where the in-game menu keeps its tab, and which screen bytes are the
@@ -622,6 +630,9 @@ pub(crate) fn link(loader: &Loader) {
     GROUPS
         .waypoint
         .link(loader, WaypointLayout::resolve(loader));
+    GROUPS
+        .character
+        .link(loader, SelectedCharacter::resolve(loader));
 }
 
 /// A look input per device, each a float pair, as the input builder writes

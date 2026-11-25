@@ -471,3 +471,19 @@ fn a_host_starts_only_at_the_menu_and_never_beside_a_join() {
     release(41, 200, false);
     assert_eq!(report_of(41), None);
 }
+
+#[test]
+fn a_slot_id_reads_back_as_the_place_a_host_posts_in_either_storage() {
+    for at in [0, 2, 15] {
+        for storage in STORAGES {
+            assert_eq!(place(slot(at, storage)), Some(at));
+        }
+    }
+    assert_eq!(
+        place(0x103),
+        Some(2),
+        "the slot read live with Test selected"
+    );
+    assert_eq!(place(0), None);
+    assert_eq!(place(0x100), None, "no place in the second storage");
+}

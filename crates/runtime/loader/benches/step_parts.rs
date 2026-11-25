@@ -120,6 +120,12 @@ fn step_parts(c: &mut Criterion) {
         let mut idle = enshwick_loader::bench::bench_waypoint_idle_step();
         assert!(idle(), "nothing watches the waypoints without a loader");
         group.bench_function("waypoint_step_idle", |b| b.iter(&mut idle));
+        let mut site = enshwick_loader::bench::bench_prompt_site_idle();
+        assert!(
+            site(),
+            "nothing asks for the client snapshot without a loader"
+        );
+        group.bench_function("prompt_site_idle", |b| b.iter(&mut site));
     }
     group.finish();
 }

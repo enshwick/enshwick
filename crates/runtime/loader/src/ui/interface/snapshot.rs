@@ -6,6 +6,8 @@ use std::cell::OnceCell;
 use super::{READS_FUSE, extensions};
 use crate::actions::client_commands::{Applied, ScreenChange, Seen};
 use crate::actions::client_snapshot::{FrameRead, TabRead};
+use enshwick_core::abi::UiFrame;
+
 use crate::ui::interface::engine::Engine;
 
 /// This frame's open screens and the menu's tab.
@@ -57,9 +59,22 @@ pub(super) unsafe fn note(engine: &Engine, context: usize) {
                 host: view.host,
                 tab,
                 recipe,
+                // SAFETY: `view` is this frame's, read on the interface
+                // thread by the caller's contract.
+                prompt: unsafe { extensions::prompt_shows(&view) }
+                    .filter(|_| crate::actions::interaction_prompts::site_reads()),
             })
         },
         loader_screen,
+        || {
+            crate::actions::client_control::GROUPS
+                .character
+                .get()
+                .map(|layout| {
+                    let menu = super::screen(engine.app_state(context)) == UiFrame::MENU;
+                    menu.then(|| layout.read(context)).flatten()
+                })
+        },
     );
     crate::actions::client_commands::frame(
         || {

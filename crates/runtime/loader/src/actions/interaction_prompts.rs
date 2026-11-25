@@ -513,6 +513,29 @@ crate::engine::mid::mid_handler! {
     }
 }
 
+/// For the benchmark of what every client pays at the prompt's site once a
+/// frame while a prompt shows, with no mod asking for the client snapshot
+/// and no prompt text: the handler's gate, as the stub calls it, past which
+/// it reads nothing. Whether the snapshot stayed unasked.
+#[cfg(feature = "test")]
+#[doc(hidden)]
+pub fn bench_prompt_site_idle() -> impl FnMut() -> bool {
+    let mut registers = Registers::default();
+    move || {
+        // SAFETY: the handler takes the stub's saved registers and its user
+        // pointer, which it ignores; these are a live set on this thread,
+        // and with nothing asked its gate returns before it reads them.
+        unsafe { prompt_site(&raw mut registers, core::ptr::null_mut()) };
+        !crate::actions::client_snapshot::asked()
+    }
+}
+
+/// Whether the prompt's site keeps its target for the client snapshot on
+/// this client: it linked and is on.
+pub(crate) fn site_reads() -> bool {
+    LINKS.site.get().is_some() && !SITE_FUSE.is_off()
+}
+
 /// Whether the prompt's site has work: a mod asked for the client snapshot,
 /// or a prompt has a text.
 fn wanted() -> bool {

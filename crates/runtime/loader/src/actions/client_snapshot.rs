@@ -478,7 +478,7 @@ mod tests {
     #[test]
     fn a_shown_prompt_names_its_target_and_verb_and_a_hidden_one_clears_it() {
         let kept_word = AtomicU64::new(0);
-        kept_word.store(1052 | 0x4e82_e309 << 32, Ordering::Relaxed);
+        kept_word.store(1052 + (0x4e82_e309 << 32), Ordering::Relaxed);
         let shows = FrameRead {
             prompt: Some(true),
             ..read(1, TabRead::NoMenu)

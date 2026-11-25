@@ -104,6 +104,42 @@ side = "both""#
     }
 
     #[test]
+    fn a_snapshot_names_the_prompt_s_target_and_verb_and_the_menu_s_character() {
+        use enshwick::interactions::Verb;
+        let (loader, input) = input(Side::CLIENT);
+        loader.set_client_snapshot(Raw {
+            state: Raw::FRESH,
+            available: Raw::SCREENS | Raw::PROMPT | Raw::CHARACTER,
+            session: 1,
+            age_ms: 16,
+            hud_screen: Str::new("InGame"),
+            prompt_target: Entity(1052),
+            prompt_verb: Verb::Open.id(),
+            ..Raw::EMPTY
+        });
+        let _drawn = loader.draw_frame();
+        let facing = input.client_snapshot().unwrap();
+        assert_eq!(facing.prompt_target(), Some(Entity(1052)));
+        assert_eq!(
+            facing.prompt_verb().and_then(Verb::from_id),
+            Some(Verb::Open)
+        );
+        assert_eq!(facing.selected_character(), None, "no main menu shows");
+        assert!(facing.reads(SnapshotPart::Character));
+        loader.set_client_snapshot(Raw {
+            state: Raw::NEVER,
+            available: Raw::PROMPT | Raw::CHARACTER,
+            character: 2,
+            ..Raw::EMPTY
+        });
+        let _drawn = loader.draw_frame();
+        let menu = input.client_snapshot().unwrap();
+        assert_eq!(menu.selected_character(), Some(2));
+        assert_eq!((menu.prompt_target(), menu.prompt_verb()), (None, None));
+        assert!(menu.reads(SnapshotPart::Prompt));
+    }
+
+    #[test]
     fn a_server_has_no_client_snapshot() {
         let (_loader, input) = input(Side::SERVER);
         assert!(matches!(

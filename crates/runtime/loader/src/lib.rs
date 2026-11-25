@@ -65,6 +65,7 @@ pub mod bench {
     };
     #[cfg(all(windows, feature = "test"))]
     pub use crate::{
+        actions::interaction_prompts::bench_prompt_site_idle,
         base::carrier::bench_own_account,
         base::game_events::bench_server_copy,
         content::recipes::live::bench_recipe_filter,

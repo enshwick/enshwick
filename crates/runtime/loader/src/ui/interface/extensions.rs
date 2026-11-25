@@ -443,6 +443,20 @@ unsafe fn prompt(data: usize, at: PromptAt) -> (Str, u32) {
     (title, verb)
 }
 
+/// Whether the interaction prompt shows in `view`'s frame; `None` on a
+/// build without the prompt's reads or while they are off.
+///
+/// # Safety
+///
+/// - `view` is this frame's, read on the interface thread.
+pub(super) unsafe fn prompt_shows(view: &ScreenView) -> Option<bool> {
+    let at = LINKED.get()?.prompt.filter(|_| !PROMPT_FUSE.is_off())?;
+    // SAFETY: `view.play` is the live play data of this frame, on the
+    // interface thread (the caller's contract), whose prompt valid byte sits
+    // at the table's `ui.prompt_valid` (every kept client).
+    Some(unsafe { crate::engine::memory::read::<u8>(view.play, at.valid) } != 0)
+}
+
 /// What the frames mods draw read of the game the player is in: the open
 /// screen, the interaction prompt and the open screen's host.
 ///
