@@ -162,6 +162,15 @@ entries! {
             {
                 return Status::MISSING;
             }
+            // The loader checks the scene's box once it found the entity.
+            let (min, max) = s
+                .host
+                .world
+                .world_box
+                .unwrap_or(crate::test::world::GAME_WORLD_BOX);
+            if (0..3).any(|axis| !(min[axis]..=max[axis]).contains(&request.position[axis])) {
+                return Status::OUTSIDE_WORLD;
+            }
             s.world.teleports.push(request);
             Status::OK
         })

@@ -599,15 +599,21 @@ impl Effects {
     /// Asks the server to move `entity` to `position`, in metres, after the
     /// next step, as its admin teleport does: the entity jumps there and
     /// clients see it arrive.
+    ///
     /// # Errors
     ///
     /// [`WorldError::Gone`] for an entity not in the world or without a
     /// place, [`WorldError::Refused`] for one the game's teleport does not
     /// move, such as a prop (it moves actors and characters), or for a
     /// position not finite or at 2^31 metres or more on an axis,
-    /// [`WorldError::WrongThread`] off the game thread and
-    /// [`WorldError::Unavailable`] where no server runs or on a build without
-    /// teleports.
+    /// [`WorldError::OutsideWorld`] for a target past the box the world's
+    /// scene keeps players in (on the game's world, 0 to 10,240 m across),
+    /// where the game moves a player back and removes anything else and a
+    /// player's client can crash first,
+    /// [`WorldError::NotLoaded`] while the loader still reads that box, in
+    /// the first moments of a game, [`WorldError::WrongThread`] off the game
+    /// thread and [`WorldError::Unavailable`] where no server runs or on a
+    /// build without teleports or the world's box.
     ///
     /// # Examples
     ///

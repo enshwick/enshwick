@@ -820,13 +820,16 @@ impl Refusal for crate::base::saves::HoldSavesError {
 /// No events, world or teleport are unavailable; a type mods may not
 /// raise, the engine's no, a notifier past the step's bound or an entity it
 /// does not move refused; bad bytes, entity 0 or a position past the fixed
-/// point bad arguments.
+/// point bad arguments; a target outside the world's box outside the world,
+/// and one while that box still reads not loaded.
 impl Refusal for crate::base::emits::EmitError {
     fn status(&self) -> Status {
         match self {
             Self::Unread | Self::NoWorld | Self::Unavailable => Status::UNAVAILABLE,
             Self::NotAllowed | Self::Refused | Self::TooMany | Self::NotMovable => Status::REFUSED,
             Self::BadSize | Self::NoEntity | Self::BadPosition => Status::BAD_ARGS,
+            Self::OutsideWorld => Status::OUTSIDE_WORLD,
+            Self::NotLoaded => Status::NOT_LOADED,
             Self::World(error) => error.status(),
         }
     }

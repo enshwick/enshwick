@@ -246,7 +246,9 @@ entries! {
     }
 
     fn teleport(loader as Caller, request as Headed<enshwick_core::abi::TeleportRequest>) -> Status {
-        crate::base::emits::teleport(loader, &request)?;
+        crate::base::emits::teleport(loader, &request, |position| {
+            crate::world::scene::admit_teleport(loader, position)
+        })?;
         Ok(())
     }
 

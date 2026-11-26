@@ -58,7 +58,7 @@ mod tests {
             .player(player(6, 8))
             .template(Entity::from_engine(5), enshwick::content::Guid([5; 16]))
             .template(Entity::from_engine(6), enshwick::content::Guid([6; 16]))
-            .component(Entity::from_engine(6), transform, &standing([40, 12, -3]))
+            .component(Entity::from_engine(6), transform, &standing([40, 12, 3]))
             .install();
         // SAFETY: the three functions are the exports of this file's `declare_mod!`.
         let status =
@@ -99,7 +99,7 @@ mod tests {
             TeleportRequest::BEST_SPAWN,
             "beside another player, the game finds a free spot"
         );
-        assert_eq!(teleports[1].position, [40.0, 12.0, -3.0]);
+        assert_eq!(teleports[1].position, [40.0, 12.0, 3.0]);
     }
 
     #[test]

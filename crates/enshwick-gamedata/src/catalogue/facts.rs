@@ -2658,6 +2658,34 @@ pub const FACTS: &[(&str, Fact)] = &[
         ids::SCENE_RESOURCE_HAS_BIOME_MAP,
         offset("keen::SceneResource", "hasBiomeMap", BOOL),
     ),
+    (
+        ids::SCENE_RESOURCE_PLAYER_BOUNDS,
+        offset(
+            "keen::SceneResource",
+            "resetPlayersOutOfBounds",
+            "keen::SceneResetPlayersOutOfBounds",
+        ),
+    ),
+    (
+        ids::PLAYER_BOUNDS_WORLD_MIN,
+        offset(
+            "keen::SceneResetPlayersOutOfBounds",
+            "worldMin",
+            WORLD_POSITION,
+        ),
+    ),
+    (
+        ids::PLAYER_BOUNDS_WORLD_MAX,
+        offset(
+            "keen::SceneResetPlayersOutOfBounds",
+            "worldMax",
+            WORLD_POSITION,
+        ),
+    ),
+    (ids::WORLD_POSITION, Fact::Type(WORLD_POSITION)),
+    (ids::WORLD_POSITION_X, offset(WORLD_POSITION, "x", SINT64)),
+    (ids::WORLD_POSITION_Y, offset(WORLD_POSITION, "y", SINT64)),
+    (ids::WORLD_POSITION_Z, offset(WORLD_POSITION, "z", SINT64)),
     (ids::BIOME_MAP, Fact::Type("keen::BiomeMapResource")),
     (
         ids::BIOME_MAP_WORLD_ORIGIN,
@@ -3007,6 +3035,9 @@ const UINT32: &str = "keen::uint32";
 
 /// The engine's signed 32-bit integer.
 const SINT32: &str = "keen::sint32";
+
+/// The engine's signed 64-bit integer.
+const SINT64: &str = "keen::sint64";
 
 /// A span or a point of game time.
 const TIME: &str = "keen::Time";

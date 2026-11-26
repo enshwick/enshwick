@@ -76,6 +76,7 @@ pub mod bench {
         knowledge::quest_events::bench_quest_change,
         ui::interface::tooltips::bench_tooltip_lines,
         ui::sound::bench_sound_frame,
+        world::scene::bench_world_box_step,
         world::waypoints::bench_waypoint_idle_step,
     };
 

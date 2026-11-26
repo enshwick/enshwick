@@ -112,6 +112,17 @@ actors and characters, not props. So does a position the engine's fixed
 point cannot hold, as [Positions](ecs.md#positions) bounds it. It fails
 with `Missing` where no server runs or on a build without teleports.
 
+The target must lie in the box the world's scene keeps players in. On the
+game's world it runs 0 to 10,240 m on x and z and 0 to 2,560 m high. Past
+it the game moves a player back and removes any other entity. A player's
+client can crash before that.
+A target past the box fails with `OutsideWorld`. The loader reads the box
+from the scene as a game starts. A teleport in the moments before that read
+ends fails with `NotLoaded`, and a later call goes through.
+Where the box does not read, the fixed point alone bounds a teleport. That
+happens on a build without the box's layout or when a mod serves the scene.
+An entity that is gone fails with `Gone` whatever its target.
+
 ### Teleport a player
 
 `teleport_player(player, position, how)` moves a connected player's

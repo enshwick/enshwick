@@ -51,8 +51,9 @@ pub enum WorldError {
     /// loading it, so try again in a second or so.
     #[error("that part of the world is not loaded")]
     NotLoaded,
-    /// The box asked about leaves the world: past its edge across, or
-    /// above the height the loader takes.
+    /// The box or place asked about leaves the world: past its edge across,
+    /// above the height the loader takes, or, for a teleport, past the box
+    /// the world's scene keeps entities in.
     #[error("outside the world")]
     OutsideWorld,
     /// The component type is the static half of its ECS type, such as
