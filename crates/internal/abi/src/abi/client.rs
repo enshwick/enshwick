@@ -161,6 +161,30 @@ pub struct ClientSnapshot {
     pub character: u32,
     /// Zero.
     pub reserved3: u32,
+    /// Where the local player stands, x, y and z in metres, as the
+    /// client's world holds it; group [`ClientSnapshot::POSITION`].
+    /// ABI 12.28.
+    pub position: [f64; 3],
+    /// Where the local player's camera looks, a unit quaternion x, y, z, w
+    /// in the world's axes; group [`ClientSnapshot::LOOK`]. ABI 12.28.
+    pub look: [f32; 4],
+    /// The local player's health; group [`ClientSnapshot::VITALS`].
+    /// ABI 12.28.
+    pub health: u32,
+    /// The local player's maximum health; group [`ClientSnapshot::VITALS`].
+    /// ABI 12.28.
+    pub health_max: u32,
+    /// The local player's stamina; group [`ClientSnapshot::VITALS`].
+    /// ABI 12.28.
+    pub stamina: u32,
+    /// The local player's maximum stamina; group
+    /// [`ClientSnapshot::VITALS`]. ABI 12.28.
+    pub stamina_max: u32,
+    /// The action bar's selected slot, from 0; group
+    /// [`ClientSnapshot::ACTIONBAR`]. ABI 12.28.
+    pub actionbar_slot: u32,
+    /// Zero.
+    pub reserved4: u32,
 }
 
 impl_headed!(ClientSnapshot, born = 120);
@@ -199,6 +223,18 @@ impl ClientSnapshot {
     /// [`character`](Self::character): the main menu's selected character
     /// reads on this build. ABI 12.26.
     pub const CHARACTER: u32 = 256;
+    /// [`position`](Self::position), read in the client's last step.
+    /// ABI 12.28.
+    pub const POSITION: u32 = 512;
+    /// [`look`](Self::look), read in the client's last step. ABI 12.28.
+    pub const LOOK: u32 = 1024;
+    /// [`health`](Self::health), [`health_max`](Self::health_max),
+    /// [`stamina`](Self::stamina) and [`stamina_max`](Self::stamina_max),
+    /// read in the client's last step. ABI 12.28.
+    pub const VITALS: u32 = 2048;
+    /// [`actionbar_slot`](Self::actionbar_slot), read in the client's last
+    /// step. ABI 12.28.
+    pub const ACTIONBAR: u32 = 4096;
     /// [`character`](Self::character) while no character is selected or no
     /// main menu shows. ABI 12.26.
     pub const NO_CHARACTER: u32 = u32::MAX;
@@ -246,6 +282,14 @@ impl ClientSnapshot {
         prompt_verb: 0,
         character: Self::NO_CHARACTER,
         reserved3: 0,
+        position: [0.0; 3],
+        look: [0.0, 0.0, 0.0, 1.0],
+        health: 0,
+        health_max: 0,
+        stamina: 0,
+        stamina_max: 0,
+        actionbar_slot: 0,
+        reserved4: 0,
     };
 }
 
@@ -277,7 +321,7 @@ impl ClientSnapshot {
 pub struct ClientCommand {
     /// Size and version of this struct.
     pub header: Header,
-    /// What to do: [`ClientCommand::OPEN_SCREEN`] to [`ClientCommand::ANSWER_DIALOG`].
+    /// What to do: [`ClientCommand::OPEN_SCREEN`] to [`ClientCommand::TRASH`].
     pub kind: u32,
     /// A move's hold in milliseconds, 1 to [`ClientCommand::MAX_HOLD_MS`];
     /// a press's, 1 to [`ClientCommand::MAX_PRESS_MS`].
@@ -348,6 +392,21 @@ pub struct ClientCommand {
     /// [`ClientSnapshot::dialog`] gives it; a command for a dialog that no
     /// longer shows ends unavailable. ABI 12.25.
     pub dialog: u32,
+    /// The slot an item command acts on, packed as the game packs one: the
+    /// inventory entity, then its index shifted left by 32; the source of
+    /// [`ClientCommand::MOVE_ITEM`]. ABI 12.28.
+    pub slot: u64,
+    /// The slot [`ClientCommand::MOVE_ITEM`] moves into, packed as `slot`.
+    /// ABI 12.28.
+    pub target_slot: u64,
+    /// The station [`ClientCommand::CRAFT`] crafts at, 0 to craft by hand;
+    /// the inventory [`ClientCommand::TAKE_ALL`] takes from or
+    /// [`ClientCommand::DEPOSIT_ALL`] deposits into. ABI 12.28.
+    pub entity: Entity,
+    /// How many: crafts of [`ClientCommand::CRAFT`], 1 to
+    /// [`ClientCommand::MAX_AMOUNT`]; items [`ClientCommand::MOVE_ITEM`]
+    /// moves, 0 for the whole stack. ABI 12.28.
+    pub amount: u32,
 }
 
 impl_headed!(ClientCommand, born = 88);
@@ -409,6 +468,26 @@ impl ClientCommand {
     /// Answers the loader's dialog that shows with `answer`, as its button
     /// would. ABI 12.25.
     pub const ANSWER_DIALOG: u32 = 21;
+    /// Crafts `recipe` `amount` times at `entity` or by hand, through the
+    /// game's own crafting request; the server checks it. ABI 12.28.
+    pub const CRAFT: u32 = 22;
+    /// Moves `amount` items, or the whole stack, from `slot` to
+    /// `target_slot`, through the game's own item transfer. ABI 12.28.
+    pub const MOVE_ITEM: u32 = 23;
+    /// Equips the item in `slot` into the equipment slot `target` names, a
+    /// member of the game's `EquipmentSlot` such as `RangedWeapon`.
+    /// ABI 12.28.
+    pub const EQUIP: u32 = 24;
+    /// Takes every stack from the inventory `entity` into the player's, as
+    /// a storage window's take all does. ABI 12.28.
+    pub const TAKE_ALL: u32 = 25;
+    /// Moves every stack of the player's into the inventory `entity`, as a
+    /// storage window's deposit all does. ABI 12.28.
+    pub const DEPOSIT_ALL: u32 = 26;
+    /// Destroys the stack in `slot`, as the game's trash does. ABI 12.28.
+    pub const TRASH: u32 = 27;
+    /// The most crafts or items one command asks for. ABI 12.28.
+    pub const MAX_AMOUNT: u32 = 0xffff;
     /// The longest text, in bytes, a window's field takes. ABI 12.24.
     pub const MAX_TEXT: usize = 255;
     /// How many worlds and characters the main menu lists at most.
@@ -444,6 +523,10 @@ impl ClientCommand {
         text: Str::EMPTY,
         answer: 0,
         dialog: 0,
+        slot: 0,
+        target_slot: 0,
+        entity: Entity(0),
+        amount: 0,
     };
 
     /// Whether the command's own bounds hold: a finite look of at most
@@ -453,7 +536,11 @@ impl ClientCommand {
     /// mark whose metres are finite and below 2^31 (2,147,483,648) on each
     /// axis, the range of the engine's 32.32 fixed point, a host's world and
     /// character below [`ClientCommand::MAX_SLOTS`], an answer a dialog's
-    /// button can give to a dialog named by its number.
+    /// button can give to a dialog named by its number, a craft of a
+    /// non-zero recipe 1 to [`ClientCommand::MAX_AMOUNT`] times, a move
+    /// between two different slots of at most that many items, an
+    /// inventory to take from or deposit into, and a slot to equip from or
+    /// trash.
     ///
     /// # Examples
     ///
@@ -499,6 +586,15 @@ impl ClientCommand {
             Self::WINDOW_PRESS | Self::WINDOW_PICK | Self::WINDOW_TEXT => {
                 self.text.len() <= Self::MAX_TEXT
             }
+            Self::CRAFT => self.recipe.0 != 0 && (1..=Self::MAX_AMOUNT).contains(&self.amount),
+            Self::MOVE_ITEM => {
+                self.slot != 0
+                    && self.target_slot != 0
+                    && self.slot != self.target_slot
+                    && self.amount <= Self::MAX_AMOUNT
+            }
+            Self::TAKE_ALL | Self::DEPOSIT_ALL => self.entity.0 != 0,
+            Self::EQUIP | Self::TRASH => self.slot != 0,
             _ => true,
         }
     }
@@ -676,6 +772,59 @@ pub struct ClientWindowItem {
 }
 
 impl_headed!(ClientWindowItem);
+
+/// One slot of the local player's inventory as the client's world holds
+/// it, which [`HostApi::client_slots`](super::HostApi::client_slots) lists.
+/// ABI 12.28.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::ClientSlot;
+///
+/// let empty = ClientSlot::EMPTY;
+/// assert_eq!((empty.item, empty.count), (0, 0));
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct ClientSlot {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The slot as the game packs it: the sub-inventory entity, then the
+    /// index in it shifted left by 32.
+    pub slot: u64,
+    /// The item's id, 0 for none.
+    pub item: u32,
+    /// How many.
+    pub count: u32,
+    /// The item's own entity, for items with durability or a level; 0 for
+    /// none.
+    pub pide: Entity,
+    /// The sub-inventory's `InventoryCategory`.
+    pub category: u8,
+    /// [`ClientSlot::ACTIONBAR`].
+    pub flags: u8,
+    /// Zero.
+    pub reserved: u16,
+}
+
+impl_headed!(ClientSlot);
+
+impl ClientSlot {
+    /// The slot is one of the action bar's.
+    pub const ACTIONBAR: u8 = 1;
+    /// An empty slot, its header set.
+    pub const EMPTY: Self = Self {
+        header: Header::of::<Self>(),
+        slot: 0,
+        item: 0,
+        count: 0,
+        pide: Entity(0),
+        category: 0,
+        flags: 0,
+        reserved: 0,
+    };
+}
 
 impl ClientWindowItem {
     /// A button: a row's, an action's Run, a form's Cancel, the window's

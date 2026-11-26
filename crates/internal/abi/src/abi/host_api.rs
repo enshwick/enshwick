@@ -8,23 +8,23 @@ use crate::abi::{
     AltarInfo, AltarLimitFilterFn, AltarZoneFilterFn, BaseLimitInfo, BedCheckFn, BuffRequest,
     BuffTypeAdd, BuffTypeInfo, BuildFilterFn, BuildInfo, BuildRights, BuildingZoneFilterFn, CallFn,
     CallSpec, CallerFrame, ChangeId, ChangeOp, ChatFilterFn, ClientCommand, ClientCommandStatus,
-    ClientSnapshot, ClientWindowItem, ComfortFilterFn, CommandInfo, ConfigCheckFn, ContainerRuleFn,
-    ContentRename, ControlFn, ControlSpec, CraftFilterFn, DamageFilterFn, DataChange, DaytimeInfo,
-    DropRequest, EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo,
-    ExperienceFilterFn, FogInfo, GameBinding, GameEventFn, Header, HookSpec, InteractionFilterFn,
-    InteractionPrompt, InventoryRequest, InventoryResultFn, ItemFilterFn, ItemLine, ItemTypeInfo,
-    JoinRuleFn, KnowledgeChange, KnowledgeInfo, KnowledgeInputFilterFn, Level, LoaderOff,
-    LocalInputInfo, LoopWaitFn, LoopWaitSites, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo,
-    MidHookSpec, ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle,
-    PointLink, PointSpec, PointVerdict, PropPlacementInfo, QuestRewardFilterFn, RateId, RecipeKind,
-    RecipeRuleKind, RenameFilterFn, ResourceKey, ResourcePatchFn, RespawnPointInfo, SaveInfo,
-    ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SoundAudience, SoundInfo, SoundPlay,
-    SoundSteer, SpawnRequest, StatChangeFn, StatModifier, StatModify, StatRef, StatSource,
-    StatSpec, Status, StatusFn, Str, SummonFilterFn, SurvivorLookupFn, SurvivorStatusFn,
-    TeleportRequest, TerrainEdit, TerrainMaterialAdd, TerrainMaterialInfo, TickHandle,
-    TransactionInfo, TransactionOp, TransactionSettledFn, TypeEntry, UiAnswerFn, UiDialog,
-    UiExtension, UiFrameFn, UiMarker, UiTooltipFn, UiWidget, Voxel, WaypointData, WeatherFront,
-    WeatherSample,
+    ClientSlot, ClientSnapshot, ClientWindowItem, ComfortFilterFn, CommandInfo, ConfigCheckFn,
+    ContainerRuleFn, ContentRename, ControlFn, ControlSpec, CraftFilterFn, DamageFilterFn,
+    DataChange, DaytimeInfo, DropRequest, EntityDataFlags, EntityPlace, Event, EventFn, EventSpec,
+    EventTypeInfo, ExperienceFilterFn, FogInfo, GameBinding, GameEventFn, Header, HookSpec,
+    InteractionFilterFn, InteractionPrompt, InventoryRequest, InventoryResultFn, ItemFilterFn,
+    ItemLine, ItemTypeInfo, JoinRuleFn, KnowledgeChange, KnowledgeInfo, KnowledgeInputFilterFn,
+    Level, LoaderOff, LocalInputInfo, LoopWaitFn, LoopWaitSites, MapFrameInfo, MapMarkerInfo,
+    MapMarkerTypeInfo, MidHookSpec, ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo,
+    PointFn, PointHandle, PointLink, PointSpec, PointVerdict, PropPlacementInfo,
+    QuestRewardFilterFn, RateId, RecipeKind, RecipeRuleKind, RenameFilterFn, ResourceKey,
+    ResourcePatchFn, RespawnPointInfo, SaveInfo, ServerWaitFn, ServiceFound, ServiceSpec,
+    SkillCheckFn, SoundAudience, SoundInfo, SoundPlay, SoundSteer, SpawnRequest, StatChangeFn,
+    StatModifier, StatModify, StatRef, StatSource, StatSpec, Status, StatusFn, Str, SummonFilterFn,
+    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialAdd,
+    TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp, TransactionSettledFn,
+    TypeEntry, UiAnswerFn, UiDialog, UiExtension, UiFrameFn, UiMarker, UiTooltipFn, UiWidget,
+    Voxel, WaypointData, WeatherFront, WeatherSample,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, Metres, NpcId, PlayerKey, RecipeId};
 use crate::content::Guid;
@@ -2533,6 +2533,23 @@ pub struct HostApi {
         capacity: u32,
         count: *mut u32,
     ) -> Status,
+    /// Up to `capacity` slots of the local player's inventory, empty ones
+    /// included, in the game's order, as the client's last step read them
+    /// from its copy of the world, and how many there are, as every list
+    /// answers. Entries are `entry_size` bytes apart, the caller's
+    /// `size_of::<ClientSlot>()`. The first call starts the reads, which
+    /// then run in each step for a few seconds after the last call; while
+    /// no step read them in the last second it answers
+    /// [`Status::NOT_LOADED`]. Client only: [`Status::UNAVAILABLE`] on a
+    /// server and on a build whose slots the loader cannot read. Any thread;
+    /// it runs no mod callback. ABI 12.28.
+    pub client_slots: extern "system" fn(
+        me: ModHandle,
+        out: *mut ClientSlot,
+        entry_size: u32,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2774,5 +2791,6 @@ const _: () = {
     assert!(offset_of!(HostApi, quest_reward_filter) == 24 + 228 * 8);
     assert!(offset_of!(HostApi, knowledge_set) == 24 + 229 * 8);
     assert!(offset_of!(HostApi, client_windows) == 24 + 230 * 8);
-    assert!(size_of::<HostApi>() == 24 + 231 * 8);
+    assert!(offset_of!(HostApi, client_slots) == 24 + 231 * 8);
+    assert!(size_of::<HostApi>() == 24 + 232 * 8);
 };

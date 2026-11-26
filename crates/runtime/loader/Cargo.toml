@@ -167,6 +167,11 @@ harness = false
 required-features = ["test"]
 
 [[bench]]
+name = "player_state"
+harness = false
+required-features = ["test"]
+
+[[bench]]
 name = "item_ui"
 harness = false
 required-features = ["test"]

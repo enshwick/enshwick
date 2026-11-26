@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 27
+#define ENSHWICK_ABI_MINOR 28
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -1038,7 +1038,7 @@ typedef uint32_t EnshwickRecipeId;
 typedef struct EnshwickClientCommand {
   // Size and version of this struct.
   struct EnshwickHeader header;
-  // What to do: `EnshwickClientCommand_OPEN_SCREEN` to `EnshwickClientCommand_ANSWER_DIALOG`.
+  // What to do: `EnshwickClientCommand_OPEN_SCREEN` to `EnshwickClientCommand_TRASH`.
   uint32_t kind;
   // A move's hold in milliseconds, 1 to `EnshwickClientCommand_MAX_HOLD_MS`;
   // a press's, 1 to `EnshwickClientCommand_MAX_PRESS_MS`.
@@ -1109,6 +1109,21 @@ typedef struct EnshwickClientCommand {
   // `EnshwickClientSnapshot.dialog` gives it; a command for a dialog that no
   // longer shows ends unavailable. ABI 12.25.
   uint32_t dialog;
+  // The slot an item command acts on, packed as the game packs one: the
+  // inventory entity, then its index shifted left by 32; the source of
+  // `EnshwickClientCommand_MOVE_ITEM`. ABI 12.28.
+  uint64_t slot;
+  // The slot `EnshwickClientCommand_MOVE_ITEM` moves into, packed as `slot`.
+  // ABI 12.28.
+  uint64_t target_slot;
+  // The station `EnshwickClientCommand_CRAFT` crafts at, 0 to craft by hand;
+  // the inventory `EnshwickClientCommand_TAKE_ALL` takes from or
+  // `EnshwickClientCommand_DEPOSIT_ALL` deposits into. ABI 12.28.
+  EnshwickEntity entity;
+  // How many: crafts of `EnshwickClientCommand_CRAFT`, 1 to
+  // `EnshwickClientCommand_MAX_AMOUNT`; items `EnshwickClientCommand_MOVE_ITEM`
+  // moves, 0 for the whole stack. ABI 12.28.
+  uint32_t amount;
 } EnshwickClientCommand;
 // Opens `target`, one of the screens the game opens from a key in the
 // world.
@@ -1166,6 +1181,26 @@ typedef struct EnshwickClientCommand {
 // Answers the loader's dialog that shows with `answer`, as its button
 // would. ABI 12.25.
 #define EnshwickClientCommand_ANSWER_DIALOG 21
+// Crafts `recipe` `amount` times at `entity` or by hand, through the
+// game's own crafting request; the server checks it. ABI 12.28.
+#define EnshwickClientCommand_CRAFT 22
+// Moves `amount` items, or the whole stack, from `slot` to
+// `target_slot`, through the game's own item transfer. ABI 12.28.
+#define EnshwickClientCommand_MOVE_ITEM 23
+// Equips the item in `slot` into the equipment slot `target` names, a
+// member of the game's `EquipmentSlot` such as `RangedWeapon`.
+// ABI 12.28.
+#define EnshwickClientCommand_EQUIP 24
+// Takes every stack from the inventory `entity` into the player's, as
+// a storage window's take all does. ABI 12.28.
+#define EnshwickClientCommand_TAKE_ALL 25
+// Moves every stack of the player's into the inventory `entity`, as a
+// storage window's deposit all does. ABI 12.28.
+#define EnshwickClientCommand_DEPOSIT_ALL 26
+// Destroys the stack in `slot`, as the game's trash does. ABI 12.28.
+#define EnshwickClientCommand_TRASH 27
+// The most crafts or items one command asks for. ABI 12.28.
+#define EnshwickClientCommand_MAX_AMOUNT 65535
 // The longest text, in bytes, a window's field takes. ABI 12.24.
 #define EnshwickClientCommand_MAX_TEXT 255
 // How many worlds and characters the main menu lists at most.
@@ -1281,6 +1316,32 @@ typedef struct EnshwickClientCommandStatus {
 // The join failed for a reason the client does not show.
 #define EnshwickClientCommandStatus_UNKNOWN 9
 
+// One slot of the local player's inventory as the client's world holds
+// it, which `EnshwickHostApi.client_slots` lists.
+// ABI 12.28.
+typedef struct EnshwickClientSlot {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The slot as the game packs it: the sub-inventory entity, then the
+  // index in it shifted left by 32.
+  uint64_t slot;
+  // The item's id, 0 for none.
+  uint32_t item;
+  // How many.
+  uint32_t count;
+  // The item's own entity, for items with durability or a level; 0 for
+  // none.
+  EnshwickEntity pide;
+  // The sub-inventory's `InventoryCategory`.
+  uint8_t category;
+  // `EnshwickClientSlot_ACTIONBAR`.
+  uint8_t flags;
+  // Zero.
+  uint16_t reserved;
+} EnshwickClientSlot;
+// The slot is one of the action bar's.
+#define EnshwickClientSlot_ACTIONBAR 1
+
 // The client's state in one copy, which
 // `EnshwickHostApi.client_snapshot` writes.
 //
@@ -1378,6 +1439,30 @@ typedef struct EnshwickClientSnapshot {
   uint32_t character;
   // Zero.
   uint32_t reserved3;
+  // Where the local player stands, x, y and z in metres, as the
+  // client's world holds it; group `EnshwickClientSnapshot_POSITION`.
+  // ABI 12.28.
+  double position[3];
+  // Where the local player's camera looks, a unit quaternion x, y, z, w
+  // in the world's axes; group `EnshwickClientSnapshot_LOOK`. ABI 12.28.
+  float look[4];
+  // The local player's health; group `EnshwickClientSnapshot_VITALS`.
+  // ABI 12.28.
+  uint32_t health;
+  // The local player's maximum health; group `EnshwickClientSnapshot_VITALS`.
+  // ABI 12.28.
+  uint32_t health_max;
+  // The local player's stamina; group `EnshwickClientSnapshot_VITALS`.
+  // ABI 12.28.
+  uint32_t stamina;
+  // The local player's maximum stamina; group
+  // `EnshwickClientSnapshot_VITALS`. ABI 12.28.
+  uint32_t stamina_max;
+  // The action bar's selected slot, from 0; group
+  // `EnshwickClientSnapshot_ACTIONBAR`. ABI 12.28.
+  uint32_t actionbar_slot;
+  // Zero.
+  uint32_t reserved4;
 } EnshwickClientSnapshot;
 // No interface read yet.
 #define EnshwickClientSnapshot_NEVER 0
@@ -1412,6 +1497,18 @@ typedef struct EnshwickClientSnapshot {
 // `character`: the main menu's selected character
 // reads on this build. ABI 12.26.
 #define EnshwickClientSnapshot_CHARACTER 256
+// `position`, read in the client's last step.
+// ABI 12.28.
+#define EnshwickClientSnapshot_POSITION 512
+// `look`, read in the client's last step. ABI 12.28.
+#define EnshwickClientSnapshot_LOOK 1024
+// `health`, `health_max`,
+// `stamina` and `stamina_max`,
+// read in the client's last step. ABI 12.28.
+#define EnshwickClientSnapshot_VITALS 2048
+// `actionbar_slot`, read in the client's last
+// step. ABI 12.28.
+#define EnshwickClientSnapshot_ACTIONBAR 4096
 // `character` while no character is selected or no
 // main menu shows. ABI 12.26.
 #define EnshwickClientSnapshot_NO_CHARACTER UINT32_MAX
@@ -7694,6 +7791,21 @@ typedef struct EnshwickHostApi {
                                    uint32_t entry_size,
                                    uint32_t capacity,
                                    uint32_t *count);
+  // Up to `capacity` slots of the local player's inventory, empty ones
+  // included, in the game's order, as the client's last step read them
+  // from its copy of the world, and how many there are, as every list
+  // answers. Entries are `entry_size` bytes apart, the caller's
+  // `sizeof(EnshwickClientSlot)`. The first call starts the reads, which
+  // then run in each step for a few seconds after the last call; while
+  // no step read them in the last second it answers
+  // `EnshwickStatus_NOT_LOADED`. Client only: `EnshwickStatus_UNAVAILABLE` on a
+  // server and on a build whose slots the loader cannot read. Any thread;
+  // it runs no mod callback. ABI 12.28.
+  EnshwickStatus (*client_slots)(EnshwickModHandle me,
+                                 struct EnshwickClientSlot *out,
+                                 uint32_t entry_size,
+                                 uint32_t capacity,
+                                 uint32_t *count);
 } EnshwickHostApi;
 
 // The layout the loader was built with, from its golden layout file.
@@ -7934,7 +8046,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, header) == 0, "offset of Chun
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, x) == 8, "offset of ChunkData.x");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, z) == 12, "offset of ChunkData.z");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, size) == 16, "offset of ChunkData.size");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientCommand) == 176, "size of ClientCommand");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientCommand) == 200, "size of ClientCommand");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientCommand) == 8, "alignment of ClientCommand");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, header) == 0, "offset of ClientCommand.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, kind) == 8, "offset of ClientCommand.kind");
@@ -7956,6 +8068,10 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, item) == 136, "offset of 
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, text) == 152, "offset of ClientCommand.text");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, answer) == 168, "offset of ClientCommand.answer");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, dialog) == 172, "offset of ClientCommand.dialog");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, slot) == 176, "offset of ClientCommand.slot");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, target_slot) == 184, "offset of ClientCommand.target_slot");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, entity) == 192, "offset of ClientCommand.entity");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, amount) == 196, "offset of ClientCommand.amount");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientCommandStatus) == 40, "size of ClientCommandStatus");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientCommandStatus) == 8, "alignment of ClientCommandStatus");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, header) == 0, "offset of ClientCommandStatus.header");
@@ -7966,7 +8082,17 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, reserved) == 20, "o
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, age_ms) == 24, "offset of ClientCommandStatus.age_ms");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, phase) == 32, "offset of ClientCommandStatus.phase");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, failure) == 36, "offset of ClientCommandStatus.failure");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientSnapshot) == 200, "size of ClientSnapshot");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientSlot) == 32, "size of ClientSlot");
+ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientSlot) == 8, "alignment of ClientSlot");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSlot, header) == 0, "offset of ClientSlot.header");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSlot, slot) == 8, "offset of ClientSlot.slot");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSlot, item) == 16, "offset of ClientSlot.item");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSlot, count) == 20, "offset of ClientSlot.count");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSlot, pide) == 24, "offset of ClientSlot.pide");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSlot, category) == 28, "offset of ClientSlot.category");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSlot, flags) == 29, "offset of ClientSlot.flags");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSlot, reserved) == 30, "offset of ClientSlot.reserved");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientSnapshot) == 264, "size of ClientSnapshot");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientSnapshot) == 8, "alignment of ClientSnapshot");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, header) == 0, "offset of ClientSnapshot.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, state) == 8, "offset of ClientSnapshot.state");
@@ -7993,6 +8119,14 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, prompt_target) == 184, "
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, prompt_verb) == 188, "offset of ClientSnapshot.prompt_verb");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, character) == 192, "offset of ClientSnapshot.character");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, reserved3) == 196, "offset of ClientSnapshot.reserved3");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, position) == 200, "offset of ClientSnapshot.position");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, look) == 224, "offset of ClientSnapshot.look");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, health) == 240, "offset of ClientSnapshot.health");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, health_max) == 244, "offset of ClientSnapshot.health_max");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, stamina) == 248, "offset of ClientSnapshot.stamina");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, stamina_max) == 252, "offset of ClientSnapshot.stamina_max");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, actionbar_slot) == 256, "offset of ClientSnapshot.actionbar_slot");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientSnapshot, reserved4) == 260, "offset of ClientSnapshot.reserved4");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientWindowItem) == 88, "size of ClientWindowItem");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientWindowItem) == 8, "alignment of ClientWindowItem");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientWindowItem, header) == 0, "offset of ClientWindowItem.header");
@@ -8190,7 +8324,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, detour) == 16, "offset of Hook
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, next) == 24, "offset of HookSpec.next");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, priority) == 32, "offset of HookSpec.priority");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHookSpec, flags) == 36, "offset of HookSpec.flags");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1872, "size of HostApi");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickHostApi) == 1880, "size of HostApi");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickHostApi) == 8, "alignment of HostApi");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, header) == 0, "offset of HostApi.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, host_version) == 8, "offset of HostApi.host_version");
@@ -8425,6 +8559,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_rebind) == 1840, "offset o
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, quest_reward_filter) == 1848, "offset of HostApi.quest_reward_filter");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, knowledge_set) == 1856, "offset of HostApi.knowledge_set");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_windows) == 1864, "offset of HostApi.client_windows");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_slots) == 1872, "offset of HostApi.client_slots");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 96, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");

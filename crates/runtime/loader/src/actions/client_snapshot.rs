@@ -12,6 +12,7 @@ use enshwick_core::{Entity, RecipeId};
 
 use crate::actions::client_control::MenuTab;
 use crate::actions::local_held::{self, Sample};
+use crate::actions::player_state::{self, Parts};
 use crate::engine::copied::Copied;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
@@ -308,6 +309,7 @@ pub(crate) fn snapshot(loader: &Loader, scene: Option<&'static str>) -> ClientSn
             off,
             held: local_held::sample(),
             player: local_held::player(),
+            state: player_state::last(),
             scene,
         },
         local_held::now_ms(),
@@ -333,7 +335,8 @@ pub(crate) fn snapshot(loader: &Loader, scene: Option<&'static str>) -> ClientSn
 
 /// What a snapshot is made of: the frame's last whole copy, the loader's
 /// screen word, the selected character's word, whether the reads are off,
-/// the held controls' sample, the local player and the world's name.
+/// the held controls' sample, the local player, its own state with when it
+/// was read, and the world's name.
 #[derive(Clone, Copy, Debug)]
 struct Kept {
     words: Option<[u64; 5]>,
@@ -342,6 +345,7 @@ struct Kept {
     off: bool,
     held: Sample,
     player: Option<Entity>,
+    state: Option<(player_state::Read, u64)>,
     scene: Option<&'static str>,
 }
 
@@ -364,6 +368,11 @@ fn compose(
             snapshot.player = player;
             snapshot.available |= ClientSnapshot::PLAYER;
         }
+    }
+    if let Some((state, at)) = kept.state
+        && local_held::fresh(at, now)
+    {
+        player_parts(&mut snapshot, &state);
     }
     // The loader's own screen reads at the main menu too, before any game.
     if !kept.off
@@ -428,9 +437,79 @@ fn compose(
     snapshot
 }
 
+/// Sets the groups of `snapshot` that `state`, a fresh read of the local
+/// player, holds.
+fn player_parts(snapshot: &mut ClientSnapshot, state: &player_state::Read) {
+    let parts = state.parts;
+    if parts.contains(Parts::POSITION) {
+        snapshot.position = enshwick_core::ecs::metres(state.position);
+        snapshot.available |= ClientSnapshot::POSITION;
+    }
+    if parts.contains(Parts::LOOK) {
+        snapshot.look = state.look;
+        snapshot.available |= ClientSnapshot::LOOK;
+    }
+    if parts.contains(Parts::VITALS) {
+        [
+            snapshot.health,
+            snapshot.health_max,
+            snapshot.stamina,
+            snapshot.stamina_max,
+        ] = state.vitals.map(u32::from);
+        snapshot.available |= ClientSnapshot::VITALS;
+    }
+    if parts.contains(Parts::ACTIONBAR) {
+        snapshot.actionbar_slot = u32::from(state.actionbar);
+        snapshot.available |= ClientSnapshot::ACTIONBAR;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_local_player_s_state_counts_only_while_fresh_and_only_its_read_parts() {
+        let read = player_state::Read {
+            parts: Parts::POSITION.with(Parts::VITALS),
+            position: [3 << 32, -(1 << 31), 0],
+            look: [0.0, 0.0, 0.0, 1.0],
+            vitals: [37, 120, 50, 100],
+            actionbar: 2,
+        };
+        let fresh = compose(
+            Kept {
+                state: Some((read, 100)),
+                ..kept(None)
+            },
+            150,
+            name,
+        );
+        assert_eq!(
+            fresh.available,
+            ClientSnapshot::POSITION | ClientSnapshot::VITALS
+        );
+        assert_eq!(fresh.position, [3.0, -0.5, 0.0]);
+        assert_eq!(
+            (
+                fresh.health,
+                fresh.health_max,
+                fresh.stamina,
+                fresh.stamina_max
+            ),
+            (37, 120, 50, 100)
+        );
+        assert_eq!(fresh.actionbar_slot, 0, "an unread part stays empty");
+        let stale = compose(
+            Kept {
+                state: Some((read, 100)),
+                ..kept(None)
+            },
+            100 + local_held::FRESH_MS + 1,
+            name,
+        );
+        assert_eq!(stale.available, 0, "no step read it in the last second");
+    }
 
     /// The text of a snapshot's name.
     fn text(name: Str) -> Option<&'static str> {
@@ -466,6 +545,7 @@ mod tests {
             off: false,
             held: Sample::Never { miss: None },
             player: None,
+            state: None,
             scene: None,
         }
     }

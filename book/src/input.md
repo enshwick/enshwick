@@ -295,6 +295,42 @@ takes it. It is `None` while no character is selected and outside the main
 menu. The place does not name the save storage. When the local folder and
 Steam's cloud both hold a character there, the host plays the cloud one.
 
+The local player's own parts read on any client, a joined one included:
+
+| Call | Gives |
+| --- | --- |
+| `position()` | where the player stands, x, y and z in metres |
+| `look()` | where its camera looks, a unit quaternion x, y, z, w |
+| `health()`, `stamina()` | a `Meter`: the value and its maximum, as the HUD draws them |
+| `actionbar_slot()` | the action bar's selected slot, from 0 |
+
+These come from the client's own copy of the world, read in its last step.
+On a joined client they may trail the server by a step. While no step ran
+in the last second, as in a menu that stops the steps, they are `None`.
+
+`Input::client_slots()` lists every slot of the local player's inventory,
+empty ones included: the equipment, the action bar and the backpack. Each
+`PlayerSlot` holds a `Slot`, as the server's inventory reads name it: its
+place, category, item and count. It also says whether the slot is one of
+the action bar's. The first call starts the reads, so it gives `None`. The
+reads then run each step until a few seconds after the last call. On a
+build that cannot read the slots, the call returns
+`WorldError::Unavailable`.
+
+```rust
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let input = load.input()?;
+    load.on_frame(move |frame| {
+        if let Ok(snapshot) = input.client_snapshot()
+            && let Some(health) = snapshot.health()
+            && health.fraction() < 0.3
+        {
+            frame.label("Low health");
+        }
+    })
+}
+```
+
 The client reads the snapshot once a mod opens its input, as it does the
 held controls. So a mod's first frame in a game has it. The state is
 `Never` in two cases:
@@ -557,6 +593,44 @@ local function highlight(recipe: number)
         recipe = recipe,
     })
 end
+```
+
+## Crafting and moving items
+
+These commands write the same requests the game's own screens send. The
+server checks each one as it checks the player's own: resources, recipes,
+stations and rights. Each is `Applied` once the request is written. It is
+`Observed` once the client's copy of an inventory it names changes after
+it. A craft watches the player's whole inventory, and a slot command the
+inventories of its slots. `TakeAll` and `DepositAll` watch both
+inventories. A request the server refuses changes nothing, so the command
+ends timed out, as one that finds nothing to move does. A request waits a
+step while the player's own request of its kind arrives, so the player's
+input wins. One of these commands runs at a time across all mods. On a
+build that cannot read the player's slots, they return
+`WorldError::Unavailable`.
+
+| Action | Does |
+| --- | --- |
+| `Craft { recipe, count, station }` | crafts the recipe at a station, such as the open screen's host, or by hand for `None` |
+| `MoveItem { from, to, count }` | moves items, or the whole stack for `None`, from one slot to another |
+| `Equip { slot, equipment }` | equips the slot's item into a member of the game's `EquipmentSlot`, such as `RangedWeapon` |
+| `TakeAll(inventory)`, `DepositAll(inventory)` | moves every stack between a storage and the player, as the storage window's buttons do |
+| `Trash(slot)` | destroys the slot's stack; the game has no drop on the ground |
+
+A count moved into an empty slot splits a stack. A move out of an equipment
+slot unequips the item.
+
+```rust
+use enshwick::input::{ClientCommand, CommandAction, Input};
+use enshwick::{RecipeId, WorldError};
+
+fn craft_torch(input: Input) -> Result<(), WorldError> {
+    let snapshot = input.client_snapshot()?;
+    let craft = CommandAction::Craft { recipe: RecipeId(0x7cd8_0a04), count: 1, station: None };
+    input.client_command(&ClientCommand::new(craft, snapshot.session()))?;
+    Ok(())
+}
 ```
 
 ## Setting the waypoint and pinging the map

@@ -31,7 +31,7 @@ pub(crate) use self::play::{Host, Post, place, server_str};
 #[cfg(test)]
 use self::spec::inside_frame;
 use self::spec::{expected_screen, kind, text, window_ask};
-use crate::actions::client_control::{Mark, MenuTab};
+use crate::actions::client_control::{Act, Mark, MenuTab};
 use crate::actions::client_input::{self, Ask};
 use crate::actions::client_recipes;
 use crate::actions::client_snapshot::{LoaderScreen, RecipeRead, TabRead};
@@ -79,6 +79,9 @@ pub(crate) enum Kind {
     /// Sets, moves or clears the local player's waypoint, or pings a
     /// position, through its input's waypoint request.
     Mark(Mark),
+    /// Writes a crafting, item transfer, equipment or item request into the
+    /// local player's input.
+    Act(Act),
     /// Hosts a world from the main menu; [`play`] runs it from the queue
     /// on, as a join.
     Host(Host),
@@ -113,6 +116,12 @@ impl Kind {
             Self::Mark(Mark::Set(_)) => Spec::SET_WAYPOINT,
             Self::Mark(Mark::Clear) => Spec::CLEAR_WAYPOINT,
             Self::Mark(Mark::Ping(_)) => Spec::PING,
+            Self::Act(Act::Craft { .. }) => Spec::CRAFT,
+            Self::Act(Act::Move { .. }) => Spec::MOVE_ITEM,
+            Self::Act(Act::MoveAll { to: 0, .. }) => Spec::TAKE_ALL,
+            Self::Act(Act::MoveAll { .. }) => Spec::DEPOSIT_ALL,
+            Self::Act(Act::Equip { .. }) => Spec::EQUIP,
+            Self::Act(Act::Trash { .. }) => Spec::TRASH,
             Self::Window(windows::Act::Press) => Spec::WINDOW_PRESS,
             Self::Window(windows::Act::Pick) => Spec::WINDOW_PICK,
             Self::Window(windows::Act::Text) => Spec::WINDOW_TEXT,
@@ -126,7 +135,7 @@ impl Kind {
     fn waits_beside(self, other: Self) -> bool {
         match (self, other) {
             (Self::Press(bit, ..), Self::Press(other, ..)) => bit != other,
-            (Self::Mark(_), Self::Mark(_)) => false,
+            (Self::Mark(_), Self::Mark(_)) | (Self::Act(_), Self::Act(_)) => false,
             _ => self.raw() != other.raw(),
         }
     }
@@ -274,6 +283,7 @@ impl Command {
             Kind::Highlight(_) => client_recipes::progress(self.id),
             // A handed join or leave runs through `plays_next` instead.
             Kind::Mark(_) => client_input::mark_progress(self.id),
+            Kind::Act(_) => client_input::act_progress(self.id),
             Kind::Window(_) => windows::progress(self.id),
             Kind::Answer(_) => dialogs::progress(self.id),
             Kind::Join
@@ -299,6 +309,7 @@ impl Command {
             Kind::Highlight(recipe) => client_recipes::hand(self.id, recipe),
             Kind::Leave => play::leave(self.id, local_held::now_ms()).is_ok(),
             Kind::Mark(mark) => client_input::mark(self.id, self.owner, mark),
+            Kind::Act(act) => client_input::act(self.id, self.owner, act),
             Kind::Window(_) => windows::hand(self.id),
             Kind::Answer(answer) => dialogs::hand(self.id, answer),
             // A join and a host are handed when queued, a join with its
@@ -331,6 +342,7 @@ impl Command {
                 play::release(self.id, local_held::now_ms(), by_mod);
             }
             Kind::Mark(_) => client_input::unmark(self.id),
+            Kind::Act(_) => client_input::unact(self.id),
             Kind::Answer(_) => dialogs::release(self.id),
             Kind::Open(_) | Kind::Close(_) | Kind::Tab(_) | Kind::Mods(_) | Kind::Window(_) => {}
         }
@@ -426,6 +438,7 @@ fn next(
         | Kind::Leave
         | Kind::Host(_)
         | Kind::Mark(_)
+        | Kind::Act(_)
         | Kind::Window(_)
         | Kind::Answer(_) => false,
     };
@@ -466,7 +479,7 @@ fn next(
             return cancel(Status::OTHER_SCREEN);
         }
         // A waypoint or ping drives none of the player's input to give way.
-        if pressed && !matches!(command.kind, Kind::Mark(_)) {
+        if pressed && !matches!(command.kind, Kind::Mark(_) | Kind::Act(_)) {
             return cancel(Status::PLAYER_INPUT);
         }
         let ready = match command.kind {
@@ -483,6 +496,7 @@ fn next(
             | Kind::Leave
             | Kind::Host(_)
             | Kind::Mark(_)
+            | Kind::Act(_)
             | Kind::Window(_)
             | Kind::Answer(_) => true,
         };
@@ -619,6 +633,7 @@ fn runs(kind: Kind) -> bool {
         // times out.
         Kind::Mods(_) => mods_screen_opens(),
         Kind::Mark(_) => client_input::marks_run(),
+        Kind::Act(_) => client_input::acts_run(),
         Kind::Window(_) => windows::runs(),
         Kind::Answer(_) => dialogs::runs(),
     }

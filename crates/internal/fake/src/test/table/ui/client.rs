@@ -42,7 +42,7 @@ entries! {
                 unsafe { id.write(spec.cancels) };
                 return Status::OK;
             }
-            if !(Spec::OPEN_SCREEN..=Spec::ANSWER_DIALOG).contains(&spec.kind) || !spec.in_bounds() {
+            if !(Spec::OPEN_SCREEN..=Spec::TRASH).contains(&spec.kind) || !spec.in_bounds() {
                 return Status::BAD_ARGS;
             }
             // As the loader: an answer goes to the dialog it names while that
@@ -83,6 +83,26 @@ entries! {
                     .any(|(_, kind, _, status)| marks(*kind) && open(status))
             {
                 return Status::REFUSED;
+            }
+            // As the loader: one crafting or item request at a time.
+            let acts = |kind: u32| (Spec::CRAFT..=Spec::TRASH).contains(&kind);
+            if acts(spec.kind)
+                && s.ui
+                    .client_commands
+                    .iter()
+                    .any(|(_, kind, _, status)| acts(*kind) && open(status))
+            {
+                return Status::REFUSED;
+            }
+            // As the loader: an equip names a member of the build's
+            // `EquipmentSlot`.
+            if spec.kind == Spec::EQUIP
+                // SAFETY: the mod's spec, its target borrowed for the call.
+                && !unsafe { spec.target.as_str() }.is_some_and(|name| {
+                    reflects(&s.host, enshwick_core::__fake::ids::EQUIPMENT_SLOT, name)
+                })
+            {
+                return Status::BAD_ARGS;
             }
             // SAFETY: the mod's spec, its target borrowed for the call; the
             // password is never read, kept or returned.
@@ -205,9 +225,14 @@ fn on_screen(s: &crate::test::table::State) -> Option<(u32, u32, bool)> {
 }
 
 fn reflects_action(host: &crate::test::FakeHost, name: &str) -> bool {
+    reflects(host, enshwick_core::__fake::ids::PLAYER_INPUT_TYPE, name)
+}
+
+/// Whether the fake build reflects the enum `ty` with a member `name`.
+fn reflects(host: &crate::test::FakeHost, ty: &str, name: &str) -> bool {
     host.base
         .type_hashes
-        .get(enshwick_core::__fake::ids::PLAYER_INPUT_TYPE)
+        .get(ty)
         .and_then(|hash| {
             host.content
                 .type_list
@@ -325,6 +350,24 @@ entries! {
         });
         match items {
             Ok(items) => crate::test::table::base::io::list(&items, out, entry_size, capacity, count),
+            Err(status) => status,
+        }
+    }
+
+    /// The local player's slots the test set, `NOT_LOADED` while it set
+    /// none; unavailable on a server, as the loader answers.
+    pub(crate) fn client_slots(
+        me as Caller,
+        [out: *mut enshwick_core::abi::ClientSlot, entry_size: u32, capacity: u32, count: *mut u32] as args::SizedListOut,
+    ) -> Status {
+        let slots = with(Err(Status::MISSING), |s| {
+            if s.host.base.side == Side::SERVER {
+                return Err(Status::UNAVAILABLE);
+            }
+            s.ui.client_slots.clone().ok_or(Status::NOT_LOADED)
+        });
+        match slots {
+            Ok(slots) => crate::test::table::base::io::list(&slots, out, entry_size, capacity, count),
             Err(status) => status,
         }
     }

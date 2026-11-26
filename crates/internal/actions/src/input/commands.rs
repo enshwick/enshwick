@@ -2,13 +2,17 @@
 //! screen, choose the in-game menu's tab, each with an id and an outcome
 //! the client's own state confirms.
 
+use core::num::NonZeroU16;
+
 use super::Input;
 use crate::abi::{ClientCommand as RawCommand, ClientCommandStatus as Raw, Status, Str};
 use crate::controls::GameAction;
-use crate::{RecipeId, WorldError};
+use crate::{Entity, RecipeId, WorldError};
 use enshwick_base::ui::Response;
+use enshwick_inventory::inventory::SlotRef;
 use enshwick_world::__internal::world_status;
 
+mod luau;
 mod status;
 
 pub use status::{CancelReason, CommandState, CommandStatus, JoinFailure, JoinPhase};
@@ -170,6 +174,61 @@ pub enum CommandAction {
         /// The answer.
         response: Response,
     },
+    /// Crafts `recipe` `count` times through the game's own crafting
+    /// request, as the craft button does, at `station` (the chest-like
+    /// workbench whose screen shows, as
+    /// [`ClientSnapshot::host`](super::ClientSnapshot::host) names it) or by
+    /// hand for `None`. The server checks every craft: resources, the
+    /// recipe and the station. Applied once the request is written;
+    /// observed once the client's copy of the player's inventory changes
+    /// after it; a craft the server refuses changes nothing, so it ends
+    /// timed out. Any change counts, so a craft sent before the last one's
+    /// items arrived may take those for its own.
+    Craft {
+        /// The recipe.
+        recipe: RecipeId,
+        /// How many times, 1 to 65,535.
+        count: u16,
+        /// The station, `None` to craft by hand.
+        station: Option<Entity>,
+    },
+    /// Moves `count` items, or the whole stack for `None`, from the slot
+    /// `from` to `to`, through the game's own item transfer, as a drag
+    /// does: a count into an empty slot splits a stack, a move into an
+    /// action bar slot fills it, a move out of an equipment slot unequips.
+    /// The slots are those [`Input::client_slots`] lists, or a chest's.
+    /// Observed once the client's copy of either slot's inventory changes;
+    /// a move the server refuses changes neither, so it ends timed out.
+    MoveItem {
+        /// The slot the items leave.
+        from: SlotRef,
+        /// The slot they go to.
+        to: SlotRef,
+        /// How many, `None` for the whole stack.
+        count: Option<NonZeroU16>,
+    },
+    /// Equips the item in `slot` into the equipment slot `equipment`, a
+    /// member of the game's `EquipmentSlot` such as `RangedWeapon`, through
+    /// the game's own equipment request. Observed once the client's copy of
+    /// the slot's inventory changes.
+    Equip {
+        /// The slot that holds the item.
+        slot: SlotRef,
+        /// The equipment slot.
+        equipment: String,
+    },
+    /// Takes every stack of the inventory `from`, such as the chest
+    /// [`ClientSnapshot::host`](super::ClientSnapshot::host) names, into the
+    /// player's, as a storage window's take all does. Observed once the
+    /// client's copy of either inventory changes; one that finds nothing to
+    /// move changes neither, so it ends timed out, as a refused one does.
+    TakeAll(Entity),
+    /// Moves every stack of the player's into the inventory `to`, as a
+    /// storage window's deposit all does. Observed as [`Self::TakeAll`].
+    DepositAll(Entity),
+    /// Destroys the stack in `slot`, as the game's trash does; the game has
+    /// no drop of an item on the ground. Observed as [`Self::Equip`].
+    Trash(SlotRef),
 }
 
 /// A server's password for [`CommandAction::Join`]: the loader hands it to
@@ -256,6 +315,10 @@ impl ClientCommand {
         self
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one arm per action, exhaustive so a new action cannot build without its raw form"
+    )]
     fn raw(&self) -> RawCommand {
         let mut raw = RawCommand {
             session: self.session,
@@ -350,8 +413,54 @@ impl ClientCommand {
                 raw.dialog = *dialog;
                 raw.answer = response.to_raw();
             }
+            CommandAction::Craft { .. }
+            | CommandAction::MoveItem { .. }
+            | CommandAction::Equip { .. }
+            | CommandAction::TakeAll(_)
+            | CommandAction::DepositAll(_)
+            | CommandAction::Trash(_) => item_raw(&self.action, &mut raw),
         }
         raw
+    }
+}
+
+/// Fills `raw` with the item command `action`; the others leave it.
+fn item_raw(action: &CommandAction, raw: &mut RawCommand) {
+    match action {
+        CommandAction::Craft {
+            recipe,
+            count,
+            station,
+        } => {
+            raw.kind = RawCommand::CRAFT;
+            raw.recipe = *recipe;
+            raw.amount = u32::from(*count);
+            raw.entity = station.unwrap_or(Entity(0));
+        }
+        CommandAction::MoveItem { from, to, count } => {
+            raw.kind = RawCommand::MOVE_ITEM;
+            raw.slot = from.0;
+            raw.target_slot = to.0;
+            raw.amount = count.map_or(0, |count| u32::from(count.get()));
+        }
+        CommandAction::Equip { slot, equipment } => {
+            raw.kind = RawCommand::EQUIP;
+            raw.slot = slot.0;
+            raw.target = Str::new(equipment);
+        }
+        CommandAction::TakeAll(from) => {
+            raw.kind = RawCommand::TAKE_ALL;
+            raw.entity = *from;
+        }
+        CommandAction::DepositAll(to) => {
+            raw.kind = RawCommand::DEPOSIT_ALL;
+            raw.entity = *to;
+        }
+        CommandAction::Trash(slot) => {
+            raw.kind = RawCommand::TRASH;
+            raw.slot = slot.0;
+        }
+        _ => {}
     }
 }
 
@@ -391,187 +500,6 @@ impl CommandId {
     #[must_use]
     pub const fn as_u64(self) -> u64 {
         self.0
-    }
-}
-
-/// [`ClientCommand`] as Luau gives it; its `Debug` shows none of the
-/// password.
-#[derive(Clone, PartialEq, crate::Script)]
-#[script(name = "ClientCommand")]
-struct LuauCommand {
-    /// `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`,
-    /// `"move"`, `"highlight_recipe"`, `"join"`, `"leave"`, `"press"`,
-    /// `"set_waypoint"`, `"clear_waypoint"`, `"ping"`, `"host"`,
-    /// `"open_mods"`, `"open_mod"`, `"open_mod_settings"`,
-    /// `"press_window_item"`, `"pick_window_item"`, `"set_window_text"` or
-    /// `"answer_dialog"`.
-    pub kind: String,
-    /// The session, as `client_snapshot().session` gives it.
-    pub session: u64,
-    /// The HUD screen the client must show.
-    pub expected_screen: Option<String>,
-    /// The screen to open, the tab to choose, the server to join or the
-    /// mod whose page to open, by its id.
-    pub target: Option<String>,
-    /// A look's yaw and pitch in radians.
-    pub look: Option<[f32; 2]>,
-    /// A move's direction.
-    pub direction: Option<[f32; 2]>,
-    /// A move's or a press's hold in milliseconds.
-    pub hold_ms: Option<u32>,
-    /// The recipe to highlight.
-    pub recipe: Option<RecipeId>,
-    /// A join's server password.
-    pub password: Option<String>,
-    /// The game action a press holds, by its game name, as a control's
-    /// `link` names it.
-    pub action: Option<String>,
-    /// The world position, x, y and z in metres, a waypoint or a ping
-    /// marks.
-    pub position: Option<[f64; 3]>,
-    /// A host's world, by its place in the main menu's list from 0.
-    pub world: Option<u16>,
-    /// A host's character, by its place in the main menu's list from 0.
-    pub character: Option<u16>,
-    /// Whether a host opens its world online; offline without it.
-    pub online: Option<bool>,
-    /// A window command's window, as `mod:window`.
-    pub window: Option<String>,
-    /// A window command's item, by its id in the window.
-    pub item: Option<String>,
-    /// The option a pick picks or the text a window's field takes.
-    pub text: Option<String>,
-    /// The response a dialog's answer gives.
-    pub answer: Option<Response>,
-    /// The dialog an answer answers, as `client_snapshot().dialog` numbers
-    /// it.
-    pub dialog: Option<u32>,
-}
-
-impl core::fmt::Debug for LuauCommand {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("LuauCommand")
-            .field("kind", &self.kind)
-            .field("session", &self.session)
-            .field("expected_screen", &self.expected_screen)
-            .field("target", &self.target)
-            .field("look", &self.look)
-            .field("direction", &self.direction)
-            .field("hold_ms", &self.hold_ms)
-            .field("recipe", &self.recipe)
-            .field("password", &self.password.as_ref().map(|_| "<secret>"))
-            .field("action", &self.action)
-            .field("position", &self.position)
-            .field("world", &self.world)
-            .field("character", &self.character)
-            .field("online", &self.online)
-            .field("window", &self.window)
-            .field("item", &self.item)
-            .field("text", &self.text)
-            .field("answer", &self.answer)
-            .field("dialog", &self.dialog)
-            .finish()
-    }
-}
-
-impl TryFrom<LuauCommand> for ClientCommand {
-    type Error = crate::script::Error;
-
-    fn try_from(luau: LuauCommand) -> Result<Self, Self::Error> {
-        let missing =
-            |what: &str| crate::script::Error::new(format!("a {} command needs {what}", luau.kind));
-        let action = match luau.kind.as_str() {
-            "open_screen" => {
-                CommandAction::OpenScreen(luau.target.clone().ok_or_else(|| missing("a target"))?)
-            }
-            "close_screen" => CommandAction::CloseScreen,
-            "choose_tab" => {
-                CommandAction::ChooseTab(luau.target.clone().ok_or_else(|| missing("a target"))?)
-            }
-            "look" => {
-                let [yaw, pitch] = luau.look.ok_or_else(|| missing("a look"))?;
-                CommandAction::Look { yaw, pitch }
-            }
-            "move" => CommandAction::Move {
-                direction: luau.direction.ok_or_else(|| missing("a direction"))?,
-                hold_ms: luau.hold_ms.ok_or_else(|| missing("a hold"))?,
-            },
-            "highlight_recipe" => {
-                CommandAction::HighlightRecipe(luau.recipe.ok_or_else(|| missing("a recipe"))?)
-            }
-            "join" => CommandAction::Join {
-                server: luau.target.clone().ok_or_else(|| missing("a target"))?,
-                password: luau.password.clone().map(Password),
-            },
-            "leave" => CommandAction::Leave,
-            "press" => {
-                let name = luau.action.as_deref().ok_or_else(|| missing("an action"))?;
-                let action = GameAction::ALL
-                    .iter()
-                    .copied()
-                    .find(|action| action.name() == name)
-                    .ok_or_else(|| crate::script::Error::new(format!("no game action {name:?}")))?;
-                CommandAction::Press {
-                    action,
-                    hold_ms: luau.hold_ms.ok_or_else(|| missing("a hold"))?,
-                }
-            }
-            "set_waypoint" => {
-                CommandAction::SetWaypoint(luau.position.ok_or_else(|| missing("a position"))?)
-            }
-            "clear_waypoint" => CommandAction::ClearWaypoint,
-            "ping" => CommandAction::Ping(luau.position.ok_or_else(|| missing("a position"))?),
-            "open_mods" => CommandAction::OpenMods,
-            "open_mod" => {
-                CommandAction::OpenMod(luau.target.clone().ok_or_else(|| missing("a target"))?)
-            }
-            "open_mod_settings" => CommandAction::OpenModSettings(
-                luau.target.clone().ok_or_else(|| missing("a target"))?,
-            ),
-            "host" => CommandAction::Host {
-                world: luau.world.ok_or_else(|| missing("a world"))?,
-                character: luau.character.ok_or_else(|| missing("a character"))?,
-                online: luau.online.unwrap_or(false),
-            },
-            "press_window_item" => CommandAction::PressWindowItem {
-                window: luau.window.clone().ok_or_else(|| missing("a window"))?,
-                item: luau.item.clone().ok_or_else(|| missing("an item"))?,
-            },
-            "pick_window_item" => CommandAction::PickWindowItem {
-                window: luau.window.clone().ok_or_else(|| missing("a window"))?,
-                item: luau.item.clone().ok_or_else(|| missing("an item"))?,
-                option: luau.text.clone().ok_or_else(|| missing("a text"))?,
-            },
-            "set_window_text" => CommandAction::SetWindowText {
-                window: luau.window.clone().ok_or_else(|| missing("a window"))?,
-                item: luau.item.clone().ok_or_else(|| missing("an item"))?,
-                text: luau.text.clone().ok_or_else(|| missing("a text"))?,
-            },
-            "answer_dialog" => CommandAction::AnswerDialog {
-                dialog: luau.dialog.ok_or_else(|| missing("a dialog"))?,
-                response: luau.answer.ok_or_else(|| missing("an answer"))?,
-            },
-            other => {
-                return Err(crate::script::Error::new(format!(
-                    "no client command kind {other:?}"
-                )));
-            }
-        };
-        Ok(Self {
-            action,
-            session: luau.session,
-            expected_screen: luau.expected_screen,
-        })
-    }
-}
-
-impl crate::script::Typed for ClientCommand {
-    const TY: &'static crate::script::Ty = <LuauCommand as crate::script::Typed>::TY;
-}
-
-impl crate::script::FromScript for ClientCommand {
-    fn from_value(value: crate::script::Value) -> Result<Self, crate::script::Error> {
-        LuauCommand::from_value(value)?.try_into()
     }
 }
 
@@ -664,6 +592,7 @@ impl Input {
 
 #[cfg(test)]
 mod tests {
+    use super::luau::LuauCommand;
     use super::*;
 
     #[test]
@@ -713,6 +642,11 @@ mod tests {
             text: None,
             answer: None,
             dialog: None,
+            count: None,
+            entity: None,
+            slot: None,
+            target_slot: None,
+            equipment: None,
         };
         assert!(ClientCommand::try_from(luau("open_screen", Some("Map"))).is_ok());
         assert!(ClientCommand::try_from(luau("open_screen", None)).is_err());
@@ -724,6 +658,11 @@ mod tests {
         let answer = |dialog| LuauCommand {
             answer: Some(Response::Ok),
             dialog,
+            count: None,
+            entity: None,
+            slot: None,
+            target_slot: None,
+            equipment: None,
             ..luau("answer_dialog", None)
         };
         assert!(
@@ -761,6 +700,121 @@ mod tests {
     }
 
     #[test]
+    fn item_commands_carry_their_slots_counts_and_entities_within_bounds() {
+        let craft = ClientCommand::new(
+            CommandAction::Craft {
+                recipe: RecipeId(0x7cd8_0a04),
+                count: 2,
+                station: None,
+            },
+            1,
+        )
+        .raw();
+        assert_eq!(
+            (craft.kind, craft.amount, craft.entity),
+            (RawCommand::CRAFT, 2, Entity(0))
+        );
+        assert!(craft.in_bounds());
+        assert!(!RawCommand { amount: 0, ..craft }.in_bounds(), "no craft");
+        let (from, to) = (SlotRef::new(Entity(0x41), 2), SlotRef::new(Entity(0x42), 0));
+        let split = ClientCommand::new(
+            CommandAction::MoveItem {
+                from,
+                to,
+                count: NonZeroU16::new(5),
+            },
+            1,
+        )
+        .raw();
+        assert_eq!(
+            (split.slot, split.target_slot, split.amount),
+            (from.0, to.0, 5)
+        );
+        assert!(split.in_bounds());
+        assert!(
+            !RawCommand {
+                target_slot: from.0,
+                ..split
+            }
+            .in_bounds(),
+            "a move onto its own slot"
+        );
+        let whole = ClientCommand::new(
+            CommandAction::MoveItem {
+                from,
+                to,
+                count: None,
+            },
+            1,
+        )
+        .raw();
+        assert_eq!(whole.amount, 0, "the whole stack");
+        let take = ClientCommand::new(CommandAction::TakeAll(Entity(500)), 1).raw();
+        assert_eq!(
+            (take.kind, take.entity),
+            (RawCommand::TAKE_ALL, Entity(500))
+        );
+        assert!(
+            !RawCommand {
+                entity: Entity(0),
+                ..take
+            }
+            .in_bounds()
+        );
+        let trash = ClientCommand::new(CommandAction::Trash(from), 1).raw();
+        assert_eq!((trash.kind, trash.slot), (RawCommand::TRASH, from.0));
+    }
+
+    #[test]
+    fn a_luau_move_item_takes_a_count_above_zero_or_none_for_the_whole_stack() {
+        let (from, to) = (SlotRef::new(Entity(9), 0), SlotRef::new(Entity(9), 1));
+        let luau = |count: Option<u16>| LuauCommand {
+            kind: "move_item".to_owned(),
+            session: 1,
+            expected_screen: None,
+            target: None,
+            look: None,
+            direction: None,
+            hold_ms: None,
+            recipe: None,
+            password: None,
+            action: None,
+            position: None,
+            world: None,
+            character: None,
+            online: None,
+            window: None,
+            item: None,
+            text: None,
+            answer: None,
+            dialog: None,
+            count,
+            entity: None,
+            slot: Some(from),
+            target_slot: Some(to),
+            equipment: None,
+        };
+        let moved = |count| ClientCommand::try_from(luau(count)).map(|c| c.action).ok();
+        assert_eq!(
+            moved(Some(4)),
+            Some(CommandAction::MoveItem {
+                from,
+                to,
+                count: NonZeroU16::new(4),
+            })
+        );
+        assert_eq!(
+            moved(None),
+            Some(CommandAction::MoveItem {
+                from,
+                to,
+                count: None,
+            })
+        );
+        assert_eq!(moved(Some(0)), None, "a count of 0 moves nothing");
+    }
+
+    #[test]
     fn a_luau_press_needs_a_game_action_by_its_game_name_and_a_hold() {
         let luau = |action: Option<&str>, hold_ms: Option<u32>| LuauCommand {
             kind: "press".to_owned(),
@@ -782,6 +836,11 @@ mod tests {
             text: None,
             answer: None,
             dialog: None,
+            count: None,
+            entity: None,
+            slot: None,
+            target_slot: None,
+            equipment: None,
         };
         assert!(
             ClientCommand::try_from(luau(Some("MainhandAction_Tap"), Some(16))).is_ok_and(|c| {
@@ -833,6 +892,11 @@ mod tests {
             text: None,
             answer: None,
             dialog: None,
+            count: None,
+            entity: None,
+            slot: None,
+            target_slot: None,
+            equipment: None,
         };
         let shown = format!("{luau:?}");
         assert!(!shown.contains("hunter2"), "{shown}");

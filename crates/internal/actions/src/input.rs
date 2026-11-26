@@ -51,6 +51,7 @@ use enshwick_world::__internal::world_status;
 #[cfg(feature = "typed")]
 mod bindings;
 mod commands;
+mod slots;
 mod snapshot;
 mod windows;
 
@@ -60,6 +61,7 @@ pub use commands::{
     CancelReason, ClientCommand, CommandAction, CommandId, CommandState, CommandStatus,
     JoinFailure, JoinPhase, Password,
 };
+pub use slots::PlayerSlot;
 pub use snapshot::{ClientSnapshot, LoaderPage, SnapshotPart, SnapshotState};
 pub use windows::{ClientWindowItem, WindowItemKind};
 
@@ -84,6 +86,7 @@ impl crate::script::Bound for Input {
         Self::SCRIPT_CLIENT_SNAPSHOT,
         Self::SCRIPT_CLIENT_COMMANDS,
         Self::SCRIPT_CLIENT_WINDOWS,
+        Self::SCRIPT_CLIENT_SLOTS,
         #[cfg(feature = "typed")]
         Self::SCRIPT_BINDINGS,
     ];

@@ -334,6 +334,29 @@ side = "both""#
     }
 
     #[test]
+    fn an_equip_names_a_member_of_the_build_s_equipment_slots() {
+        let (loader, input) = input(Side::CLIENT);
+        let equip = |equipment: &str| {
+            ClientCommand::new(
+                CommandAction::Equip {
+                    slot: enshwick::inventory::SlotRef::new(enshwick::Entity(41), 0),
+                    equipment: equipment.to_owned(),
+                },
+                1,
+            )
+        };
+        assert!(
+            matches!(
+                input.client_command(&equip("RangedWeapn")),
+                Err(WorldError::Refused)
+            ),
+            "a typo the game's build lacks"
+        );
+        assert!(input.client_command(&equip("RangedWeapon")).is_ok());
+        assert_eq!(loader.client_commands().len(), 1);
+    }
+
+    #[test]
     fn each_cancel_reason_ends_a_press() {
         let (loader, input) = input(Side::CLIENT);
         for (reason, expected) in [

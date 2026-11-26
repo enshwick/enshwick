@@ -8,7 +8,7 @@ use enshwick_gamedata::catalogue;
 
 use super::play::Host;
 use super::{CommandError, Kind, ModsAsk, dialogs, windows};
-use crate::actions::client_control::{Mark, MenuTab};
+use crate::actions::client_control::{Act, Mark, MenuTab};
 use crate::engine::loader::Loader;
 
 /// The screen byte named `name` on this build.
@@ -110,8 +110,54 @@ pub(super) fn kind(loader: &Loader, spec: &Spec) -> Result<Kind, CommandError> {
             let interacts = INTERACTS.iter().any(|action| action.name() == target);
             Kind::Press(bit, spec.hold_ms, interacts)
         }),
+        Spec::CRAFT => Ok(Kind::Act(Act::Craft {
+            station: spec.entity.0,
+            recipe: spec.recipe.0,
+            count: amount(spec.amount)?,
+        })),
+        Spec::MOVE_ITEM => Ok(Kind::Act(Act::Move {
+            from: spec.slot,
+            to: spec.target_slot,
+            count: amount(spec.amount)?,
+        })),
+        Spec::TAKE_ALL => Ok(Kind::Act(Act::MoveAll {
+            from: spec.entity.0,
+            to: 0,
+        })),
+        Spec::DEPOSIT_ALL => Ok(Kind::Act(Act::MoveAll {
+            from: 0,
+            to: spec.entity.0,
+        })),
+        Spec::EQUIP => equipment_slot(loader, target).map(|equipment| {
+            Kind::Act(Act::Equip {
+                slot: spec.slot,
+                equipment,
+            })
+        }),
+        Spec::TRASH => Ok(Kind::Act(Act::Trash { slot: spec.slot })),
         _ => Err(CommandError::BadArgs),
     }
+}
+
+/// A command's amount as the requests' `u16`, which the bounds checked.
+fn amount(amount: u32) -> Result<u16, CommandError> {
+    u16::try_from(amount).map_err(|_| CommandError::BadArgs)
+}
+
+/// The `EquipmentSlot` member `name` on `loader`'s build, as the equipment
+/// request's byte.
+///
+/// # Errors
+///
+/// [`CommandError::BadArgs`] for a name the build's enum lacks.
+fn equipment_slot(loader: &Loader, name: &str) -> Result<u8, CommandError> {
+    let ty = catalogue::type_name(catalogue::ids::EQUIPMENT_SLOT);
+    loader
+        .reflection
+        .enum_value(ty, name)
+        .ok()
+        .and_then(|value| u8::try_from(value).ok())
+        .ok_or(CommandError::BadArgs)
 }
 
 /// The window command `spec` gives on window `window`, its ids read.
