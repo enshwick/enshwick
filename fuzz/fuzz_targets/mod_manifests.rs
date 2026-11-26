@@ -8,7 +8,7 @@
 
 #![no_main]
 
-use enshwick::abi::{Dependency, Header, Manifest, ManifestFlags, Relation, Side, Str};
+use enshwick::abi::{Dependency, Manifest, ManifestFlags, Relation, Side, Str};
 use enshwick_fuzz::text_fields;
 use enshwick_loader::base::manifest::{meta, parse};
 use enshwick_loader::base::resolve::{Candidate, resolve};
@@ -41,8 +41,7 @@ fn candidate(record: &[u8]) -> Option<Candidate> {
     let [id, version, side, deps] = text_fields::<4>(record)?;
     let dependencies = dependencies(deps);
     let exports: Vec<Str> = deps.lines().take(8).map(Str::new).collect();
-    let manifest = Manifest {
-        header: Header::of::<Manifest>(),
+    let manifest = enshwick::abi::headed!(Manifest {
         id: Str::new(id),
         version: Str::new(version),
         side: Side(side.parse().unwrap_or(3)),
@@ -60,7 +59,7 @@ fn candidate(record: &[u8]) -> Option<Candidate> {
         points: Str::new(deps),
         exports: exports.as_ptr(),
         export_count: u32::try_from(exports.len()).unwrap_or(u32::MAX),
-    };
+    });
     // SAFETY: every string borrows the input, `dependencies` holds
     // `dependency_count` entries and `exports` `export_count`; all outlive
     // the calls.
