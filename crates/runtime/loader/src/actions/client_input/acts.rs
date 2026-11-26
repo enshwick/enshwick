@@ -1,5 +1,5 @@
-//! The crafting, item transfer, equipment and item requests client commands
-//! write into the local player's input: one at a time across all mods, in
+//! The crafting, item transfer and equipment requests client commands write
+//! into the local player's input: one at a time across all mods, in
 //! the builder's next step pass after the game's own, as the waypoint's.
 //! A request waits a step while the game wrote one of the player's own of
 //! its kind, so the player's input wins. A written request is applied; it
