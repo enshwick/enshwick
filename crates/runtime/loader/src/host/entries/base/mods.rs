@@ -4,13 +4,12 @@ use std::sync::atomic::Ordering;
 
 use enshwick_base::Relock;
 use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{Header, Level, ManifestFlags, ModHandle, ModInfo, Side, Status, Str};
+use enshwick_core::abi::{Header, Level, ManifestFlags, ModInfo, Side, Status, Str};
 use enshwick_core::mods::LOADER_FILE;
 
 use crate::engine::loader::{ModRecord, loader};
-use crate::host::LOADER_HANDLE;
 use crate::host::layer::guards::in_init;
-use crate::host::layer::{AnyMod, Callback, Mod, Out, SizedListOut, Text, entries};
+use crate::host::layer::{AnyMod, Callback, Mod, Out, SizedListOut, Text, Writer, entries};
 use crate::host::memory::text;
 
 /// The listing entry of the loader itself.
@@ -34,23 +33,6 @@ pub(crate) fn loader_info() -> ModInfo {
 
 /// The loader's authors, as its listing names them.
 pub(crate) static LOADER_AUTHORS: [Str; 1] = [Str::new("themaiby")];
-
-/// The id lines from `me` go under: the loader's own for its copy of the
-/// API, else a loaded mod's, on or off.
-///
-/// # Errors
-///
-/// [`Status::BAD_ARGS`] for a handle the loader never gave out, or before
-/// the loader runs.
-pub(crate) fn writer(me: ModHandle) -> Result<&'static str, Status> {
-    if me == LOADER_HANDLE {
-        return Ok(crate::engine::settings::LOADER_ID);
-    }
-    loader()
-        .and_then(|loader| loader.record(me))
-        .map(|(_, record)| record.id.as_str())
-        .ok_or(Status::BAD_ARGS)
-}
 
 /// The listing entry of a loaded mod; its strings live as long as the loader.
 pub(crate) fn mod_info(record: &'static ModRecord) -> ModInfo {
@@ -77,8 +59,8 @@ entries! {
         Ok(())
     }
 
-    fn log(me: ModHandle, level: Level, message as Text) -> Status {
-        crate::engine::log::write(level, writer(me)?, message);
+    fn log(me as Writer, level: Level, message as Text) -> Status {
+        crate::engine::log::write(level, me.id, message);
         Ok(())
     }
 
@@ -175,8 +157,7 @@ entries! {
         Ok(())
     }
 
-    fn language(me: ModHandle, out as Out<u32>) -> Status {
-        writer(me)?;
+    fn language(_me as Writer, out as Out<u32>) -> Status {
         if let Some(reader) = crate::engine::texts::reader() {
             return out.put(reader.0);
         }
