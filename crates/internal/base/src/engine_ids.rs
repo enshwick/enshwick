@@ -450,6 +450,8 @@ ids! {
     INVENTORY_ACTION_ALL = "inventory_action.all";
     /// The id of the transfer type that moves its amount.
     INVENTORY_ACTION_CUSTOM_AMOUNT = "inventory_action.custom_amount";
+    /// The id of the transfer type that destroys the source slot's stack.
+    INVENTORY_ACTION_DESTROY = "inventory_action.destroy";
     /// The id of the transfer flag's bit index that moves every stack.
     TRANSFER_FLAG_MOVE_ALL_STACKS = "transfer_flag.move_all_stacks";
     /// The id of the local player's equipment request in its input, an
@@ -470,19 +472,6 @@ ids! {
     /// The id of the game's enum of equipment slots, which commands name by
     /// member.
     EQUIPMENT_SLOT = "equipment_slot";
-    /// The id of the local player's item request in its input, an
-    /// [`ITEM_ACTION`] the server takes when its version changes.
-    CLIENT_PLAYER_INPUT_ITEM = "client_player_input.item";
-    /// The id of an item request.
-    ITEM_ACTION = "item_action";
-    /// The id of its inventory slot.
-    ITEM_ACTION_SLOT = "item_action.slot";
-    /// The id of its version.
-    ITEM_ACTION_VERSION = "item_action.version";
-    /// The id of its `ItemActionType` byte.
-    ITEM_ACTION_TYPE = "item_action.type";
-    /// The id of the item request type that destroys the slot's stack.
-    ITEM_ACTION_TRASH = "item_action.trash";
     /// The id of a waypoint request: set, clear or ping a position.
     WAYPOINT_ACTION = "waypoint_action";
     /// The id of its `WorldPosition`, three `i64` in 32.32 fixed point.

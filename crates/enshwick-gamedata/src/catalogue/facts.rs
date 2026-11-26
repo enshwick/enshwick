@@ -1516,6 +1516,13 @@ pub const FACTS: &[(&str, Fact)] = &[
         },
     ),
     (
+        ids::INVENTORY_ACTION_DESTROY,
+        Fact::Constant {
+            ty: INVENTORY_ACTION_TYPE,
+            name: "Destroy",
+        },
+    ),
+    (
         ids::TRANSFER_FLAG_MOVE_ALL_STACKS,
         Fact::Constant {
             ty: "keen::ecs::TransferItemToInventoryFlag",
@@ -1560,36 +1567,6 @@ pub const FACTS: &[(&str, Fact)] = &[
     (
         ids::RECIPE_INPUT_SELECTIONS,
         Fact::Type("keen::RecipeInputCategorySelections"),
-    ),
-    (
-        ids::CLIENT_PLAYER_INPUT_ITEM,
-        Fact::Path {
-            steps: &[
-                ("keen::ecs::ClientPlayerInput", "data"),
-                ("keen::ecs::ClientPlayerInputData", "itemAction"),
-            ],
-            holds: ITEM_ACTION,
-        },
-    ),
-    (ids::ITEM_ACTION, Fact::Type(ITEM_ACTION)),
-    (
-        ids::ITEM_ACTION_SLOT,
-        offset(ITEM_ACTION, "inventorySlotId", INVENTORY_SLOT_ID),
-    ),
-    (
-        ids::ITEM_ACTION_VERSION,
-        offset(ITEM_ACTION, "versionData", VERSIONED_DATA),
-    ),
-    (
-        ids::ITEM_ACTION_TYPE,
-        offset(ITEM_ACTION, "type", "keen::ecs::ItemActionType"),
-    ),
-    (
-        ids::ITEM_ACTION_TRASH,
-        Fact::Constant {
-            ty: "keen::ecs::ItemActionType",
-            name: "Trash",
-        },
     ),
     (ids::WAYPOINT_ACTION, Fact::Type(WAYPOINT_ACTION)),
     (
@@ -3015,8 +2992,6 @@ const INVENTORY_ACTION_TYPE: &str = "keen::InventoryActionType";
 const EQUIPMENT_ACTION: &str = "keen::ecs::ChangeEquipmentAction";
 /// Whether an equipment request equips or unequips.
 const CHANGE_EQUIPMENT: &str = "keen::ecs::ChangeEquipment";
-/// A player's item request.
-const ITEM_ACTION: &str = "keen::ecs::ItemAction";
 
 /// Four 32-bit floats, such as an orientation.
 const FLOAT4: &str = "keen::float4";
