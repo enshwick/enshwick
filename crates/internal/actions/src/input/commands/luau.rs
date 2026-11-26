@@ -222,7 +222,12 @@ fn item_action(luau: &LuauCommand) -> Result<CommandAction, crate::script::Error
         "move_item" => CommandAction::MoveItem {
             from: luau.slot.ok_or_else(|| missing("a slot"))?,
             to: luau.target_slot.ok_or_else(|| missing("a target slot"))?,
-            count: luau.count,
+            count: luau
+                .count
+                .map(|count| {
+                    core::num::NonZeroU16::new(count).ok_or_else(|| missing("a count above 0"))
+                })
+                .transpose()?,
         },
         "equip" => CommandAction::Equip {
             slot: luau.slot.ok_or_else(|| missing("a slot"))?,
@@ -235,7 +240,11 @@ fn item_action(luau: &LuauCommand) -> Result<CommandAction, crate::script::Error
         "deposit_all" => {
             CommandAction::DepositAll(luau.entity.ok_or_else(|| missing("an entity"))?)
         }
-        // "trash", the one item kind left.
-        _ => CommandAction::Trash(luau.slot.ok_or_else(|| missing("a slot"))?),
+        "trash" => CommandAction::Trash(luau.slot.ok_or_else(|| missing("a slot"))?),
+        other => {
+            return Err(crate::script::Error::new(format!(
+                "no item command kind {other:?}"
+            )));
+        }
     })
 }

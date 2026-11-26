@@ -27,7 +27,9 @@ impl FakeHost {
     /// Each player's `PlayerInput` with the game controls held, and the
     /// reflected enum of controls as the type registry holds it, with
     /// `MainhandAction` at bit 0, `ContextualAction` at 5 and `Block` at 30;
-    /// what `Input::held` reads, with the `unstable` feature.
+    /// what `Input::held` reads, with the `unstable` feature. Its
+    /// `EquipmentSlot` names `MeleeWeapon`, `RangedWeapon` and `Shield`, the
+    /// members an equip command may name.
     ///
     /// # Examples
     ///
@@ -52,13 +54,21 @@ impl FakeHost {
                 Constant::new("Block", 30),
             ]);
         let hash = controls.qualified_hash();
-        self.types([controls])
+        let equipment =
+            Type::new("demo::ecs::EquipmentSlot", Kind::Enum, 1, 1).with_constants(vec![
+                Constant::new("MeleeWeapon", 0),
+                Constant::new("RangedWeapon", 1),
+                Constant::new("Shield", 2),
+            ]);
+        let equipment_hash = equipment.qualified_hash();
+        self.types([controls, equipment])
             .preset(
                 &[ids::PLAYER_INPUT],
                 &[(ids::PLAYER_INPUT, 1536)],
                 &[(ids::PLAYER_INPUT_DIGITAL, 936)],
             )
             .type_hash(ids::PLAYER_INPUT_TYPE, hash)
+            .type_hash(ids::EQUIPMENT_SLOT, equipment_hash)
     }
 
     /// Each player's `SelectedTargets`, sixteen 136-byte targets from byte

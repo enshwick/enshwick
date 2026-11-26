@@ -94,9 +94,14 @@ entries! {
             {
                 return Status::REFUSED;
             }
-            // As the loader: an equip names its equipment slot.
-            // SAFETY: the mod's spec, its target borrowed for the call.
-            if spec.kind == Spec::EQUIP && unsafe { spec.target.as_str() }.is_none_or(str::is_empty) {
+            // As the loader: an equip names a member of the build's
+            // `EquipmentSlot`.
+            if spec.kind == Spec::EQUIP
+                // SAFETY: the mod's spec, its target borrowed for the call.
+                && !unsafe { spec.target.as_str() }.is_some_and(|name| {
+                    reflects(&s.host, enshwick_core::__fake::ids::EQUIPMENT_SLOT, name)
+                })
+            {
                 return Status::BAD_ARGS;
             }
             // SAFETY: the mod's spec, its target borrowed for the call; the
@@ -220,9 +225,14 @@ fn on_screen(s: &crate::test::table::State) -> Option<(u32, u32, bool)> {
 }
 
 fn reflects_action(host: &crate::test::FakeHost, name: &str) -> bool {
+    reflects(host, enshwick_core::__fake::ids::PLAYER_INPUT_TYPE, name)
+}
+
+/// Whether the fake build reflects the enum `ty` with a member `name`.
+fn reflects(host: &crate::test::FakeHost, ty: &str, name: &str) -> bool {
     host.base
         .type_hashes
-        .get(enshwick_core::__fake::ids::PLAYER_INPUT_TYPE)
+        .get(ty)
         .and_then(|hash| {
             host.content
                 .type_list

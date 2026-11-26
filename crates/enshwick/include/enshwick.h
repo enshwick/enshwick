@@ -1038,7 +1038,7 @@ typedef uint32_t EnshwickRecipeId;
 typedef struct EnshwickClientCommand {
   // Size and version of this struct.
   struct EnshwickHeader header;
-  // What to do: `EnshwickClientCommand_OPEN_SCREEN` to `EnshwickClientCommand_ANSWER_DIALOG`.
+  // What to do: `EnshwickClientCommand_OPEN_SCREEN` to `EnshwickClientCommand_TRASH`.
   uint32_t kind;
   // A move's hold in milliseconds, 1 to `EnshwickClientCommand_MAX_HOLD_MS`;
   // a press's, 1 to `EnshwickClientCommand_MAX_PRESS_MS`.
@@ -7799,7 +7799,8 @@ typedef struct EnshwickHostApi {
   // then run in each step for a few seconds after the last call; while
   // no step read them in the last second it answers
   // `EnshwickStatus_NOT_LOADED`. Client only: `EnshwickStatus_UNAVAILABLE` on a
-  // server. Any thread; it runs no mod callback. ABI 12.28.
+  // server and on a build whose slots the loader cannot read. Any thread;
+  // it runs no mod callback. ABI 12.28.
   EnshwickStatus (*client_slots)(EnshwickModHandle me,
                                  struct EnshwickClientSlot *out,
                                  uint32_t entry_size,

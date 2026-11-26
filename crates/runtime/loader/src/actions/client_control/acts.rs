@@ -41,6 +41,59 @@ pub(crate) enum Act {
     Trash { slot: u64 },
 }
 
+impl Act {
+    const CRAFT: u64 = 1;
+    const MOVE: u64 = 2;
+    const MOVE_ALL: u64 = 3;
+    const EQUIP: u64 = 4;
+    const TRASH: u64 = 5;
+
+    /// The act in three words, its kind and small field first, so a
+    /// handoff passes it in atomics.
+    pub(crate) fn words(self) -> [u64; 3] {
+        let head = |kind: u64, small: u16| kind | u64::from(small) << 8;
+        match self {
+            Self::Craft {
+                station,
+                recipe,
+                count,
+            } => [head(Self::CRAFT, count), station.into(), recipe.into()],
+            Self::Move { from, to, count } => [head(Self::MOVE, count), from, to],
+            Self::MoveAll { from, to } => [head(Self::MOVE_ALL, 0), from.into(), to.into()],
+            Self::Equip { slot, equipment } => [head(Self::EQUIP, equipment.into()), slot, 0],
+            Self::Trash { slot } => [head(Self::TRASH, 0), slot, 0],
+        }
+    }
+
+    /// The act [`Act::words`] packed into `words`; `None` for none.
+    pub(crate) fn from_words([head, a, b]: [u64; 3]) -> Option<Self> {
+        let small = u16::try_from(head >> 8 & 0xffff).ok()?;
+        let low = |word: u64| u32::try_from(word).ok();
+        Some(match head & 0xff {
+            Self::CRAFT => Self::Craft {
+                station: low(a)?,
+                recipe: low(b)?,
+                count: small,
+            },
+            Self::MOVE => Self::Move {
+                from: a,
+                to: b,
+                count: small,
+            },
+            Self::MOVE_ALL => Self::MoveAll {
+                from: low(a)?,
+                to: low(b)?,
+            },
+            Self::EQUIP => Self::Equip {
+                slot: a,
+                equipment: u8::try_from(small).ok()?,
+            },
+            Self::TRASH => Self::Trash { slot: a },
+            _ => return None,
+        })
+    }
+}
+
 /// One request's place in the input and its version's.
 #[derive(Debug)]
 struct Record {
@@ -215,6 +268,29 @@ impl ActLayout {
             trash: value(loader, ids::ITEM_ACTION_TRASH)?,
             item,
         })
+    }
+
+    /// The request `act` writes.
+    const fn record(&self, act: Act) -> &Record {
+        match act {
+            Act::Craft { .. } => &self.craft,
+            Act::Move { .. } | Act::MoveAll { .. } => &self.transfer,
+            Act::Equip { .. } => &self.equipment,
+            Act::Trash { .. } => &self.item,
+        }
+    }
+
+    /// The version the input holds now for the request `act` writes; it
+    /// moves when the game writes a request of the player's own.
+    ///
+    /// # Safety
+    ///
+    /// - `input` is valid for reads of the build's `ClientPlayerInput`.
+    pub(crate) unsafe fn version(&self, input: *mut u8, act: Act) -> u32 {
+        let record = self.record(act);
+        // SAFETY: the caller's record, which `resolve` checked holds the
+        // request's `u32` version there.
+        unsafe { read_at(input, record.base + record.version) }
     }
 
     /// Writes `act` as a new request of the local player `player`, its
@@ -416,6 +492,50 @@ mod tests {
             "no slots"
         );
         assert_eq!((input[28], input[29]), (2, 1 << 2));
+    }
+
+    #[test]
+    fn every_act_comes_back_whole_from_its_words() {
+        for act in [
+            Act::Craft {
+                station: u32::MAX,
+                recipe: 0x7cd8_0a04,
+                count: u16::MAX,
+            },
+            Act::Move {
+                from: u64::MAX,
+                to: 0x42 | 5 << 32,
+                count: 3,
+            },
+            Act::MoveAll { from: 500, to: 0 },
+            Act::Equip {
+                slot: 0x41 | 1 << 32,
+                equipment: u8::MAX,
+            },
+            Act::Trash { slot: 0x43 },
+        ] {
+            assert_eq!(Act::from_words(act.words()), Some(act));
+        }
+        assert_eq!(Act::from_words([0; 3]), None, "no act");
+    }
+
+    #[test]
+    fn an_act_reads_the_version_of_the_request_it_writes() {
+        let mut input = vec![0u8; 0x600];
+        input[0xf0..0xf4].copy_from_slice(&9u32.to_ne_bytes());
+        let craft = Act::Craft {
+            station: 0,
+            recipe: 1,
+            count: 1,
+        };
+        let trash = Act::Trash { slot: 0x43 };
+        // SAFETY: a record of the build's size, not shared.
+        let version =
+            |input: &mut Vec<u8>, act| unsafe { TEST_LAYOUT.version(input.as_mut_ptr(), act) };
+        assert_eq!(version(&mut input, craft), 9);
+        assert_eq!(version(&mut input, trash), 0, "another request");
+        request(&mut input, craft);
+        assert_eq!(version(&mut input, craft), 0xa | LOADER_VERSION);
     }
 
     #[test]

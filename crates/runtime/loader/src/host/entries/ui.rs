@@ -52,6 +52,9 @@ entries! {
         [out, entry_size, capacity, count] as SizedListOut<api_frame::ClientSlot>,
     ) -> Status {
         on_client(loader)?;
+        crate::actions::local_held::slots_run()
+            .then_some(())
+            .ok_or(Status::UNAVAILABLE)?;
         // The slots read inside the held controls' read, which this starts.
         let _asked = crate::actions::local_held::sample();
         let slots = crate::actions::player_state::slots(crate::actions::local_held::now_ms())

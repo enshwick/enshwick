@@ -2,6 +2,8 @@
 //! screen, choose the in-game menu's tab, each with an id and an outcome
 //! the client's own state confirms.
 
+use core::num::NonZeroU16;
+
 use super::Input;
 use crate::abi::{ClientCommand as RawCommand, ClientCommandStatus as Raw, Status, Str};
 use crate::controls::GameAction;
@@ -180,7 +182,8 @@ pub enum CommandAction {
     /// recipe and the station. Applied once the request is written;
     /// observed once the client's copy of the player's inventory changes
     /// after it; a craft the server refuses changes nothing, so it ends
-    /// timed out.
+    /// timed out. Any change counts, so a craft sent before the last one's
+    /// items arrived may take those for its own.
     Craft {
         /// The recipe.
         recipe: RecipeId,
@@ -194,18 +197,20 @@ pub enum CommandAction {
     /// does: a count into an empty slot splits a stack, a move into an
     /// action bar slot fills it, a move out of an equipment slot unequips.
     /// The slots are those [`Input::client_slots`] lists, or a chest's.
-    /// Observed once the client's copy of the player's inventory changes.
+    /// Observed once the client's copy of either slot's inventory changes;
+    /// a move the server refuses changes neither, so it ends timed out.
     MoveItem {
         /// The slot the items leave.
         from: SlotRef,
         /// The slot they go to.
         to: SlotRef,
         /// How many, `None` for the whole stack.
-        count: Option<u16>,
+        count: Option<NonZeroU16>,
     },
     /// Equips the item in `slot` into the equipment slot `equipment`, a
     /// member of the game's `EquipmentSlot` such as `RangedWeapon`, through
-    /// the game's own equipment request. Observed as [`Self::MoveItem`].
+    /// the game's own equipment request. Observed once the client's copy of
+    /// the slot's inventory changes.
     Equip {
         /// The slot that holds the item.
         slot: SlotRef,
@@ -214,14 +219,15 @@ pub enum CommandAction {
     },
     /// Takes every stack of the inventory `from`, such as the chest
     /// [`ClientSnapshot::host`](super::ClientSnapshot::host) names, into the
-    /// player's, as a storage window's take all does. Observed as
-    /// [`Self::MoveItem`].
+    /// player's, as a storage window's take all does. Observed once the
+    /// client's copy of either inventory changes; one that finds nothing to
+    /// move changes neither, so it ends timed out, as a refused one does.
     TakeAll(Entity),
     /// Moves every stack of the player's into the inventory `to`, as a
-    /// storage window's deposit all does. Observed as [`Self::MoveItem`].
+    /// storage window's deposit all does. Observed as [`Self::TakeAll`].
     DepositAll(Entity),
     /// Destroys the stack in `slot`, as the game's trash does; the game has
-    /// no drop of an item on the ground. Observed as [`Self::MoveItem`].
+    /// no drop of an item on the ground. Observed as [`Self::Equip`].
     Trash(SlotRef),
 }
 
@@ -309,6 +315,10 @@ impl ClientCommand {
         self
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one arm per action, exhaustive so a new action cannot build without its raw form"
+    )]
     fn raw(&self) -> RawCommand {
         let mut raw = RawCommand {
             session: self.session,
@@ -403,8 +413,12 @@ impl ClientCommand {
                 raw.dialog = *dialog;
                 raw.answer = response.to_raw();
             }
-            // The item commands, each filled by `item_raw`.
-            _ => item_raw(&self.action, &mut raw),
+            CommandAction::Craft { .. }
+            | CommandAction::MoveItem { .. }
+            | CommandAction::Equip { .. }
+            | CommandAction::TakeAll(_)
+            | CommandAction::DepositAll(_)
+            | CommandAction::Trash(_) => item_raw(&self.action, &mut raw),
         }
         raw
     }
@@ -427,7 +441,7 @@ fn item_raw(action: &CommandAction, raw: &mut RawCommand) {
             raw.kind = RawCommand::MOVE_ITEM;
             raw.slot = from.0;
             raw.target_slot = to.0;
-            raw.amount = count.map_or(0, u32::from);
+            raw.amount = count.map_or(0, |count| u32::from(count.get()));
         }
         CommandAction::Equip { slot, equipment } => {
             raw.kind = RawCommand::EQUIP;
@@ -707,7 +721,7 @@ mod tests {
             CommandAction::MoveItem {
                 from,
                 to,
-                count: Some(5),
+                count: NonZeroU16::new(5),
             },
             1,
         )
@@ -749,6 +763,55 @@ mod tests {
         );
         let trash = ClientCommand::new(CommandAction::Trash(from), 1).raw();
         assert_eq!((trash.kind, trash.slot), (RawCommand::TRASH, from.0));
+    }
+
+    #[test]
+    fn a_luau_move_item_takes_a_count_above_zero_or_none_for_the_whole_stack() {
+        let (from, to) = (SlotRef::new(Entity(9), 0), SlotRef::new(Entity(9), 1));
+        let luau = |count: Option<u16>| LuauCommand {
+            kind: "move_item".to_owned(),
+            session: 1,
+            expected_screen: None,
+            target: None,
+            look: None,
+            direction: None,
+            hold_ms: None,
+            recipe: None,
+            password: None,
+            action: None,
+            position: None,
+            world: None,
+            character: None,
+            online: None,
+            window: None,
+            item: None,
+            text: None,
+            answer: None,
+            dialog: None,
+            count,
+            entity: None,
+            slot: Some(from),
+            target_slot: Some(to),
+            equipment: None,
+        };
+        let moved = |count| ClientCommand::try_from(luau(count)).map(|c| c.action).ok();
+        assert_eq!(
+            moved(Some(4)),
+            Some(CommandAction::MoveItem {
+                from,
+                to,
+                count: NonZeroU16::new(4),
+            })
+        );
+        assert_eq!(
+            moved(None),
+            Some(CommandAction::MoveItem {
+                from,
+                to,
+                count: None,
+            })
+        );
+        assert_eq!(moved(Some(0)), None, "a count of 0 moves nothing");
     }
 
     #[test]

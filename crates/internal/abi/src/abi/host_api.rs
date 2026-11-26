@@ -2541,7 +2541,8 @@ pub struct HostApi {
     /// then run in each step for a few seconds after the last call; while
     /// no step read them in the last second it answers
     /// [`Status::NOT_LOADED`]. Client only: [`Status::UNAVAILABLE`] on a
-    /// server. Any thread; it runs no mod callback. ABI 12.28.
+    /// server and on a build whose slots the loader cannot read. Any thread;
+    /// it runs no mod callback. ABI 12.28.
     pub client_slots: extern "system" fn(
         me: ModHandle,
         out: *mut ClientSlot,

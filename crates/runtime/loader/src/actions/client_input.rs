@@ -8,7 +8,7 @@
 //! player's input is held here first
 //! ([`crate::engine::screens::holds_world`]), as the game holds it while it
 //! blocks the input. Until a mod hands one over and with no window, its
-//! detour adds five atomic loads.
+//! detour adds six atomic loads.
 
 mod acts;
 mod presses;
@@ -109,9 +109,10 @@ pub(crate) fn marks_run() -> bool {
 }
 
 /// Whether the build runs crafting and item commands: the builder's detour
-/// runs and the build reflects their requests.
+/// runs, the build reflects their requests, and the slot read their outcome
+/// waits for runs.
 pub(crate) fn acts_run() -> bool {
-    runs() && GROUPS.acts.get().is_some()
+    runs() && GROUPS.acts.get().is_some() && local_held::slots_run()
 }
 
 /// What a command hands the builder.

@@ -708,6 +708,19 @@ pub(crate) fn players_held() -> Option<u64> {
     STATE.players_held(off(), now_ms())
 }
 
+/// Whether the build reads the local player's inventory slots: the held
+/// read and its link are on, and the slot read resolved and is on.
+pub(crate) fn slots_run() -> bool {
+    STATE.linked.load(Ordering::Acquire)
+        && !off()
+        && !player_state::FUSE.is_off()
+        && !player_state::SLOTS_FUSE.is_off()
+        && STATE
+            .layout
+            .get()
+            .is_some_and(|layout| layout.state.reads_slots())
+}
+
 /// The local player's entity at the last mask read; `None` before one.
 pub(crate) fn player() -> Option<Entity> {
     let player = STATE.player.load(Ordering::Relaxed);

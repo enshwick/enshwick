@@ -313,7 +313,9 @@ empty ones included: the equipment, the action bar and the backpack. Each
 `PlayerSlot` holds a `Slot`, as the server's inventory reads name it: its
 place, category, item and count. It also says whether the slot is one of
 the action bar's. The first call starts the reads, so it gives `None`. The
-reads then run each step until a few seconds after the last call.
+reads then run each step until a few seconds after the last call. On a
+build that cannot read the slots, the call returns
+`WorldError::Unavailable`.
 
 ```rust
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -597,10 +599,16 @@ end
 
 These commands write the same requests the game's own screens send. The
 server checks each one as it checks the player's own: resources, recipes,
-stations and rights. Each is `Applied` once the request is written, and
-`Observed` once the client's copy of the player's inventory changes after
-it. A request the server refuses changes nothing, so the command ends timed
-out. One of these commands runs at a time across all mods.
+stations and rights. Each is `Applied` once the request is written. It is
+`Observed` once the client's copy of an inventory it names changes after
+it. A craft watches the player's whole inventory, and a slot command the
+inventories of its slots. `TakeAll` and `DepositAll` watch both
+inventories. A request the server refuses changes nothing, so the command
+ends timed out, as one that finds nothing to move does. A request waits a
+step while the player's own request of its kind arrives, so the player's
+input wins. One of these commands runs at a time across all mods. On a
+build that cannot read the player's slots, they return
+`WorldError::Unavailable`.
 
 | Action | Does |
 | --- | --- |
