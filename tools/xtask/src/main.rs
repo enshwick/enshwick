@@ -56,8 +56,9 @@ enum Task {
     },
     /// Writes the notes of the alpha the workspace carries.
     Notes(commands::notes::Args),
-    /// Closes every changelog for the alpha the workspace carries, joining
-    /// each crate's change files.
+    /// Closes every changelog for the alpha the workspace carries, or those
+    /// of the named packages at their own versions, joining each crate's
+    /// change files.
     Close(commands::close::Args),
     /// Moves the install and dependency lines of the Markdown to the
     /// workspace version's tag.
@@ -420,5 +421,17 @@ mod tests {
         assert!(parse(&["peel-load"]).is_err());
         assert!(parse(&["close"]).is_err());
         assert!(parse(&["close", "--date", "2026-11-13"]).is_ok());
+        assert!(
+            parse(&[
+                "close",
+                "--date",
+                "2026-11-13",
+                "--package",
+                "a",
+                "--package",
+                "b"
+            ])
+            .is_ok()
+        );
     }
 }

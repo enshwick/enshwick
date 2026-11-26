@@ -168,8 +168,8 @@ pub fn close(changelog: &str, version: &str, date: &str) -> Result<Option<String
 /// fragments the heading stands alone, as for a release with no change of
 /// the package's own. When the version is closed already, the fragments
 /// join its section after the entries there, so a change file merged after
-/// the close joins on a second run; an empty heading of the version is
-/// replaced, as [`close`] does.
+/// the close joins on a second run; an empty heading of the version, such
+/// as the bare one release-plz writes, is replaced, as [`close`] does.
 ///
 /// # Errors
 ///
@@ -190,10 +190,10 @@ pub fn join(
     let mut changelog = changelog;
     if let Some((at, start, end)) = heading(changelog, version) {
         let body = changelog[start..end].trim();
-        if fragments.is_empty() {
-            return Ok(changelog.to_owned());
-        }
         if !body.is_empty() {
+            if fragments.is_empty() {
+                return Ok(changelog.to_owned());
+            }
             let closed =
                 Fragment::parse(body).map_err(|_| Error::NotJoinable(version.to_owned()))?;
             let all: Vec<Fragment> = std::iter::once(closed)
@@ -514,6 +514,20 @@ mod tests {
             Ok(Some(
                 "### Added\n\n- Add late.\n\n### Fixed\n\n- Fix a.\n- Fix late."
             ))
+        );
+    }
+
+    #[test]
+    fn release_plz_s_bare_heading_takes_the_standard_form_without_change_files() {
+        let written = "# Changelog\n\n## [Unreleased]\n## [0.1.1] - 2026-11-12\n## [0.1.0] - 2026-11-05\n\n- First.\n";
+        let alone = "# Changelog\n\n## [Unreleased]\n## [0.1.1] - 2026-11-12";
+        assert_eq!(
+            join(written, "0.1.1", "2026-11-13", &[]).unwrap(),
+            "# Changelog\n\n## [Unreleased]\n\n## [0.1.1] - 2026-11-13\n\n## [0.1.0] - 2026-11-05\n\n- First.\n"
+        );
+        assert_eq!(
+            join(alone, "0.1.1", "2026-11-13", &[]).unwrap(),
+            "# Changelog\n\n## [Unreleased]\n\n## [0.1.1] - 2026-11-13\n\n"
         );
     }
 

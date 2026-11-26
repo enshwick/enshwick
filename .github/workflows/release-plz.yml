@@ -116,7 +116,43 @@ jobs:
           permission-pull-requests: write
 
       - uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
+        id: release-plz
         with:
           command: release-pr
         env:
           GITHUB_TOKEN: ${{ steps.token.outputs.token }}
+
+      # release-plz writes only each version's heading (release-plz.toml);
+      # the change files of the packages it releases fill it. The commit is
+      # the app's bot user's, so release-plz's next update force-pushes over
+      # it as over its own commit, and this step joins the files again.
+      - name: Join the change files into the release pull request
+        env:
+          PR: ${{ steps.release-plz.outputs.pr }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          APP: ${{ steps.token.outputs.app-slug }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          branch=$(jq -r '.head_branch // empty' <<<"${PR:-null}")
+          args=()
+          while read -r package; do
+            args+=(--package "$package")
+          done < <(jq -r '.releases[]?.package_name' <<<"${PR:-null}")
+          # Without `--package`, close would take every package.
+          if [[ -z "$branch" || ${#args[@]} -eq 0 ]]; then
+            echo "no release pull request with packages"
+            exit 0
+          fi
+          git fetch --no-tags origin "$branch"
+          git switch --detach FETCH_HEAD
+          cargo xtask close --date "$(date -u +%F)" "${args[@]}"
+          git add -A -- crates
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          id=$(gh api "users/${APP}%5Bbot%5D" --jq .id)
+          git -c user.name="${APP}[bot]" \
+            -c user.email="${id}+${APP}[bot]@users.noreply.github.com" \
+            commit -m "chore(release): join the change files into the changelogs"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git" \
+            "HEAD:refs/heads/${branch}"

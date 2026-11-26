@@ -178,9 +178,16 @@ run, not by a new run from a later `main`:
 
 1. `release-pr` reads the conventional commits since each crate's last
    release, checks the public API with cargo-semver-checks, and opens or
-   updates one release pull request with the new versions and each crate's
-   `CHANGELOG.md`.
+   updates one release pull request with the new versions. The change files
+   are the changelog, never the commits: release-plz writes only each
+   released crate's `## [<version>] - <date>` heading, and the next step of
+   the workflow runs `cargo xtask close --date <today> --package <crate>`
+   for each crate the pull request releases, so their change files join
+   that section at the crate's own version and go, and pushes the result to
+   the release pull request. A crate without a `CHANGELOG.md` keeps none:
+   [release-plz.toml](release-plz.toml) turns its changelog off.
 2. Once that pull request merges, `release` tags each released crate
    `<package>-v<version>`, such as `enshwick-v1.0.0-alpha.3`, makes its
-   GitHub release, and publishes the public crates to crates.io. The loader
+   GitHub release with the crate's joined changelog section as its notes,
+   and publishes the public crates to crates.io. The loader
    and the stub are tagged only; they never go to crates.io.
