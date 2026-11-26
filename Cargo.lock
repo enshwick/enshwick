@@ -808,6 +808,7 @@ dependencies = [
  "bytemuck",
  "criterion",
  "crossbeam-queue",
+ "enshwick",
  "enshwick-abi",
  "enshwick-base",
  "enshwick-core",

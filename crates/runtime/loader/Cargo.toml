@@ -72,8 +72,10 @@ test = []
 [dev-dependencies]
 criterion.workspace = true
 crossbeam-queue.workspace = true
-# Not `enshwick`: its `test` feature would turn on the fake host's features
-# of the crates the loader runs on, for every test here.
+# The discovery tests build mods against `crates/enshwick` by path, so a
+# change there reaches them. Without `test`, which would turn on the fake
+# host's features of the crates the loader runs on, for every test here.
+enshwick.workspace = true
 enshwick-abi = { workspace = true, features = ["test"] }
 enshwick-core = { workspace = true, features = ["unstable", "test"] }
 enshwick-gamedata = { workspace = true, features = ["test"] }
