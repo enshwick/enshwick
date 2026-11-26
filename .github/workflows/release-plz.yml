@@ -49,6 +49,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      # Whether this commit merged a release pull request.
+      pull-requests: read
       # crates.io trusted publishing.
       id-token: write
     # One group per commit: in a shared group a later merge would cancel the
@@ -66,17 +68,33 @@ jobs:
           persist-credentials: false
 
       - uses: ./.github/actions/setup-rust
+      - uses: ./.github/actions/gh
 
-      # A loader version without its tag releases in this run, and its
-      # release needs notes: refused notes stop the run before anything goes
-      # to crates.io.
+      # release-plz releases only on the commit that merged a release pull
+      # request (release_always), whose branch it names `release-plz-…`. On
+      # that commit a loader version without its tag releases, so it stops
+      # the run before anything goes to crates.io when the notes are refused
+      # or the version is an alpha, which only release.yml releases, by hand.
+      # Any other commit releases nothing and skips the check.
       - name: The loader's notes
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           version=$(cargo pkgid --locked -p enshwick-loader)
           version=${version##*[#@]}
-          if ! git rev-parse -q --verify "refs/tags/v$version" > /dev/null; then
-            cargo xtask notes --out "$RUNNER_TEMP/notes.md"
+          if git rev-parse -q --verify "refs/tags/v$version" > /dev/null; then
+            exit 0
           fi
+          merged=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
+            --jq '[.[] | select(.merged_at != null and (.head.ref | startswith("release-plz-")))] | length')
+          if [ "$merged" -eq 0 ]; then
+            exit 0
+          fi
+          if [[ "$version" == *-* ]]; then
+            echo "::error title=release::$version is a prerelease; an alpha releases only through release.yml, by hand"
+            exit 1
+          fi
+          cargo xtask notes --out "$RUNNER_TEMP/notes.md"
 
       # The app pushes the tags; the job token may not.
       - name: Token for the release
@@ -245,7 +263,7 @@ jobs:
   # no hook, and pushes it. The commit is the app's bot user's, so
   # release-plz's next update force-pushes over it as over its own commit,
   # and `changelogs` joins the files again. A branch that moved since
-  # `changelogs` read it refuses the push.
+  # `changelogs` read it is left alone: the run that moved it joins them.
   push-changelogs:
     needs: [release-pr, changelogs]
     if: needs.changelogs.outputs.changed == 'true'
@@ -280,8 +298,13 @@ jobs:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           APP: ${{ steps.token.outputs.app-slug }}
           BRANCH: ${{ needs.release-pr.outputs.branch }}
+          HEAD: ${{ needs.changelogs.outputs.head }}
           REPOSITORY: ${{ github.repository }}
         run: |
+          if [ "$(gh api "repos/$REPOSITORY/git/ref/heads/$BRANCH" --jq .object.sha)" != "$HEAD" ]; then
+            echo "::notice title=changelogs::$BRANCH moved since its change files were joined; the run that moved it joins them"
+            exit 0
+          fi
           git apply --index "$RUNNER_TEMP/changelogs.patch"
           id=$(gh api "users/${APP}%5Bbot%5D" --jq .id)
           git -c user.name="${APP}[bot]" \

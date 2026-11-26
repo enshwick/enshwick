@@ -164,8 +164,9 @@ against, each crate's changelog section and the known issues the run is
 given. A version released already is refused, and so is one whose
 changelogs lack its section or whose change files are not joined yet. The
 workflow scans the archive on VirusTotal. With `publish` off it runs from
-any branch, builds without signing and shows the notes and the files in
-the run's summary, publishing nothing.
+any branch that carries a version not released yet with its changelogs
+closed, builds without signing and shows the notes and the files in the
+run's summary, publishing nothing.
 
 The 1.0 release moves every crate to `1.0.0`. From that version on,
 `cargo xtask check` accepts install and dependency lines that take the

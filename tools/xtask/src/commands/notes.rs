@@ -19,6 +19,8 @@ const MAX_BODY: usize = 125_000;
 const INSTALL: &str = "Extract `enshwick.zip` into the folder that holds \
 `enshrouded.exe` or `enshrouded_server.exe`. It holds the loader and no mod: \
 each mod ships in its own archive.";
+/// The start of an alpha's prerelease part, `alpha.N`.
+const ALPHA_PRE: &str = "alpha.";
 
 /// The command line `notes` takes.
 #[derive(Debug, clap::Args)]
@@ -218,8 +220,12 @@ fn notes(
     }
     let (warning, kind) = if semver.pre.is_empty() {
         (String::new(), "release")
-    } else {
+    } else if semver.pre.as_str().starts_with(ALPHA_PRE) {
         (format!("{ALPHA_WARNING}\n"), "alpha")
+    } else {
+        return Err(format!(
+            "{version}: a prerelease is an alpha.N, the only one these notes announce"
+        ));
     };
     let mut text = format!(
         "{warning}{INSTALL}\n\n## Game version\n\nThis {kind} was checked against {}.\n",
@@ -512,6 +518,14 @@ mod tests {
         );
         assert!(text.ends_with("## Known issues\n\nNone reported for this release.\n"));
         Ok(())
+    }
+
+    #[test]
+    fn a_prerelease_other_than_an_alpha_gets_no_notes() {
+        for version in ["1.0.0-beta.1", "1.0.0-rc.1", "1.0.0-alphabet.1"] {
+            let refused = notes(version, &[side("server", 1, 1)], &[], "").unwrap_err();
+            assert!(refused.contains("alpha.N"), "{version}: {refused}");
+        }
     }
 
     #[test]

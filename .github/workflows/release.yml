@@ -9,8 +9,9 @@
 # by hand on main, after a pull request moved the crates to that version and
 # joined their change files with `cargo xtask close`, and tags it here. A
 # version released already is refused. With `publish` off it runs from any
-# branch, builds unsigned without the release environment and shows the
-# notes and the files in the run's summary, publishing nothing.
+# branch that carries a version not released yet with its changelogs closed,
+# builds unsigned without the release environment and shows the notes and
+# the files in the run's summary, publishing nothing.
 name: release
 
 on:
@@ -35,14 +36,16 @@ on:
         type: boolean
         default: true
     # A called job reads an environment secret only when the caller passes
-    # it by name; one not passed is empty without an error.
+    # it by name; one not passed is empty without an error. None is
+    # `required`: the caller's job has no environment, so it passes an empty
+    # value, which a required secret refuses before the release starts.
     secrets:
       ENSHWICK_SIGNING_KEY:
-        required: true
+        required: false
       ENSHWICK_CI_CLIENT_ID:
-        required: true
+        required: false
       ENSHWICK_CI_PRIVATE_KEY:
-        required: true
+        required: false
       DOCS_DEPLOY_HOOK:
         required: false
       VIRUSTOTAL_API_KEY:
