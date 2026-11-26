@@ -617,7 +617,10 @@ build that cannot read the player's slots, they return
 | `Trash(slot)` | destroys the slot's stack; the game has no drop on the ground |
 
 A count moved into an empty slot splits a stack. A move out of an equipment
-slot unequips the item.
+slot unequips the item. The server refuses to equip an item into an
+equipment slot of another kind, such as a chest armour as `Shield`. A
+trash is an item transfer of type `Destroy`: a server mod refuses it in its
+interaction filter, not with an item filter on `Trash`.
 
 ```rust
 use enshwick::input::{ClientCommand, CommandAction, Input};

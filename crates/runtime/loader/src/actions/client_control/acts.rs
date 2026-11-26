@@ -1,12 +1,13 @@
-//! Where the local player's crafting, item transfer, equipment and item
-//! requests lie in its `ClientPlayerInput`, and how a client command writes
-//! one. The game's own interface raises each as an event the input builder
-//! copies into its request with the step count as its version, and the
-//! server runs a request when its version changes: crafting in
-//! `player_crafting`, which pushes the `CraftRecipeEvent` the crafting
-//! system checks, the rest in `inventory_actions` (client 26430625 UI
-//! command 0x37 and builder `0x1403af670`; server 26430253 `0x1400d2250`,
-//! read in the decompiler, 2026-11-26).
+//! Where the local player's crafting, item transfer and equipment requests
+//! lie in its `ClientPlayerInput`, and how a client command writes one. The
+//! game's own interface raises each as an event the input builder copies
+//! into its request with the step count as its version, and the server runs
+//! a request when its version changes: crafting in `player_crafting`, which
+//! pushes the `CraftRecipeEvent` the crafting system checks, a transfer in
+//! `inventory_actions` through `access.transfer`, an equipment change in
+//! `equipment_actions` (client 26430625 UI command 0x37 and builder
+//! `0x1403af670`; server 26430253 `0x1400d2250`, `0x14019e860` and
+//! `0x140144950`, read in the decompiler, 2026-11-26).
 
 use enshwick_core::raw::{read_at, write_at};
 
@@ -37,7 +38,9 @@ pub(crate) enum Act {
     MoveAll { from: u32, to: u32 },
     /// Equips the slot's item into the `EquipmentSlot` member `equipment`.
     Equip { slot: u64, equipment: u8 },
-    /// Destroys the slot's stack.
+    /// Destroys the slot's stack, a transfer of type `Destroy`, which the
+    /// server runs as a plain destroy; `ItemActionType::Trash` is another
+    /// action, which it runs only for some items and which gives one back.
     Trash { slot: u64 },
 }
 
@@ -175,9 +178,10 @@ pub(crate) struct ActLayout {
     transfer_type: usize,
     transfer_flags: usize,
     transfer_amount: usize,
-    /// `InventoryActionType` `All` and `CustomAmount`.
+    /// `InventoryActionType` `All`, `CustomAmount` and `Destroy`.
     all: u8,
     custom: u8,
+    destroy: u8,
     /// The flags byte that moves every stack.
     move_all_stacks: u8,
     equipment: Record,
@@ -185,10 +189,6 @@ pub(crate) struct ActLayout {
     equipment_member: usize,
     equipment_type: usize,
     equip: u8,
-    item: Record,
-    item_slot: usize,
-    item_type: usize,
-    trash: u8,
 }
 
 impl ActLayout {
@@ -217,13 +217,6 @@ impl ActLayout {
             ids::EQUIPMENT_ACTION,
             ids::EQUIPMENT_ACTION_VERSION,
         )?;
-        let (item, item_size) = Record::resolve(
-            loader,
-            input,
-            ids::CLIENT_PLAYER_INPUT_ITEM,
-            ids::ITEM_ACTION,
-            ids::ITEM_ACTION_VERSION,
-        )?;
         let selections = reflected_size(loader, ids::RECIPE_INPUT_SELECTIONS)?;
         let craft_field = |id, bytes| field(loader, id, bytes, craft_size);
         let transfer_field = |id, bytes| field(loader, id, bytes, transfer_size);
@@ -251,6 +244,7 @@ impl ActLayout {
             transfer_amount: transfer_field(ids::TRANSFER_ACTION_AMOUNT, 2)?,
             all: value(loader, ids::INVENTORY_ACTION_ALL)?,
             custom: value(loader, ids::INVENTORY_ACTION_CUSTOM_AMOUNT)?,
+            destroy: value(loader, ids::INVENTORY_ACTION_DESTROY)?,
             move_all_stacks: 1 << flag,
             transfer,
             equipment_slot: field(loader, ids::EQUIPMENT_ACTION_SLOT, 8, equipment_size)?,
@@ -263,10 +257,6 @@ impl ActLayout {
             equipment_type: field(loader, ids::EQUIPMENT_ACTION_TYPE, 1, equipment_size)?,
             equip: value(loader, ids::CHANGE_EQUIPMENT_EQUIP)?,
             equipment,
-            item_slot: field(loader, ids::ITEM_ACTION_SLOT, 8, item_size)?,
-            item_type: field(loader, ids::ITEM_ACTION_TYPE, 1, item_size)?,
-            trash: value(loader, ids::ITEM_ACTION_TRASH)?,
-            item,
         })
     }
 
@@ -274,9 +264,8 @@ impl ActLayout {
     const fn record(&self, act: Act) -> &Record {
         match act {
             Act::Craft { .. } => &self.craft,
-            Act::Move { .. } | Act::MoveAll { .. } => &self.transfer,
+            Act::Move { .. } | Act::MoveAll { .. } | Act::Trash { .. } => &self.transfer,
             Act::Equip { .. } => &self.equipment,
-            Act::Trash { .. } => &self.item,
         }
     }
 
@@ -310,6 +299,22 @@ impl ActLayout {
             }
         };
         let own = |entity: u32| if entity == 0 { player } else { entity };
+        // The server skips a transfer that names a slot beside its
+        // inventory, and finds a named slot's inventory itself (server
+        // 26430253 `access.transfer`), so a slot's entity stays 0.
+        let transfer =
+            |[source, target]: [u32; 2], [from, to]: [u64; 2], kind: u8, flags: u8, amount: u16| {
+                let r = &self.transfer;
+                put(r, self.transfer_source, &source.to_ne_bytes());
+                put(r, self.transfer_target, &target.to_ne_bytes());
+                put(r, self.transfer_source_slot, &from.to_ne_bytes());
+                put(r, self.transfer_target_slot, &to.to_ne_bytes());
+                put(r, self.transfer_type, &[kind]);
+                put(r, self.transfer_flags, &[flags]);
+                put(r, self.transfer_amount, &amount.to_ne_bytes());
+                // SAFETY: the caller's record.
+                unsafe { r.bump(input) };
+            };
         match act {
             Act::Craft {
                 station,
@@ -330,43 +335,19 @@ impl ActLayout {
                 unsafe { r.bump(input) };
             }
             Act::Move { from, to, count } => {
-                let r = &self.transfer;
-                let entity = |slot: u64| u32::try_from(slot & 0xffff_ffff).unwrap_or(0);
-                put(r, self.transfer_source, &entity(from).to_ne_bytes());
-                put(r, self.transfer_target, &entity(to).to_ne_bytes());
-                put(r, self.transfer_source_slot, &from.to_ne_bytes());
-                put(r, self.transfer_target_slot, &to.to_ne_bytes());
                 let kind = if count == 0 { self.all } else { self.custom };
-                put(r, self.transfer_type, &[kind]);
-                put(r, self.transfer_flags, &[0]);
-                put(r, self.transfer_amount, &count.to_ne_bytes());
-                // SAFETY: the caller's record.
-                unsafe { r.bump(input) };
+                transfer([0, 0], [from, to], kind, 0, count);
             }
             Act::MoveAll { from, to } => {
-                let r = &self.transfer;
-                put(r, self.transfer_source, &own(from).to_ne_bytes());
-                put(r, self.transfer_target, &own(to).to_ne_bytes());
-                put(r, self.transfer_source_slot, &0u64.to_ne_bytes());
-                put(r, self.transfer_target_slot, &0u64.to_ne_bytes());
-                put(r, self.transfer_type, &[self.all]);
-                put(r, self.transfer_flags, &[self.move_all_stacks]);
-                put(r, self.transfer_amount, &0u16.to_ne_bytes());
-                // SAFETY: the caller's record.
-                unsafe { r.bump(input) };
+                let kind = self.all;
+                transfer([own(from), own(to)], [0, 0], kind, self.move_all_stacks, 0);
             }
+            Act::Trash { slot } => transfer([0, 0], [slot, 0], self.destroy, 0, 0),
             Act::Equip { slot, equipment } => {
                 let r = &self.equipment;
                 put(r, self.equipment_slot, &slot.to_ne_bytes());
                 put(r, self.equipment_member, &[equipment]);
                 put(r, self.equipment_type, &[self.equip]);
-                // SAFETY: the caller's record.
-                unsafe { r.bump(input) };
-            }
-            Act::Trash { slot } => {
-                let r = &self.item;
-                put(r, self.item_slot, &slot.to_ne_bytes());
-                put(r, self.item_type, &[self.trash]);
                 // SAFETY: the caller's record.
                 unsafe { r.bump(input) };
             }
@@ -406,6 +387,7 @@ pub(crate) const TEST_LAYOUT: ActLayout = ActLayout {
     transfer_amount: 30,
     all: 2,
     custom: 3,
+    destroy: 4,
     move_all_stacks: 1 << 2,
     equipment: Record {
         base: 0x1c0,
@@ -415,13 +397,6 @@ pub(crate) const TEST_LAYOUT: ActLayout = ActLayout {
     equipment_member: 12,
     equipment_type: 13,
     equip: 0,
-    item: Record {
-        base: 0x1dc,
-        version: 16,
-    },
-    item_slot: 0,
-    item_type: 20,
-    trash: 2,
 };
 
 #[cfg(test)]
@@ -469,16 +444,22 @@ mod tests {
     }
 
     #[test]
-    fn a_move_names_both_slots_and_a_count_or_the_whole_stack() {
-        let mut input = vec![0u8; 0x600];
+    fn a_move_names_both_slots_and_a_count_or_the_whole_stack_but_no_inventory() {
+        let mut input = vec![0xffu8; 0x600];
+        input[..4].copy_from_slice(&1u32.to_ne_bytes());
         let (from, to) = (0x41 | 2 << 32, 0x42 | 5 << 32);
         request(&mut input, Act::Move { from, to, count: 4 });
-        assert_eq!((at::<u32>(&input, 4), at::<u32>(&input, 8)), (0x41, 0x42));
+        assert_eq!(
+            (at::<u32>(&input, 4), at::<u32>(&input, 8)),
+            (0, 0),
+            "the server skips a slot named beside its inventory"
+        );
         assert_eq!((at::<u64>(&input, 12), at::<u64>(&input, 20)), (from, to));
         assert_eq!((input[28], at::<u16>(&input, 30)), (3, 4), "custom amount");
+        assert_eq!(input[29], 0, "no flags");
         request(&mut input, Act::Move { from, to, count: 0 });
         assert_eq!(input[28], 2, "all");
-        assert_eq!(at::<u32>(&input, 0), 2 | LOADER_VERSION);
+        assert_eq!(at::<u32>(&input, 0), 3 | LOADER_VERSION);
     }
 
     #[test]
@@ -539,7 +520,7 @@ mod tests {
     }
 
     #[test]
-    fn equip_and_trash_write_their_own_requests() {
+    fn equip_writes_the_equipment_request() {
         let mut input = vec![0u8; 0x600];
         request(
             &mut input,
@@ -551,8 +532,21 @@ mod tests {
         assert_eq!(at::<u64>(&input, 0x1c0), 0x41 | 1 << 32);
         assert_eq!((input[0x1cc], input[0x1cd]), (12, 0));
         assert_eq!(at::<u32>(&input, 0x1c8), 1 | LOADER_VERSION);
-        request(&mut input, Act::Trash { slot: 0x43 });
-        assert_eq!((at::<u64>(&input, 0x1dc), input[0x1dc + 20]), (0x43, 2));
-        assert_eq!(at::<u32>(&input, 0x1dc + 16), 1 | LOADER_VERSION);
+    }
+
+    #[test]
+    fn trash_destroys_the_source_slot_through_the_transfer_request() {
+        let mut input = vec![0xffu8; 0x600];
+        input[..4].copy_from_slice(&1u32.to_ne_bytes());
+        let slot = 0x43 | 6 << 32;
+        request(&mut input, Act::Trash { slot });
+        assert_eq!((at::<u32>(&input, 4), at::<u32>(&input, 8)), (0, 0));
+        assert_eq!(
+            (at::<u64>(&input, 12), at::<u64>(&input, 20)),
+            (slot, 0),
+            "the source slot alone"
+        );
+        assert_eq!((input[28], input[29], at::<u16>(&input, 30)), (4, 0, 0));
+        assert_eq!(at::<u32>(&input, 0), 2 | LOADER_VERSION);
     }
 }
