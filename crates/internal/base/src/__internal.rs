@@ -22,11 +22,12 @@ pub use builds::{
     rebuild_in, rebuild_one, rebuild_readers, rekeys_another,
 };
 
-/// Whether this build is the fake host's, whose scheduler counts time only as
-/// the fake's steps move it; the loader's tests check that it is not.
+/// Whether the scheduler counts time only as a fake host's steps move it,
+/// which it does once a fake host is installed in the process; the loader's
+/// tests check that theirs is the wall clock.
 #[must_use]
-pub fn is_fake_host() -> bool {
-    cfg!(feature = "fake")
+pub fn fake_clock() -> bool {
+    crate::schedule::fake_clock()
 }
 
 /// Makes `host` the answer of [`crate::host`]; the first call wins.

@@ -11,6 +11,8 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 publish = true
+# The loader's contract table, which only this crate's own test reads.
+exclude = ["contract/"]
 
 [dependencies]
 enshwick-macros = { path = "../macros", version = "=1.0.0-alpha.17" }

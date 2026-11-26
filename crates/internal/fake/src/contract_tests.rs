@@ -23,8 +23,7 @@ macro_rules! callers {
 enshwick_abi::__host_entries!(callers);
 
 /// The loader's table, from this crate's folder.
-const TABLE: &str =
-    "../../runtime/loader/src/host/snapshots/enshwick_loader__host__contract_tests__contract.snap";
+const TABLE: &str = "contract/loader.snap";
 
 /// A difference the hosts keep on purpose: the entry, the precondition,
 /// the loader's answer, the fake's, and why.

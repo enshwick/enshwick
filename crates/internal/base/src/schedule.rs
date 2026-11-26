@@ -112,11 +112,30 @@ fn now() -> Instant {
     Instant::now()
 }
 
-/// Now, as the scheduler counts time: under the fake host, its own clock.
+/// Now, as the scheduler counts time: once a fake host is installed, its
+/// own clock; before, the wall clock, as for the loader's tests, whose build
+/// may share the fake's features with another crate's.
 #[cfg(feature = "fake")]
 fn now() -> Instant {
+    if !fake_clock() {
+        return Instant::now();
+    }
     let (start, moved) = &schedule().clock;
     *start + Duration::from_nanos(moved.load(Ordering::Acquire))
+}
+
+/// Whether the scheduler counts time by a fake host's steps: only once one
+/// is installed in the process.
+#[cfg(feature = "fake")]
+pub(crate) fn fake_clock() -> bool {
+    crate::fresh::fake_installed()
+}
+
+/// Whether the scheduler counts time by a fake host's steps: never in a
+/// build without the fake.
+#[cfg(not(feature = "fake"))]
+pub(crate) const fn fake_clock() -> bool {
+    false
 }
 
 /// Sets the fake host's clock to `nanos` past the start of the mod life,
@@ -328,6 +347,18 @@ mod tests {
     use std::sync::atomic::AtomicU32;
 
     use super::*;
+
+    #[test]
+    fn before_a_fake_host_is_installed_the_scheduler_counts_the_wall_clock_in_any_build() {
+        // A test of this process that installed a fake has moved on to its clock.
+        if crate::fresh::life() > 1 {
+            return;
+        }
+        assert!(!fake_clock());
+        let before = now();
+        std::thread::sleep(Duration::from_millis(5));
+        assert!(now() - before >= Duration::from_millis(5));
+    }
 
     #[test]
     fn tasks_run_when_due_and_repeat_until_they_stop() {

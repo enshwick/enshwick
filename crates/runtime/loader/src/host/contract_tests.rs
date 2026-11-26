@@ -1,7 +1,8 @@
 //! The loader's half of its contract with the fake host: each entry's caller
 //! kind and its answer to a call with zeroed arguments under each
-//! precondition, written as the table in `snapshots/` that the fake host's
-//! own `contract_tests` hold the fake to, on its own feature set.
+//! precondition, written as the table `crates/internal/fake/contract/loader.snap`
+//! that the fake host's own `contract_tests` hold the fake to, on its own
+//! feature set.
 
 use std::sync::atomic::Ordering;
 
@@ -110,5 +111,12 @@ fn the_table_is_written_in_a_process_of_its_own() {
             row.answers[column] = loader_answers(entry, precondition);
         }
     }
-    insta::assert_snapshot!("contract", contract::render(&rows));
+    // In the fake's folder, so a change of the table puts the fake's half in
+    // the change's scope.
+    insta::with_settings!({
+        snapshot_path => "../../../../internal/fake/contract",
+        prepend_module_to_snapshot => false,
+    }, {
+        insta::assert_snapshot!("loader", contract::render(&rows));
+    });
 }
