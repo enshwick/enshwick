@@ -113,7 +113,9 @@ const MAX_DEPTH: u32 = 3;
 ///
 /// # Safety
 ///
-/// As [`inventory_links::walk`] for `setup` and `layout`.
+/// Every pointer `setup` returns is a live `InventorySetup` laid out as
+/// `layout` says, readable for its links and categories and its
+/// initialised byte, with no concurrent writer until the call returns.
 pub(crate) unsafe fn holds_items(
     root: u32,
     layout: &SetupLayout,
@@ -129,7 +131,9 @@ pub(crate) unsafe fn holds_items(
             ControlFlow::Continue(())
         }
     };
-    // SAFETY: the caller's contract, passed on whole.
+    // SAFETY: every pointer `setup` returns is a live `InventorySetup` of
+    // `layout`, readable and unwritten during the walk (this function's
+    // `# Safety`), which is all `walk` asks.
     unsafe {
         inventory_links::walk(
             Entity(root),
@@ -465,6 +469,16 @@ mod tests {
         };
         assert!(holds(&setups, 1, &mut slots));
         assert!(!holds(&setups, 1, &mut |_| Some([0; SLOTS])));
+    }
+
+    #[test]
+    fn an_item_behind_an_empty_link_keeps_the_prop() {
+        let setups = [(1, setup(&[(10, 0), (0, 0), (11, 0)]))];
+        let mut slots = |entity| match entity {
+            11 => Some([0, 4, 0, 0, 0, 0, 0, 0]),
+            _ => Some([0; SLOTS]),
+        };
+        assert!(holds(&setups, 1, &mut slots));
     }
 
     #[test]

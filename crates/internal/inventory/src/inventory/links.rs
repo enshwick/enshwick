@@ -24,9 +24,9 @@ pub struct SetupLayout {
 ///
 /// It hands each link that is not virtual, and each virtual one found
 /// `max_depth` links deep, whose own links it leaves unread. It follows the
-/// other virtual links, stops at a setup's first empty link, and leaves out
-/// the entity `skip` (0 for none). A setup the game has not set up holds
-/// nothing. `setup` finds an entity's setup; the walk ends at the first
+/// other virtual links, passes over empty links, and leaves out the entity
+/// `skip` (0 for none). A setup the game has not set up holds nothing.
+/// `setup` finds an entity's setup; the walk ends at the first
 /// [`ControlFlow::Break`] of `visit`.
 ///
 /// # Safety
@@ -42,7 +42,9 @@ pub unsafe fn walk<B>(
     setup: &mut dyn FnMut(Entity) -> Option<*const u8>,
     visit: &mut dyn FnMut(Entity, InventoryCategory) -> ControlFlow<B>,
 ) -> ControlFlow<B> {
-    // SAFETY: the caller's contract, passed on whole.
+    // SAFETY: every pointer `setup` returns is a live `InventorySetup` of
+    // `layout`, unwritten during the walk (this function's `# Safety`), the
+    // same guarantee `walk_from` asks.
     unsafe { walk_from(root, 0, max_depth, skip, layout, setup, visit) }
 }
 
@@ -50,7 +52,9 @@ pub unsafe fn walk<B>(
 ///
 /// # Safety
 ///
-/// As [`walk`].
+/// Every pointer `setup` returns is a live `InventorySetup` laid out as
+/// `layout` says, readable for its [`LINKS`] links and categories and its
+/// initialised byte, with no concurrent writer until the walk ends.
 unsafe fn walk_from<B>(
     root: Entity,
     depth: u32,
@@ -73,17 +77,19 @@ unsafe fn walk_from<B>(
         // SAFETY: `found` is a live `InventorySetup` (the caller's contract),
         // whose `LINKS` `u32` links start at `layout.links`, and `i < LINKS`.
         let link = Entity(unsafe { read_at::<u32>(found, layout.links + i * size_of::<u32>()) });
-        if link.is_none() {
-            break;
-        }
-        if link == skip {
+        // The game appends links packed, but its own setup check reads past
+        // an empty one (`sys.inventory_setup`, server 26430253), so a gap
+        // never hides the links after it.
+        if link.is_none() || link == skip {
             continue;
         }
         // SAFETY: the same setup, whose `LINKS` category bytes start at
         // `layout.categories`, and `i < LINKS`.
         let category = InventoryCategory(unsafe { read_at::<u8>(found, layout.categories + i) });
         if category == InventoryCategory::VIRTUAL && depth < max_depth {
-            // SAFETY: the caller's contract, passed on whole.
+            // SAFETY: the same `setup` and `layout`, whose pointers are live
+            // `InventorySetup`s unwritten during the walk (this function's
+            // `# Safety`).
             unsafe { walk_from(link, depth + 1, max_depth, skip, layout, setup, visit) }?;
         } else {
             visit(link, category)?;
@@ -173,11 +179,11 @@ mod tests {
     }
 
     #[test]
-    fn the_walk_stops_at_the_first_empty_link_and_leaves_out_the_skipped_one() {
+    fn the_walk_passes_over_empty_links_and_leaves_out_the_skipped_one() {
         let setups = [(1, setup(&[(10, GENERIC), (99, VIRTUAL), (11, GENERIC)]))];
         assert_eq!(walked(&setups, 1, 4, 99), [(10, GENERIC), (11, GENERIC)]);
         let gap = [(1, setup(&[(10, GENERIC), (0, GENERIC), (11, GENERIC)]))];
-        assert_eq!(walked(&gap, 1, 4, 0), [(10, GENERIC)]);
+        assert_eq!(walked(&gap, 1, 4, 0), [(10, GENERIC), (11, GENERIC)]);
     }
 
     #[test]
