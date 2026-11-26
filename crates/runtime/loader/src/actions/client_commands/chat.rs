@@ -21,14 +21,15 @@ pub(super) fn park(id: u64, line: String) {
     STATE.parked.relock().push((id, line));
 }
 
-/// Command `id`'s line, while it is parked.
-pub(super) fn line(id: u64) -> Option<String> {
+/// What `post` answers for command `id`'s line, lent while it is parked, so
+/// a frame that retries a full queue copies nothing; `None` without one.
+pub(super) fn with_line<T>(id: u64, post: impl FnOnce(&str) -> T) -> Option<T> {
     STATE
         .parked
         .relock()
         .iter()
         .find(|(parked, _)| *parked == id)
-        .map(|(_, line)| line.clone())
+        .map(|(_, line)| post(line))
 }
 
 /// Forgets command `id`'s line.
@@ -44,10 +45,14 @@ mod tests {
     fn a_parked_line_stays_until_its_command_releases_it() {
         park(91, "hello".to_owned());
         park(92, "there".to_owned());
-        assert_eq!(line(91).as_deref(), Some("hello"));
+        assert_eq!(with_line(91, str::to_owned).as_deref(), Some("hello"));
         release(91);
-        assert_eq!(line(91), None);
-        assert_eq!(line(92).as_deref(), Some("there"), "another's stays");
+        assert_eq!(with_line(91, str::to_owned), None);
+        assert_eq!(
+            with_line(92, str::to_owned).as_deref(),
+            Some("there"),
+            "another's stays"
+        );
         release(92);
     }
 }

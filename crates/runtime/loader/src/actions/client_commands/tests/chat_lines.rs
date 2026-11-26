@@ -2,6 +2,11 @@
 
 use super::*;
 
+/// Command `id`'s line while it is parked.
+fn parked(id: u64) -> Option<String> {
+    chat::with_line(id, str::to_owned)
+}
+
 #[test]
 fn a_chat_line_is_posted_by_the_frame_and_observed_once_the_game_s_queue_takes_it() {
     let mut commands = kept(Command {
@@ -30,7 +35,7 @@ fn a_chat_line_is_posted_by_the_frame_and_observed_once_the_game_s_queue_takes_i
     assert_eq!(commands.kept[0].state, Status::OBSERVED);
     let line = format!("{:?}", FrameChange::Chat("hello there"));
     assert_eq!(posted, [line.clone(), line]);
-    assert_eq!(chat::line(77), None, "its line went with it");
+    assert_eq!(parked(77), None, "its line went with it");
 }
 
 #[test]
@@ -51,5 +56,42 @@ fn a_chat_line_at_the_main_menu_ends_timed_out_and_drops_its_line() {
         (ended.state, ended.reason),
         (Status::CANCELLED, Status::TIMED_OUT)
     );
-    assert_eq!(chat::line(78), None);
+    assert_eq!(parked(78), None);
+}
+
+#[test]
+fn a_chat_line_waiting_for_a_full_queue_is_not_cancelled_by_the_player_s_keys() {
+    let mut commands = kept(Command {
+        id: 79,
+        expected: None,
+        ..command(Kind::Chat)
+    });
+    chat::park(79, "wait for me".to_owned());
+    let sprinting = Seen {
+        held: Some(1 << 12),
+        ..world()
+    };
+    assert!(run(&mut commands, Some(sprinting), None, 150, |_| {
+        Applied::Busy
+    }));
+    assert_eq!(commands.kept[0].state, Status::PENDING, "it still waits");
+    assert!(!run(&mut commands, Some(sprinting), None, 160, |_| {
+        Applied::Taken
+    }));
+    assert_eq!(commands.kept[0].state, Status::OBSERVED);
+}
+
+#[test]
+fn a_chat_line_the_build_cannot_post_ends_unavailable_and_drops_its_line() {
+    let mut commands = kept(Command {
+        id: 80,
+        expected: None,
+        ..command(Kind::Chat)
+    });
+    chat::park(80, "no poster".to_owned());
+    assert!(!run(&mut commands, Some(world()), None, 150, |_| {
+        Applied::Unavailable
+    }));
+    assert_eq!(commands.kept[0].state, Status::UNAVAILABLE);
+    assert_eq!(parked(80), None);
 }

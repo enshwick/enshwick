@@ -161,19 +161,15 @@ impl Kind {
         matches!(self, Self::Look(_) | Self::Move(..) | Self::Press(..))
     }
 
-    /// The change the interface frame applies for it, `line` being a chat's
-    /// parked line; `None` for a kind a detour of the game's own code runs
-    /// through a [`Handoff`], and for a chat without its line.
-    const fn frame_change(self, line: Option<&str>) -> Option<FrameChange<'_>> {
+    /// The change the interface frame applies for it; `None` for a kind a
+    /// detour of the game's own code runs through a [`Handoff`], and for a
+    /// chat, whose line the frame borrows from [`chat`].
+    const fn frame_change(self) -> Option<FrameChange<'static>> {
         match self {
             Self::Open(screen) => Some(FrameChange::Open(screen)),
             Self::Close(screen) => Some(FrameChange::Close(screen)),
             Self::Tab(tab) => Some(FrameChange::Tab(tab)),
             Self::Mods(ask) => Some(FrameChange::Mods(ask)),
-            Self::Chat => match line {
-                Some(line) => Some(FrameChange::Chat(line)),
-                None => None,
-            },
             _ => None,
         }
     }
@@ -181,10 +177,7 @@ impl Kind {
     /// Whether a detour of the game's own code runs it, through a
     /// [`Handoff`], rather than the interface frame.
     const fn handed(self) -> bool {
-        !matches!(
-            self,
-            Self::Open(_) | Self::Close(_) | Self::Tab(_) | Self::Mods(_) | Self::Chat
-        )
+        self.frame_change().is_none() && !matches!(self, Self::Chat)
     }
 
     /// Whether it joins or leaves play, at the game's own pace once handed:
@@ -507,8 +500,9 @@ fn next(
         if elsewhere {
             return cancel(Status::OTHER_SCREEN);
         }
-        // A waypoint or ping drives none of the player's input to give way.
-        if pressed && !matches!(command.kind, Kind::Mark(_) | Kind::Act(_)) {
+        // A waypoint, a ping or a chat line drives none of the player's
+        // input to give way.
+        if pressed && !matches!(command.kind, Kind::Mark(_) | Kind::Act(_) | Kind::Chat) {
             return cancel(Status::PLAYER_INPUT);
         }
         let ready = match command.kind {
@@ -902,22 +896,26 @@ fn run(
         match next {
             Next::Wait => {}
             Next::Apply => {
-                let line = (command.kind == Kind::Chat)
-                    .then(|| chat::line(command.id))
-                    .flatten();
-                match command.kind.frame_change(line.as_deref()) {
+                let applied = match command.kind {
+                    Kind::Chat => {
+                        chat::with_line(command.id, |line| apply(FrameChange::Chat(line)))
+                    }
+                    kind => kind.frame_change().map(&mut apply),
+                };
+                match applied {
                     None => command.handed = command.hand().then_some(now),
-                    Some(change) => match apply(change) {
-                        // The line is in the game's own queue, as the chat
-                        // window's Enter leaves it: nothing later shows it.
-                        Applied::Taken if command.kind == Kind::Chat => {
-                            command.release(false);
-                            command.state = Status::OBSERVED;
-                        }
-                        Applied::Taken => command.state = Status::APPLIED,
-                        Applied::Busy => {}
-                        Applied::Unavailable => command.state = Status::UNAVAILABLE,
-                    },
+                    // The line is in the game's own queue, as the chat
+                    // window's Enter leaves it: nothing later shows it.
+                    Some(Applied::Taken) if command.kind == Kind::Chat => {
+                        command.release(false);
+                        command.state = Status::OBSERVED;
+                    }
+                    Some(Applied::Taken) => command.state = Status::APPLIED,
+                    Some(Applied::Busy) => {}
+                    Some(Applied::Unavailable) => {
+                        command.release(false);
+                        command.state = Status::UNAVAILABLE;
+                    }
                 }
             }
             Next::Applied => command.state = Status::APPLIED,

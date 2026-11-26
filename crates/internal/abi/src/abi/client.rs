@@ -545,8 +545,8 @@ impl ClientCommand {
     /// button can give to a dialog named by its number, a craft of a
     /// non-zero recipe 1 to [`ClientCommand::MAX_AMOUNT`] times, a move
     /// between two different slots of at most that many items, an
-    /// inventory to take from or deposit into, and a slot to equip from or
-    /// trash.
+    /// inventory to take from or deposit into, a slot to equip from or
+    /// trash, and a chat line of 1 to [`ClientCommand::MAX_CHAT`] bytes.
     ///
     /// # Examples
     ///

@@ -934,6 +934,7 @@ mod tests {
             &GROUPS.menu.fuse,
             &GROUPS.host.fuse,
             &GROUPS.waypoint.fuse,
+            &GROUPS.chat.fuse,
         ] {
             assert!(fuse.is_off(), "{}", fuse.feature());
         }
@@ -941,6 +942,7 @@ mod tests {
         let listed = crate::engine::diag::parts_off();
         let parts: Vec<&str> = listed.iter().map(|p| p.part.as_str()).collect();
         assert!(parts.contains(&"the in-game menu's tab"), "{parts:?}");
+        assert!(parts.contains(&"the client's chat command"), "{parts:?}");
         assert!(
             parts.contains(&GROUPS.buttons.fuse.feature()),
             "the held buttons are a part of their own, so their entries never turn off the look and move: {parts:?}"

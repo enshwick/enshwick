@@ -14,7 +14,10 @@ pub(crate) struct ChatPost {
     post: PostFn,
 }
 
-/// A text as the game passes one: its first byte and its length.
+/// A text as the game passes one: its first byte and its length, the game's
+/// own layout (client 26430625). The bytes are the loader's, UTF-8, not
+/// NUL-terminated, non-null and borrowed only for the call; the game copies
+/// them and keeps no pointer.
 #[repr(C)]
 struct Text {
     bytes: *const u8,
@@ -22,7 +25,10 @@ struct Text {
 }
 
 /// The poster: the UI context, the text, the line's type and two words in;
-/// whether the queue took it out, in its low byte.
+/// whether the queue took it out, in its low byte. The game's own code,
+/// called only on the interface thread inside its frame; as read in the
+/// decompiler it reserves and copies without calling the loader back, so no
+/// loader code runs, or panics, inside it.
 type PostFn =
     unsafe extern "system" fn(context: usize, text: *const Text, kind: u8, a: u32, b: u32) -> u64;
 

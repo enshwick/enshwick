@@ -695,8 +695,9 @@ enshwick.input.client_command({
 `CommandAction::Chat(text)` sends `text` to the world's chat as the local
 player's own line, on any server the client plays on, a joined one included.
 The loader posts it through the game's own chat, as the chat window's Enter
-does. The server's chat filter and mute see it as any line the player types. A line of 1 to 1,024 bytes (`CommandAction::MAX_CHAT`, the game's own
-limit) is taken; an empty or longer one returns `WorldError::Refused`.
+does. The server's chat filter and mute see it as any line the player types.
+A line of 1 to 1,024 bytes (`CommandAction::MAX_CHAT`, the game's own limit)
+is taken; an empty or longer one returns `WorldError::Refused`.
 
 The command runs in a world, on any screen. It is observed once the game's
 interface queue takes the line, in the next frame; a full queue retries in
