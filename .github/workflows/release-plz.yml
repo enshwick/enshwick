@@ -1,10 +1,11 @@
 # Release pull requests and releases with release-plz (release-plz.toml), on
-# main only. `release-pr` opens or updates the release pull
-# request; `release`, after that pull request merged, tags each
-# released crate `<package>-v<version>`, makes its GitHub release and
-# publishes the public crates to crates.io through trusted publishing, which
-# matches this file's name. A push to main runs both, but only while the repository variable RELEASE_ON_MERGE is `true`; until the
-# first real release it is unset and releases run by hand.
+# main only. `release-pr` opens or updates the release pull request;
+# `release`, after that pull request merged, tags each released crate
+# `<package>-v<version>`, makes its GitHub release and publishes the public
+# crates to crates.io through trusted publishing, which matches this file's
+# name. A push to main runs both, but only while the repository variable
+# RELEASE_ON_MERGE is `true`; until the first real release it is unset and
+# releases run by hand.
 name: release-plz
 
 on:
@@ -28,11 +29,12 @@ on:
 permissions: {}
 
 jobs:
-  release-plz:
+  release:
     # Releases come only from main; a push releases only once switched on.
     if: >-
       github.ref == 'refs/heads/main' &&
-      (github.event_name == 'workflow_dispatch' || vars.RELEASE_ON_MERGE == 'true')
+      (github.event_name == 'workflow_dispatch' || vars.RELEASE_ON_MERGE == 'true') &&
+      inputs.command != 'release-pr'
     # The release environment admits main only.
     environment: release
     # A fresh machine: what ships is built and published without the
@@ -43,8 +45,11 @@ jobs:
       contents: read
       # crates.io trusted publishing.
       id-token: write
+    # One group per commit: in a shared group a later merge would cancel the
+    # pending run of a merged release pull request, and `release` acts only
+    # on that commit.
     concurrency:
-      group: release-plz
+      group: release-plz-release-${{ github.sha }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -54,9 +59,7 @@ jobs:
 
       - uses: ./.github/actions/setup-rust
 
-      # The app pushes the release branch and tags and opens the release pull
-      # request, which then runs CI as any other; the job token may not open
-      # pull requests.
+      # The app pushes the tags and makes the releases; the job token may not.
       - name: Token for the release
         id: token
         uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
@@ -67,20 +70,52 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
 
-      # A push has no command and runs both. `release` goes first: the
-      # action's own order, release-pr first, would open a new release pull
-      # request for versions the merged one has not tagged yet.
-      - name: Release
-        if: inputs.command != 'release-pr'
-        uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
+      - uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
         with:
           command: release
         env:
           GITHUB_TOKEN: ${{ steps.token.outputs.token }}
 
-      - name: Release pull request
-        if: inputs.command != 'release'
-        uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
+  release-pr:
+    # After `release`: run first, release-pr would open a new release pull
+    # request for versions the merged one has not tagged yet.
+    needs: release
+    if: >-
+      !cancelled() && needs.release.result != 'failure' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' || vars.RELEASE_ON_MERGE == 'true') &&
+      inputs.command != 'release'
+    environment: release
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    # A newer run may replace a pending one: it covers the same commits.
+    concurrency:
+      group: release-plz-pr
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-rust
+
+      # The app pushes the release branch and opens the release pull request,
+      # which then runs CI as any other; the job token may not open pull
+      # requests.
+      - name: Token for the release pull request
+        id: token
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          client-id: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
+          private-key: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
         with:
           command: release-pr
         env:
