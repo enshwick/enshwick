@@ -955,7 +955,11 @@ pub(crate) fn set_key(
         kept.clone()
     };
     let path = game_dir(loader).join(bindings::FILE);
-    enshwick_core::files::write_atomically(&path, bindings::render(&entries, &kept))?;
+    crate::base::frame_writes::write(
+        &path,
+        &bindings::render(&entries, &kept),
+        crate::base::frame_writes::whole,
+    )?;
     Ok(())
 }
 

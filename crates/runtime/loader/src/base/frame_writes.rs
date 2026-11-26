@@ -1,0 +1,496 @@
+//! Whole-file writes from a thread that must not stall, such as a client's
+//! main thread, which draws the interface: a write waits about 30 ms for a
+//! file another program holds, and while the file stays held its text is
+//! kept and written again on a thread of its own until it lands. A later
+//! write of the same file takes the place of one still waiting, readers see
+//! the waiting text, and the process's end writes what is left.
+
+use std::io;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant, SystemTime};
+
+use enshwick_base::__internal::{briefly, held};
+use enshwick_base::Relock;
+
+/// How a file is written: [`whole`], or with what a caller adds around it,
+/// such as the settings watch's note. The process's end writes a text with
+/// [`whole`] alone, since a lock the writer takes may be held by a thread
+/// the end already stopped.
+pub(crate) type Writer = fn(&Path, &str) -> io::Result<()>;
+
+/// A write that waits for its file.
+struct Waiting {
+    path: PathBuf,
+    text: String,
+    write: Writer,
+    /// Which write this is, so the writer never drops a newer text of the
+    /// file that came while it wrote an older one.
+    turn: u64,
+    /// The file's modified time when the text came or the loader last wrote
+    /// it: a program that writes the file after letting it go wins.
+    seen: Option<SystemTime>,
+    /// When the text came, to give up on a file that never lets go.
+    since: Instant,
+}
+
+/// The writes that wait, and whether a thread writes them.
+struct Queue {
+    waiting: Vec<Waiting>,
+    turns: u64,
+    writing: bool,
+}
+
+/// The queue, and whether anything waits, so readers skip its lock while
+/// nothing does.
+struct State {
+    queue: Mutex<Queue>,
+    any: AtomicBool,
+}
+
+static STATE: State = State::new();
+
+/// The writer's first pause after a file is still held; it doubles up to
+/// [`LONGEST_PAUSE`].
+const FIRST_PAUSE: Duration = Duration::from_millis(50);
+
+/// The writer's longest pause between tries of a held file.
+const LONGEST_PAUSE: Duration = Duration::from_secs(2);
+
+/// How long the writer tries a text before it gives up: a file held or
+/// refused that long is no short hold of a scanner.
+const GIVE_UP_AFTER: Duration = Duration::from_mins(10);
+
+/// Writes `text` to `path` whole, as
+/// [`write_atomically`](enshwick_core::files::write_atomically) does.
+///
+/// # Errors
+///
+/// As `write_atomically`.
+pub(crate) fn whole(path: &Path, text: &str) -> io::Result<()> {
+    enshwick_core::files::write_atomically(path, text)
+}
+
+/// Writes `text` to `path` with `write`, waiting about 30 ms for a file
+/// another handle holds; a file still held then gets the text later, from
+/// a thread of its own. While an earlier write of `path` waits, this text
+/// takes its place, so the files never go back to an older text.
+///
+/// # Errors
+///
+/// What `write` returns but a held file, whose text is kept; a read-only
+/// file, which Windows also refuses as if held, returns its error.
+pub(crate) fn write(path: &Path, text: &str, write: Writer) -> io::Result<()> {
+    // Held across the try: a write of the same file from another thread
+    // never lands under a text that waits.
+    let mut queue = STATE.queue.relock();
+    queue.turns += 1;
+    let kept = Waiting {
+        path: path.to_owned(),
+        text: text.to_owned(),
+        write,
+        turn: queue.turns,
+        seen: modified(path),
+        since: Instant::now(),
+    };
+    if let Some(waiting) = queue.waiting.iter_mut().find(|w| w.path == path) {
+        *waiting = kept;
+        start(&mut queue);
+        return Ok(());
+    }
+    match briefly(|| write(path, text)) {
+        Err(e) if held(&e) && !read_only(path) => crate::log!(
+            WARN,
+            "{} is held by another program ({e}); it is written once let go",
+            path.display()
+        ),
+        done => return done,
+    }
+    queue.waiting.push(kept);
+    STATE.any.store(true, Ordering::Release);
+    start(&mut queue);
+    Ok(())
+}
+
+/// The text of a write of `path` that waits for its file: a reader takes
+/// it in place of what the file holds.
+pub(crate) fn waiting(path: &Path) -> Option<String> {
+    STATE.waiting(path)
+}
+
+/// Starts the writer unless it runs; a thread that does not start leaves
+/// the texts for the next write or the process's end.
+fn start(queue: &mut Queue) {
+    at_exit::register();
+    if queue.writing {
+        return;
+    }
+    match crate::engine::off_thread::spawn("held files", write_waiting) {
+        Ok(()) => queue.writing = true,
+        Err(e) => crate::log!(WARN, "held files wait for the next write: {e}"),
+    }
+}
+
+/// The writer: each waiting text in turn, each try waiting about 30 ms
+/// for a held file, until none waits.
+fn write_waiting() {
+    let mut pause = FIRST_PAUSE;
+    while let Some((path, text, write, turn)) = STATE.next() {
+        // Brief tries keep the locks a writer takes, such as the settings
+        // watch's, short; the pauses between them do the waiting.
+        let written = std::panic::catch_unwind(|| briefly(|| write(&path, &text)))
+            .unwrap_or_else(|_| Err(io::Error::other("the write panicked")));
+        if STATE.settle(&path, turn, written) {
+            pause = FIRST_PAUSE;
+        } else {
+            std::thread::sleep(pause);
+            pause = (pause * 2).min(LONGEST_PAUSE);
+        }
+    }
+}
+
+/// The file's modified time, `None` when it does not read.
+fn modified(path: &Path) -> Option<SystemTime> {
+    std::fs::metadata(path).and_then(|m| m.modified()).ok()
+}
+
+/// Whether `path` is marked read-only, which no wait lets go.
+fn read_only(path: &Path) -> bool {
+    std::fs::metadata(path).is_ok_and(|m| m.permissions().readonly())
+}
+
+/// Whether another program wrote the file of `waiting` since its text
+/// came; an unknown time on either side counts as no change.
+fn changed(waiting: &Waiting) -> bool {
+    waiting
+        .seen
+        .zip(modified(&waiting.path))
+        .is_some_and(|(seen, now)| seen != now)
+}
+
+impl State {
+    const fn new() -> Self {
+        Self {
+            queue: Mutex::new(Queue {
+                waiting: Vec::new(),
+                turns: 0,
+                writing: false,
+            }),
+            any: AtomicBool::new(false),
+        }
+    }
+
+    /// The text that waits for `path`, unless another program wrote the
+    /// file since.
+    fn waiting(&self, path: &Path) -> Option<String> {
+        if !self.any.load(Ordering::Acquire) {
+            return None;
+        }
+        self.queue
+            .relock()
+            .waiting
+            .iter()
+            .find(|w| w.path == path && !changed(w))
+            .map(|w| w.text.clone())
+    }
+
+    /// The next text for the writer, dropping those whose file another
+    /// program wrote since; `None` ends the writer.
+    fn next(&self) -> Option<(PathBuf, String, Writer, u64)> {
+        let mut queue = self.queue.relock();
+        loop {
+            let Some(first) = queue.waiting.first() else {
+                queue.writing = false;
+                self.any.store(false, Ordering::Release);
+                return None;
+            };
+            if !changed(first) {
+                return Some((
+                    first.path.clone(),
+                    first.text.clone(),
+                    first.write,
+                    first.turn,
+                ));
+            }
+            let gone = queue.waiting.remove(0);
+            crate::log!(
+                INFO,
+                "{} was written by another program once let go; its text stays",
+                gone.path.display()
+            );
+        }
+    }
+
+    /// Takes the result of the writer's try of the text `turn` of `path`;
+    /// whether the writer goes on at once, else it pauses first.
+    fn settle(&self, path: &Path, turn: u64, written: io::Result<()>) -> bool {
+        let mut queue = self.queue.relock();
+        let at = queue.waiting.iter().position(|w| w.path == path);
+        let go_on = match (written, at) {
+            (_, None) => true,
+            (Ok(()), Some(at)) => {
+                crate::log!(INFO, "{} written once let go", path.display());
+                if let Some(newer) = queue.waiting.get_mut(at).filter(|w| w.turn != turn) {
+                    newer.seen = modified(path);
+                } else {
+                    queue.waiting.remove(at);
+                }
+                true
+            }
+            (Err(e), Some(at)) => {
+                let kept = queue.waiting.remove(at);
+                if kept.since.elapsed() < GIVE_UP_AFTER {
+                    // Behind the others: one file held for long holds up no other.
+                    queue.waiting.push(kept);
+                    false
+                } else {
+                    crate::log!(
+                        WARN,
+                        "{} not written, given up after {} minutes: {e}",
+                        path.display(),
+                        GIVE_UP_AFTER.as_secs() / 60
+                    );
+                    true
+                }
+            }
+        };
+        self.any.store(!queue.waiting.is_empty(), Ordering::Release);
+        go_on
+    }
+
+    /// Writes every text still waiting, with the full wait, as the process
+    /// ends. Every other thread is gone by then: a queue one of them held
+    /// stays held, so it gives up rather than wait.
+    #[cfg(any(test, windows))]
+    fn write_left(&self) {
+        let mut queue = match self.queue.try_lock() {
+            Ok(queue) => queue,
+            Err(std::sync::TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+            Err(std::sync::TryLockError::WouldBlock) => return,
+        };
+        enshwick_base::__internal::wait_briefly_on_this_thread(false);
+        for left in queue.waiting.drain(..) {
+            // The process ends: nothing is left to tell, and the log may be gone.
+            let _written = whole(&left.path, &left.text);
+        }
+        self.any.store(false, Ordering::Release);
+    }
+}
+
+#[cfg(all(windows, not(test)))]
+mod at_exit {
+    unsafe extern "C" {
+        /// The C runtime's `atexit`; in a DLL its functions run after
+        /// `DllMain` gets `DLL_PROCESS_DETACH`, so at an `ExitProcess`, not
+        /// at a `TerminateProcess` (Microsoft's C runtime reference, atexit).
+        fn atexit(function: extern "C" fn()) -> core::ffi::c_int;
+    }
+
+    /// Registers the writes of what is left for the process's end, once.
+    pub(super) fn register() {
+        static ONCE: std::sync::Once = std::sync::Once::new();
+        ONCE.call_once(|| {
+            // SAFETY: `at_end` is an `extern "C" fn()` of this DLL, which
+            // stays loaded until the C runtime calls it at its detach; it
+            // never unwinds.
+            if unsafe { atexit(at_end) } != 0 {
+                crate::log!(WARN, "held files are not written at the game's end");
+            }
+        });
+    }
+
+    extern "C" fn at_end() {
+        let _ended = std::panic::catch_unwind(|| super::STATE.write_left());
+    }
+}
+
+#[cfg(not(all(windows, not(test))))]
+mod at_exit {
+    /// Tests and other systems end the process with nothing to write.
+    pub(super) const fn register() {}
+}
+
+#[cfg(test)]
+#[cfg(windows)]
+mod tests {
+    use std::os::windows::fs::OpenOptionsExt as _;
+
+    use super::*;
+
+    fn dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "enshwick-frame-writes-{name}-{}",
+            std::process::id()
+        ));
+        let _gone = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// `path` held with no sharing at all, as a scanner holds a file it reads.
+    fn hold(path: &Path) -> std::fs::File {
+        std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(path)
+            .unwrap()
+    }
+
+    fn landed(path: &Path, text: &str) -> bool {
+        let started = Instant::now();
+        while started.elapsed() < Duration::from_secs(10) {
+            if waiting(path).is_none() && std::fs::read_to_string(path).is_ok_and(|t| t == text) {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        false
+    }
+
+    /// A text of `path` queued in `state` as `write` keeps it.
+    fn queue(state: &State, path: &Path, text: &str, since: Instant) -> u64 {
+        let mut queue = state.queue.relock();
+        queue.turns += 1;
+        let turn = queue.turns;
+        queue.waiting.push(Waiting {
+            path: path.to_owned(),
+            text: text.to_owned(),
+            write: whole,
+            turn,
+            seen: modified(path),
+            since,
+        });
+        state.any.store(true, Ordering::Release);
+        turn
+    }
+
+    #[test]
+    fn a_held_file_stalls_the_writer_briefly_and_gets_the_latest_text_once_let_go() {
+        let dir = dir("held");
+        let path = dir.join("mod-controls.toml");
+        std::fs::write(&path, "first").unwrap();
+        let held = hold(&path);
+        let started = Instant::now();
+        write(&path, "second", whole).unwrap();
+        write(&path, "third", whole).unwrap();
+        assert!(
+            started.elapsed() < Duration::from_millis(500),
+            "the frame waits about 30 ms, not a second: {:?}",
+            started.elapsed()
+        );
+        assert_eq!(waiting(&path).as_deref(), Some("third"), "readers see it");
+        drop(held);
+        assert!(landed(&path, "third"), "the latest text lands once let go");
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_free_file_is_written_at_once_and_a_failure_that_is_no_hold_is_returned() {
+        let dir = dir("free");
+        let path = dir.join("settings.toml");
+        write(&path, "value = 1\n", whole).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "value = 1\n");
+        assert_eq!(waiting(&path), None);
+        let other = dir.join("other.toml");
+        let refused = write(&other, "text", |_, _| Err(io::ErrorKind::NotFound.into()));
+        assert_eq!(refused.unwrap_err().kind(), io::ErrorKind::NotFound);
+        assert_eq!(
+            waiting(&other),
+            None,
+            "nothing kept for a failure that is no hold"
+        );
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_read_only_file_returns_its_refusal_and_keeps_nothing() {
+        let dir = dir("read-only");
+        let path = dir.join("mod-controls.toml");
+        std::fs::write(&path, "old").unwrap();
+        let mut permissions = std::fs::metadata(&path).unwrap().permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&path, permissions.clone()).unwrap();
+        let refused = write(&path, "new", whole);
+        #[expect(
+            clippy::permissions_set_readonly_false,
+            reason = "the test file is removed after"
+        )]
+        permissions.set_readonly(false);
+        std::fs::set_permissions(&path, permissions).unwrap();
+        assert_eq!(refused.unwrap_err().kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(waiting(&path), None, "a lasting refusal is no hold");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "old");
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_failed_try_keeps_its_text_until_the_writer_gives_up() {
+        let state = State::new();
+        let dir = dir("give-up");
+        let path = dir.join("settings.toml");
+        let turn = queue(&state, &path, "kept", Instant::now());
+        let full = || Err(io::Error::other("the disk is full"));
+        assert!(!state.settle(&path, turn, full()), "the writer pauses");
+        assert_eq!(state.waiting(&path).as_deref(), Some("kept"));
+        state.queue.relock().waiting.clear();
+        let long_ago = Instant::now().checked_sub(GIVE_UP_AFTER).unwrap();
+        let turn = queue(&state, &path, "old", long_ago);
+        assert!(state.settle(&path, turn, full()), "the writer goes on");
+        assert_eq!(state.waiting(&path), None, "given up");
+        assert!(state.next().is_none(), "the writer ends");
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_file_another_program_writes_after_letting_go_keeps_its_text() {
+        let state = State::new();
+        let dir = dir("edited");
+        let path = dir.join("settings.toml");
+        std::fs::write(&path, "old").unwrap();
+        queue(&state, &path, "queued", Instant::now());
+        state.queue.relock().waiting[0].seen = Some(SystemTime::UNIX_EPOCH);
+        assert_eq!(state.waiting(&path), None, "readers see the edit");
+        assert!(state.next().is_none(), "the writer drops the text");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "old");
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_older_text_that_lands_leaves_the_newer_one_waiting() {
+        let state = State::new();
+        let dir = dir("newer");
+        let path = dir.join("mod-controls.toml");
+        std::fs::write(&path, "old").unwrap();
+        let older = queue(&state, &path, "older", Instant::now());
+        {
+            let mut queue = state.queue.relock();
+            queue.turns += 1;
+            let newer = queue.turns;
+            let waiting = &mut queue.waiting[0];
+            waiting.text = "newer".to_owned();
+            waiting.turn = newer;
+        }
+        std::fs::write(&path, "older").unwrap();
+        assert!(state.settle(&path, older, Ok(())));
+        assert_eq!(
+            state.waiting(&path).as_deref(),
+            Some("newer"),
+            "the loader's own write is no other program's"
+        );
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_process_end_writes_what_still_waits() {
+        let state = State::new();
+        let dir = dir("end");
+        let path = dir.join("world.toml");
+        std::fs::write(&path, "old").unwrap();
+        queue(&state, &path, "new", Instant::now());
+        state.write_left();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "new");
+        assert_eq!(state.waiting(&path), None);
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+}

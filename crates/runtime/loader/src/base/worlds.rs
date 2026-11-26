@@ -388,7 +388,9 @@ pub fn part(view: &str, file: &str, others: &[&str]) -> String {
 }
 
 #[cfg(windows)]
-pub(crate) use live::{changed, file_text, load, sent_view, show_text, unload, write_target};
+pub(crate) use live::{
+    changed, file_text, load, read_target, sent_view, show_text, unload, write_target,
+};
 
 /// What a mod's record keeps of its settings: the files it declared, the
 /// texts handed to it, its checks and what a server sent for it.
