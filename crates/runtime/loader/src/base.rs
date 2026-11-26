@@ -20,8 +20,11 @@ pub mod discovery;
 pub(crate) mod emits;
 pub(crate) mod fnv;
 #[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "only the running game writes from its frame")
+    not(windows),
+    expect(
+        dead_code,
+        reason = "only the running game writes from its frame, and its tests hold files as Windows does"
+    )
 )]
 pub(crate) mod frame_writes;
 #[cfg(windows)]
