@@ -1,6 +1,7 @@
 # release-plz: versions from conventional commits and cargo-semver-checks,
-# changelogs, tags `<package>-v<version>`. Runs only by hand through the
-# release-plz workflow; the alpha releases of the loader come from alpha.yml.
+# changelogs, tags `<package>-v<version>`. Runs through the release-plz
+# workflow, by hand or on each merge to main once RELEASE_ON_MERGE is on; the
+# alpha releases of the loader come from alpha.yml.
 
 [workspace]
 # `release` acts only when the newest commit on main is a merged release pull
