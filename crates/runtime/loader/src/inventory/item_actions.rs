@@ -14,7 +14,10 @@
 //! uses after the filters, such as a potion at full health, and keeps the
 //! item (a healing potion at full health, client 26430625 and server
 //! 26430253). A use whose player does anything else before then raises
-//! none, since a stack dragged or stashed out of the slot looks taken. Pickups
+//! none, since a stack dragged or stashed out of the slot looks taken. A
+//! stack the backpack deletes is an inventory transfer of type `Destroy`,
+//! which reaches the filters as a trash from the interactions' transfer
+//! link ([`allows_destroy`]). Pickups
 //! and placements reach
 //! the filters from the server's event streams, after the game made them.
 //! Reflection of dedicated server build 26319703 names all of it.
@@ -547,6 +550,34 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
             );
         }
     }
+}
+
+/// Whether the filters let `player` trash the stack of `count` `item` in slot
+/// `index` of `inventory` by a transfer of type `Destroy`, the backpack's
+/// Delete (client 26430625: UI request 0x2c copies its type into the
+/// transfer, while `ItemActionType::Trash` is the request 0x51, a salvage
+/// that gives an item back); asked from the transfer, in the server's world.
+pub(crate) fn allows_destroy(
+    player: u32,
+    item: u32,
+    count: u32,
+    inventory: u32,
+    index: u32,
+) -> bool {
+    if item == 0 || count == 0 || LINKED.get().is_none() {
+        return true;
+    }
+    let call = enshwick_abi::headed!(ItemAction {
+        kind: ItemAction::TRASH,
+        character: enshwick_core::Entity::from_engine(player),
+        item: enshwick_core::ItemId::new(item),
+        count,
+        inventory: enshwick_core::Entity::from_engine(inventory),
+        slot: index,
+    });
+    ITEMS_FUSE
+        .run("the item destroys", || ask(&call, true))
+        .unwrap_or(true)
 }
 
 /// Lists a pickup the loader raised itself, so the filters do not hear it

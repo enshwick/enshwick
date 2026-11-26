@@ -580,6 +580,9 @@ unsafe fn may_touch(
             }
             allowed(&call)
         })
+        && moved.is_none_or(|moved| {
+            moved.items_allow(player, crate::inventory::item_actions::allows_destroy)
+        })
 }
 
 crate::engine::chains::chain_detour! {

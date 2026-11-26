@@ -101,6 +101,43 @@ mod tests {
         );
     }
 
+    fn moved(item: ItemId, action: u8) -> enshwick::abi::Interaction {
+        let mut call = enshwick::abi::Interaction::new(
+            enshwick::abi::Interaction::MOVE,
+            Entity::from_engine(4096),
+            Entity::from_engine(4100),
+        );
+        call.moving = 1;
+        call.moved = item;
+        call.stack = 3;
+        call.action = action;
+        call.from_slot = 4100 | 2 << 32;
+        call
+    }
+
+    #[test]
+    fn a_stack_the_backpack_deletes_reaches_the_trash_handler() {
+        use enshwick::abi::Interaction;
+        let loader = enshwick::test::FakeHost::new().install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Tonics)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+
+        assert!(!loader.interaction(&moved(tonic(), Interaction::ACTION_DESTROY)));
+        assert!(
+            loader.interaction(&moved(tonic(), Interaction::ACTION_ALL)),
+            "a plain move is not a trash"
+        );
+        assert!(
+            loader.interaction(&moved(
+                ItemId::named("you.lanterns:lantern"),
+                Interaction::ACTION_DESTROY
+            )),
+            "another item's delete goes ahead"
+        );
+    }
+
     unsafe extern "system" fn refuse_all(_: *const ItemAction, _: *mut core::ffi::c_void) -> u8 {
         0
     }
