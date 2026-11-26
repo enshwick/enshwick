@@ -144,6 +144,14 @@ mod tests {
             "no world runs yet"
         );
         loader.set_game_settings(defaults(), 0);
+        let elsewhere = std::thread::spawn(|| SETTINGS.get().unwrap().read().err())
+            .join()
+            .unwrap();
+        assert_eq!(
+            elsewhere,
+            Some(WorldError::WrongThread),
+            "read on the game thread only"
+        );
         let SettingsRead {
             settings: now,
             preset,

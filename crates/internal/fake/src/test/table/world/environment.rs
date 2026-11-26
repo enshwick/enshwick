@@ -70,6 +70,9 @@ entries! {
         [out: *mut u8, size: u32] as args::Buffer,
         preset: *mut u32 as args::Out,
     ) -> Status {
+        if !on_game_thread() {
+            return Status::WRONG_THREAD;
+        }
         let Some((bytes, value)) = with(None, |s| s.world.game_settings.clone()) else {
             return Status::UNAVAILABLE;
         };

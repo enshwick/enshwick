@@ -18,14 +18,20 @@ entries! {
         if !crate::test::table::on_game_thread() {
             return Status::WRONG_THREAD;
         }
-        let address = with(None, |s| {
-            s.host
+        let address = with(Ok(None), |s| {
+            if s.host.world.no_world_reads {
+                return Err(Status::UNAVAILABLE);
+            }
+            Ok(s.host
                 .base
                 .components
                 .get(&(entity.get(), type_hash))
-                .map(|c| c.0)
+                .map(|c| c.0))
         });
-        found(address.map(core::ptr::with_exposed_provenance), out)
+        match address {
+            Ok(address) => found(address.map(core::ptr::with_exposed_provenance), out),
+            Err(status) => status,
+        }
     }
 
     pub(crate) fn hosting(me as Caller, out: *mut u8 as args::Out) -> Status {

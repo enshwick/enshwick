@@ -3,6 +3,43 @@
 use enshwick_core::abi::EntityPlace;
 
 use super::{FakeZones, VoxelGrid, props, respawn};
+use crate::test::FakeHost;
+
+impl FakeHost {
+    /// Plays a game build without the world's entity commands: destroy,
+    /// `set_saved`, teleport and component writes answer
+    /// [`Status::UNAVAILABLE`](enshwick_core::abi::Status::UNAVAILABLE), as they do
+    /// on a client that hosts no game.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().world().without_entity_commands().install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn without_entity_commands(mut self) -> Self {
+        self.world.no_entity_commands = true;
+        self
+    }
+
+    /// Plays a game build whose table lacks the world's reads: component
+    /// reads, and the inventory, buff and entity reads made of them, answer
+    /// [`Status::UNAVAILABLE`](enshwick_core::abi::Status::UNAVAILABLE) on
+    /// the game thread too, as the loader does on such a build.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().world().without_world_reads().install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn without_world_reads(mut self) -> Self {
+        self.world.no_world_reads = true;
+        self
+    }
+}
 
 /// Whether the fake's game build has the base code the loader hooks to
 /// raise the base limits.
@@ -21,6 +58,9 @@ pub(crate) enum BaseCode {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct WorldPresets {
     pub(crate) no_entity_commands: bool,
+    /// The build lacks the world's reads: component reads answer
+    /// `UNAVAILABLE` on the game thread too.
+    pub(crate) no_world_reads: bool,
     pub(crate) base_code: BaseCode,
     /// The build lacks the code altars are read from.
     pub(crate) no_altar_code: bool,

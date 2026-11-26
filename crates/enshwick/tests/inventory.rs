@@ -145,6 +145,20 @@ mod tests {
     }
 
     #[test]
+    fn a_read_on_a_build_without_the_world_s_reads_fails_on_the_game_thread_too() {
+        let e = Entity::from_engine;
+        let loader = world().without_world_reads().install();
+        // SAFETY: `enshwick_mod_init` is the export of this file's `declare_mod!(Looter)`.
+        assert_eq!(unsafe { loader.init(enshwick_mod_init) }, Status::OK);
+        let inventories = INVENTORIES.get().unwrap();
+        assert_eq!(inventories.slots(e(CORPSE)), Err(WorldError::Unavailable));
+        assert_eq!(
+            inventories.count(e(CORPSE), enshwick::ItemId::new(COIN)),
+            Err(WorldError::Unavailable)
+        );
+    }
+
+    #[test]
     fn a_mod_reads_a_corpse_and_takes_everything() {
         let e = Entity::from_engine;
         let loader = world().install();
