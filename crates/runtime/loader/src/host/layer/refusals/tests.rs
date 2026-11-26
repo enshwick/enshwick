@@ -59,29 +59,7 @@ use crate::world::writes::WriteError;
 
 /// The constant's name of `status`, so the snapshot reads as the ABI does.
 fn name(status: Status) -> String {
-    [
-        (Status::OK, "OK"),
-        (Status::MISSING, "MISSING"),
-        (Status::AMBIGUOUS, "AMBIGUOUS"),
-        (Status::REFUSED, "REFUSED"),
-        (Status::BAD_ARGS, "BAD_ARGS"),
-        (Status::TOO_LATE, "TOO_LATE"),
-        (Status::FAULTED, "FAULTED"),
-        (Status::WRONG_THREAD, "WRONG_THREAD"),
-        (Status::NOT_LOADED, "NOT_LOADED"),
-        (Status::OUTSIDE_WORLD, "OUTSIDE_WORLD"),
-        (Status::STATIC_HALF, "STATIC_HALF"),
-        (Status::NOT_A_PROP, "NOT_A_PROP"),
-        (Status::NOT_KEPT, "NOT_KEPT"),
-        (Status::UNAVAILABLE, "UNAVAILABLE"),
-        (Status::BUILDING, "BUILDING"),
-        (Status::LOADER_FAULT, "LOADER_FAULT"),
-        (Status::BUSY, "BUSY"),
-        (Status::TOO_SMALL, "TOO_SMALL"),
-    ]
-    .into_iter()
-    .find(|&(known, _)| known == status)
-    .map_or_else(|| format!("{status:?}"), |(_, name)| name.to_owned())
+    enshwick_abi::contract::status_name(status).map_or_else(|| format!("{status:?}"), str::to_owned)
 }
 
 /// One line per error: its expression, the status a mod gets and the

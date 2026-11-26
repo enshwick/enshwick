@@ -72,9 +72,9 @@ test = []
 [dev-dependencies]
 criterion.workspace = true
 crossbeam-queue.workspace = true
-# The discovery tests build mods against `crates/enshwick` by path.
-# The contract test holds the fake host's table to the loader's.
-enshwick = { workspace = true, features = ["test", "unstable"] }
+# Not `enshwick`: its `test` feature would turn on the fake host's features
+# of the crates the loader runs on, for every test here.
+enshwick-abi = { workspace = true, features = ["test"] }
 enshwick-core = { workspace = true, features = ["unstable", "test"] }
 enshwick-gamedata = { workspace = true, features = ["test"] }
 insta.workspace = true

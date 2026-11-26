@@ -22,6 +22,10 @@ pub use builds::{
     rebuild_in, rebuild_one, rebuild_readers, rekeys_another,
 };
 
+/// Whether this build is the fake host's, whose scheduler counts time only as
+/// the fake's steps move it; the loader's tests check that it is not.
+pub const FAKE_HOST: bool = cfg!(feature = "fake");
+
 /// Makes `host` the answer of [`crate::host`]; the first call wins.
 #[must_use]
 pub fn install(host: Host) -> Host {

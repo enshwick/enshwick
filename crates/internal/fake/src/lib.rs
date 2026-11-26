@@ -17,3 +17,6 @@
 struct MergedExamples;
 
 pub mod test;
+
+#[cfg(test)]
+mod contract_tests;

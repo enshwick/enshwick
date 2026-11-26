@@ -120,6 +120,16 @@ entries! {
         out.fill(1);
         Ok(())
     }
+
+    fn oil_asked(_me as Asker) -> Status {
+        Ok(())
+    }
+}
+
+#[test]
+fn an_entry_records_its_caller_kind_by_the_name_the_fake_host_gives_it() {
+    assert_eq!((Callers::oil, Callers::oil_asked), ("Mod", "Caller"));
+    assert_eq!(oil_asked(ModHandle(77)), Status::BAD_ARGS);
 }
 
 #[test]
