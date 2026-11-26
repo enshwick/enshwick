@@ -205,11 +205,10 @@ pub(super) unsafe extern "system" fn answer(
     REPLY.with_borrow_mut(|kept| match answered {
         Answered::Run(outcome) if !slot.is_null() => {
             *kept = outcome.text;
-            let reply = ActionReply {
-                header: crate::abi::Header::of::<ActionReply>(),
+            let reply = enshwick_abi::headed!(ActionReply {
                 done: u8::from(outcome.done),
                 text: Str::new(kept),
-            };
+            });
             // SAFETY: `slot` is not null, as the guard checks, and the caller
             // guarantees it writable for one `ActionReply`; its text lives in
             // this thread's buffer until the next question, after the loader

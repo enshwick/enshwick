@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use std::time::Duration;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use enshwick::abi::{DamageCheck, Header, Status};
+use enshwick::abi::{DamageCheck, Status};
 use enshwick::damage::DamageCause;
 use enshwick::test::{FakeHost, Installed};
 use enshwick::{Load, Mod, Off};
@@ -171,16 +171,15 @@ const HITS: u32 = 10_000;
 /// A hit of `total`: a fall of 40 for the plain filter, else the kind it
 /// names.
 fn hit(total: f32) -> DamageCheck {
-    DamageCheck {
-        header: Header::of::<DamageCheck>(),
+    enshwick::abi::headed!(DamageCheck {
         cause: DamageCheck::FALL_DAMAGE,
-        target: enshwick::Entity(2),
-        source: enshwick::Entity(0),
-        attacker: enshwick::Entity(0),
+        target: enshwick::Entity::from_engine(2),
+        source: enshwick::Entity::from_engine(0),
+        attacker: enshwick::Entity::from_engine(0),
         total,
         amount_count: 0,
         amounts: core::ptr::null_mut(),
-    }
+    })
 }
 
 /// The allocations `hits` hits of `total` make, after one warm hit.

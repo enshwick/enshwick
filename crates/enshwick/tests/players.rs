@@ -4,7 +4,7 @@
 mod tests {
     use std::sync::OnceLock;
 
-    use enshwick::abi::{Header, PlayerInfo, Status};
+    use enshwick::abi::{PlayerInfo, Status};
     use enshwick::world::PlayerPermissions::CanEditBase;
     use enshwick::world::World;
     use enshwick::{Load, Mod, Off};
@@ -31,15 +31,14 @@ mod tests {
     fn player(entity: u32, key: u64, name: &str) -> PlayerInfo {
         let mut bytes = [0u8; PlayerInfo::NAME_MAX];
         bytes[..name.len()].copy_from_slice(name.as_bytes());
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick::abi::headed!(PlayerInfo {
             slot: entity,
-            entity: enshwick::Entity(entity),
+            entity: enshwick::Entity::from_engine(entity),
             key: enshwick::PlayerKey::new(key),
             permissions: 0,
             name_len: u32::try_from(name.len()).unwrap(),
             name: bytes,
-        }
+        })
     }
 
     #[test]
@@ -79,19 +78,24 @@ mod tests {
         let long = "🦀".repeat(33);
         let loader = enshwick::test::FakeHost::new()
             .world()
-            .player(PlayerInfo {
+            .player(enshwick::abi::headed!(PlayerInfo {
                 slot: 20,
                 ..PlayerInfo::with_name(
-                    enshwick::Entity(20),
+                    enshwick::Entity::from_engine(20),
                     enshwick::PlayerKey::new(1),
                     0,
                     &whole,
                 )
-            })
-            .player(PlayerInfo {
+            }))
+            .player(enshwick::abi::headed!(PlayerInfo {
                 slot: 21,
-                ..PlayerInfo::with_name(enshwick::Entity(21), enshwick::PlayerKey::new(2), 0, &long)
-            })
+                ..PlayerInfo::with_name(
+                    enshwick::Entity::from_engine(21),
+                    enshwick::PlayerKey::new(2),
+                    0,
+                    &long,
+                )
+            }))
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Lookups)`.
         let status =
@@ -124,10 +128,10 @@ mod tests {
 
         let group =
             PlayerInfo::CAN_EDIT_WORLD | PlayerInfo::CAN_EDIT_BASE | PlayerInfo::CAN_RECEIVE_EXP;
-        let ann = PlayerInfo {
+        let ann = enshwick::abi::headed!(PlayerInfo {
             permissions: group,
             ..player(10, 7, "Ann")
-        };
+        });
         let (_loader, world) = started(
             enshwick::test::FakeHost::new()
                 .world()

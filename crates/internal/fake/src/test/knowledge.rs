@@ -2,7 +2,7 @@
 //! skills, comfort and experience, with the fake's vanilla knowledge.
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{Comfort, ExperiencePass, ExperienceRow, Header, KnowledgeId, SkillCheck};
+use enshwick_core::abi::{Comfort, ExperiencePass, ExperienceRow, KnowledgeId, SkillCheck};
 
 use crate::test::{Installed, table};
 
@@ -32,9 +32,8 @@ impl Installed {
     /// use enshwick::abi::{Header, KnowledgeInfo, KnowledgeInput};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let quest = KnowledgeInput {
-    ///     header: Header::of::<KnowledgeInput>(),
-    ///     character: enshwick::Entity(2),
+    /// let quest = enshwick::abi::headed!(KnowledgeInput {
+    ///     character: enshwick::Entity::from_engine(2),
     ///     id: enshwick::knowledge::KnowledgeId::new(0x51),
     ///     kind: KnowledgeInfo::BOOL,
     ///     scope: KnowledgeInfo::PLAYER,
@@ -43,7 +42,7 @@ impl Installed {
     ///     refusal: KnowledgeInput::QUEST,
     ///     allowed: 0,
     ///     reserved_tail: [0; 3],
-    /// };
+    /// });
     /// assert!(!loader.knowledge_input(quest), "no filters, the guard's verdict");
     /// ```
     #[must_use]
@@ -69,7 +68,7 @@ impl Installed {
     /// use enshwick::abi::{Header, KnowledgeInfo};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let flag = KnowledgeInfo { header: Header::of::<KnowledgeInfo>(), id: enshwick::knowledge::KnowledgeId::new(9), kind: KnowledgeInfo::BOOL, scope: KnowledgeInfo::WORLD, reserved: 0, value: 1, flags: 0 };
+    /// let flag = enshwick::abi::headed!(KnowledgeInfo { id: enshwick::knowledge::KnowledgeId::new(9), kind: KnowledgeInfo::BOOL, scope: KnowledgeInfo::WORLD, reserved: 0, value: 1, flags: 0 });
     /// loader.set_knowledge(&[(None, flag)], &[]);
     /// assert!(loader.grants().is_empty());
     /// ```
@@ -176,7 +175,7 @@ impl Installed {
     /// use enshwick::abi::{Header, SkillCheck};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let check = SkillCheck { header: Header::of::<SkillCheck>(), node: enshwick::abi::SkillNode::new(7), gate: SkillCheck::OTHER, unlocked: 0, reserved: [0; 3] };
+    /// let check = enshwick::abi::headed!(SkillCheck { node: enshwick::abi::SkillNode::new(7), gate: SkillCheck::OTHER, unlocked: 0, reserved: [0; 3] });
     /// assert_eq!(loader.skill(&check), SkillCheck::VANILLA);
     /// ```
     #[must_use]
@@ -203,14 +202,14 @@ impl Installed {
     /// use enshwick::abi::{Comfort, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let comfort = Comfort { header: Header::of::<Comfort>(), category: 1, value: 3, position: [0.0; 3] };
+    /// let comfort = enshwick::abi::headed!(Comfort { category: 1, value: 3, position: [0.0; 3] });
     /// assert_eq!(loader.comfort(&comfort), 3);
     /// ```
     #[must_use]
     pub fn comfort(&self, comfort: &Comfort) -> i32 {
         let filters = table::with(Vec::new(), |s| s.knowledge.comfort_filters.clone());
         let filtered = filters.iter().fold(comfort.value, |value, filter| {
-            let call = Comfort { value, ..*comfort };
+            let call = enshwick_core::headed!(Comfort { value, ..*comfort });
             // SAFETY: a valid registration; `user` is the mod's pointer.
             filter.run(|callback, user| unsafe { callback(&raw const call, user) })
         });
@@ -231,7 +230,7 @@ impl Installed {
     /// use enshwick::progress::Experience;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let mut rows = [Experience { entity: Entity(1), level: 1, progress: 0, need: 100, gained: 5 }];
+    /// let mut rows = [Experience { entity: Entity::from_engine(1), level: 1, progress: 0, need: 100, gained: 5 }];
     /// loader.experience(&mut rows, 25, |level| level * 100);
     /// assert_eq!(rows[0].gained, 5);
     /// ```
@@ -254,14 +253,13 @@ impl Installed {
         let filters = table::with(Vec::new(), |s| s.knowledge.experience_filters.clone());
         let mut need = need;
         for filter in &filters {
-            let mut pass = ExperiencePass {
-                header: Header::of::<ExperiencePass>(),
+            let mut pass = enshwick_core::headed!(ExperiencePass {
                 rows: rows.as_mut_ptr().cast::<ExperienceRow>(),
                 row_count: u32::try_from(rows.len()).unwrap_or(u32::MAX),
                 level_cap: cap,
                 need_for: Some(need_for),
                 token: (&raw mut need).cast(),
-            };
+            });
             // SAFETY: a valid pass; `user` is the mod's pointer.
             filter.run(|callback, user| unsafe { callback(&raw mut pass, user) });
         }

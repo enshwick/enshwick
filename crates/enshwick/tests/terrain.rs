@@ -5,7 +5,7 @@ mod tests {
     use std::sync::OnceLock;
 
     use enshwick::WorldError;
-    use enshwick::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
+    use enshwick::abi::{Status, TerrainEdit, TerrainMaterialInfo};
     use enshwick::terrain::{Shape, Terrain};
     use enshwick::{Load, Mod, Off};
 
@@ -43,15 +43,14 @@ mod tests {
             Err(WorldError::Unavailable),
             "no world runs yet"
         );
-        let rock = TerrainMaterialInfo {
-            header: Header::of::<TerrainMaterialInfo>(),
+        let rock = enshwick::abi::headed!(TerrainMaterialInfo {
             id: 9,
             flags: 0,
             hardness: 3,
             reserved: 0,
             item: enshwick::ItemId::new(77),
             health: 500,
-        };
+        });
         loader.set_terrain(&[rock]);
         let materials = terrain.materials();
         assert_eq!(materials.len(), 1);

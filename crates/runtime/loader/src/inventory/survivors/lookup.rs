@@ -2,7 +2,7 @@ use core::ffi::c_void;
 use std::sync::atomic::Ordering;
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{Header, Side, SurvivorLookup};
+use enshwick_core::abi::{Side, SurvivorLookup};
 use enshwick_core::altars::cell_of_fixed;
 use enshwick_core::raw::read_at;
 
@@ -20,7 +20,7 @@ use super::{LOOKUP_FUSE, Layout, SKIP_UPDATE, STATE, layout};
 pub(super) fn ask(call: &SurvivorLookup) -> Option<u32> {
     let on = |owner| !crate::engine::loader::is_off(owner);
     super::first_answer(STATE.registrations.lookup(), on, |registered| {
-        let mut out = Entity(0);
+        let mut out = Entity::from_engine(0);
         let user = core::ptr::with_exposed_provenance_mut(registered.user);
         // SAFETY: the registered `SurvivorLookupFn` lives in the mod's DLL,
         // which stays loaded for the process, and takes the `user` word it
@@ -30,7 +30,7 @@ pub(super) fn ask(call: &SurvivorLookup) -> Option<u32> {
             crate::engine::profile::Feature::Survivors,
             || unsafe { (registered.callback)(call, user, &raw mut out) },
         );
-        (answered != 0).then_some(out.0)
+        (answered != 0).then_some(out.get())
     })
 }
 
@@ -41,16 +41,15 @@ pub(super) fn call(
     entity: Entity,
     cell: [i64; 3],
 ) -> SurvivorLookup {
-    SurvivorLookup {
-        header: Header::of::<SurvivorLookup>(),
+    enshwick_abi::headed!(SurvivorLookup {
         survivor: enshwick_core::abi::NpcId::new(survivor),
-        vanilla: Entity(vanilla),
+        vanilla: Entity::from_engine(vanilla),
         purpose,
         entity,
         cell,
         bed_of: None,
         token: core::ptr::null_mut(),
-    }
+    })
 }
 
 /// Links the two lookups of the survivor lookup; false once it is off.
@@ -160,7 +159,7 @@ pub(super) unsafe fn resolve(
             survivor,
             found,
             SurvivorLookup::CURSOR,
-            Entity(0),
+            Entity::from_engine(0),
             [0; 3],
         ));
     }
@@ -197,7 +196,7 @@ pub(super) unsafe fn resolve(
             survivor,
             found,
             SurvivorLookup::UNIQUENESS,
-            Entity(me),
+            Entity::from_engine(me),
             home,
         ))?;
         SKIP_UPDATE
@@ -215,7 +214,7 @@ pub(super) unsafe fn resolve(
             survivor,
             found,
             SurvivorLookup::SPAWN,
-            Entity(0),
+            Entity::from_engine(0),
             cell_of_fixed(target),
         ))?;
         if answer != 0 {
@@ -239,7 +238,7 @@ pub(super) unsafe fn resolve(
             survivor,
             found,
             SurvivorLookup::BED_OWNER,
-            Entity(0),
+            Entity::from_engine(0),
             cell_of_fixed(position),
         ));
     }
@@ -248,7 +247,7 @@ pub(super) unsafe fn resolve(
             survivor,
             found,
             SurvivorLookup::BED_BINDING,
-            Entity(0),
+            Entity::from_engine(0),
             [0; 3],
         ));
     }
@@ -284,7 +283,7 @@ pub(super) unsafe fn resolve(
     };
     // SAFETY: `ctx` is null or the caller's live query context, used on its
     // system's thread while it runs.
-    let cell = unsafe { position_of(engine, ctx, Entity(entity)) }?;
+    let cell = unsafe { position_of(engine, ctx, Entity::from_engine(entity)) }?;
     let purpose = if roaming {
         SurvivorLookup::ROAMING
     } else if caller == c.assign[0] {
@@ -292,7 +291,7 @@ pub(super) unsafe fn resolve(
     } else {
         SurvivorLookup::PREVIOUS_OCCUPANT
     };
-    let mut lookup = call(survivor, found, purpose, Entity(entity), cell);
+    let mut lookup = call(survivor, found, purpose, Entity::from_engine(entity), cell);
     let mut token = BedToken {
         engine,
         ctx,
@@ -312,8 +311,8 @@ pub(super) struct BedToken<'e> {
 /// The bed `entity` sleeps in: its `NpcCommon.bedId`.
 pub(super) unsafe extern "system" fn bed_of(token: *mut c_void, entity: Entity) -> Entity {
     let kind = STATE.npc_common_type.load(Ordering::Acquire);
-    if token.is_null() || kind == u16::MAX || entity == Entity(0) {
-        return Entity(0);
+    if token.is_null() || kind == u16::MAX || entity == Entity::from_engine(0) {
+        return Entity::from_engine(0);
     }
     // SAFETY: the non-null `token` (checked earlier) is the `BedToken` that
     // `resolve` handed the mod with this function, alive on its stack until
@@ -323,7 +322,7 @@ pub(super) unsafe extern "system" fn bed_of(token: *mut c_void, entity: Entity) 
     // used on its system's thread while the lookup runs.
     let common = unsafe { token.engine.component(token.ctx, kind, entity) };
     if common.is_null() {
-        return Entity(0);
+        return Entity::from_engine(0);
     }
     // SAFETY: `common` is the entity's non-null live `NpcCommon` (checked
     // earlier), which keeps its `u32` bed id at the table's
@@ -343,7 +342,7 @@ pub(super) unsafe fn position_of(
     entity: Entity,
 ) -> Option<[i64; 3]> {
     let kind = STATE.transform_type.load(Ordering::Acquire);
-    if kind == u16::MAX || ctx.is_null() || entity == Entity(0) {
+    if kind == u16::MAX || ctx.is_null() || entity == Entity::from_engine(0) {
         return None;
     }
     // SAFETY: the caller's contract makes the non-null `ctx` (checked earlier)

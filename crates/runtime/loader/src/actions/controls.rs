@@ -20,7 +20,7 @@ use std::time::Instant;
 
 use arc_swap::ArcSwapOption;
 use enshwick_core::Entity;
-use enshwick_core::abi::{ControlEvent, ControlFn, Header, PlayerInfo, Side, Str};
+use enshwick_core::abi::{ControlEvent, ControlFn, PlayerInfo, Side, Str};
 use enshwick_core::controls::{GameAction, Key, Tracker, is_valid_name, phases, valid_phases};
 use enshwick_gamedata::catalogue;
 
@@ -486,14 +486,13 @@ fn link_actions(loader: &Loader, declared: &[Declared]) {
 /// Calls `control`'s callback with `kind`, as the client's own (`player`
 /// `None`) or for `player` on the server.
 fn fire(control: &Declared, kind: u32, player: Option<&PlayerInfo>) {
-    let event = ControlEvent {
-        header: Header::of::<ControlEvent>(),
+    let event = enshwick_abi::headed!(ControlEvent {
         name: Str::new(&control.name),
         kind,
         server: u8::from(player.is_some()),
         reserved: [0; 3],
         player: player.map_or(core::ptr::null(), core::ptr::from_ref),
-    };
+    });
     // SAFETY: the callback lives in the mod's DLL, which stays loaded, and
     // gets a live event and the pointer its mod declared it with; by the
     // callback contract of `HostApi` it does not unwind into the loader.

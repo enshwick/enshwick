@@ -47,6 +47,6 @@ pub(super) const NAMESPACES: &[Namespace] = &[
         "",
         &[Load::SCRIPT_LOOT_DROPS, Load::SCRIPT_LOOT_PASS],
     ),
-    Namespace::on_request::<Stats>("stats"),
+    Namespace::on_request::<Stats>("stats", "The stat values and modifiers."),
     Namespace::starting("stats", "", &[Load::SCRIPT_STATS]),
 ];

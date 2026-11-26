@@ -22,7 +22,7 @@ mod spawn;
 #[cfg(feature = "unstable")]
 pub use spawn::{PlayerSpawnInfoChangeEvent, UniqueSceneId};
 
-/// `Some(entity)` unless it is [`Entity::NONE`].
+/// `Some(entity)` unless it is [entity 0].
 pub(super) fn some(entity: Entity) -> Option<Entity> {
     (!entity.is_none()).then_some(entity)
 }
@@ -219,7 +219,7 @@ impl Credit {
 
     /// The attacker of the last hit `entity` took.
     fn killer(&self, entity: Entity) -> Option<Entity> {
-        let history = self.history.read(self.host, entity)?.cast::<u8>();
+        let history = self.history.read(self.host, entity).ok()??.cast::<u8>();
         // SAFETY: `read` returned the entity's live HitHistory, valid
         // until the game thread moves on; `resolve` checked that the u32 at
         // `lastIndex` lies inside its reflected size.
@@ -229,16 +229,18 @@ impl Credit {
         // SAFETY: `history` is the entity's live HitHistory; `last < slots`
         // was checked above, and `resolve` checked that every slot, and the
         // u32 attacker inside it, lies inside its reflected size.
-        some(Entity(unsafe { read_at(history, at) }))
+        some(Entity::from_engine(unsafe { read_at(history, at) }))
     }
 
     /// The last player character that hit `entity`.
     fn killer_player(&self, entity: Entity) -> Option<Entity> {
-        let source = self.experience.read(self.host, entity)?.cast::<u8>();
+        let source = self.experience.read(self.host, entity).ok()??.cast::<u8>();
         // SAFETY: `read` returned the entity's live ExperienceSource component,
         // valid until the game thread moves on; `resolve` checked that the u32
         // at `lastHitPlayerId` lies inside its reflected size.
-        some(Entity(unsafe { read_at(source, self.last_player) }))
+        some(Entity::from_engine(unsafe {
+            read_at(source, self.last_player)
+        }))
     }
 }
 
@@ -281,7 +283,7 @@ impl crate::events::Kind for EntityDiedEvent {
 /// use enshwick::game_events::LevelUpEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on::<LevelUpEvent>(|up| enshwick::info!("entity {} reached level {}", up.player_entity_id.0, up.level))
+///     load.on::<LevelUpEvent>(|up| enshwick::info!("entity {} reached level {}", up.player_entity_id, up.level))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]

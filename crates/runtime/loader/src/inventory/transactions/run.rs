@@ -147,7 +147,7 @@ pub(super) unsafe fn touched(
     for op in ops {
         let from = match op.kind {
             InventoryOp::GIVE | InventoryOp::TAKE => {
-                touched.push(op.target.0);
+                touched.push(op.target.get());
                 continue;
             }
             InventoryOp::DESTROY_SLOT => {
@@ -155,13 +155,13 @@ pub(super) unsafe fn touched(
                 continue;
             }
             InventoryOp::RENEW => {
-                touched.extend([root(slot_ref(op)), op.other.0]);
+                touched.extend([root(slot_ref(op)), op.other.get()]);
                 continue;
             }
             InventoryOp::MOVE_SLOT => root(slot_ref(op)),
-            _ => op.target.0,
+            _ => op.target.get(),
         };
-        touched.extend([from, op.other.0]);
+        touched.extend([from, op.other.get()]);
         if source == 0 {
             source = from;
         }
@@ -305,7 +305,7 @@ pub(super) unsafe fn apply(
                 (executor.give)(
                     out,
                     txn,
-                    op.target.0,
+                    op.target.get(),
                     0,
                     op.item.get(),
                     op.count.cast_signed(),
@@ -319,7 +319,7 @@ pub(super) unsafe fn apply(
             // SAFETY: the game's consume at the table's `inventory.take`
             // across the sub-inventories, on the caller's live transaction,
             // with our own result record.
-            unsafe { (executor.take)(out, txn, op.target.0, op.item.get(), 0, op.count) };
+            unsafe { (executor.take)(out, txn, op.target.get(), op.item.get(), 0, op.count) };
         }
         InventoryOp::DESTROY_SLOT => {
             // SAFETY: the game's destroy of one stack at the table's
@@ -342,7 +342,7 @@ pub(super) unsafe fn apply(
                     (executor.give)(
                         out,
                         txn,
-                        give.target.0,
+                        give.target.get(),
                         slot_ref(op),
                         give.item.get(),
                         give.count.cast_signed(),
@@ -357,7 +357,7 @@ pub(super) unsafe fn apply(
             // SAFETY: the game's move of the whole stack at the table's
             // `inventory.move_slot`, on the caller's live transaction, with
             // our own result record; a remainder goes back to the source.
-            unsafe { (executor.move_slot)(out, txn, slot_ref(op), op.other.0, 0, 1, 1, 1) };
+            unsafe { (executor.move_slot)(out, txn, slot_ref(op), op.other.get(), 0, 1, 1, 1) };
         }
         InventoryOp::MOVE_SLOT => {
             // SAFETY: the game's move of `count` of the stack at the table's
@@ -368,7 +368,7 @@ pub(super) unsafe fn apply(
                     out,
                     txn,
                     slot_ref(op),
-                    op.other.0,
+                    op.other.get(),
                     op.count as u16,
                     1,
                     1,
@@ -382,7 +382,7 @@ pub(super) unsafe fn apply(
             // `inventory.move_all`, on the caller's live transaction, with our
             // own result record; remainders stay in the source.
             unsafe {
-                (executor.move_all)(out, txn, op.target.0, op.other.0, 1, special);
+                (executor.move_all)(out, txn, op.target.get(), op.other.get(), 1, special);
             };
         }
     }

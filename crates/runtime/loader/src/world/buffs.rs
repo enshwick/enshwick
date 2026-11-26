@@ -20,7 +20,7 @@
 use std::sync::OnceLock;
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header};
+use enshwick_core::abi::{ActiveBuff, BuffRequest, BuffTypeInfo};
 
 use crate::engine::loader::Loader;
 use crate::engine::memory::{BlobArray, read, write};
@@ -329,8 +329,7 @@ fn type_info(layout: &Layout, ty: usize) -> BuffTypeInfo {
     if hidden != 0 {
         flags |= BuffTypeInfo::HIDDEN;
     }
-    BuffTypeInfo {
-        header: Header::of::<BuffTypeInfo>(),
+    enshwick_abi::headed!(BuffTypeInfo {
         // SAFETY: `ty` is a live `BuffType` of the registry, from `find_type`
         // or the registry's collection on the game thread; the reflected
         // `keen::BuffType` places its `u32` `buffTypeId` at `type_id`.
@@ -346,7 +345,7 @@ fn type_info(layout: &Layout, ty: usize) -> BuffTypeInfo {
         // `keen::BuffType` places its `i64` `defaultLifeTime` at
         // `type_duration`.
         duration_ns: unsafe { read(ty, layout.type_duration) },
-    }
+    })
 }
 
 /// Every buff type of the running game.
@@ -409,7 +408,8 @@ pub(crate) fn of(loader: &Loader, entity: Entity) -> Result<Vec<ActiveBuff>, Buf
         if buff == 0 || cleansed != 0 {
             continue;
         }
-        let Ok(network) = crate::engine::world::component(loader, Entity(buff), layout.network)
+        let Ok(network) =
+            crate::engine::world::component(loader, Entity::from_engine(buff), layout.network)
         else {
             continue;
         };
@@ -422,14 +422,13 @@ pub(crate) fn of(loader: &Loader, entity: Entity) -> Result<Vec<ActiveBuff>, Buf
         // which `crate::engine::world::component` found on the game thread; the
         // reflected type places its `i64` `endOfLife` at `network_end`.
         let end: i64 = unsafe { read(network, layout.network_end) };
-        out.push(ActiveBuff {
-            header: Header::of::<ActiveBuff>(),
+        out.push(enshwick_abi::headed!(ActiveBuff {
             // SAFETY: `slot` is a slot of the entity's live `BuffContainer`,
             // which `crate::engine::world::component` found on the game thread; the
             // reflected `keen::ecs::BuffInstance` places its `u32` `typeId` at
             // `instance_type`.
             id: unsafe { read(slot, layout.instance_type) },
-            entity: Entity(buff),
+            entity: Entity::from_engine(buff),
             slot: u32::from(kind),
             // SAFETY: `network` is the buff entity's live `BuffNetworkData`,
             // which `crate::engine::world::component` found on the game thread; the
@@ -438,7 +437,7 @@ pub(crate) fn of(loader: &Loader, entity: Entity) -> Result<Vec<ActiveBuff>, Buf
             level: unsafe { read(network, layout.network_level) },
             duration_ns: total,
             remaining_ns: end.saturating_sub(now).max(0),
-        });
+        }));
     }
     Ok(out)
 }
@@ -478,7 +477,9 @@ pub(crate) fn type_ids(loader: &Loader, entity: Entity) -> Vec<u32> {
 pub(crate) fn apply(loader: &Loader, request: &BuffRequest) -> Result<(), BuffError> {
     let layout = layout(loader).ok_or(BuffError::Unread)?;
     let (server, _, game, now) = server(layout)?;
-    if request.entity == Entity(0) || request.level > u32::from(u8::MAX) || request.duration_ns < 0
+    if request.entity == Entity::from_engine(0)
+        || request.level > u32::from(u8::MAX)
+        || request.duration_ns < 0
     {
         return Err(BuffError::BadRequest);
     }
@@ -521,7 +522,7 @@ pub(crate) fn apply(loader: &Loader, request: &BuffRequest) -> Result<(), BuffEr
         }
     }
     let container =
-        crate::world::writes::component_mut(loader, request.entity.0, layout.container)?
+        crate::world::writes::component_mut(loader, request.entity.get(), layout.container)?
             .expose_provenance();
     let mut record = [0u8; RECORD];
     let mut put = |at: usize, bytes: &[u8]| {
@@ -551,7 +552,7 @@ pub(crate) fn apply(loader: &Loader, request: &BuffRequest) -> Result<(), BuffEr
     unsafe {
         (layout.restore)(
             core::ptr::with_exposed_provenance_mut(container),
-            request.entity.0,
+            request.entity.get(),
             record.as_ptr(),
             core::ptr::with_exposed_provenance_mut(server),
             core::ptr::with_exposed_provenance_mut(balancing),
@@ -606,7 +607,7 @@ pub(crate) fn remove(loader: &Loader, entity: Entity, id: u32) -> Result<bool, B
     if !had {
         return Ok(false);
     }
-    let container = crate::world::writes::component_mut(loader, entity.0, layout.container)?
+    let container = crate::world::writes::component_mut(loader, entity.get(), layout.container)?
         .expose_provenance();
     // SAFETY: `cleanse` is the table's `buffs.cleanse`, called on the
     // entity's live container, which `component_mut` marked changed, on the

@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{Header, ModHandle, PlayerData, PlayerInfo, Status, TickData};
+    use enshwick::abi::{ModHandle, PlayerData, PlayerInfo, Status, TickData};
     use enshwick::events::{PlayerJoined, Ticked, WorldLoaded};
     use enshwick::packs::{Pack, PackFiles};
     use enshwick::progress::Experience;
@@ -50,15 +50,14 @@ mod tests {
         let _gone = std::fs::remove_dir_all(&data);
         let loader = packs()
             .world()
-            .player(PlayerInfo {
-                header: Header::of::<PlayerInfo>(),
+            .player(enshwick::abi::headed!(PlayerInfo {
                 slot: 0,
-                entity: Entity(2),
+                entity: Entity::from_engine(2),
                 key: PlayerKey::new(7),
                 permissions: 0,
                 name_len: 0,
                 name: [0; PlayerInfo::NAME_MAX],
-            })
+            }))
             .data_dir(data.to_str().unwrap())
             .world_key("world0")
             .install();
@@ -93,16 +92,15 @@ mod tests {
             4,
             "each pack's settings and rewards"
         );
-        let joined = PlayerData {
-            header: Header::of::<PlayerData>(),
+        let joined = enshwick::abi::headed!(PlayerData {
             slot: 0,
-            entity: Entity(2),
+            entity: Entity::from_engine(2),
             key: PlayerKey::new(7),
-        };
+        });
         let _heard = loader.raise::<PlayerJoined>(&joined);
         let _ran = loader.raise::<Ticked>(&TickData::new(1));
         let mut rows = [Experience {
-            entity: Entity(2),
+            entity: Entity::from_engine(2),
             level: 1,
             progress: 0,
             need: 1000,

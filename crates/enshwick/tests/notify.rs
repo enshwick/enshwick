@@ -91,7 +91,7 @@ mod tests {
             .sound_volume_hint(SoundVolumeHint::FriendlyNpc);
         effects.notify(&here).unwrap();
         effects
-            .notify(&Notify::new(BELL, NotifyAt::Entity(Entity(9))))
+            .notify(&Notify::new(BELL, NotifyAt::Entity(Entity::from_engine(9))))
             .unwrap();
         let emits = loader.emits();
         let (ty, placed) = &emits[0];
@@ -167,7 +167,7 @@ mod tests {
         assert_eq!(heard[0].source_entity_id, None);
         assert_eq!(heard[0].sound_volume_hint, SoundVolumeHint::FriendlyNpc);
         assert_eq!(heard[1].r#type, NotifyEventType::Sfx);
-        assert_eq!(heard[1].source_entity_id, Some(Entity(9)));
+        assert_eq!(heard[1].source_entity_id, Some(Entity::from_engine(9)));
         assert_eq!(heard[1].sound_volume_hint, SoundVolumeHint::GenericSfx);
     }
 
@@ -186,7 +186,7 @@ mod tests {
         assert_eq!(status, Status::OK);
         let effects = EFFECTS.get().unwrap();
         assert_eq!(
-            effects.notify(&Notify::new(BELL, NotifyAt::Entity(Entity(9)))),
+            effects.notify(&Notify::new(BELL, NotifyAt::Entity(Entity::from_engine(9)))),
             Err(WorldError::Unavailable),
             "raising needs the turn"
         );

@@ -62,13 +62,12 @@ use enshwick::typed::FactionType;
 use enshwick::typed::ecs::{Aggro, Faction};
 
 fn init(load: &mut enshwick::Load<'_>, wolf: Guid) -> Result<(), enshwick::Off> {
-    let vukah_wolf = load.add_template(NewTemplate {
-        changes: vec![
+    let mut template = NewTemplate::new(id!("vukah-wolf"), wolf);
+    template.changes = vec![
             ComponentChange::edit(|faction: &mut Faction| faction.faction = FactionType::Vukah),
             ComponentChange::remove::<Aggro>(),
-        ],
-        ..NewTemplate::new(id!("vukah-wolf"), wolf)
-    })?;
+        ];
+    let vukah_wolf = load.add_template(template)?;
     enshwick::info!("vukah wolves are {}", vukah_wolf.guid());
     load.change_template(wolf, vec![ComponentChange::remove::<Aggro>()])
 }

@@ -7,7 +7,7 @@ mod tests {
     use std::sync::{Mutex, OnceLock};
     use std::time::Duration;
 
-    use enshwick::abi::{Event, Header, SaveInfo, SpawnRequest, Status};
+    use enshwick::abi::{Event, SaveInfo, SpawnRequest, Status};
     use enshwick::effects::{Effects, Spawn};
     use enshwick::events::{ShutdownStarted, WorldSaved, WorldSaving};
     use enshwick::world::{World, WorldGuid};
@@ -62,14 +62,13 @@ mod tests {
         assert_eq!(*ORDER.lock().unwrap(), ["saving", "saved"]);
 
         assert_eq!(world.save_info(), None, "no save before the first");
-        loader.set_save_info(Some(SaveInfo {
-            header: Header::of::<SaveInfo>(),
+        loader.set_save_info(Some(enshwick::abi::headed!(SaveInfo {
             world: enshwick::content::Guid([9; 16]),
             saved_at: 1_762_300_000,
             size: 4_096,
             backups: 3,
             reserved: 0,
-        }));
+        })));
         let info = world.save_info().unwrap();
         assert_eq!(info.world, WorldGuid([9; 16]));
         assert_eq!(info.saved_at, Duration::from_secs(1_762_300_000));
@@ -103,7 +102,7 @@ mod tests {
         let flags: Vec<_> = loader
             .spawns()
             .into_iter()
-            .map(|(id, request)| (Entity(id), request.flags))
+            .map(|(id, request)| (Entity::from_engine(id), request.flags))
             .collect();
         assert_eq!(flags, [(kept, 0), (passing, SpawnRequest::DO_NOT_SAVE)]);
     }
@@ -197,7 +196,11 @@ mod tests {
     fn a_mod_keeps_its_own_entities_out_of_the_save_and_never_a_vanilla_one() {
         let loader = enshwick::test::FakeHost::new()
             .world()
-            .prop(Entity(500), enshwick::ItemId::new(30), [0.0; 3])
+            .prop(
+                Entity::from_engine(500),
+                enshwick::ItemId::new(30),
+                [0.0; 3],
+            )
             .install();
         // SAFETY: the three functions are the exports of this file's `declare_mod!(Keeper)`.
         let status =
@@ -226,12 +229,12 @@ mod tests {
         assert_eq!(loader.unsaved(), [decoy], "put back in the save");
 
         assert_eq!(
-            world.set_saved(Entity(500), false),
+            world.set_saved(Entity::from_engine(500), false),
             Err(enshwick::WorldError::Refused),
             "a vanilla prop is refused"
         );
         assert_eq!(
-            world.set_saved(Entity(7), false),
+            world.set_saved(Entity::from_engine(7), false),
             Err(enshwick::WorldError::Gone),
             "an entity not in the world is gone"
         );

@@ -423,9 +423,22 @@ impl Drop for OwnFolder {
 /// See [`Installed::check_settings`].
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("{reason}")]
+#[non_exhaustive]
 pub struct SettingsRefused {
     /// The mod's reason.
     pub reason: String,
+}
+
+impl SettingsRefused {
+    /// A `SettingsRefused` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`SettingsRefused`].
+    #[must_use]
+    pub const fn new(reason: String) -> Self {
+        Self { reason }
+    }
 }
 
 #[cfg(test)]

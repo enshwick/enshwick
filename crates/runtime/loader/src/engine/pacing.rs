@@ -78,12 +78,11 @@ struct Handler<F> {
 /// handles) or `r8` (the client's message wait), with the nanoseconds left
 /// in `rbx` (1.0 builds).
 fn wait_of(ms: u64, rbx: u64) -> LoopWaitData {
-    LoopWaitData {
-        header: enshwick_core::abi::Header::of::<LoopWaitData>(),
+    enshwick_abi::headed!(LoopWaitData {
         ms: u32::try_from(ms & 0xffff_ffff).unwrap_or(u32::MAX),
         reserved: 0,
         left_ns: i64::from_ne_bytes(rbx.to_ne_bytes()),
-    }
+    })
 }
 
 /// Runs a mod's loop wait handler at the wait on handles.

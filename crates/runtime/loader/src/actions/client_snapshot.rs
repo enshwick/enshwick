@@ -245,7 +245,7 @@ pub(crate) fn frame(
         };
         let now = (
             read.play as u64,
-            local_held::player().map_or(0, |player| player.0),
+            local_held::player().map_or(0, Entity::get),
             crate::base::saves::worlds(),
         );
         let last = STATE.session.load(Ordering::Relaxed);
@@ -317,10 +317,10 @@ pub(crate) fn snapshot(loader: &Loader, scene: Option<&'static str>) -> ClientSn
         // The records live as long as the loader, the process.
         |index| loader.mods.get(index).map(|m| Str::new(&m.id)),
     );
-    let mut snapshot = ClientSnapshot {
+    let mut snapshot = enshwick_abi::headed!(ClientSnapshot {
         server: crate::actions::client_commands::server_str(),
         ..snapshot
-    };
+    });
     if let Some(shown) = crate::actions::client_commands::dialogs::shown() {
         snapshot.available |= ClientSnapshot::DIALOG;
         snapshot.dialog = shown.number;
@@ -357,10 +357,10 @@ fn compose(
     name: impl Fn(u8) -> &'static str,
     mod_id: impl Fn(usize) -> Option<Str>,
 ) -> ClientSnapshot {
-    let mut snapshot = ClientSnapshot {
+    let mut snapshot = enshwick_abi::headed!(ClientSnapshot {
         scene: kept.scene.map_or(Str::EMPTY, Str::new),
         ..ClientSnapshot::EMPTY
-    };
+    });
     if let Sample::Fresh { bits, .. } = kept.held {
         snapshot.held = bits;
         snapshot.available |= ClientSnapshot::HELD;
@@ -411,7 +411,7 @@ fn compose(
     if byte(8) != 0 {
         snapshot.return_screen = named(byte(8));
     }
-    snapshot.host = Entity(u32::try_from(screens >> 32).unwrap_or(0));
+    snapshot.host = Entity::from_engine(u32::try_from(screens >> 32).unwrap_or(0));
     snapshot.available |= ClientSnapshot::SCREENS;
     if screens >> 24 & 1 == 1 {
         snapshot.available |= ClientSnapshot::MENU_TAB;
@@ -430,7 +430,7 @@ fn compose(
         snapshot.available |= ClientSnapshot::PROMPT;
         let target = u32::try_from(prompt & 0xffff_ffff).unwrap_or(0);
         if target != 0 {
-            snapshot.prompt_target = Entity(target);
+            snapshot.prompt_target = Entity::from_engine(target);
             snapshot.prompt_verb = u32::try_from(prompt >> 32).unwrap_or(0);
         }
     }
@@ -583,7 +583,7 @@ mod tests {
         assert_ne!(facing.available & ClientSnapshot::PROMPT, 0);
         assert_eq!(
             (facing.prompt_target, facing.prompt_verb),
-            (Entity(1052), 0x4e82_e309)
+            (Entity::from_engine(1052), 0x4e82_e309)
         );
         let hidden = FrameRead {
             prompt: Some(false),
@@ -602,7 +602,10 @@ mod tests {
             0,
             "read, none shows"
         );
-        assert_eq!((away.prompt_target, away.prompt_verb), (Entity(0), 0));
+        assert_eq!(
+            (away.prompt_target, away.prompt_verb),
+            (Entity::from_engine(0), 0)
+        );
         assert_eq!(
             kept_word.load(Ordering::Relaxed),
             0,
@@ -618,7 +621,7 @@ mod tests {
         );
         assert_eq!(
             again.prompt_target,
-            Entity(0),
+            Entity::from_engine(0),
             "no stale target before the site runs"
         );
         let unread = compose(
@@ -781,7 +784,7 @@ mod tests {
         let snapshot = compose(kept(Some([1, pack(&read), 0, 100])), 150, name);
         assert_eq!(text(snapshot.hud_screen), Some("StorageChest"));
         assert_eq!(text(snapshot.return_screen), Some("Backpack"));
-        assert_eq!(snapshot.host, Entity(77));
+        assert_eq!(snapshot.host, Entity::from_engine(77));
         let world = compose(kept(Some([1, pack(&read_world()), 0, 100])), 150, name);
         assert_eq!(text(world.return_screen), Some(""), "back to the world");
     }
@@ -820,13 +823,13 @@ mod tests {
                 bits: 1 << 30,
                 age_ms: 5,
             },
-            player: Some(Entity(9)),
+            player: Some(Entity::from_engine(9)),
             scene: Some("world1"),
             ..kept(None)
         };
         let snapshot = compose(fresh, 150, name);
         assert_eq!(snapshot.held, 1 << 30);
-        assert_eq!(snapshot.player, Entity(9));
+        assert_eq!(snapshot.player, Entity::from_engine(9));
         assert_eq!(text(snapshot.scene), Some("world1"));
         assert_eq!(
             snapshot.available,
@@ -941,13 +944,17 @@ mod tests {
         };
         note_prompt(1052, 0x4e82_e309);
         frame(|| Some(facing(0x1000)), list, || None);
-        assert_eq!(kept().prompt_target, Entity(1052), "kept in its session");
+        assert_eq!(
+            kept().prompt_target,
+            Entity::from_engine(1052),
+            "kept in its session"
+        );
         frame(|| Some(facing(0x2000)), list, || None);
         let next = kept();
         assert_eq!(next.session, 2, "another game object");
         assert_eq!(
             next.prompt_target,
-            Entity(0),
+            Entity::from_engine(0),
             "the last session's target is gone before the site runs again"
         );
     }

@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{Header, ItemAction, Status};
+    use enshwick::abi::{ItemAction, Status};
     use enshwick::packs::{Pack, PackFiles};
     use enshwick::test::FakeHost;
     use enshwick::{Entity, ItemId};
@@ -15,15 +15,14 @@ mod tests {
     const LANTERN: u32 = 0x5e02;
 
     fn action(kind: u32, item: u32) -> ItemAction {
-        ItemAction {
-            header: Header::of::<ItemAction>(),
+        enshwick::abi::headed!(ItemAction {
             kind,
-            character: Entity(4096),
+            character: Entity::from_engine(4096),
             item: ItemId::new(item),
             count: 1,
-            inventory: Entity(4100),
+            inventory: Entity::from_engine(4100),
             slot: 2,
-        }
+        })
     }
 
     #[test]

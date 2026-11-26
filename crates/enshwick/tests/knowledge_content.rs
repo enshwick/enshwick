@@ -44,29 +44,32 @@ mod tests {
     impl Mod for Lore {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let added = [
-                load.add_knowledge(NewKnowledge {
-                    skill_points: 2,
-                    experience: Some(ExperienceValue::new(77)),
-                    ..NewKnowledge::new(SHRINE, Scope::Player, KnowledgeType::Bool)
+                load.add_knowledge({
+                    let mut value = NewKnowledge::new(SHRINE, Scope::Player, KnowledgeType::Bool);
+                    value.skill_points = 2;
+                    value.experience = Some(ExperienceValue::new(77));
+                    value
                 })?,
                 load.add_knowledge(NewKnowledge::new(
                     KILLS,
                     Scope::World,
                     KnowledgeType::Counter,
                 ))?,
-                load.add_knowledge(NewKnowledge {
-                    flags: 0b111,
-                    ..NewKnowledge::new(MARKS, Scope::Player, KnowledgeType::Flags)
+                load.add_knowledge({
+                    let mut value = NewKnowledge::new(MARKS, Scope::Player, KnowledgeType::Flags);
+                    value.flags = 0b111;
+                    value
                 })?,
             ];
             ADDED.lock().unwrap().extend(added);
-            refused(load.add_knowledge(NewKnowledge {
-                skill_points: 1,
-                ..NewKnowledge::new(
+            refused(load.add_knowledge({
+                let mut value = NewKnowledge::new(
                     Id::new("you.lore:world-points"),
                     Scope::World,
                     KnowledgeType::Bool,
-                )
+                );
+                value.skill_points = 1;
+                value
             }));
             refused(load.add_knowledge(NewKnowledge::new(
                 Id::new("you.lore:no-bits"),

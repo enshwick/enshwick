@@ -6,7 +6,7 @@ mod tests {
 
     use enshwick::Entity;
     use enshwick::WorldError;
-    use enshwick::abi::{Header, KnowledgeChange, KnowledgeData, KnowledgeInfo, Status};
+    use enshwick::abi::{KnowledgeChange, KnowledgeData, KnowledgeInfo, Status};
     use enshwick::events::KnowledgeChanged;
     use enshwick::knowledge::{Grant, Knowledge, KnowledgeId, KnowledgeType, Scope};
     use enshwick::{Load, Mod, Off};
@@ -40,15 +40,14 @@ mod tests {
     );
 
     fn info(id: KnowledgeId, kind: u8, scope: u8, value: u32, flags: u32) -> KnowledgeInfo {
-        KnowledgeInfo {
-            header: Header::of::<KnowledgeInfo>(),
+        enshwick::abi::headed!(KnowledgeInfo {
             id,
             kind,
             scope,
             reserved: 0,
             value,
             flags,
-        }
+        })
     }
 
     #[test]
@@ -63,34 +62,42 @@ mod tests {
         let recipe = info(RECIPE, KnowledgeInfo::FLAGS, KnowledgeInfo::PLAYER, 1, 3);
         let quest = info(QUEST, KnowledgeInfo::BOOL, KnowledgeInfo::PLAYER, 1, 0);
         let found = info(FOUND, KnowledgeInfo::COUNTER, KnowledgeInfo::WORLD, 4, 0);
-        let player = Some(Entity(2));
+        let player = Some(Entity::from_engine(2));
         loader.set_knowledge(
             &[(player, recipe), (player, quest), (None, found)],
             &[QUEST, OPEN_QUEST],
         );
 
-        let known = knowledge.get(Entity(2), RECIPE).unwrap();
+        let known = knowledge.get(Entity::from_engine(2), RECIPE).unwrap();
         assert_eq!(
             (known.r#type, known.scope),
             (KnowledgeType::Flags, Scope::Player)
         );
         assert!(known.has_flag(0) && !known.has_flag(1));
-        assert_eq!(knowledge.get(Entity(3), RECIPE), None, "another player's");
+        assert_eq!(
+            knowledge.get(Entity::from_engine(3), RECIPE),
+            None,
+            "another player's"
+        );
         assert_eq!(knowledge.world(FOUND).map(|k| k.value), Some(4));
         assert_eq!(
-            knowledge.get(Entity(3), FOUND).map(|k| k.value),
+            knowledge
+                .get(Entity::from_engine(3), FOUND)
+                .map(|k| k.value),
             Some(4),
             "the world's for anyone"
         );
 
-        knowledge.grant(Entity(2), RECIPE, Grant::Flag(1)).unwrap();
+        knowledge
+            .grant(Entity::from_engine(2), RECIPE, Grant::Flag(1))
+            .unwrap();
         knowledge.grant_world(FOUND, Grant::Add(2)).unwrap();
         assert_eq!(
-            knowledge.grant(Entity(2), RECIPE, Grant::Set),
+            knowledge.grant(Entity::from_engine(2), RECIPE, Grant::Set),
             Err(WorldError::Refused)
         );
         assert_eq!(
-            knowledge.grant(Entity(2), UNKNOWN, Grant::Set),
+            knowledge.grant(Entity::from_engine(2), UNKNOWN, Grant::Set),
             Err(WorldError::Refused)
         );
         assert_eq!(
@@ -102,15 +109,14 @@ mod tests {
         );
 
         assert_eq!(knowledge.quests(), [QUEST, OPEN_QUEST]);
-        assert!(knowledge.completed(Entity(2), QUEST));
-        assert!(!knowledge.completed(Entity(2), OPEN_QUEST));
+        assert!(knowledge.completed(Entity::from_engine(2), QUEST));
+        assert!(!knowledge.completed(Entity::from_engine(2), OPEN_QUEST));
 
-        let changed = KnowledgeData {
-            header: Header::of::<KnowledgeData>(),
-            entity: Entity(2),
+        let changed = enshwick::abi::headed!(KnowledgeData {
+            entity: Entity::from_engine(2),
             id: RECIPE,
             value: 3,
-        };
+        });
         assert_eq!(loader.raise::<KnowledgeChanged>(&changed), 1);
     }
 
@@ -118,20 +124,19 @@ mod tests {
     fn a_change_naming_both_an_account_and_a_character_or_no_operation_is_refused() {
         let loader = enshwick::test::FakeHost::new().install();
         let recipe = info(RECIPE, KnowledgeInfo::FLAGS, KnowledgeInfo::PLAYER, 0, 0);
-        loader.set_knowledge(&[(Some(Entity(2)), recipe)], &[]);
+        loader.set_knowledge(&[(Some(Entity::from_engine(2)), recipe)], &[]);
         // SAFETY: the fake's table is a static, aligned and never written.
         let api = unsafe { &*loader.api() };
         let change = |account: u64, entity: u32, op: u8| {
-            let change = KnowledgeChange {
-                header: Header::of::<KnowledgeChange>(),
+            let change = enshwick::abi::headed!(KnowledgeChange {
                 account: enshwick::PlayerKey::new(account),
-                entity: Entity(entity),
+                entity: Entity::from_engine(entity),
                 id: RECIPE,
                 value: 0,
                 kind: KnowledgeInfo::FLAGS,
                 op,
                 reserved: 0,
-            };
+            });
             (api.change_knowledge)(loader.handle(), &raw const change)
         };
         assert_eq!(change(7, 2, KnowledgeChange::GRANT), Status::BAD_ARGS);

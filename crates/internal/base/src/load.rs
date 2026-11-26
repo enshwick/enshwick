@@ -287,22 +287,20 @@ impl BaseLoad {
 
 /// The ABI description of the service `T`, with `table` or null.
 pub(crate) fn service_spec<T: Service>(table: *const c_void) -> crate::abi::ServiceSpec {
-    crate::abi::ServiceSpec {
-        header: crate::abi::Header::of::<crate::abi::ServiceSpec>(),
+    enshwick_abi::headed!(crate::abi::ServiceSpec {
         name: crate::services::name(T::NAME),
         major: T::MAJOR,
         layout: crate::services::layout(T::LAYOUT, size_of::<T>()),
         table,
-    }
+    })
 }
 
 /// The ABI description of the mod event `E`.
 pub(crate) fn event_spec<E: ModEvent>() -> crate::abi::EventSpec {
-    crate::abi::EventSpec {
-        header: crate::abi::Header::of::<crate::abi::EventSpec>(),
+    enshwick_abi::headed!(crate::abi::EventSpec {
         name: crate::services::name(E::NAME),
         layout: crate::services::layout(E::LAYOUT, size_of::<E>()),
-    }
+    })
 }
 
 std::thread_local! {

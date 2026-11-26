@@ -70,13 +70,7 @@ pub(super) fn vanilla_recipes(loader: &Loader) -> Vec<(Guid, RecipeTraits)> {
                 .and_then(|item| kinds.get(item))
                 .copied()
                 .unwrap_or(RecipeKind::Other);
-            (
-                recipe.guid,
-                RecipeTraits {
-                    kind,
-                    workshop: recipe.workshop,
-                },
-            )
+            (recipe.guid, RecipeTraits::new(kind, recipe.workshop))
         })
         .collect()
 }

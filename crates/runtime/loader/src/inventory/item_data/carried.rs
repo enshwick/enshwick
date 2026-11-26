@@ -181,7 +181,7 @@ pub(super) fn keep_carried(
             .filter(|anchor| matches!(anchor, Anchor::Carried { .. }));
         left.push(Pending {
             kind,
-            anchor: anchor.unwrap_or(Anchor::Session(pide.0)),
+            anchor: anchor.unwrap_or(Anchor::Session(pide.get())),
             check: held.item.0,
             value: record.value,
             aside: anchor.is_none(),

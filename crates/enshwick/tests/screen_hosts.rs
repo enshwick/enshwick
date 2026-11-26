@@ -9,7 +9,7 @@ mod tests {
     use std::sync::atomic::{AtomicU32, Ordering};
 
     use enshwick::Entity;
-    use enshwick::abi::{Header, Side, Status, Str, UiExtension, UiFrame};
+    use enshwick::abi::{Side, Status, Str, UiExtension, UiFrame};
     use enshwick::content::Guid;
     use enshwick::test::Drawn;
     use enshwick::ui::{Edge, HudScreenType};
@@ -42,8 +42,7 @@ mod tests {
                 .extend_screen_for(HudScreenType::StorageChest, Edge::Left, &many, |_| {})
                 .map_err(|_| Status::BAD_ARGS);
             let host = load.host();
-            let spec = UiExtension {
-                header: Header::of::<UiExtension>(),
+            let spec = enshwick::abi::headed!(UiExtension {
                 screen: Str::new("StorageChest"),
                 edge: UiExtension::LEFT,
                 reserved: 0,
@@ -54,7 +53,7 @@ mod tests {
                 shift: 0.0,
                 inset: 0.0,
                 reserved_place: 0,
-            };
+            });
             let status = (host.api().ui_extension)(
                 host.handle(),
                 &raw const spec,
@@ -68,8 +67,7 @@ mod tests {
             };
             *REFUSED.lock().unwrap() = vec![too_many, null];
             // A spec that names no host shows for every host.
-            let old = UiExtension {
-                header: Header::of::<UiExtension>(),
+            let old = enshwick::abi::headed!(UiExtension {
                 screen: Str::new("StorageChest"),
                 edge: UiExtension::TOP,
                 reserved: 0,
@@ -80,7 +78,7 @@ mod tests {
                 shift: 0.0,
                 inset: 0.0,
                 reserved_place: 0,
-            };
+            });
             let status =
                 (host.api().ui_extension)(host.handle(), &raw const old, Some(counted), null_mut());
             *OLD.lock().unwrap() = Some(status);
@@ -132,7 +130,7 @@ mod tests {
             loader.draw_screen(HudScreenType::StorageChest).is_empty(),
             "no host"
         );
-        loader.host_screen(Some(Entity(512)));
+        loader.host_screen(Some(Entity::from_engine(512)));
         assert!(
             loader.draw_screen(HudScreenType::StorageChest).is_empty(),
             "a host no step read yet"
@@ -163,7 +161,7 @@ mod tests {
         assert_eq!(status, Status::OK);
         assert_eq!(*OLD.lock().unwrap(), Some(Status::OK));
         let _drawn = loader.draw_screen(HudScreenType::StorageChest);
-        loader.host_screen(Some(Entity(512)));
+        loader.host_screen(Some(Entity::from_engine(512)));
         loader.read_screen_host(THEIRS, [1.0, 2.0, 3.0]);
         let _drawn = loader.draw_screen(HudScreenType::StorageChest);
         assert_eq!(OLD_DRAWS.load(Ordering::Relaxed), 2);
@@ -176,17 +174,17 @@ mod tests {
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        loader.host_screen(Some(Entity(512)));
+        loader.host_screen(Some(Entity::from_engine(512)));
         loader.read_screen_host(OURS, [1.0, 2.0, 3.0]);
         let ours =
             |drawn: Vec<(u32, Vec<Drawn>)>| drawn.iter().any(|(e, _)| *e == UiExtension::RIGHT);
         assert!(ours(loader.draw_screen(HudScreenType::StorageChest)));
-        loader.host_screen(Some(Entity(600)));
+        loader.host_screen(Some(Entity::from_engine(600)));
         assert!(
             !ours(loader.draw_screen(HudScreenType::StorageChest)),
             "the first frame of a new host"
         );
-        loader.host_screen(Some(Entity(512)));
+        loader.host_screen(Some(Entity::from_engine(512)));
         assert!(
             !ours(loader.draw_screen(HudScreenType::StorageChest)),
             "the first host again, read no more"
@@ -195,8 +193,7 @@ mod tests {
 
     #[test]
     fn a_spec_without_hosts_names_none_and_one_past_the_limit_is_refused() {
-        let mut spec = UiExtension {
-            header: Header::of::<UiExtension>(),
+        let mut spec = enshwick::abi::headed!(UiExtension {
             screen: Str::new("StorageChest"),
             edge: UiExtension::RIGHT,
             reserved: 0,
@@ -207,7 +204,7 @@ mod tests {
             shift: 0.0,
             inset: 0.0,
             reserved_place: 0,
-        };
+        });
         // SAFETY: a null list with no count reads as no host.
         assert_eq!(unsafe { spec.host_list() }, Some(&[][..]));
         let many = vec![Guid([7; 16]); UiExtension::MAX_HOSTS as usize + 1];

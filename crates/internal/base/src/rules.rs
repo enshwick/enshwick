@@ -198,6 +198,7 @@ pub const WINDOW_MAP: &str = "@map";
 /// start with `@`, and the separators `/`, `@` and `#` never clash with
 /// one.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum WindowItem {
     /// `<action>`: the button that runs the action, drawn whole or in its
     /// form.

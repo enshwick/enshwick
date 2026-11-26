@@ -23,7 +23,7 @@
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use enshwick_core::abi::{DaytimeInfo, Event, Header, HookFlags};
+use enshwick_core::abi::{DaytimeInfo, Event, HookFlags};
 
 use crate::engine::chains::Next;
 use crate::engine::fuse::Fuse;
@@ -274,8 +274,7 @@ pub(crate) fn info(loader: &Loader) -> Result<DaytimeInfo, DaytimeError> {
     // the game thread that alone writes it; the table's `daytime.is_day`
     // offset holds its day flag byte, read as an integer.
     let is_day: u8 = unsafe { crate::engine::memory::read(daytime, layout.is_day) };
-    Ok(DaytimeInfo {
-        header: Header::of::<DaytimeInfo>(),
+    Ok(enshwick_abi::headed!(DaytimeInfo {
         time_ns: time,
         day_start_ns: day_start,
         day_end_ns: day_end,
@@ -283,7 +282,7 @@ pub(crate) fn info(loader: &Loader) -> Result<DaytimeInfo, DaytimeError> {
         night_length_ns: night_length,
         speed,
         flags: if is_day == 0 { 0 } else { DaytimeInfo::DAY },
-    })
+    }))
 }
 
 /// Sets the time of day through the game's setter.

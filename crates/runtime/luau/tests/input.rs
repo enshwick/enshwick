@@ -19,7 +19,7 @@ mod tests {
         let mut bytes = vec![0u8; fake.size(facts::PLAYER_INPUT.id()).unwrap()];
         bytes[at..][..8].copy_from_slice(&(1u64 << 30 | 1).to_le_bytes());
         let loader = run(
-            fake.component(Entity(40), ty, &bytes),
+            fake.component(Entity::from_engine(40), ty, &bytes),
             r#"
             enshwick.on_tick(0.1, function()
                 local held = enshwick.input.held(40)
@@ -77,18 +77,17 @@ mod tests {
 
     #[test]
     fn a_mod_whose_scripts_never_name_input_starts_no_input_reads() {
-        use enshwick::abi::{Header, LocalInputInfo, Side};
+        use enshwick::abi::{LocalInputInfo, Side};
         let loader = run(
             FakeHost::new().side(Side::CLIENT).player_input(),
             "enshwick.log.info('no controls read here')",
         );
         let _drawn = loader.draw_frame();
-        let mut info = LocalInputInfo {
-            header: Header::of::<LocalInputInfo>(),
+        let mut info = enshwick::abi::headed!(LocalInputInfo {
             flags: 0,
             reserved: 0,
             age_ms: 0,
-        };
+        });
         // SAFETY: the fake's table lives for the process; `info` is writable.
         let status = (unsafe { &*loader.api() }.local_input_status)(loader.handle(), &raw mut info);
         assert!(status.is_ok());

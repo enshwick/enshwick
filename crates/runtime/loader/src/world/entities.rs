@@ -282,7 +282,9 @@ fn place(layout: &Layout, entry: &[u8]) -> EntityPlace {
         entity: entry
             .get(..4)
             .and_then(|b| b.try_into().ok())
-            .map_or(Entity(0), |b| Entity(u32::from_le_bytes(b))),
+            .map_or(Entity::from_engine(0), |b| {
+                Entity::from_engine(u32::from_le_bytes(b))
+            }),
         reserved: 0,
         position: enshwick_core::ecs::metres([word(at), word(at + 8), word(at + 16)]),
     }
@@ -294,7 +296,7 @@ pub(crate) fn destroy(loader: &Loader, entity: Entity) -> Result<(), EntityError
     crate::engine::world::entity_call(loader)?;
     let layout = layout(loader).ok_or(EntityError::Unavailable)?;
     let world = entity_world()?;
-    if entity == Entity(0) {
+    if entity == Entity::from_engine(0) {
         return Err(EntityError::NoEntity);
     }
     crate::engine::world::template(loader, entity)?;
@@ -314,7 +316,7 @@ pub(crate) fn destroy(loader: &Loader, entity: Entity) -> Result<(), EntityError
     // SAFETY: `buffer` is the world's first command buffer, non-null by the
     // earlier check, used on the game thread between steps, where no system
     // writes it.
-    let queued = unsafe { (layout.destroy)(buffer, 0, entity.0) };
+    let queued = unsafe { (layout.destroy)(buffer, 0, entity.get()) };
     if queued == 0 {
         return Err(EntityError::Refused);
     }
@@ -327,7 +329,7 @@ pub(crate) fn destroy(loader: &Loader, entity: Entity) -> Result<(), EntityError
 /// step; vanilla entities are refused, so no mod drops the game's own data
 /// from a save.
 pub(crate) fn set_saved(loader: &Loader, entity: Entity, saved: bool) -> Result<(), EntityError> {
-    if entity == Entity(0) {
+    if entity == Entity::from_engine(0) {
         return Err(EntityError::NoEntity);
     }
     crate::engine::world::entity_call(loader)?;
@@ -393,7 +395,7 @@ fn append(
             buffer.wrapping_add(saving.records),
             kind,
             size,
-            entity.0,
+            entity.get(),
         )
     };
     if command.is_null() {

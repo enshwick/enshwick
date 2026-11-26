@@ -71,7 +71,7 @@ fn narrow(at: [f64; 3]) -> [f32; 3] {
 /// use enshwick_core::abi::SoundPlay;
 /// use enshwick_loader::base::wire::{MAX_SOUND, SoundMessage, SoundOp, read_sound, sound};
 ///
-/// let start = SoundMessage { owner: 7, id: 1, op: SoundOp::Play(SoundPlay { place: SoundPlay::AT, at: [1.0, 2.0, 3.0], ..SoundPlay::EMPTY }) };
+/// let start = SoundMessage { owner: 7, id: 1, op: SoundOp::Play(enshwick_core::headed!(SoundPlay { place: SoundPlay::AT, at: [1.0, 2.0, 3.0], ..SoundPlay::EMPTY })) };
 /// let data = sound(&start);
 /// assert!(data.len() <= MAX_SOUND);
 /// let read = read_sound(&data[2..]).ok_or("unread")?;
@@ -144,24 +144,24 @@ pub fn read_sound(bytes: &[u8]) -> Option<SoundMessage> {
     let id = u64::from_le_bytes(take(bytes, 5));
     let body = &bytes[HEAD..];
     let op = match bytes[0] {
-        PLAY if body.len() == PLAY_BODY => SoundOp::Play(SoundPlay {
+        PLAY if body.len() == PLAY_BODY => SoundOp::Play(enshwick_abi::headed!(SoundPlay {
             container: Guid(take(body, 0)),
             place: u32::from(body[16]),
             at: position(body, 17),
             volume: f32::from_le_bytes(take(body, 29)),
             fade_in_ms: u32::from_le_bytes(take(body, 33)),
             ..SoundPlay::EMPTY
-        }),
+        })),
         // A server changes only the one sound it names, never the client
         // part's own sounds.
         STEER if body.len() == STEER_BODY && u32::from(body[0]) != SoundSteer::STOP_ALL => {
-            SoundOp::Steer(SoundSteer {
+            SoundOp::Steer(enshwick_abi::headed!(SoundSteer {
                 kind: u32::from(body[0]),
                 volume: f32::from_le_bytes(take(body, 1)),
                 fade_ms: u32::from_le_bytes(take(body, 5)),
                 at: position(body, 9),
                 ..SoundSteer::EMPTY
-            })
+            }))
         }
         _ => return None,
     };
@@ -174,14 +174,14 @@ mod tests {
 
     #[test]
     fn a_start_and_a_change_read_back_as_they_were_sent() {
-        let play = SoundPlay {
+        let play = enshwick_abi::headed!(SoundPlay {
             container: Guid([3; 16]),
             place: SoundPlay::MUSIC,
             at: [-4.5, 1e3, 0.25],
             volume: 0.5,
             fade_in_ms: 1500,
             ..SoundPlay::EMPTY
-        };
+        });
         let data = sound(&SoundMessage {
             owner: 0xdead_beef,
             id: u64::MAX,
@@ -203,13 +203,13 @@ mod tests {
                 play.fade_in_ms
             )
         );
-        let steer = SoundSteer {
+        let steer = enshwick_abi::headed!(SoundSteer {
             kind: SoundSteer::POSITION,
             volume: 0.1,
             fade_ms: 9,
             at: [1.0, 2.0, 3.0],
             ..SoundSteer::EMPTY
-        };
+        });
         let data = sound(&SoundMessage {
             owner: 1,
             id: 2,
@@ -232,11 +232,11 @@ mod tests {
         let rounded = near as f32;
         assert_eq!(rounded, 2_147_483_648.0, "f32 rounds it up to 2^31");
         let at = [near, -near, 0.0];
-        let play = SoundPlay {
+        let play = enshwick_abi::headed!(SoundPlay {
             place: SoundPlay::AT,
             at,
             ..SoundPlay::EMPTY
-        };
+        });
         assert!(play.in_bounds());
         let data = sound(&SoundMessage {
             owner: 1,
@@ -248,11 +248,11 @@ mod tests {
         };
         assert!(got.in_bounds(), "{:?}", got.at);
         assert_eq!(got.at, [EDGE, -EDGE, 0.0]);
-        let steer = SoundSteer {
+        let steer = enshwick_abi::headed!(SoundSteer {
             kind: SoundSteer::POSITION,
             at,
             ..SoundSteer::EMPTY
-        };
+        });
         let data = sound(&SoundMessage {
             owner: 1,
             id: 2,
@@ -266,10 +266,10 @@ mod tests {
 
     #[test]
     fn a_place_past_a_byte_goes_as_one_the_client_refuses() {
-        let play = SoundPlay {
+        let play = enshwick_abi::headed!(SoundPlay {
             place: 300,
             ..SoundPlay::EMPTY
-        };
+        });
         let data = sound(&SoundMessage {
             owner: 1,
             id: 1,
@@ -286,10 +286,10 @@ mod tests {
         let data = sound(&SoundMessage {
             owner: 1,
             id: 1,
-            op: SoundOp::Steer(SoundSteer {
+            op: SoundOp::Steer(enshwick_abi::headed!(SoundSteer {
                 kind: SoundSteer::STOP_ALL,
                 ..SoundSteer::EMPTY
-            }),
+            })),
         });
         assert!(read_sound(&data[2..]).is_none());
     }

@@ -17,6 +17,10 @@
 /// assert!(HELD.contains(ItemCategoryMask::TOOLS | ItemCategoryMask::WEAPONS));
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct ItemCategoryMask(pub u32);
 
 impl ItemCategoryMask {

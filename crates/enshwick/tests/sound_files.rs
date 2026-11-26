@@ -62,18 +62,21 @@ mod tests {
             }
             let horn = SoundId::from_guid(id!("horn").guid());
             for container in [
-                SoundChange {
-                    takes: Some(Takes::Replace(vec![Take::new(horn)])),
-                    ..SoundChange::default()
+                {
+                    let mut value = SoundChange::default();
+                    value.takes = Some(Takes::Replace(vec![Take::new(horn)]));
+                    value
                 },
-                SoundChange {
-                    min_distance: Some(50.0),
-                    ..SoundChange::default()
+                {
+                    let mut value = SoundChange::default();
+                    value.min_distance = Some(50.0);
+                    value
                 },
             ] {
-                let added = load.add_sound(NewSound {
-                    container,
-                    ..NewSound::new(id!("odd"), "horn.wav")
+                let added = load.add_sound({
+                    let mut value = NewSound::new(id!("odd"), "horn.wav");
+                    value.container = container;
+                    value
                 });
                 RESULTS
                     .lock()

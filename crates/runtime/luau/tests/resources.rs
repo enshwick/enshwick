@@ -359,10 +359,7 @@ mod tests {
         let mut pixels = [0xff, 0, 0, 0xff, 0, 0xff, 0, 0xff];
         enshwick::content::icons::tint(
             &mut pixels,
-            enshwick::content::icons::Tint {
-                colour: [0, 0, 255],
-                amount: 100,
-            },
+            enshwick::content::icons::Tint::new([0, 0, 255], 100),
         );
         let tinted = format!("tint {}", pixels[2]);
         for line in [

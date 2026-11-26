@@ -4,20 +4,19 @@ use crate::test::FakeHost;
 use crate::test::table::base::args;
 use crate::test::table::entries;
 use crate::test::table::{found, put, text, with};
-use enshwick_core::abi::{BuildInfo, CallerFrame, Header, Level, Str};
+use enshwick_core::abi::{BuildInfo, CallerFrame, Level, Str};
 
 entries! {
     pub(crate) fn build(me as Caller, out: *mut BuildInfo as args::HeadedOut) -> Status {
         let host = with(FakeHost::new(), |s| s.host.clone());
         crate::test::table::put_headed(
             out,
-            BuildInfo {
-                header: Header::of::<BuildInfo>(),
+            enshwick_core::headed!(BuildInfo {
                 side: host.base.side,
                 base: host.base.module_base,
                 fingerprint: host.base.fingerprint,
                 complete: u8::from(host.base.build_complete),
-            },
+            }),
         )
     }
 

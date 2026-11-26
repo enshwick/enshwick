@@ -29,6 +29,8 @@ pub trait RecipeChanges {
 /// many recipes changed. `duration` is where a recipe keeps its time, when
 /// the build reflects it.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// Counts change in place. An ingredient that takes any item of a kind keeps
 /// its count. An ingredient set to 0 is taken out, and one the recipe lacks
 /// is added with nothing but its item and count. Either moves the
@@ -58,6 +60,7 @@ pub trait RecipeChanges {
 /// }
 /// ```
 #[must_use]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
 pub fn change_recipes_in(
     layout: &RecipeLayout,
     duration: Option<usize>,
@@ -254,6 +257,8 @@ fn change_time(
 /// Every workshop some recipe of the registry `registry` is made at, each
 /// once; `None` when it does not read with `layout`.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// ```
@@ -264,6 +269,7 @@ fn change_time(
 /// }
 /// ```
 #[must_use]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
 pub fn recipe_workshops(
     layout: &RecipeLayout,
     registry: &[u8],

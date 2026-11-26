@@ -290,8 +290,7 @@ pub(crate) fn when_settled(
 #[doc(hidden)]
 pub fn bench_settle_step(pending: usize) -> impl Fn() {
     let state: &'static Transactions = Box::leak(Box::new(Transactions::new()));
-    let dig = enshwick_core::abi::TerrainEdit {
-        header: enshwick_core::abi::Header::of::<enshwick_core::abi::TerrainEdit>(),
+    let dig = enshwick_abi::headed!(enshwick_core::abi::TerrainEdit {
         kind: enshwick_core::abi::TerrainEdit::DIG,
         shape: enshwick_core::abi::TerrainEdit::ROUND,
         flags: 0,
@@ -300,7 +299,7 @@ pub fn bench_settle_step(pending: usize) -> impl Fn() {
         radius: 1.0,
         height: 0.0,
         protect: [0; 16],
-    };
+    });
     for _ in 0..pending {
         let committed =
             state
@@ -457,15 +456,14 @@ fn forget_in(state: &Transactions) {
 
 #[cfg(test)]
 mod tests {
-    use enshwick_core::abi::{Header, TerrainEdit};
+    use enshwick_core::abi::TerrainEdit;
 
     use super::*;
 
     const ME: ModIndex = ModIndex::new(0);
 
     fn dig() -> TerrainEdit {
-        TerrainEdit {
-            header: Header::of::<TerrainEdit>(),
+        enshwick_abi::headed!(TerrainEdit {
             kind: TerrainEdit::DIG,
             shape: TerrainEdit::ROUND,
             flags: 0,
@@ -474,7 +472,7 @@ mod tests {
             radius: 4.0,
             height: 0.0,
             protect: [0; 16],
-        }
+        })
     }
 
     #[test]

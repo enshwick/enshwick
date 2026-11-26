@@ -33,14 +33,7 @@ impl Load<'_> {
     /// use enshwick::content::recipes::NewRecipe;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.add_recipe(NewRecipe {
-    ///         id: id!("locker.recipe"),
-    ///         like: Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
-    ///         output: id!("locker").guid(),
-    ///         output_count: 1,
-    ///         cost: 2,
-    ///         workshop: None,
-    ///     })
+    ///     load.add_recipe(NewRecipe::new(id!("locker.recipe"), Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"), id!("locker").guid(), 1, 2))
     /// }
     /// ```
     #[cfg(feature = "unstable")]
@@ -70,14 +63,7 @@ impl Load<'_> {
     /// static COST: AtomicU32 = AtomicU32::new(2);
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.add_recipe_with(|| NewRecipe {
-    ///         id: id!("locker.recipe"),
-    ///         like: Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
-    ///         output: id!("locker").guid(),
-    ///         output_count: 1,
-    ///         cost: COST.load(Ordering::Relaxed),
-    ///         workshop: None,
-    ///     })
+    ///     load.add_recipe_with(|| NewRecipe::new(id!("locker.recipe"), Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"), id!("locker").guid(), 1, COST.load(Ordering::Relaxed)))
     /// }
     /// ```
     #[cfg(feature = "unstable")]
@@ -109,7 +95,7 @@ impl Load<'_> {
     ///         recipe
     ///             .debug_name()
     ///             .starts_with("Block_")
-    ///             .then_some(Derived { output: 2, cost: 1, workshop: None })
+    ///             .then_some(Derived::new(2, 1))
     ///     })
     /// }
     /// ```

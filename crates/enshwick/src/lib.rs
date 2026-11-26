@@ -56,11 +56,11 @@
 //! | Interface | [`ui`], [`sound`] |
 #![cfg_attr(
     feature = "unstable",
-    doc = "| Unstable, with the `unstable` feature | [`map`],[`input`], [`item_data`], [`entity_data`], [`actions`], [`controls`], [`items`], [`rewards`], [`console`], [`rates`], [`script`](mod@script) |"
+    doc = "| Unstable, with the `unstable` feature | [`map`],[`input`], [`item_data`], [`entity_data`], [`actions`], [`controls`], [`items`], [`rewards`], [`rates`], [`script`](mod@script) |"
 )]
 #![cfg_attr(
     not(feature = "unstable"),
-    doc = "| Unstable, with the `unstable` feature | `map`,`input`, `item_data`, `entity_data`, `actions`, `controls`, `items`, `rewards`, `console`, `rates`, `script` |"
+    doc = "| Unstable, with the `unstable` feature | `map`,`input`, `item_data`, `entity_data`, `actions`, `controls`, `items`, `rewards`, `rates`, `script` |"
 )]
 //! | Tests | `test`, with the `test` feature |
 //!
@@ -119,6 +119,9 @@
 //! ```
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![forbid(unsafe_code)]
+// The API grows after 1.0 without a major: a public struct or enum is
+// `#[non_exhaustive]`, or closed on purpose with an `#[expect]`.
+#![warn(clippy::exhaustive_enums, clippy::exhaustive_structs)]
 
 /// Fails when rustdoc builds this crate's examples one by one, which it does
 /// without a word when one of them does not merge.
@@ -158,7 +161,6 @@ pub use enshwick_actions::chat;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_actions::commands;
-#[cfg(feature = "unstable")]
 #[doc(inline)]
 pub use enshwick_actions::console;
 #[cfg(feature = "unstable")]
@@ -364,8 +366,6 @@ pub use enshwick_macros::Shape;
 /// per field and one for the answer, which the loader checks for every
 /// caller.
 ///
-/// Unstable: needs the `unstable` feature and may change in any release.
-///
 /// `#[call(name = "<call>", output = <type>, version = <major>, export)]`, with
 /// `of = <alias>` for a dependency's call ([`deps!`]); `version` is 1 when
 /// left out. A changed field or answer is a new major. Every type in it has
@@ -385,7 +385,6 @@ pub use enshwick_macros::Shape;
 ///     load.serve_call(|input: &PriceOf| input.item * 10)
 /// }
 /// ```
-#[cfg(feature = "unstable")]
 pub use enshwick_macros::call;
 /// Declares a mod's settings struct: serde's `Deserialize` and `Serialize`,
 /// unknown keys refused and [`trait@config::Config`], so the mod needs no

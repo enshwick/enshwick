@@ -106,11 +106,12 @@ pub(crate) fn to_lua(
         (Value::Nil, Ty::Data) => LuaValue::NULL,
         (Value::Function(callback), Ty::Function(signature)) => {
             let scope = scope.clone();
-            LuaValue::Function(lua.create_function(move |lua, args: LuaArgs| {
+            let function = lua.create_function(move |lua, args: LuaArgs| {
                 call(lua, &scope, args, signature, "function", |slots| {
                     callback.call(slots)
                 })
-            })?)
+            })?;
+            LuaValue::Function(raising(lua, function)?)
         }
         _ => LuaValue::Nil,
     })
@@ -310,6 +311,9 @@ struct Interned {
     /// Each live script object's table of method functions, its keys weak,
     /// which `__index` reads in Luau.
     objects: Option<mlua::Table>,
+    /// The Luau function that makes an API function raise the error table
+    /// it answers ([`raising`]).
+    raise: Option<mlua::Function>,
 }
 
 impl Interned {
@@ -365,6 +369,24 @@ impl Interned {
             interned.objects = Some(objects.clone());
         }
         Ok(objects)
+    }
+
+    /// The wrapper of [`raising`], made once per VM: its errors share one
+    /// metatable, whose `__tostring` reads `<call>: <message>`.
+    fn raise(lua: &Lua) -> mlua::Result<mlua::Function> {
+        if let Some(interned) = lua.app_data_ref::<Self>()
+            && let Some(raise) = &interned.raise
+        {
+            return Ok(raise.clone());
+        }
+        let raise: mlua::Function = lua.load(RAISE).set_name("=enshwick").eval()?;
+        if lua.app_data_ref::<Self>().is_none() {
+            let _none = lua.set_app_data(Self::default());
+        }
+        if let Some(mut interned) = lua.app_data_mut::<Self>() {
+            interned.raise = Some(raise.clone());
+        }
+        Ok(raise)
     }
 
     /// The variant of `choice` the script string `text` names, read without
@@ -464,20 +486,19 @@ fn data(value: LuaValue, depth: usize) -> Result<Value, Error> {
     })
 }
 
-/// The API values of `args` as `signature` has them; a lent text
-/// parameter's text lands in a buffer the VM kept.
+/// The API values of `args` as `signature` has them, or why one does not
+/// fit; a lent text parameter's text lands in a buffer the VM kept.
 fn arguments(
     lua: &Lua,
     scope: &Scope,
     args: impl Spread,
     signature: &'static Signature,
-    what: &str,
-) -> mlua::Result<Args> {
+) -> Result<Args, Error> {
     let params = signature.params();
     let (given, mut values) = args.spread();
     if given > params.len() {
-        return Err(mlua::Error::runtime(format!(
-            "{what} takes {} arguments, not {given}",
+        return Err(Error::new(format!(
+            "takes {} arguments, not {given}",
             params.len(),
         )));
     }
@@ -489,15 +510,53 @@ fn arguments(
             value => from_lua(lua, scope, value, param.ty()),
         };
         *slot = read.map_err(|e| {
-            let name = if param.name().is_empty() {
+            e.within(if param.name().is_empty() {
                 "argument"
             } else {
                 param.name()
-            };
-            failed(what, format_args!("{name}: {e}"))
+            })
         })?;
     }
     Ok(out)
+}
+
+/// The Luau source of [`Interned::raise`].
+const RAISE: &str = r"
+local meta = {}
+function meta.__tostring(error)
+    return `{error.call}: {error.message}`
+end
+return function(call)
+    return function(...)
+        local value, failure = call(...)
+        if failure ~= nil then
+            error(setmetatable(failure, meta), 0)
+        end
+        return value
+    end
+end
+";
+
+/// What a call into the API gives the wrapper of [`raising`]: its value, or
+/// nil and the error table the wrapper raises.
+pub(crate) type Answer = (LuaValue, Option<mlua::Table>);
+
+/// `call`, a function made with `Lua::create_function` whose body answers
+/// [`Answer`], as a function that raises its error: a table of the error's
+/// `kind` (see [`Error::kind`]), `message` and the `call` that failed, which
+/// `pcall` catches and `tostring` reads as `<call>: <message>`.
+pub(crate) fn raising(lua: &Lua, call: mlua::Function) -> mlua::Result<mlua::Function> {
+    Interned::raise(lua)?.call(call)
+}
+
+/// The [`Answer`] of the API function or method `what` that failed with
+/// `error`.
+pub(crate) fn refused(lua: &Lua, what: &str, error: &Error) -> mlua::Result<Answer> {
+    let table = lua.create_table_with_capacity(0, 3)?;
+    table.raw_set("kind", error.kind())?;
+    table.raw_set("message", error.to_string())?;
+    table.raw_set("call", what)?;
+    Ok((LuaValue::Nil, Some(table)))
 }
 
 /// Runs one call from Luau into the API, the one path every function and
@@ -510,11 +569,17 @@ pub(crate) fn call(
     signature: &'static Signature,
     what: &str,
     run: impl FnOnce(&mut [Value]) -> Result<Value, Error>,
-) -> mlua::Result<LuaValue> {
-    let mut values = arguments(lua, scope, args, signature, what)?;
-    let answer = run(values.slots()).map_err(|e| failed(what, e));
+) -> mlua::Result<Answer> {
+    let mut values = match arguments(lua, scope, args, signature) {
+        Ok(values) => values,
+        Err(error) => return refused(lua, what, &error),
+    };
+    let answer = run(values.slots());
     values.give_back_text(lua, signature);
-    to_lua(lua, scope, answer?, signature.ret())
+    match answer {
+        Ok(value) => Ok((to_lua(lua, scope, value, signature.ret())?, None)),
+        Err(error) => refused(lua, what, &error),
+    }
 }
 
 /// The Luau error of the API function or method `what` that failed with

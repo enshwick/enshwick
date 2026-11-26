@@ -33,7 +33,7 @@ use core::time::Duration;
 use crate::Entity;
 use crate::Host;
 use crate::WorldError;
-use crate::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header, Status};
+use crate::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Status};
 
 #[doc(no_inline)]
 pub use crate::abi::BuffTypeId;
@@ -85,8 +85,8 @@ impl BuffSlotType {
 /// ```
 /// use enshwick::buffs::BuffSlotType;
 ///
-/// fn food(buffs: &enshwick::buffs::Buffs) -> usize {
-///     buffs.types().iter().filter(|ty| ty.slot == BuffSlotType::Food).count()
+/// fn food(buffs: &enshwick::buffs::Buffs) -> Result<usize, enshwick::WorldError> {
+///     Ok(buffs.types()?.iter().filter(|ty| ty.slot == BuffSlotType::Food).count())
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -216,28 +216,30 @@ fn nanos(duration: i64) -> Duration {
 
 #[crate::script(buffs)]
 impl Buffs {
-    /// Every buff and debuff type of the running game; empty off the game
-    /// thread or while no world runs.
+    /// Every buff and debuff type of the running game.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::WrongThread`] off the game thread and
+    /// [`WorldError::Unavailable`] while no world runs or on a build without
+    /// buffs.
     ///
     /// # Examples
     ///
     /// See [`BuffType`].
-    #[must_use]
     #[script]
-    pub fn types(&self) -> Vec<BuffType> {
-        let blank = BuffTypeInfo {
-            header: Header::of::<BuffTypeInfo>(),
+    pub fn types(&self) -> Result<Vec<BuffType>, WorldError> {
+        let blank = enshwick_abi::headed!(BuffTypeInfo {
             id: BuffTypeId::default(),
             slot: 0,
             flags: 0,
             name: 0,
             duration_ns: 0,
-        };
+        });
         let fill = |out: *mut BuffTypeInfo, entry_size: u32, capacity: u32, count: *mut u32| {
             (self.host.api().buff_types)(self.host.handle(), out, entry_size, capacity, count)
         };
-        list(blank, fill)
-            .unwrap_or_default()
+        Ok(list(blank, fill)?
             .iter()
             .map(|info| BuffType {
                 buff_type_id: info.id,
@@ -247,7 +249,7 @@ impl Buffs {
                 hide_in_ui: info.flags & BuffTypeInfo::HIDDEN != 0,
                 name: info.name,
             })
-            .collect()
+            .collect())
     }
 
     /// The buffs `entity` has.
@@ -263,15 +265,14 @@ impl Buffs {
     /// See [`Buff`].
     #[script]
     pub fn of(&self, entity: Entity) -> Result<Vec<Buff>, WorldError> {
-        let blank = ActiveBuff {
-            header: Header::of::<ActiveBuff>(),
+        let blank = enshwick_abi::headed!(ActiveBuff {
             id: BuffTypeId::default(),
             entity: Entity::NONE,
             slot: 0,
             level: 0,
             duration_ns: 0,
             remaining_ns: 0,
-        };
+        });
         let fill = |out: *mut ActiveBuff, entry_size: u32, capacity: u32, count: *mut u32| {
             (self.host.api().buffs)(self.host.handle(), entity, out, entry_size, capacity, count)
         };
@@ -288,23 +289,30 @@ impl Buffs {
             .collect())
     }
 
-    /// Whether `entity` has a buff of type `id`; `false` when it holds no
-    /// buffs or off the game thread.
+    /// Whether `entity` has a buff of type `id`; `false` for an entity that
+    /// holds no buffs.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::WrongThread`] off the game thread and
+    /// [`WorldError::Unavailable`] on a build without buffs.
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick::buffs::BuffTypeId;
     ///
-    /// fn starving(buffs: &enshwick::buffs::Buffs, player: enshwick::Entity) -> bool {
+    /// fn starving(buffs: &enshwick::buffs::Buffs, player: enshwick::Entity) -> Result<bool, enshwick::WorldError> {
     ///     buffs.has(player, BuffTypeId(0x6ad7_cfc4))
     /// }
     /// ```
-    #[must_use]
     #[script]
-    pub fn has(&self, entity: Entity, id: BuffTypeId) -> bool {
-        self.of(entity)
-            .is_ok_and(|on| on.iter().any(|buff| buff.type_id == id))
+    pub fn has(&self, entity: Entity, id: BuffTypeId) -> Result<bool, WorldError> {
+        match self.of(entity) {
+            Ok(on) => Ok(on.iter().any(|buff| buff.type_id == id)),
+            Err(WorldError::Lacks) => Ok(false),
+            Err(error) => Err(error),
+        }
     }
 
     /// Gives `entity` a buff of type `id`, at once, as the game restores a
@@ -330,14 +338,13 @@ impl Buffs {
                 .unwrap_or(i64::MAX)
                 .max(1)
         });
-        let request = BuffRequest {
-            header: Header::of::<BuffRequest>(),
+        let request = enshwick_abi::headed!(BuffRequest {
             entity,
             id,
             level: how.level.map_or(0, u32::from),
             reserved: 0,
             duration_ns: duration,
-        };
+        });
         WorldError::check(
             (self.host.api().apply_buff)(self.host.handle(), &raw const request),
             WorldError::Lacks,

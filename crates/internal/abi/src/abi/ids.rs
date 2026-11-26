@@ -10,15 +10,18 @@
 /// restart goes in entity data or item data (the `unstable` modules
 /// `entity_data` and `item_data`), which find their entities again after a
 /// load. The engine's id 0 stands for no entity; the safe API hands it over
-/// as `None` in an `Option<Entity>`, never as an `Entity`.
+/// as `None` in an `Option<Entity>`, never as an `Entity`, so the type has no
+/// `Default`.
 ///
 /// # Examples
 ///
 /// ```
 /// use enshwick::Entity;
 ///
-/// let entity = Entity(1210);
-/// assert_eq!(entity.0, 1210);
+/// let entity = Entity::from_raw(1210).ok_or("no entity")?;
+/// assert_eq!(entity.get(), 1210);
+/// assert_eq!(Entity::from_raw(0), None);
+/// # Ok::<(), &str>(())
 /// ```
 ///
 /// A kept file cannot hold one:
@@ -34,7 +37,6 @@
     Clone,
     Copy,
     Debug,
-    Default,
     PartialEq,
     Eq,
     Hash,
@@ -46,15 +48,13 @@
     crate::Script,
 )]
 #[shape(api = "entity")]
-pub struct Entity(pub u32);
+pub struct Entity(pub(crate) u32);
 
-// Public only for the safe layer above this crate, which reads and writes the
-// engine's 0; hidden, since a mod is handed no entity as `None`.
 impl Entity {
     /// The engine's id for no entity.
     ///
     /// cbindgen:ignore
-    // No part of the C header.
+    // No part of the C header. Hidden: a mod is handed no entity as `None`.
     #[doc(hidden)]
     pub const NONE: Self = Self(0);
 
@@ -65,11 +65,28 @@ impl Entity {
         self.0 == 0
     }
 
-    /// `Some(entity)` for the engine's id `raw`, `None` for 0.
-    #[doc(hidden)]
+    /// Takes an entity id from outside the API, such as a C or Luau caller, as
+    /// `None` for the engine's 0.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::Entity;
+    ///
+    /// assert_eq!(Entity::from_raw(7).map(Entity::get), Some(7));
+    /// assert!(Entity::from_raw(0).is_none());
+    /// ```
     #[must_use]
     pub const fn from_raw(raw: u32) -> Option<Self> {
         if raw == 0 { None } else { Some(Self(raw)) }
+    }
+
+    /// The engine's id as it is, 0 included, for the layers that carry the
+    /// engine's value through.
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn from_engine(raw: u32) -> Self {
+        Self(raw)
     }
 }
 
@@ -105,6 +122,10 @@ impl Entity {
 )]
 #[serde(transparent)]
 #[shape(api = "item_id")]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct ItemId(pub u32);
 
 /// A player's account by the number the game keeps for it, the same in every
@@ -139,6 +160,10 @@ pub struct ItemId(pub u32);
 )]
 #[serde(transparent)]
 #[shape(api = "player_key")]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct PlayerKey(pub u64);
 
 /// A crafting recipe of the game by its recipe id, to grant, refuse or watch
@@ -173,6 +198,10 @@ pub struct PlayerKey(pub u64);
 )]
 #[serde(transparent)]
 #[shape(api = "recipe_id")]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct RecipeId(pub u32);
 
 /// A node of the game's skill tree by its id, as
@@ -209,6 +238,10 @@ pub struct RecipeId(pub u32);
 )]
 #[serde(transparent)]
 #[shape(api = "skill_node")]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct SkillNode(pub u32);
 
 /// A knowledge value of the game by its id: a recipe's, a quest's, or any
@@ -246,6 +279,10 @@ pub struct SkillNode(pub u32);
 )]
 #[serde(transparent)]
 #[shape(api = "knowledge_id")]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct KnowledgeId(pub u32);
 
 /// A buff type of the game by its id, the
@@ -280,6 +317,10 @@ pub struct KnowledgeId(pub u32);
 )]
 #[serde(transparent)]
 #[shape(api = "buff_type_id")]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct BuffTypeId(pub u32);
 
 /// An NPC of the game, such as a survivor, by its id, the
@@ -314,6 +355,10 @@ pub struct BuffTypeId(pub u32);
 )]
 #[serde(transparent)]
 #[shape(api = "npc_id")]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct NpcId(pub u32);
 
 impl From<RecipeId> for KnowledgeId {
@@ -322,8 +367,8 @@ impl From<RecipeId> for KnowledgeId {
     }
 }
 
-/// `new`, `get`, the `From` conversions both ways and the formatting traits
-/// of an id newtype over an integer, which print the bare number.
+/// `new`, the `From` conversion from the integer and everything
+/// [`id_reads!`] gives, for an id newtype any number is a valid value of.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! id_conversions {
@@ -338,7 +383,25 @@ macro_rules! id_conversions {
             pub const fn new(id: $int) -> Self {
                 Self(id)
             }
+        }
 
+        impl From<$int> for $id {
+            fn from(id: $int) -> Self {
+                Self(id)
+            }
+        }
+
+        $crate::id_reads!($id($int));
+    )*};
+}
+
+/// `get`, the `From` conversion into the integer and the formatting traits
+/// of an id newtype, which print the bare number.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! id_reads {
+    ($($id:ident($int:ty)),* $(,)?) => {$(
+        impl $id {
             /// Its number.
             ///
             /// # Examples
@@ -347,12 +410,6 @@ macro_rules! id_conversions {
             #[must_use]
             pub const fn get(self) -> $int {
                 self.0
-            }
-        }
-
-        impl From<$int> for $id {
-            fn from(id: $int) -> Self {
-                Self(id)
             }
         }
 
@@ -433,8 +490,10 @@ macro_rules! guid_ids {
     )*};
 }
 
+// An entity is never 0, so it is built only through `Entity::from_raw`.
+id_reads!(Entity(u32));
+
 id_conversions!(
-    Entity(u32),
     ItemId(u32),
     PlayerKey(u64),
     RecipeId(u32),
@@ -533,7 +592,7 @@ mod tests {
 
     #[test]
     fn every_id_displays_as_its_number() {
-        assert_eq!(Entity(1210).to_string(), "1210");
+        assert_eq!(Entity::from_engine(1210).to_string(), "1210");
         assert_eq!(ItemId::new(1_042).to_string(), "1042");
         assert_eq!(PlayerKey::new(u64::MAX).to_string(), u64::MAX.to_string());
         assert_eq!(RecipeId::new(77).to_string(), "77");
@@ -576,9 +635,9 @@ mod tests {
     #[test]
     fn an_entity_of_zero_is_no_entity() {
         assert_eq!(Entity::from_raw(0), None);
-        assert_eq!(Entity::from_raw(9), Some(Entity(9)));
+        assert_eq!(Entity::from_raw(9), Some(Entity::from_engine(9)));
         assert!(Entity::NONE.is_none());
-        assert!(!Entity(9).is_none());
+        assert!(!Entity::from_engine(9).is_none());
     }
 
     /// The postcard bytes of `value`.

@@ -392,14 +392,18 @@ impl Spawned {
 pub(crate) fn note(loader: &Loader, entity: u32, template: [u8; 16]) {
     let now = crate::engine::ticks::steps();
     STATE.relock().note(entity, template, now, |kept, was| {
-        crate::engine::world::template(loader, Entity(kept)) == Ok(was)
+        crate::engine::world::template(loader, Entity::from_engine(kept)) == Ok(was)
     });
 }
 
 /// The template a mod spawned or placed `entity` from in the running world,
 /// or `None` for an entity no mod spawned.
 pub(crate) fn spawned(entity: Entity) -> Option<[u8; 16]> {
-    STATE.relock().kept.get(&entity.0).map(|kept| kept.template)
+    STATE
+        .relock()
+        .kept
+        .get(&entity.get())
+        .map(|kept| kept.template)
 }
 
 /// Whether `entity` needs a `DoNotSave` command to end up `saved`, the world
@@ -407,13 +411,13 @@ pub(crate) fn spawned(entity: Entity) -> Option<[u8; 16]> {
 pub(crate) fn needs_saved(entity: Entity, saved: bool, live: bool) -> bool {
     STATE
         .relock()
-        .needs(entity.0, saved, live, crate::engine::ticks::steps())
+        .needs(entity.get(), saved, live, crate::engine::ticks::steps())
 }
 
 /// Notes that a command to make `entity` `saved` went to the world now.
 pub(crate) fn asked_saved(entity: Entity, saved: bool) {
     let now = crate::engine::ticks::steps();
-    if let Some(kept) = STATE.relock().kept.get_mut(&entity.0) {
+    if let Some(kept) = STATE.relock().kept.get_mut(&entity.get()) {
         kept.asked = Some((saved, now));
     }
 }
@@ -421,7 +425,7 @@ pub(crate) fn asked_saved(entity: Entity, saved: bool) {
 /// Forgets `entity`, which a mod asked to destroy, so a vanilla entity
 /// given its id later does not pass for it.
 pub(crate) fn destroyed(entity: Entity) {
-    STATE.relock().kept.remove(&entity.0);
+    STATE.relock().kept.remove(&entity.get());
 }
 
 /// Forgets the entities mods spawned, when a hosted game ends.
@@ -446,16 +450,16 @@ mod tests {
     fn a_spawn_is_kept_with_its_template_until_destroyed_or_the_hosted_game_ends() {
         STATE.relock().note(7, [1; 16], 0, |_, _| false);
         STATE.relock().note(9, [1; 16], 0, |_, _| false);
-        assert_eq!(spawned(Entity(7)), Some([1; 16]));
-        assert_eq!(spawned(Entity(8)), None, "no mod spawned it");
-        destroyed(Entity(9));
+        assert_eq!(spawned(Entity::from_engine(7)), Some([1; 16]));
+        assert_eq!(spawned(Entity::from_engine(8)), None, "no mod spawned it");
+        destroyed(Entity::from_engine(9));
         assert_eq!(
-            spawned(Entity(9)),
+            spawned(Entity::from_engine(9)),
             None,
             "its id may go to a vanilla entity"
         );
         forget();
-        assert_eq!(spawned(Entity(7)), None);
+        assert_eq!(spawned(Entity::from_engine(7)), None);
     }
 
     #[test]

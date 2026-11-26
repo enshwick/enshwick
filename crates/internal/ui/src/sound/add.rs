@@ -27,6 +27,7 @@ const RANDOM: &str = "Random";
 ///
 /// See [`NewSound`].
 #[derive(Clone, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct NewTake {
     /// The file, relative to the mod's folder: WAV (8, 16, 24 or 32-bit,
     /// or float), FLAC, Ogg Vorbis or MP3, at 8 to 384 kHz, at most
@@ -66,21 +67,22 @@ impl NewTake {
 /// use enshwick::content::id;
 /// use enshwick::sound::{Channels, NewSound, NewTake, SoundChange, SoundContainerScene};
 ///
-/// let steps = NewSound {
-///     takes: vec![NewTake::new("steps/1.ogg"), NewTake::new("steps/2.ogg"), NewTake::new("steps/3.flac")],
-///     channels: Channels::Mono,
-///     gain_db: -3.0,
-///     container: SoundChange { volume: Some(0.5), ..SoundChange::default() },
-///     ..NewSound::new(id!("steps"), "steps/1.ogg")
-/// };
+/// let mut steps = NewSound::new(id!("steps"), "steps/1.ogg");
+/// steps.takes = vec![NewTake::new("steps/1.ogg"), NewTake::new("steps/2.ogg"), NewTake::new("steps/3.flac")];
+/// steps.channels = Channels::Mono;
+/// steps.gain_db = -3.0;
+/// let mut sound_change = SoundChange::default();
+/// sound_change.volume = Some(0.5);
+/// steps.container = sound_change;
 /// assert_eq!(steps.takes.len(), 3);
-/// let ui = NewSound {
-///     container: SoundChange { scene: Some(SoundContainerScene::Ui), ..SoundChange::default() },
-///     ..NewSound::new(id!("horn"), "sounds/horn.wav")
-/// };
+/// let mut ui = NewSound::new(id!("horn"), "sounds/horn.wav");
+/// let mut sound_change_2 = SoundChange::default();
+/// sound_change_2.scene = Some(SoundContainerScene::Ui);
+/// ui.container = sound_change_2;
 /// assert_eq!(ui.takes[0].file, "sounds/horn.wav");
 /// ```
 #[derive(Clone, Debug, crate::Script)]
+#[non_exhaustive]
 pub struct NewSound {
     /// The sound's content id; its container's GUID is the id's.
     pub id: Id,

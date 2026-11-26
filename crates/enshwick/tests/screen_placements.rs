@@ -48,7 +48,7 @@ mod tests {
             *REFUSED.lock().unwrap() = refused.to_vec();
             // Its header ends where the placement's fields start, before
             // the end of what every writer of this major sends.
-            let short = UiExtension {
+            let short = enshwick::abi::headed!(UiExtension {
                 header: Header {
                     size: 48,
                     abi_major: ABI_MAJOR,
@@ -64,7 +64,7 @@ mod tests {
                 shift: f32::NAN,
                 inset: -1.0,
                 reserved_place: 0,
-            };
+            });
             let host = load.host();
             let status = (host.api().ui_extension)(
                 host.handle(),

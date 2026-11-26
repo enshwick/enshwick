@@ -1,14 +1,11 @@
 //! Flame Altars as a script sees them: the namespace `altars`, its handles
 //! as objects, and the boxes a building zone check hands a filter.
 
-#[cfg(feature = "unstable")]
 use super::set_base_limit;
 use super::{
     Altar, Altars, Base, BaseLimit, BuildingZoneCheck, Grouping, ZoneSizes, base_limit, bases_of,
     cell_of_fixed, cell_of_metres, grouping,
 };
-#[cfg(feature = "unstable")]
-use crate::Off;
 use crate::script::{Class, Field, Function, IntoScript, Object, Record, Ty, Typed, Value};
 
 impl Object for Altars {
@@ -96,9 +93,8 @@ impl Altars {
     /// # Errors
     ///
     /// As [`set_base_limit`].
-    #[cfg(feature = "unstable")]
     #[script(name = "set_base_limit")]
-    pub(crate) fn set_base_cap_script(self, bases: u32) -> Result<(), Off> {
+    pub(crate) fn set_base_cap_script(self, bases: u32) -> Result<(), crate::WorldError> {
         set_base_limit(bases)
     }
 

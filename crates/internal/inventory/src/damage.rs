@@ -78,7 +78,7 @@ pub enum DamageTypeNew {
 
 impl DamageTypeNew {
     /// Every type, in the game's order.
-    pub const ALL: [Self; crate::abi::DAMAGE_TYPES] = [
+    pub const ALL: &'static [Self] = &[
         Self::PhysicalCut,
         Self::PhysicalPierce,
         Self::PhysicalBlunt,
@@ -274,6 +274,10 @@ pub fn causes_off() -> Result<Vec<DamageCause>, Off> {
 #[doc(hidden)]
 #[cfg(feature = "unstable")]
 #[derive(Clone, Copy, Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a unit marker, which never gains a field"
+)]
 pub struct DamageFns;
 
 #[cfg(feature = "unstable")]
@@ -419,7 +423,7 @@ impl Damage<'_> {
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     // Entity 2 takes no damage at all.
     ///     load.on_damage(|damage| {
-    ///         if damage.target().0 == 2 {
+    ///         if damage.target().get() == 2 {
     ///             damage.cancel();
     ///         }
     ///     })
@@ -463,7 +467,7 @@ impl Damage<'_> {
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     // Entity 7 deals double damage, by hand or by bow.
     ///     load.on_damage(|damage| {
-    ///         if damage.attacker().is_some_and(|a| a.0 == 7) {
+    ///         if damage.attacker().is_some_and(|a| a.get() == 7) {
     ///             damage.scale(2.0);
     ///         }
     ///     })

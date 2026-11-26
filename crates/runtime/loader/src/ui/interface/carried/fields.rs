@@ -386,14 +386,15 @@ mod tests {
     use super::*;
 
     fn ann_and_bob() -> ArgView {
-        ArgView {
-            kind: ArgView::PLAYER,
-            label: "Player".into(),
-            players: vec![
+        {
+            let mut value = ArgView::default();
+            value.kind = ArgView::PLAYER;
+            value.label = "Player".into();
+            value.players = vec![
                 (PlayerKey::new(7), "Ann".into()),
                 (PlayerKey::new(8), "Bob".into()),
-            ],
-            ..ArgView::default()
+            ];
+            value
         }
     }
 
@@ -440,9 +441,10 @@ mod tests {
 
     #[test]
     fn a_player_field_without_players_shows_its_label_and_the_name_field() {
-        let arg = ArgView {
-            players: Vec::new(),
-            ..ann_and_bob()
+        let arg = {
+            let mut value = ann_and_bob();
+            value.players = Vec::new();
+            value
         };
         let paint = Recorder::default();
         assert!(!field(&paint, &arg, &mut Field::new(&arg)));
@@ -459,11 +461,12 @@ mod tests {
 
     #[test]
     fn a_text_field_holds_a_value_only_once_text_within_its_bytes_is_typed() {
-        let arg = ArgView {
-            kind: ArgView::TEXT,
-            label: "Reason".into(),
-            max: 4.0,
-            ..ArgView::default()
+        let arg = {
+            let mut value = ArgView::default();
+            value.kind = ArgView::TEXT;
+            value.label = "Reason".into();
+            value.max = 4.0;
+            value
         };
         let hint = texts::text("windows.text");
         let mut state = Field::new(&arg);
@@ -477,11 +480,12 @@ mod tests {
 
     #[test]
     fn choice_number_and_toggle_fields_take_what_the_player_set() {
-        let choice = ArgView {
-            kind: ArgView::CHOICE,
-            label: "Kind".into(),
-            choices: vec!["Basic".into(), "Pro".into()],
-            ..ArgView::default()
+        let choice = {
+            let mut value = ArgView::default();
+            value.kind = ArgView::CHOICE;
+            value.label = "Kind".into();
+            value.choices = vec!["Basic".into(), "Pro".into()];
+            value
         };
         let mut state = Field::new(&choice);
         let picks = Recorder::default().answer("Kind", Answer::Pick(1));
@@ -490,23 +494,25 @@ mod tests {
         let past = Recorder::default().answer("Kind", Answer::Pick(5));
         assert!(!field(&past, &choice, &mut state), "a row past the choices");
 
-        let hours = ArgView {
-            kind: ArgView::NUMBER,
-            label: "Hours".into(),
-            min: 1.0,
-            max: 48.0,
-            step: 1.0,
-            ..ArgView::default()
+        let hours = {
+            let mut value = ArgView::default();
+            value.kind = ArgView::NUMBER;
+            value.label = "Hours".into();
+            value.min = 1.0;
+            value.max = 48.0;
+            value.step = 1.0;
+            value
         };
         let mut state = Field::new(&hours);
         let slides = Recorder::default().answer("Hours", Answer::Slide(3.4));
         assert!(field(&slides, &hours, &mut state));
         assert_eq!(value(&hours, &state), Some(Value::Number(3.0)));
 
-        let bound = ArgView {
-            kind: ArgView::TOGGLE,
-            label: "Bound".into(),
-            ..ArgView::default()
+        let bound = {
+            let mut value = ArgView::default();
+            value.kind = ArgView::TOGGLE;
+            value.label = "Bound".into();
+            value
         };
         let mut state = Field::new(&bound);
         let flips = Recorder::default().answer("Bound", Answer::Flip(true));
@@ -516,10 +522,11 @@ mod tests {
 
     #[test]
     fn fields_give_values_within_their_arguments() {
-        let players = ArgView {
-            kind: ArgView::PLAYER,
-            players: vec![(PlayerKey::new(7), "Ann".into())],
-            ..ArgView::default()
+        let players = {
+            let mut value = ArgView::default();
+            value.kind = ArgView::PLAYER;
+            value.players = vec![(PlayerKey::new(7), "Ann".into())];
+            value
         };
         assert_eq!(
             player_given(&players, 0, ""),
@@ -534,62 +541,76 @@ mod tests {
         );
         assert_eq!(player_given(&players, 3, ""), None);
 
-        let text = ArgView {
-            kind: ArgView::TEXT,
-            min: 1.0,
-            max: 4.0,
-            ..ArgView::default()
+        let text = {
+            let mut value = ArgView::default();
+            value.kind = ArgView::TEXT;
+            value.min = 1.0;
+            value.max = 4.0;
+            value
         };
         assert_eq!(text_given(&text, " hi "), Some(Given::Typed("hi")));
         assert_eq!(text_given(&text, "toolong"), None);
         assert_eq!(text_given(&text, "  "), None);
 
-        let hours = ArgView {
-            kind: ArgView::NUMBER,
-            min: 1.0,
-            max: 48.0,
-            step: 1.0,
-            ..ArgView::default()
+        let hours = {
+            let mut value = ArgView::default();
+            value.kind = ArgView::NUMBER;
+            value.min = 1.0;
+            value.max = 48.0;
+            value.step = 1.0;
+            value
         };
         assert_eq!(steps(&hours), 48);
         assert!((snapped(&hours, 3.4) - 3.0).abs() < f64::EPSILON);
         assert!((snapped(&hours, 99.0) - 48.0).abs() < f64::EPSILON);
-        let any = ArgView { step: 0.0, ..hours };
+        let any = {
+            let mut value = hours;
+            value.step = 0.0;
+            value
+        };
         assert_eq!(steps(&any), 0);
-        let fine = ArgView {
-            step: 0.001,
-            ..any.clone()
+        let fine = {
+            let mut value = any.clone();
+            value.step = 0.001;
+            value
         };
         assert_eq!(steps(&fine), 0, "past MAX_STEPS the slider takes any value");
     }
 
     #[test]
     fn a_number_snaps_to_its_step_from_the_least_value_and_any_value_stays() {
-        let even = ArgView {
-            kind: ArgView::NUMBER,
-            min: 1.0,
-            max: 9.0,
-            step: 2.0,
-            ..ArgView::default()
+        let even = {
+            let mut value = ArgView::default();
+            value.kind = ArgView::NUMBER;
+            value.min = 1.0;
+            value.max = 9.0;
+            value.step = 2.0;
+            value
         };
         assert!((snapped(&even, 4.2) - 5.0).abs() < f64::EPSILON);
-        let any = ArgView { step: 0.0, ..even };
+        let any = {
+            let mut value = even;
+            value.step = 0.0;
+            value
+        };
         assert!((snapped(&any, 4.2) - 4.2).abs() < f64::EPSILON);
     }
 
     #[test]
     fn a_reversed_or_unreadable_range_from_the_server_does_not_panic() {
-        let reversed = ArgView {
-            kind: ArgView::NUMBER,
-            min: 9.0,
-            max: 1.0,
-            ..ArgView::default()
+        let reversed = {
+            let mut value = ArgView::default();
+            value.kind = ArgView::NUMBER;
+            value.min = 9.0;
+            value.max = 1.0;
+            value
         };
         assert!((snapped(&reversed, 4.0) - 1.0).abs() < f64::EPSILON);
-        let unreadable = ArgView {
-            min: f64::NAN,
-            max: f64::NAN,
-            ..reversed
+        let unreadable = {
+            let mut value = reversed;
+            value.min = f64::NAN;
+            value.max = f64::NAN;
+            value
         };
         assert!((snapped(&unreadable, 4.0) - 4.0).abs() < f64::EPSILON);
     }
@@ -610,10 +631,11 @@ mod tests {
             pick, NO_PICK,
             "Bob left: Carl, now in his row, is not picked"
         );
-        let arg = ArgView {
-            kind: ArgView::PLAYER,
-            players: carl.to_vec(),
-            ..ArgView::default()
+        let arg = {
+            let mut value = ArgView::default();
+            value.kind = ArgView::PLAYER;
+            value.players = carl.to_vec();
+            value
         };
         assert_eq!(player_given(&arg, pick, ""), None, "nothing to run on");
         assert_eq!(
@@ -621,9 +643,10 @@ mod tests {
             NO_PICK,
             "a player is picked, never assumed"
         );
-        let choice = ArgView {
-            kind: ArgView::CHOICE,
-            ..ArgView::default()
+        let choice = {
+            let mut value = ArgView::default();
+            value.kind = ArgView::CHOICE;
+            value
         };
         assert_eq!(Field::new(&choice).pick, 0);
     }
@@ -643,10 +666,11 @@ mod tests {
             mods: 0,
             items: crate::content::names::listed(named),
         });
-        let arg = ArgView {
-            kind: ArgView::ITEM,
-            label: "Item".into(),
-            ..ArgView::default()
+        let arg = {
+            let mut value = ArgView::default();
+            value.kind = ArgView::ITEM;
+            value.label = "Item".into();
+            value
         };
         let mut state = Field::new(&arg);
         let shown = |state: &mut Field| {
@@ -683,12 +707,13 @@ mod tests {
 
     #[test]
     fn a_field_opens_with_its_argument_s_default() {
-        let with = |kind: u8, default: Value| ArgView {
-            kind,
-            min: 1.0,
-            max: 99.0,
-            default: Some(default),
-            ..ArgView::default()
+        let with = |kind: u8, default: Value| {
+            let mut value = ArgView::default();
+            value.kind = kind;
+            value.min = 1.0;
+            value.max = 99.0;
+            value.default = Some(default);
+            value
         };
         let count = Field::new(&with(ArgView::NUMBER, Value::Number(5.0)));
         assert!((count.number - 5.0).abs() < f32::EPSILON);
@@ -701,10 +726,11 @@ mod tests {
             Field::new(&with(ArgView::ITEM, Value::Item(torch))).guid,
             Some(torch)
         );
-        let plain = Field::new(&ArgView {
-            kind: ArgView::NUMBER,
-            min: 1.0,
-            ..ArgView::default()
+        let plain = Field::new(&{
+            let mut value = ArgView::default();
+            value.kind = ArgView::NUMBER;
+            value.min = 1.0;
+            value
         });
         assert!(
             (plain.number - 1.0).abs() < f32::EPSILON,

@@ -118,13 +118,11 @@ impl LoadMethods for crate::BaseLoad {
                 .transpose()
         };
         for workshop in &pack.workshops {
-            let new = NewWorkshop {
-                named: workshop.name.is_some(),
-                described: workshop.description.is_some(),
-                recipe_cost: workshop.cost,
-                debug_name: workshop.debug_name.clone(),
-                ..NewWorkshop::new(id(&workshop.id)?, workshop.like)
-            };
+            let mut new = NewWorkshop::new(id(&workshop.id)?, workshop.like);
+            new.named = workshop.name.is_some();
+            new.described = workshop.description.is_some();
+            new.recipe_cost = workshop.cost;
+            new.debug_name.clone_from(&workshop.debug_name);
             enshwick_content::__internal::check_workshop(&new)?;
             for (key, tag) in [
                 (&workshop.name, new.name()),
@@ -143,20 +141,16 @@ impl LoadMethods for crate::BaseLoad {
             let mut stats = Vec::new();
             for (label, value, format) in &item.stats {
                 let label = tag(self, &Some(label.clone()))?.unwrap_or(Guid([0; 16]));
-                stats.push(ImpactUiValue {
-                    loca_id: label,
-                    value: *value,
-                    value_format: *format,
-                });
+                stats.push(ImpactUiValue::new(label, *value, *format));
             }
             let meter = item
                 .meter
                 .map(|(max, start)| -> Result<FuelSetup, Off> {
-                    Ok(FuelSetup {
-                        template: id(&format!("{}.meter", item.id))?,
-                        max_fuel_charges: max,
+                    Ok(FuelSetup::new(
+                        id(&format!("{}.meter", item.id))?,
+                        max,
                         start,
-                    })
+                    ))
                 })
                 .transpose()?;
             let icon = item
@@ -170,22 +164,17 @@ impl LoadMethods for crate::BaseLoad {
                             (item.like, Pixels::Png(bytes))
                         }
                     };
-                    Ok(Icon {
-                        id: id(&format!("{}.icon", item.id))?,
-                        like,
-                        pixels,
-                    })
+                    Ok(Icon::new(id(&format!("{}.icon", item.id))?, like, pixels))
                 })
                 .transpose()?;
-            self.add_item(NewItem {
-                name,
-                description,
-                debug_name: item.debug_name.clone(),
-                meter,
-                stats,
-                icon,
-                ..NewItem::new(own, item.like)
-            })?;
+            let mut new = NewItem::new(own, item.like);
+            new.name = name;
+            new.description = description;
+            new.debug_name.clone_from(&item.debug_name);
+            new.meter = meter;
+            new.stats = stats;
+            new.icon = icon;
+            self.add_item(new)?;
         }
         self.add_pack_rest(pack)
     }
@@ -205,17 +194,15 @@ pub(crate) trait LoadHelpers {
 impl LoadHelpers for crate::BaseLoad {
     fn add_pack_rest(&mut self, pack: &Pack) -> Result<(), Off> {
         for recipe in &pack.recipes {
-            enshwick_content::__internal::push_recipe(
-                self,
-                NewRecipe {
-                    id: id(&recipe.id)?,
-                    like: recipe.like,
-                    output: recipe.output,
-                    output_count: recipe.count,
-                    cost: recipe.cost,
-                    workshop: recipe.workshop.map(WorkshopId::new),
-                },
-            )?;
+            let mut new = NewRecipe::new(
+                id(&recipe.id)?,
+                recipe.like,
+                recipe.output,
+                recipe.count,
+                recipe.cost,
+            );
+            new.workshop = recipe.workshop.map(WorkshopId::new);
+            enshwick_content::__internal::push_recipe(self, new)?;
         }
         for (change, source) in &pack.changes {
             self.change(change, source)?;

@@ -62,7 +62,8 @@ const TIME_VALUE: &str = "value";
 /// ```
 /// use enshwick::sound::{SoundChange, SoundContainerScene};
 ///
-/// let music = SoundChange { scene: Some(SoundContainerScene::Music), ..SoundChange::default() };
+/// let mut music = SoundChange::default();
+/// music.scene = Some(SoundContainerScene::Music);
 /// assert_eq!(music.scene, Some(SoundContainerScene::Music));
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
@@ -98,11 +99,9 @@ impl SoundContainerScene {
 /// ```
 /// use enshwick::sound::{SoundChange, SoundContainerStealingMode};
 ///
-/// let three = SoundChange {
-///     max_count: Some(3),
-///     stealing_mode: Some(SoundContainerStealingMode::Furthest),
-///     ..SoundChange::default()
-/// };
+/// let mut three = SoundChange::default();
+/// three.max_count = Some(3);
+/// three.stealing_mode = Some(SoundContainerStealingMode::Furthest);
 /// assert_eq!(three.max_count, Some(3));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
@@ -134,13 +133,15 @@ impl SoundContainerStealingMode {
 /// ```
 /// use enshwick::sound::{RandomPosition, SoundChange};
 ///
-/// let birds = SoundChange {
-///     random_position: Some(RandomPosition { left_right: 8.0, front_back: 4.0 }),
-///     ..SoundChange::default()
-/// };
+/// let mut birds = SoundChange::default();
+/// birds.random_position = Some(RandomPosition { left_right: 8.0, front_back: 4.0 });
 /// assert!(birds.random_position.is_some());
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, crate::Script)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a spread on the two axes of the ground"
+)]
 pub struct RandomPosition {
     /// The spread to either side, from 0 to [`MAX_DISTANCE`].
     pub left_right: f32,
@@ -155,6 +156,7 @@ pub struct RandomPosition {
 ///
 /// See [`Takes`].
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct Take {
     /// The recording: the game's, or one a mod added or replaced.
     pub sound: SoundId,
@@ -184,10 +186,10 @@ impl Take {
 /// use enshwick::sound::{SoundChange, SoundId, Take, Takes};
 ///
 /// let creak = SoundId::from_guid(Guid::named("you.doors:creak.sound"));
-/// let change = SoundChange {
-///     takes: Some(Takes::Add(vec![Take { chance: 0.5, ..Take::new(creak) }])),
-///     ..SoundChange::default()
-/// };
+/// let mut change = SoundChange::default();
+/// let mut take = Take::new(creak);
+/// take.chance = 0.5;
+/// change.takes = Some(Takes::Add(vec![take]));
 /// assert!(change.takes.is_some());
 /// ```
 #[derive(Clone, Debug, PartialEq, crate::Script)]
@@ -216,6 +218,7 @@ impl Takes {
 ///
 /// See [`Load::change_sound`](../struct.Load.html#method.change_sound).
 #[derive(Clone, Debug, Default, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct SoundChange {
     /// The game's volume factor, from 0 (silent) to [`MAX_VOLUME`].
     pub volume: Option<f32>,

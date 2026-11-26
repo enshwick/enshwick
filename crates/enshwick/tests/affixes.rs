@@ -78,7 +78,7 @@ mod tests {
             luck,
         } = KIT.get().unwrap();
         let ring = ItemInstance {
-            pide: Entity(900),
+            pide: Entity::from_engine(900),
             item: enshwick::ItemId::new(RING),
         };
         let rules = RollRules::new(1, 1);
@@ -94,16 +94,16 @@ mod tests {
         assert_eq!(stats.item(ring), first, "the same seed rolls the same");
 
         let sword = ItemInstance {
-            pide: Entity(901),
+            pide: Entity::from_engine(901),
             item: enshwick::ItemId::new(SWORD),
         };
         assert_eq!(affixes.roll(sword, rules, Some(7), true), Ok(0));
         assert!(!stats.item(sword).rolled, "no affix fits a weapon");
 
-        loader.wear(Entity(2), ring);
+        loader.wear(Entity::from_engine(2), ring);
         let rolled = first.affixes[0].values[0];
         assert!((1.0..=5.0).contains(&rolled));
-        assert!((stats.value(Entity(2), *luck) - rolled).abs() < 1e-5);
+        assert!((stats.value(Entity::from_engine(2), *luck) - rolled).abs() < 1e-5);
 
         let lines = affixes.lines(ring);
         assert_eq!(lines.len(), 1);

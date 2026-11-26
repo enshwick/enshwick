@@ -48,11 +48,12 @@ use enshwick::content::Guid;
 use enshwick::content::spawns::{SpawnEntry, SpawnerChange, SpawnerPick};
 
 fn init(load: &mut enshwick::Load<'_>, wolf: Guid, elder: Guid, nest: Guid) -> Result<(), enshwick::Off> {
-    load.add_spawn_entry(SpawnEntry { weight: 0.25, ..SpawnEntry::new(SpawnerPick::Listing(wolf), elder) })?;
-    load.change_spawner(
-        SpawnerPick::Spawner(nest),
-        SpawnerChange { max_entities_alive: Some(8), ..SpawnerChange::default() },
-    )
+    let mut spawn_entry = SpawnEntry::new(SpawnerPick::Listing(wolf), elder);
+    spawn_entry.weight = 0.25;
+    load.add_spawn_entry(spawn_entry)?;
+    let mut spawner_change = SpawnerChange::default();
+    spawner_change.max_entities_alive = Some(8);
+    load.change_spawner(SpawnerPick::Spawner(nest), spawner_change)
 }
 ```
 

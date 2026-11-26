@@ -6,7 +6,7 @@ mod tests {
     use std::sync::Mutex;
     use std::time::Duration;
 
-    use enshwick::abi::{Header, MapFrameInfo, PlayerInfo, Status};
+    use enshwick::abi::{MapFrameInfo, PlayerInfo, Status};
     use enshwick::content::EngineFacts;
     use enshwick::map::{MapPinged, WaypointChanged};
     use enshwick::test::facts::{self, Fact};
@@ -33,18 +33,17 @@ mod tests {
         "#
     );
 
-    const ANN: Entity = Entity(40);
+    const ANN: Entity = Entity::from_engine(40);
 
     fn ann() -> PlayerInfo {
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick::abi::headed!(PlayerInfo {
             slot: 0,
             entity: ANN,
             key: PlayerKey::new(7),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        }
+        })
     }
 
     /// A `PlayerWaypoint`'s bytes, on or off at `at`.
@@ -63,12 +62,12 @@ mod tests {
     }
 
     fn frame() -> MapFrameInfo {
-        MapFrameInfo {
+        enshwick::abi::headed!(MapFrameInfo {
             origin: [-1000.0; 2],
             size: [2000.0; 2],
             metres_per_cell: 8.0,
             ..MapFrameInfo::EMPTY
-        }
+        })
     }
 
     #[test]
@@ -140,7 +139,7 @@ mod tests {
         let place = fake.offset(facts::UI_PING_EVENT_POSITION.id()).unwrap();
         let ping = |from: Entity, at: [f64; 3]| {
             let mut bytes = vec![0u8; size];
-            bytes[sender..][..4].copy_from_slice(&from.0.to_le_bytes());
+            bytes[sender..][..4].copy_from_slice(&from.get().to_le_bytes());
             for (axis, value) in enshwick::ecs::fixed(at).iter().enumerate() {
                 bytes[place + 8 * axis..][..8].copy_from_slice(&value.to_le_bytes());
             }
@@ -153,8 +152,8 @@ mod tests {
         assert_eq!(status, Status::OK);
         assert_eq!(loader.raise_game_event(ty, &ping(ANN, [1.0, 2.0, 3.0])), 1);
         let _again = loader.raise_game_event(ty, &ping(ANN, [4.0, 2.0, 3.0]));
-        let _far = loader.raise_game_event(ty, &ping(Entity(5), [9000.0, 0.0, 0.0]));
-        let _other = loader.raise_game_event(ty, &ping(Entity(5), [-5.0, 0.0, 6.0]));
+        let _far = loader.raise_game_event(ty, &ping(Entity::from_engine(5), [9000.0, 0.0, 0.0]));
+        let _other = loader.raise_game_event(ty, &ping(Entity::from_engine(5), [-5.0, 0.0, 6.0]));
         let pings: Vec<(Option<PlayerKey>, Entity, [f64; 3])> = PINGS
             .lock()
             .unwrap()
@@ -165,7 +164,7 @@ mod tests {
             pings,
             [
                 (Some(PlayerKey::new(7)), ANN, [1.0, 2.0, 3.0]),
-                (None, Entity(5), [-5.0, 0.0, 6.0]),
+                (None, Entity::from_engine(5), [-5.0, 0.0, 6.0]),
             ]
         );
     }

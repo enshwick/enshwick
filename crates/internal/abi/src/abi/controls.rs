@@ -17,8 +17,7 @@ use crate::abi::{Header, PlayerInfo, Str};
 /// ```
 /// use enshwick::abi::{ControlSpec, Header, Str};
 ///
-/// let spec = ControlSpec {
-///     header: Header::of::<ControlSpec>(),
+/// let spec = enshwick::abi::headed!(ControlSpec {
 ///     name: Str::new("horn"),
 ///     label: Str::new("Sound the horn"),
 ///     key: 0x23,
@@ -27,11 +26,12 @@ use crate::abi::{Header, PlayerInfo, Str};
 ///     fires: ControlSpec::PRESS,
 ///     hold_ms: 0,
 ///     action: Str::EMPTY,
-/// };
+/// });
 /// assert_eq!(spec.fires, ControlSpec::PRESS);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct ControlSpec {
     /// Size and version of this struct.
     pub header: Header,
@@ -83,18 +83,18 @@ impl ControlSpec {
 /// ```
 /// use enshwick::abi::{ControlEvent, ControlSpec, Header, Str};
 ///
-/// let event = ControlEvent {
-///     header: Header::of::<ControlEvent>(),
+/// let event = enshwick::abi::headed!(ControlEvent {
 ///     name: Str::new("horn"),
 ///     kind: ControlSpec::PRESS,
 ///     server: 0,
 ///     reserved: [0; 3],
 ///     player: core::ptr::null(),
-/// };
+/// });
 /// assert_eq!(event.server, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct ControlEvent {
     /// Size and version of this struct.
     pub header: Header,
@@ -151,6 +151,7 @@ pub type ControlFn = unsafe extern "system" fn(event: *const ControlEvent, user:
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct GameBinding {
     /// Size and version of this struct.
     pub header: Header,

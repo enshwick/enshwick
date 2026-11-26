@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{Comfort, Header, Status};
+    use enshwick::abi::{Comfort, Status};
     use enshwick::rates::Rate;
     use enshwick::test::FakeHost;
 
@@ -29,12 +29,11 @@ mod tests {
         let loader = FakeHost::new().install();
         // SAFETY: `enshwick_mod_init` is the export of this file's `declare_mod!(Cosy)`.
         assert_eq!(unsafe { loader.init(enshwick_mod_init) }, Status::OK);
-        let comfort = Comfort {
-            header: Header::of::<Comfort>(),
+        let comfort = enshwick::abi::headed!(Comfort {
             category: 1,
             value: 2,
             position: [0.0; 3],
-        };
+        });
         assert_eq!(loader.comfort(&comfort), 5, "(2 + 1) x 1.5 rounds to 5");
     }
 }

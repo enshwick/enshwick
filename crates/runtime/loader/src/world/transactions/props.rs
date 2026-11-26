@@ -124,7 +124,7 @@ pub(crate) unsafe fn holds_items(
 ) -> bool {
     let mut visit = |link: Entity, category| {
         let holds = category == InventoryCategory::VIRTUAL
-            || slots(link.0).is_some_and(|items| items.iter().any(|&item| item != 0));
+            || slots(link.get()).is_some_and(|items| items.iter().any(|&item| item != 0));
         if holds {
             ControlFlow::Break(())
         } else {
@@ -136,7 +136,7 @@ pub(crate) unsafe fn holds_items(
     // `# Safety`), which is all `walk` asks.
     unsafe {
         inventory_links::walk(
-            Entity(root),
+            Entity::from_engine(root),
             MAX_DEPTH,
             Entity::NONE,
             layout,
@@ -445,7 +445,7 @@ mod tests {
         let mut find = |entity: Entity| {
             setups
                 .iter()
-                .find(|(at, _)| *at == entity.0)
+                .find(|(at, _)| *at == entity.get())
                 .map(|(_, bytes)| bytes.as_ptr())
         };
         // SAFETY: every pointer `find` returns is a whole setup of `LAYOUT`,

@@ -21,10 +21,9 @@
 //!     ) else {
 //!         return Ok(());
 //!     };
-//!     load.add_skill_node(NewSkillNode {
-//!         links_from: vec![root.id],
-//!         ..NewSkillNode::new(id!("endurance"), stamina.id, root.x + 120.0, root.y, id!("endurance.name").guid(), id!("endurance.text").guid())
-//!     })?;
+//!     let mut skill_node = NewSkillNode::new(id!("endurance"), stamina.id, root.x + 120.0, root.y, id!("endurance.name").guid(), id!("endurance.text").guid());
+//!     skill_node.links_from = vec![root.id];
+//!     load.add_skill_node(skill_node)?;
 //!     Ok(())
 //! }
 //! ```
@@ -122,6 +121,7 @@ pub struct SkillNode {
 ///
 /// See the [module](self).
 #[derive(Clone, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct NewSkillNode {
     /// Its content id; its node id is the id's GUID hashed as the game
     /// hashes ids.
@@ -198,6 +198,7 @@ impl NewSkillNode {
 ///
 /// See [`Load::add_perk`](../../struct.Load.html#method.add_perk).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct NewPerk {
     /// Its content id, its GUID the perk's.
     pub id: Id,
@@ -207,6 +208,23 @@ pub struct NewPerk {
     pub name: Guid,
     /// Its description's text tag.
     pub description: Guid,
+}
+
+impl NewPerk {
+    /// A `NewPerk` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`NewPerk`].
+    #[must_use]
+    pub const fn new(id: Id, like: Guid, name: Guid, description: Guid) -> Self {
+        Self {
+            id,
+            like,
+            name,
+            description,
+        }
+    }
 }
 
 /// The list in field `name` of `value`, to change.

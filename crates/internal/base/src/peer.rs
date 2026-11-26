@@ -86,6 +86,10 @@ pub fn args_in_bounds(args: &str) -> bool {
 /// assert_eq!(RUNS.burst, 10.0);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a value of fixed parts, which never gains one"
+)]
 pub struct Rate {
     /// What one second gives back.
     pub per_second: f64,
@@ -241,6 +245,10 @@ impl Bucket {
 
 /// What a [`Rated`] made of one input.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[expect(
+    clippy::exhaustive_enums,
+    reason = "hidden: only the loader and the fake host name it"
+)]
 pub enum Admitted {
     /// Within the rate: serve it.
     Yes,

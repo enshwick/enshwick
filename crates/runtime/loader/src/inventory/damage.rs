@@ -24,7 +24,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{DamageCheck, DamageFilterFn, Header, HookFlags, MidHookFn, Registers};
+use enshwick_core::abi::{DamageCheck, DamageFilterFn, HookFlags, MidHookFn, Registers};
 use enshwick_core::damage::DamageCause;
 use enshwick_gamedata::catalogue;
 
@@ -346,16 +346,15 @@ fn filter(check: &mut DamageCheck) {
 }
 
 fn blank(cause: u32, target: u32) -> DamageCheck {
-    DamageCheck {
-        header: Header::of::<DamageCheck>(),
+    enshwick_abi::headed!(DamageCheck {
         cause,
-        target: Entity(target),
-        source: Entity(0),
-        attacker: Entity(0),
+        target: Entity::from_engine(target),
+        source: Entity::from_engine(0),
+        attacker: Entity::from_engine(0),
         total: 0.0,
         amount_count: 0,
         amounts: core::ptr::null_mut(),
-    }
+    })
 }
 
 /// A finite amount the filters left, never below zero.
@@ -437,8 +436,8 @@ mid_handler! {
         // attacker, worked out before it; 1.0 build 1269579.
         let root = low(registers.r12).cast_unsigned();
         let attacker = if root == 0 { source } else { root };
-        check.source = Entity(source);
-        check.attacker = Entity(attacker);
+        check.source = Entity::from_engine(source);
+        check.attacker = Entity::from_engine(attacker);
         let mut amounts = read;
         crate::inventory::stats::on_hit(&mut amounts, target, attacker);
         check.total = amounts
@@ -478,7 +477,7 @@ mid_handler! {
         // SAFETY: at the site `r15` holds the live query context of the
         // system running on this thread; 1.0 build 1269579.
         let target = unsafe { row_entity(registers.r15) };
-        let kept = fall_kept(Entity(target), current, new, |damage| {
+        let kept = fall_kept(Entity::from_engine(target), current, new, |damage| {
             filtered(DamageCheck::FALL_DAMAGE, target, damage)
         });
         if kept != new {
@@ -524,7 +523,7 @@ mid_handler! {
         // SAFETY: at the site `r15` holds the live query context of the
         // system running on this thread; server 26430253.
         let row = unsafe { row_entity(registers.r15) };
-        registers.rflags = decided(Some(written), Entity(row), registers.rflags);
+        registers.rflags = decided(Some(written), Entity::from_engine(row), registers.rflags);
     }
 }
 

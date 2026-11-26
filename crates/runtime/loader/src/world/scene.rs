@@ -22,7 +22,7 @@ use std::time::Instant;
 use crate::engine::off_thread::ReadFailure;
 
 use enshwick_core::abi::{
-    Header, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MarkerTypeSorting, ResourceKey, Side,
+    MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MarkerTypeSorting, ResourceKey, Side,
 };
 use enshwick_gamedata::catalogue as names;
 
@@ -284,11 +284,12 @@ fn read_markers(
     }
     Ok(found
         .into_iter()
-        .map(|(placed, data)| MapMarkerInfo {
-            header: Header::of::<MapMarkerInfo>(),
-            position: placed.position,
-            marker_type: enshwick_core::content::Guid(data.marker_type),
-            label: enshwick_core::content::Guid(data.label),
+        .map(|(placed, data)| {
+            enshwick_abi::headed!(MapMarkerInfo {
+                position: placed.position,
+                marker_type: enshwick_core::content::Guid(data.marker_type),
+                label: enshwick_core::content::Guid(data.label),
+            })
         })
         .collect())
 }
@@ -312,12 +313,11 @@ fn read_frame(layout: FrameLayout, key: SceneKey) -> Result<MapFrameInfo, ReadFr
     }
     let biome_map = part0(biome_hash).ok_or(ReadFrameError::BiomeMap)?;
     let (origin, size, metres_per_cell) = frame(&layout, &biome_map)?.metres();
-    Ok(MapFrameInfo {
-        header: Header::of::<MapFrameInfo>(),
+    Ok(enshwick_abi::headed!(MapFrameInfo {
         origin,
         size,
         metres_per_cell,
-    })
+    }))
 }
 
 /// What a read of the scene says about itself in the log.

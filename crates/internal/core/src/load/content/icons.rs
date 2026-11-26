@@ -23,11 +23,7 @@ impl Load<'_> {
     /// use enshwick::content::icons::{Icon, Pixels, Tint};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.add_icon(Icon {
-    ///         id: id!("ghostly-staff.icon"),
-    ///         like: Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78"),
-    ///         pixels: Pixels::Tint(Tint { colour: [120, 170, 255], amount: 60 }),
-    ///     })
+    ///     load.add_icon(Icon::new(id!("ghostly-staff.icon"), Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78"), Pixels::Tint(Tint::new([120, 170, 255], 60))))
     /// }
     /// ```
     #[script]

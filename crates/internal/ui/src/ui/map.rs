@@ -1,6 +1,6 @@
 //! Markers on the client's map.
 
-use crate::abi::{Header, MapMarkerTypeInfo, Str, UiMarker};
+use crate::abi::{MapMarkerTypeInfo, Str, UiMarker};
 use crate::map::{MapMarkerType, MapMarkerTypeId};
 
 use super::{Ui, UiError};
@@ -173,12 +173,13 @@ impl Ui {
         }
         let raw: Vec<UiMarker> = markers
             .iter()
-            .map(|m| UiMarker {
-                header: Header::of::<UiMarker>(),
-                position: m.position,
-                label: Str::new(m.label),
-                color: m.color.to_raw(),
-                marker_type: m.type_id.map_or(0, MapMarkerTypeId::get),
+            .map(|m| {
+                enshwick_abi::headed!(UiMarker {
+                    position: m.position,
+                    label: Str::new(m.label),
+                    color: m.color.to_raw(),
+                    marker_type: m.type_id.map_or(0, MapMarkerTypeId::get),
+                })
             })
             .collect();
         let count = u32::try_from(raw.len()).map_err(|_| UiError::Refused)?;

@@ -7,7 +7,7 @@ mod tests {
 
     use enshwick::abi::Status;
     use enshwick::points::DescribedField;
-    use enshwick::services::{Call, CallError, Caller, DescribedCall, DescribedCaller};
+    use enshwick::services::{Call, CallServiceError, Caller, DescribedCall, DescribedCaller};
     use enshwick::{Load, Mod, Off};
 
     /// What the trading post pays for an item.
@@ -154,7 +154,7 @@ mod tests {
                 grade: 0,
                 count: 1,
             }),
-            Err(CallError::Failed)
+            Err(CallServiceError::Failed)
         );
         assert_eq!(
             loader.call(&PriceOf {
@@ -163,7 +163,7 @@ mod tests {
                 grade: 0,
                 count: 1,
             }),
-            Err(CallError::Off)
+            Err(CallServiceError::Off)
         );
     }
 
@@ -171,22 +171,31 @@ mod tests {
     fn a_described_server_answers_a_typed_caller() {
         let loader = start();
         assert_eq!(loader.call(&Rate { item: 4 }), Ok(8));
-        assert_eq!(loader.call(&Rate { item: 0 }), Err(CallError::Failed));
+        assert_eq!(
+            loader.call(&Rate { item: 0 }),
+            Err(CallServiceError::Failed)
+        );
         assert_eq!(loader.call(&Rate { item: 5 }), Ok(10));
-        assert_eq!(loader.call(&Rate { item: 13 }), Err(CallError::Failed));
-        assert_eq!(loader.call(&Rate { item: 5 }), Err(CallError::Off));
+        assert_eq!(
+            loader.call(&Rate { item: 13 }),
+            Err(CallServiceError::Failed)
+        );
+        assert_eq!(loader.call(&Rate { item: 5 }), Err(CallServiceError::Off));
     }
 
     #[test]
     fn the_mod_calls_another_mod_and_a_major_nobody_serves_is_unmatched() {
         let loader = start();
         let (rent, later, _) = callers();
-        assert_eq!(rent.call(&Rent { stall: 4 }), Err(CallError::Unmatched));
+        assert_eq!(
+            rent.call(&Rent { stall: 4 }),
+            Err(CallServiceError::Unmatched)
+        );
         loader.serve_call(|rent: &Rent| u64::from(rent.stall) * 100);
         assert_eq!(rent.call(&Rent { stall: 4 }), Ok(400));
         assert_eq!(
             later.call(&RentLater { stall: 4 }),
-            Err(CallError::Unmatched)
+            Err(CallServiceError::Unmatched)
         );
     }
 
@@ -198,7 +207,10 @@ mod tests {
         let mut answer = [0u8; 8];
         assert_eq!(described.call(&7u16.to_le_bytes(), &mut answer), Ok(()));
         assert_eq!(u64::from_le_bytes(answer), 8);
-        assert_eq!(described.call(&[1], &mut answer), Err(CallError::Failed));
+        assert_eq!(
+            described.call(&[1], &mut answer),
+            Err(CallServiceError::Failed)
+        );
     }
 
     #[test]

@@ -35,7 +35,7 @@ use arc_swap::ArcSwapOption;
 use arrayvec::ArrayVec;
 use enshwick_core::abi::{
     AltarInfo, AltarZone, AltarZoneFilterFn, BuildingZoneCheck, BuildingZoneFilterFn, Event,
-    Extent, Header, HookFlags, Side,
+    Extent, HookFlags, Side,
 };
 use enshwick_core::altars::MAX_ZONES;
 use enshwick_core::raw::{read_at, read_ptr_at};
@@ -485,14 +485,13 @@ fn size_zones_with(sizers: &[&Sizer]) {
                 let range = levels.last()?.map(|v| v * HALF);
                 let cells = geometry::cells(centre, range, turn);
                 Some(Vanilla {
-                    zone: AltarZone {
-                        header: Header::of::<AltarZone>(),
-                        altar: enshwick_core::Entity(id),
+                    zone: enshwick_abi::headed!(AltarZone {
+                        altar: enshwick_core::Entity::from_engine(id),
                         level: u8::try_from(levels.len()).unwrap_or(u8::MAX),
                         reserved: [0; 3],
                         grow: 0,
                         height: cells.max[1] - cells.min[1],
-                    },
+                    }),
                     levels: levels.len(),
                     range,
                     turn,
@@ -504,7 +503,7 @@ fn size_zones_with(sizers: &[&Sizer]) {
     for altar in vanilla {
         if let Some((grow, height)) = chain(altar.zone, sizers) {
             targets.insert(
-                altar.zone.altar.0,
+                altar.zone.altar.get(),
                 (
                     altar.levels,
                     geometry::grown_range(altar.range, altar.turn, grow, height),
@@ -526,7 +525,7 @@ pub(crate) fn list() -> Vec<AltarInfo> {
 
 fn info(id: u32, placed: &Placed, built: Option<&[f32; 3]>, levels: Option<&Sizes>) -> AltarInfo {
     let mut altar = AltarInfo::EMPTY;
-    altar.entity = enshwick_core::Entity(id);
+    altar.entity = enshwick_core::Entity::from_engine(id);
     altar.position = enshwick_core::ecs::metres(placed.position);
     if let Some(levels) = levels {
         altar.level = u8::try_from(levels.len()).unwrap_or(u8::MAX);
@@ -918,8 +917,7 @@ unsafe fn check(
     // SAFETY: the caller guarantees two readable corners, the second
     // `building.corner_size` bytes after the first, starting with three i64.
     let high: [i64; 3] = unsafe { read_at(corners.cast(), layout.corner_size) };
-    let call = BuildingZoneCheck {
-        header: Header::of::<BuildingZoneCheck>(),
+    let call = enshwick_abi::headed!(BuildingZoneCheck {
         zones: zones.as_ptr(),
         zone_count: u32::try_from(zones.len()).unwrap_or(u32::MAX),
         object: Extent {
@@ -927,7 +925,7 @@ unsafe fn check(
             max: enshwick_core::ecs::metres([0, 1, 2].map(|a| low[a].max(high[a]))),
         },
         margin: f64::from(margin),
-    };
+    });
     filters
         .ask(|filter| {
             // SAFETY: a filter's mod runs, so its DLL that holds the callback

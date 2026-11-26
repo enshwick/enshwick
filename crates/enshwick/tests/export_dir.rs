@@ -4,7 +4,7 @@
 mod tests {
     use std::path::Path;
 
-    use enshwick::abi::{Header, ModInfo, Side, Status, Str};
+    use enshwick::abi::{ModInfo, Side, Status, Str};
     use enshwick::test::FakeHost;
     use enshwick::{Load, Mod, Off};
 
@@ -29,14 +29,13 @@ mod tests {
     );
 
     fn info(id: &'static str, file: &'static str) -> ModInfo {
-        ModInfo {
-            header: Header::of::<ModInfo>(),
+        enshwick::abi::headed!(ModInfo {
             id: Str::new(id),
             version: Str::new("1.0.0"),
             side: Side::SERVER,
             file: Str::new(file),
             ..ModInfo::EMPTY
-        }
+        })
     }
 
     /// What the mod logged about its export folder at init.

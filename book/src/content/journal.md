@@ -56,10 +56,9 @@ fn init(load: &mut enshwick::Load<'_>, torch: Guid) -> Result<(), enshwick::Off>
         KnowledgeQuery::is_set(given, Scope::Player),
         KnowledgeQuery::at_least(wood, Scope::Player, 3),
     );
-    load.add_quest(NewQuest {
-        rewards: vec![QuestReward::Item(torch)],
-        ..NewQuest::new(id!("trail"), id!("trail.name").guid(), vec![step])
-    })?;
+    let mut quest = NewQuest::new(id!("trail"), id!("trail.name").guid(), vec![step]);
+    quest.rewards = vec![QuestReward::Item(torch)];
+    load.add_quest(quest)?;
     Ok(())
 }
 ```
@@ -90,7 +89,7 @@ use enshwick::events::{QuestProgressed, QuestStepDone};
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.on::<QuestStepDone>(|done| {
-        enshwick::info!("player {} did step {} of quest {}", done.entity.0, done.step, done.quest);
+        enshwick::info!("player {} did step {} of quest {}", done.entity, done.step, done.quest);
     })?;
     load.on::<QuestProgressed>(|counted| {
         enshwick::info!("{} of {}", counted.value, counted.target);
@@ -276,7 +275,7 @@ the edits before it left:
 - `Change(StepChange)` sets a step's title, text, queries, `progress`, map
   marker, voiceover, icon or level; a text tag of zeros clears the marker
   and the voiceover;
-- `Insert(StepInsert { at, step })` inserts a step, which names both its
+- `Insert(StepInsert::new(at, step))` inserts a step, which names both its
   queries, with an entry id no other entry of the journal holds;
 - `Remove(index)` and `Move(StepMove { from, to })`.
 
@@ -424,7 +423,7 @@ end
 ## Moving a quest on
 
 `Quests` moves a quest on for a `Holder`. A holder is
-`Holder::Player(player)` or `Holder::World`. Each call grants or revokes the knowledge the steps test,
+`Holder::player(player)` or `Holder::World`. Each call grants or revokes the knowledge the steps test,
 vanilla quests and mods' alike. The game's knowledge is the quest's only
 state, so a save, a rejoin and a vanilla client agree with it.
 
@@ -455,7 +454,7 @@ entry for everything that tests it, such as another quest or a recipe.
 use enshwick::quests::{Holder, MoveQuestError, Quests};
 
 fn finish(quests: &Quests, player: enshwick::Entity, quest: enshwick::knowledge::KnowledgeId) {
-    match quests.complete(Holder::Player(player), quest) {
+    match quests.complete(Holder::player(player), quest) {
         Ok(()) => enshwick::info!("quest {quest} completes at the next step"),
         Err(MoveQuestError::Unwritable { step, .. }) => {
             enshwick::warn!("step {step} moves only through its game query");
@@ -514,19 +513,17 @@ use enshwick::content::journal::{NewQuest, Objective, QuestStep};
 use enshwick::quests::{Holder, Quests};
 
 fn init(load: &mut enshwick::Load<'_>, wall: enshwick::ItemId) -> Result<(), enshwick::Off> {
-    let step = QuestStep {
-        objectives: vec![
+    let mut step = QuestStep::owned(id!("fort.build").guid(), id!("fort.build.text").guid());
+    step.objectives = vec![
             Objective::Build { item: wall, count: 4 },
             Objective::Custom { signal: id!("beacon-lit"), count: 1 },
-        ],
-        ..QuestStep::owned(id!("fort.build").guid(), id!("fort.build.text").guid())
-    };
+        ];
     load.add_quest(NewQuest::new(id!("fort"), id!("fort.name").guid(), vec![step]))?;
     Ok(())
 }
 
 fn lit(quests: &Quests, player: enshwick::Entity) {
-    quests.signal(Holder::Player(player), id!("beacon-lit"), 1);
+    quests.signal(Holder::player(player), id!("beacon-lit"), 1);
 }
 ```
 

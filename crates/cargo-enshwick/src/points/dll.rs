@@ -46,7 +46,7 @@ fn from_section(raw: &[u8]) -> Result<Option<String>, Error> {
         ReadSectionError::Format(format) => Error::Format(format),
         other => Error::Section(other),
     })?;
-    let Some(&Head { text: head, id }) = section.heads().first() else {
+    let Some(&Head { text: head, id, .. }) = section.heads().first() else {
         return Ok(None);
     };
     let text = section.schema(head, id);

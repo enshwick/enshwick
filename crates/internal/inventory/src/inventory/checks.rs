@@ -42,7 +42,7 @@ pub fn valid(op: &InventoryOp) -> bool {
 /// `sub-inventory | index << 32`.
 #[must_use]
 pub fn slot_ref(op: &InventoryOp) -> u64 {
-    u64::from(op.target.0) | u64::from(op.slot) << 32
+    u64::from(op.target.get()) | u64::from(op.slot) << 32
 }
 
 /// The give half of a renew: the new item into the slot's inventory.
@@ -82,7 +82,7 @@ mod tests {
     fn give(count: u32) -> InventoryOp {
         InventoryOp {
             kind: InventoryOp::GIVE,
-            target: Entity(7),
+            target: Entity::from_engine(7),
             item: crate::ItemId::new(3),
             count,
             ..InventoryOp::default()
@@ -119,9 +119,12 @@ mod tests {
             slot,
             ..InventoryOp::default()
         };
-        assert!(valid(&destroy(Entity(0x41), 3)));
-        assert_eq!(slot_ref(&destroy(Entity(0x41), 3)), 0x3_0000_0041);
-        assert!(!valid(&destroy(Entity(0x41), 256)));
+        assert!(valid(&destroy(Entity::from_engine(0x41), 3)));
+        assert_eq!(
+            slot_ref(&destroy(Entity::from_engine(0x41), 3)),
+            0x3_0000_0041
+        );
+        assert!(!valid(&destroy(Entity::from_engine(0x41), 256)));
         assert!(!valid(&destroy(Entity::NONE, 3)));
     }
 }

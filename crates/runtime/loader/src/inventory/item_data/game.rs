@@ -117,7 +117,7 @@ pub(crate) fn transform_type(loader: &Loader) -> Option<u32> {
 
 /// The data of `entity`'s component `ty`.
 fn component(loader: &Loader, entity: u32, ty: u32) -> Option<*const u8> {
-    crate::engine::world::component(loader, Entity(entity), ty)
+    crate::engine::world::component(loader, Entity::from_engine(entity), ty)
         .ok()
         .map(<*const core::ffi::c_void>::cast)
 }
@@ -132,7 +132,7 @@ pub(crate) fn placed(loader: &Loader, entity: u32) -> Option<Placed> {
     {
         return None;
     }
-    let template = crate::engine::world::template(loader, Entity(entity)).ok()?;
+    let template = crate::engine::world::template(loader, Entity::from_engine(entity)).ok()?;
     let data = component(loader, entity, layout.transform)?;
     // SAFETY: `data` is the entity's live `CurrentTransform`, read on the game
     // thread (checked by `world::component`); `layout` checked that it holds
@@ -168,7 +168,7 @@ pub(crate) fn held(
     character_of: impl FnOnce(Entity) -> Option<CharacterId>,
 ) -> Option<Held> {
     let layout = layout(loader)?;
-    let state = component(loader, pide.0, layout.item_state)?;
+    let state = component(loader, pide.get(), layout.item_state)?;
     // SAFETY: `state` is the entity's live `ItemState`, whose reflected slot
     // id holds its `u32` inventory entity at `slot_entity` (in bounds, checked
     // by `layout`); read on the game thread (checked by `world::component`).
@@ -191,7 +191,7 @@ pub(crate) fn held(
         placed(loader, root)
             .map(|root| Anchor::Held { root, link, slot })
             .or_else(|| {
-                character_of(Entity(root)).map(|character| Anchor::Carried {
+                character_of(Entity::from_engine(root)).map(|character| Anchor::Carried {
                     character,
                     link,
                     slot,
@@ -201,7 +201,7 @@ pub(crate) fn held(
     Some(Held {
         anchor,
         item: ItemId(item),
-        root: Entity(root),
+        root: Entity::from_engine(root),
     })
 }
 
@@ -219,7 +219,7 @@ pub(crate) struct Held {
 pub(crate) fn filled(loader: &Loader, root: Entity) -> Option<bool> {
     let layout = layout(loader)?;
     let initialized = layout.initialized?;
-    let setup = component(loader, root.0, layout.setup)?;
+    let setup = component(loader, root.get(), layout.setup)?;
     // SAFETY: `setup` is the root's live `InventorySetup`, which holds its
     // `isInitialized` byte at `initialized` (inside the type, checked by
     // `layout`); read on the game thread (checked by `world::component`).
@@ -250,9 +250,9 @@ pub(crate) fn in_slot(
         return None;
     }
     let inventory = if link == OWN {
-        root.0
+        root.get()
     } else if link < LINKS {
-        let setup = component(loader, root.0, layout.setup)?;
+        let setup = component(loader, root.get(), layout.setup)?;
         // SAFETY: `setup` is the root's live `InventorySetup`; `link < LINKS`
         // indexes its `u32` `linksEntities`; read on the game thread.
         unsafe { read_at::<u32>(setup, layout.links + usize::from(link) * 4) }
@@ -273,5 +273,5 @@ pub(crate) fn in_slot(
     // the stack (checked by `layout`); read on the game thread (checked by
     // `world::component`).
     let pide = unsafe { read_at::<u32>(stacks, at + layout.stack_pide) };
-    (pide != 0).then_some((Entity(pide), ItemId(item)))
+    (pide != 0).then_some((Entity::from_engine(pide), ItemId(item)))
 }

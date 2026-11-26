@@ -7,9 +7,7 @@ mod tests {
 
     use enshwick::Entity;
     use enshwick::WorldError;
-    use enshwick::abi::{
-        AltarInfo, Bounds, Header, MapFrameInfo, MapMarkerInfo, PlayerInfo, Status,
-    };
+    use enshwick::abi::{AltarInfo, Bounds, MapFrameInfo, MapMarkerInfo, PlayerInfo, Status};
     use enshwick::altars::Altars;
     use enshwick::content::{EngineFacts, Guid};
     use enshwick::map::{
@@ -58,12 +56,12 @@ mod tests {
         label: Guid,
         marker_type: Guid,
     ) -> enshwick::test::FakeHost {
-        fake.map_marker(MapMarkerInfo {
+        fake.map_marker(enshwick::abi::headed!(MapMarkerInfo {
             position,
             marker_type,
             label,
             ..MapMarkerInfo::EMPTY
-        })
+        }))
     }
 
     fn waypoint(
@@ -83,7 +81,7 @@ mod tests {
             bytes[place + 8 * axis..][..8].copy_from_slice(&value.to_le_bytes());
         }
         let ty = fake.hash(facts::PLAYER_WAYPOINT.id()).unwrap();
-        fake.component(Entity(entity), ty, &bytes)
+        fake.component(Entity::from_engine(entity), ty, &bytes)
     }
 
     /// The world's own types and the map's markers, as on a build without
@@ -123,16 +121,13 @@ mod tests {
         assert_eq!(
             markers,
             [
-                MapMarker {
-                    position: [100.0, 20.0, -50.0],
-                    marker_type: Some(MapMarkerTypeId::from_guid(TOWN)),
-                    label: Some(LABEL),
+                {
+                    let mut value = MapMarker::new([100.0, 20.0, -50.0]);
+                    value.marker_type = Some(MapMarkerTypeId::from_guid(TOWN));
+                    value.label = Some(LABEL);
+                    value
                 },
-                MapMarker {
-                    position: [-10.0, 0.0, 10.0],
-                    marker_type: None,
-                    label: None,
-                },
+                MapMarker::new([-10.0, 0.0, 10.0]),
             ]
         );
     }
@@ -167,9 +162,12 @@ mod tests {
         let fake = waypoint(fake, 41, 0, [1.0, 1.0, 1.0]);
         let (_loader, map) = start(fake);
 
-        assert_eq!(map.waypoint(Entity(40)), Ok(Some([12.5, 3.0, -7.25])));
-        assert_eq!(map.waypoint(Entity(41)), Ok(None));
-        assert_eq!(map.waypoint(Entity(42)), Ok(None));
+        assert_eq!(
+            map.waypoint(Entity::from_engine(40)),
+            Ok(Some([12.5, 3.0, -7.25]))
+        );
+        assert_eq!(map.waypoint(Entity::from_engine(41)), Ok(None));
+        assert_eq!(map.waypoint(Entity::from_engine(42)), Ok(None));
     }
 
     #[test]
@@ -178,7 +176,10 @@ mod tests {
         let (loader, map) = start(fake);
         loader.stop_world();
 
-        assert_eq!(map.waypoint(Entity(40)), Err(WorldError::Unavailable));
+        assert_eq!(
+            map.waypoint(Entity::from_engine(40)),
+            Err(WorldError::Unavailable)
+        );
         assert_eq!(map.markers(), Err(WorldError::Unavailable));
     }
 
@@ -187,7 +188,7 @@ mod tests {
         let fake = waypoint(fake(), 40, 1, [12.5, 3.0, -7.25]);
         let (_loader, map) = start(fake);
 
-        let elsewhere = std::thread::spawn(move || map.waypoint(Entity(40)))
+        let elsewhere = std::thread::spawn(move || map.waypoint(Entity::from_engine(40)))
             .join()
             .unwrap();
         assert_eq!(elsewhere, Err(WorldError::WrongThread));
@@ -199,7 +200,10 @@ mod tests {
         let (_loader, map) = start(fake);
 
         assert_eq!(map.markers().unwrap().len(), 1);
-        assert_eq!(map.waypoint(Entity(40)), Err(WorldError::Unavailable));
+        assert_eq!(
+            map.waypoint(Entity::from_engine(40)),
+            Err(WorldError::Unavailable)
+        );
     }
 
     #[test]
@@ -239,19 +243,21 @@ mod tests {
         let (_loader, map) = start(fake);
 
         assert_eq!(map.markers().unwrap().len(), 1);
-        assert_eq!(map.waypoint(Entity(40)), Err(WorldError::Unavailable));
+        assert_eq!(
+            map.waypoint(Entity::from_engine(40)),
+            Err(WorldError::Unavailable)
+        );
     }
 
     fn player(slot: u32, entity: u32, name: &str) -> PlayerInfo {
-        let mut info = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let mut info = enshwick::abi::headed!(PlayerInfo {
             slot,
-            entity: Entity(entity),
+            entity: Entity::from_engine(entity),
             key: enshwick::PlayerKey::new(u64::from(entity) * 100),
             permissions: 0,
             name_len: u32::try_from(name.len()).unwrap(),
             name: [0; PlayerInfo::NAME_MAX],
-        };
+        });
         info.name[..name.len()].copy_from_slice(name.as_bytes());
         info
     }
@@ -259,7 +265,7 @@ mod tests {
     /// An altar at the middle of its zone, whose cells are 0.5 m.
     fn altar(entity: u32, level: u8, min: [i64; 3], max: [i64; 3]) -> AltarInfo {
         let mut info = AltarInfo::EMPTY;
-        info.entity = Entity(entity);
+        info.entity = Entity::from_engine(entity);
         info.level = level;
         info.zone = Bounds { min, max };
         let middle = |axis: usize| f64::from(i32::try_from(min[axis] + max[axis]).unwrap()) * 0.25;
@@ -285,37 +291,29 @@ mod tests {
         assert_eq!(
             snapshot.players,
             [
-                MapPlayer {
-                    key: enshwick::PlayerKey::new(4000),
-                    name: "Bob".to_owned(),
-                    position: None,
-                    waypoint: Some([12.5, 3.0, -7.25])
+                {
+                    let mut value =
+                        MapPlayer::new(enshwick::PlayerKey::new(4000), "Bob".to_owned());
+                    value.waypoint = Some([12.5, 3.0, -7.25]);
+                    value
                 },
-                MapPlayer {
-                    key: enshwick::PlayerKey::new(4100),
-                    name: "Ann".to_owned(),
-                    position: None,
-                    waypoint: None
-                },
+                MapPlayer::new(enshwick::PlayerKey::new(4100), "Ann".to_owned()),
             ]
         );
         let bases: Vec<Option<u32>> = snapshot.altars.iter().map(|altar| altar.base).collect();
         assert_eq!(bases, [Some(0), Some(1), Some(1), None]);
-        assert_eq!(
-            snapshot.altars[0],
-            MapAltar {
-                position: [52.5, 0.0, 52.5],
-                level: 3,
-                zone: [[100, 0, 100], [110, 10, 110]],
-                base: Some(0)
-            }
-        );
+        assert_eq!(snapshot.altars[0], {
+            let mut value = MapAltar::new([52.5, 0.0, 52.5], 3, [[100, 0, 100], [110, 10, 110]]);
+            value.base = Some(0);
+            value
+        });
         assert_eq!(
             snapshot.markers,
-            [MapPoint {
-                position: [100.0, 20.0, -50.0],
-                marker_type: Some(TOWN.fnv1a()),
-                label: Some(LABEL.fnv1a())
+            [{
+                let mut value = MapPoint::new([100.0, 20.0, -50.0]);
+                value.marker_type = Some(TOWN.fnv1a());
+                value.label = Some(LABEL.fnv1a());
+                value
             }]
         );
         let bytes = snapshot.to_bytes().unwrap();
@@ -331,12 +329,12 @@ mod tests {
     }
 
     /// The frame of a 10 240 m world of 8 m cells, as the loader reads it.
-    const FRAME: MapFrameInfo = MapFrameInfo {
+    const FRAME: MapFrameInfo = enshwick::abi::headed!(MapFrameInfo {
         origin: [-512.0, 256.0],
         size: [10240.0, 10240.0],
         metres_per_cell: 8.0,
         ..MapFrameInfo::EMPTY
-    };
+    });
 
     #[test]
     fn a_frame_gives_the_map_s_origin_size_and_cell_in_metres() {
@@ -344,11 +342,7 @@ mod tests {
 
         assert_eq!(
             map.frame(),
-            Ok(MapFrame {
-                origin: [-512.0, 256.0],
-                size: [10240.0, 10240.0],
-                metres_per_cell: 8.0,
-            })
+            Ok(MapFrame::new([-512.0, 256.0], [10240.0, 10240.0], 8.0))
         );
     }
 
@@ -361,16 +355,16 @@ mod tests {
                 .net_peer(enshwick::net::Peer::Player(with)),
         );
 
-        assert_eq!(map.uncover(with, [1250.0, -830.0], 200.0), Ok(()));
+        assert_eq!(map.uncover(with, [1250.0, 0.0, -830.0], 200.0), Ok(()));
         assert_eq!(
-            map.uncover(without, [1250.0, -830.0], 200.0),
+            map.uncover(without, [1250.0, 0.0, -830.0], 200.0),
             Err(WorldError::Unavailable),
             "a client without Enshwick is not reached"
         );
         for (at, radius) in [
-            ([f64::NAN, 0.0], 10.0),
-            ([0.0, 0.0], 0.0),
-            ([0.0, 0.0], 200_000.0),
+            ([f64::NAN, 0.0, 0.0], 10.0),
+            ([0.0; 3], 0.0),
+            ([0.0; 3], 200_000.0),
         ] {
             assert_eq!(map.uncover(with, at, radius), Err(WorldError::Refused));
         }
@@ -399,7 +393,7 @@ mod tests {
         );
         assert_eq!(map.uncover_all(host), Ok(()));
         assert_eq!(
-            map.uncover(guest, [0.0, 0.0], 50.0),
+            map.uncover(guest, [0.0; 3], 50.0),
             Err(WorldError::Unavailable),
             "a guest without Enshwick is not reached"
         );
@@ -415,7 +409,7 @@ mod tests {
                 .net_peer(enshwick::net::Peer::Player(key)),
         );
         assert_eq!(
-            map.uncover(key, [0.0, 0.0], 50.0),
+            map.uncover(key, [0.0; 3], 50.0),
             Err(WorldError::Unavailable)
         );
         assert!(loader.fog_uncovers().is_empty());
@@ -451,22 +445,22 @@ mod tests {
     #[test]
     fn a_frame_no_map_can_have_is_refused_as_missing() {
         for frame in [
-            MapFrameInfo {
+            enshwick::abi::headed!(MapFrameInfo {
                 size: [0.0, 10240.0],
                 ..FRAME
-            },
-            MapFrameInfo {
+            }),
+            enshwick::abi::headed!(MapFrameInfo {
                 metres_per_cell: -8.0,
                 ..FRAME
-            },
-            MapFrameInfo {
+            }),
+            enshwick::abi::headed!(MapFrameInfo {
                 origin: [f64::NAN, 0.0],
                 ..FRAME
-            },
-            MapFrameInfo {
+            }),
+            enshwick::abi::headed!(MapFrameInfo {
                 size: [f64::INFINITY, 10240.0],
                 ..FRAME
-            },
+            }),
         ] {
             let (_loader, map) = start(fake().map_frame(frame));
             assert_eq!(map.frame(), Err(WorldError::Unavailable), "{frame:?}");

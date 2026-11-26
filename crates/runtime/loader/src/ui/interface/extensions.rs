@@ -9,7 +9,7 @@ use core::cell::{Cell, RefCell};
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
-use enshwick_core::abi::{Header, Side, Str, UiFrame, UiFrameFn};
+use enshwick_core::abi::{Side, Str, UiFrame, UiFrameFn};
 use enshwick_core::ui::HudScreenType;
 use enshwick_gamedata::catalogue;
 
@@ -136,7 +136,7 @@ impl FrameReads {
         hud_screen: Str::EMPTY,
         prompt_title: Str::EMPTY,
         prompt_verb: 0,
-        screen_host: enshwick_core::Entity(0),
+        screen_host: enshwick_core::Entity::from_engine(0),
         screen_host_template: [0; 16],
         screen_host_position: [0; 3],
     };
@@ -146,8 +146,7 @@ impl FrameReads {
     /// thread.
     pub(super) fn frame(self, token: u64) -> UiFrame {
         let hovered = super::item_slots::hovered();
-        UiFrame {
-            header: Header::of::<UiFrame>(),
+        enshwick_abi::headed!(UiFrame {
             token,
             screen: UiFrame::IN_GAME,
             reserved: 0,
@@ -160,9 +159,9 @@ impl FrameReads {
             hovered_slot: hovered.slot,
             hovered_item: enshwick_core::ItemId::new(hovered.item),
             hovered_count: hovered.count,
-            hovered_pide: enshwick_core::Entity(hovered.pide),
+            hovered_pide: enshwick_core::Entity::from_engine(hovered.pide),
             reserved_hovered: 0,
-        }
+        })
     }
 }
 
@@ -492,7 +491,7 @@ pub(super) unsafe fn frame_reads(engine: &Engine, context: usize, hosts_asked: b
         hud_screen: screen_name(Some(seen[0].unwrap_or(screen))),
         prompt_title,
         prompt_verb,
-        screen_host: enshwick_core::Entity(host),
+        screen_host: enshwick_core::Entity::from_engine(host),
         screen_host_template: template,
         screen_host_position: position,
     }
@@ -967,12 +966,12 @@ mod tests {
     #[test]
     fn each_place_on_an_edge_draws_in_a_window_of_its_own_after_the_edges_before_it() {
         let place = |edge, align, shift| {
-            Place::of(&UiExtension {
+            Place::of(&enshwick_abi::headed!(UiExtension {
                 edge,
                 align,
                 shift,
                 ..bytemuck::Zeroable::zeroed()
-            })
+            }))
             .unwrap()
         };
         let low = place(UiExtension::LEFT, UiExtension::START, 360.0);

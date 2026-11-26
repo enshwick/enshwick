@@ -17,7 +17,7 @@ runs a handler each time the loader raises event `E`, with its typed data:
 use enshwick::events::{PlayerJoined, WorldSaved};
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    load.on::<PlayerJoined>(|player| enshwick::info!("entity {} joined", player.entity.0))?;
+    load.on::<PlayerJoined>(|player| enshwick::info!("entity {} joined", player.entity))?;
     load.on::<WorldSaved>(|()| enshwick::info!("saved"))
 }
 ```

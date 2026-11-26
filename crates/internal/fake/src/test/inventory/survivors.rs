@@ -1,7 +1,7 @@
 //! The fake's survivors: their lookups, beds, summons and menu statuses.
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{BedCheck, Header, Summon, SurvivorLookup};
+use enshwick_core::abi::{BedCheck, Summon, SurvivorLookup};
 
 use crate::test::{Installed, table};
 
@@ -24,7 +24,7 @@ impl Installed {
     /// use enshwick::survivors::{Answer, NpcId};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let vanilla = Some(enshwick::Entity(4096));
+    /// let vanilla = Some(enshwick::Entity::from_engine(4096));
     /// let answer = loader.survivor_lookup(NpcId(7), vanilla, SurvivorLookup::SPAWN, None, [0; 3], &[]);
     /// assert_eq!(answer, Answer::Vanilla);
     /// ```
@@ -53,8 +53,7 @@ impl Installed {
         use enshwick_core::survivors::Answer;
         let lookups = table::with(Vec::new(), |s| s.inventory.survivor_lookup.clone());
         let mut beds = beds;
-        let lookup = SurvivorLookup {
-            header: Header::of::<SurvivorLookup>(),
+        let lookup = enshwick_core::headed!(SurvivorLookup {
             survivor,
             vanilla: vanilla.unwrap_or(Entity::NONE),
             purpose,
@@ -62,7 +61,7 @@ impl Installed {
             cell,
             bed_of: Some(bed_of),
             token: (&raw mut beds).cast(),
-        };
+        });
         // As the loader: in load order, the first that answers decides.
         lookups
             .iter()
@@ -72,7 +71,7 @@ impl Installed {
                 // pointer.
                 let answered = registered
                     .run(|answer, user| unsafe { answer(&raw const lookup, user, &raw mut out) });
-                (answered != 0).then(|| match Entity::from_raw(out.0) {
+                (answered != 0).then(|| match Entity::from_raw(out.get()) {
                     Some(entity) => Answer::Entity(entity),
                     None => Answer::Nobody,
                 })
@@ -89,7 +88,7 @@ impl Installed {
     /// use enshwick::abi::{BedCheck, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let check = BedCheck { header: Header::of::<BedCheck>(), npc_id: enshwick::survivors::NpcId::new(7), entity: enshwick::Entity(1), bed_id: enshwick::Entity(2), home: [0; 3], bed_at: [0; 3] };
+    /// let check = enshwick::abi::headed!(BedCheck { npc_id: enshwick::survivors::NpcId::new(7), entity: enshwick::Entity::from_engine(1), bed_id: enshwick::Entity::from_engine(2), home: [0; 3], bed_at: [0; 3] });
     /// assert!(loader.survivor_bed_check(&check));
     /// ```
     #[must_use]
@@ -113,18 +112,17 @@ impl Installed {
     /// use enshwick::abi::{Header, Summon};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let summon = Summon {
-    ///     header: Header::of::<Summon>(),
+    /// let summon = enshwick::abi::headed!(Summon {
     ///     item: enshwick::ItemId::new(1),
     ///     ammo: enshwick::ItemId::new(0),
     ///     template: enshwick::abi::Guid::NIL,
     ///     target: [0; 3],
     ///     slot: 0,
-    ///     pide: enshwick::Entity(0),
+    ///     pide: enshwick::Entity::from_engine(0),
     ///     meter: [0; 2],
     ///     consumed: 0,
     ///     reserved: [0; 3],
-    /// };
+    /// });
     /// assert_eq!(loader.summon(&summon), 0);
     /// ```
     #[must_use]
@@ -151,18 +149,17 @@ impl Installed {
     /// use enshwick::abi::{Header, Summon};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let summon = Summon {
-    ///     header: Header::of::<Summon>(),
+    /// let summon = enshwick::abi::headed!(Summon {
     ///     item: enshwick::ItemId::new(1),
     ///     ammo: enshwick::ItemId::new(0),
     ///     template: enshwick::abi::Guid::NIL,
     ///     target: [0; 3],
     ///     slot: 0,
-    ///     pide: enshwick::Entity(0),
+    ///     pide: enshwick::Entity::from_engine(0),
     ///     meter: [0; 2],
     ///     consumed: 1,
     ///     reserved: [0; 3],
-    /// };
+    /// });
     /// assert_eq!(loader.summoned(&summon), 0);
     /// ```
     #[must_use]

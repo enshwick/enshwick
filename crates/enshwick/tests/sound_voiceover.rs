@@ -336,15 +336,16 @@ mod tests {
         let loader = client();
         let welcome = Id::new("you.first:welcome");
         let status = run(&loader, 1, |load| {
-            let line = load.add_voiceover(NewVoiceover {
-                fallback: Some("english".into()),
-                ..NewVoiceover::new(
+            let line = load.add_voiceover({
+                let mut value = NewVoiceover::new(
                     welcome,
                     vec![
                         VoiceLine::new("english", "short.wav"),
                         VoiceLine::new("simplified_chinese", "long.wav"),
                     ],
-                )
+                );
+                value.fallback = Some("english".into());
+                value
             })?;
             assert_eq!(line, VoiceoverId::from_guid(welcome.guid()));
             let unknown = NewVoiceover::new(
@@ -416,9 +417,10 @@ mod tests {
                 Id::new("you.first:welcome"),
                 vec![VoiceLine::new("english", "short.wav")],
             ))?;
-            let night = NewMusic {
-                environment: Some("Grassland".into()),
-                ..NewMusic::new(Id::new("you.first:night"), vec!["short.wav".into()])
+            let night = {
+                let mut value = NewMusic::new(Id::new("you.first:night"), vec!["short.wav".into()]);
+                value.environment = Some("Grassland".into());
+                value
             };
             load.add_music(night).map(|_| ())
         });
@@ -429,18 +431,20 @@ mod tests {
     fn music_rows_of_two_mods_add_up_in_load_order() {
         let loader = client();
         let first = run(&loader, 1, |load| {
-            let night = NewMusic {
-                environment: Some("Grassland".into()),
-                in_battle: Some(false),
-                ..NewMusic::new(
+            let night = {
+                let mut value = NewMusic::new(
                     Id::new("you.first:night"),
                     vec!["short.wav".into(), "long.wav".into()],
-                )
+                );
+                value.environment = Some("Grassland".into());
+                value.in_battle = Some(false);
+                value
             };
             load.add_music(night)?;
-            let moon = NewMusic {
-                environment: Some("Moon".into()),
-                ..NewMusic::new(Id::new("you.first:moon"), vec!["short.wav".into()])
+            let moon = {
+                let mut value = NewMusic::new(Id::new("you.first:moon"), vec!["short.wav".into()]);
+                value.environment = Some("Moon".into());
+                value
             };
             let refused = load.add_music(moon).unwrap_err().to_string();
             assert!(refused.contains("None, Grassland, Desert"), "{refused}");

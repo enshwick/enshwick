@@ -56,7 +56,7 @@ pub const WEAPON_GEMS: ItemSetCategory = ItemSetCategory::new(4_277_734_449);
 pub const ENEMY_TROPHIES: ItemSetCategory = ItemSetCategory::new(4_206_935_582);
 
 /// Every category, in the journal's order.
-pub const ALL: [ItemSetCategory; 20] = [
+pub const ALL: &[ItemSetCategory] = &[
     BUILDING_BLOCKS,
     TERRAIN_MATERIALS,
     PLAYER_CUSTOMIZATION,

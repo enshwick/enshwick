@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwapOption;
-use enshwick_core::abi::{Event, Header, KnowledgeId, QuestData, QuestProgressData, QuestStepData};
+use enshwick_core::abi::{Event, KnowledgeId, QuestData, QuestProgressData, QuestStepData};
 use enshwick_core::content::knowledge::{KnowledgeQuery, KnowledgeTest};
 use enshwick_core::knowledge::Scope;
 use enshwick_core::quests::QuestInfo;
@@ -149,31 +149,24 @@ impl Raise {
     ) -> Option<Self> {
         let quest = KnowledgeId::new(each.quest);
         match each.role {
-            Role::Started => (now && !before).then(|| {
-                Self::Started(QuestData {
-                    header: Header::of::<QuestData>(),
-                    entity,
-                    quest,
-                })
-            }),
+            Role::Started => (now && !before)
+                .then(|| Self::Started(enshwick_abi::headed!(QuestData { entity, quest }))),
             Role::Done => (now && !before).then(|| {
-                Self::Done(QuestStepData {
-                    header: Header::of::<QuestStepData>(),
+                Self::Done(enshwick_abi::headed!(QuestStepData {
                     entity,
                     quest,
                     step: each.step,
-                })
+                }))
             }),
             Role::Part { part, target } => (value != old).then(|| {
-                Self::Counted(QuestProgressData {
-                    header: Header::of::<QuestProgressData>(),
+                Self::Counted(enshwick_abi::headed!(QuestProgressData {
                     entity,
                     quest,
                     step: each.step,
                     part,
                     value,
                     target,
-                })
+                }))
             }),
         }
     }
@@ -224,7 +217,7 @@ struct Events {
     held: Mutex<Held>,
     /// Whether `held` has steps to ask again.
     asking: AtomicBool,
-    /// The holders in `held`, a bit for `Entity(n)` at bit `n`.
+    /// The holders in `held`, a bit for entity `n` at bit `n`.
     seen: [AtomicU64; SEEN_WORDS],
 }
 
@@ -242,7 +235,7 @@ static STATE: Events = Events {
 impl Events {
     /// Whether `entity` is a holder the module follows.
     fn seen(&self, entity: Entity) -> bool {
-        let at = entity.0 as usize;
+        let at = entity.get() as usize;
         self.seen
             .get(at / 64)
             .is_some_and(|word| word.load(Ordering::Relaxed) & (1 << (at % 64)) != 0)
@@ -250,7 +243,7 @@ impl Events {
 
     /// Notes whether the module follows `entity`, under the `held` lock.
     fn mark(&self, entity: Entity, seen: bool) {
-        let at = entity.0 as usize;
+        let at = entity.get() as usize;
         if let Some(word) = self.seen.get(at / 64) {
             let bit = 1 << (at % 64);
             if seen {
@@ -302,7 +295,7 @@ fn index() -> Option<Arc<Index>> {
     }
 }
 
-/// Notes the holder `entity`, the world for `Entity(0)`, before the loader
+/// Notes the holder `entity`, the world for entity 0, before the loader
 /// raises its log of this step: a holder seen for the first time has its
 /// values read, so its log of this step raises nothing. A character counts
 /// from the step its save has loaded, so the values the save brings raise
@@ -311,14 +304,15 @@ pub(crate) fn look(loader: &Loader, entity: Entity) {
     if !wanted() || STATE.seen(entity) {
         return;
     }
-    if entity != Entity(0) && !super::store::changes::character_loaded(loader, entity) {
+    if entity != Entity::from_engine(0) && !super::store::changes::character_loaded(loader, entity)
+    {
         return;
     }
     let Some(index) = index() else {
         return;
     };
     let holder = snapshot(loader, &index, entity);
-    STATE.held.relock().holders.insert(entity.0, holder);
+    STATE.held.relock().holders.insert(entity.get(), holder);
     STATE.mark(entity, true);
 }
 
@@ -346,7 +340,7 @@ fn snapshot(loader: &Loader, index: &Index, entity: Entity) -> Holder {
 pub(crate) fn gone(entity: Entity) {
     if STATE.seen(entity) {
         let mut state = STATE.held.relock();
-        state.holders.remove(&entity.0);
+        state.holders.remove(&entity.get());
         state.pending.retain(|(asked, ..)| *asked != entity);
         STATE.mark(entity, false);
     }
@@ -371,7 +365,7 @@ fn moved(uses: &[Use], entity: Entity, id: u32, value: u32) -> Vec<Raise> {
     let Held {
         holders, pending, ..
     } = &mut *state;
-    let Some(holder) = holders.get_mut(&entity.0) else {
+    let Some(holder) = holders.get_mut(&entity.get()) else {
         return Vec::new();
     };
     let old = holder.values.insert(id, value).unwrap_or(0);
@@ -379,9 +373,9 @@ fn moved(uses: &[Use], entity: Entity, id: u32, value: u32) -> Vec<Raise> {
     for each in uses {
         let test = each.query.test;
         if let KnowledgeTest::Holds = test {
-            if entity == Entity(0) && each.query.scope == Scope::Player {
+            if entity == Entity::from_engine(0) && each.query.scope == Scope::Player {
                 for &player in holders.keys().filter(|&&key| key != 0) {
-                    ask_again(pending, Entity(player), each);
+                    ask_again(pending, Entity::from_engine(player), each);
                 }
             } else {
                 ask_again(pending, entity, each);
@@ -444,10 +438,10 @@ fn ask(
     let mut raised = Vec::new();
     pending.retain_mut(|(entity, each, left)| {
         let query = each.query.id.get();
-        let Some(holder) = holders.get_mut(&entity.0) else {
+        let Some(holder) = holders.get_mut(&entity.get()) else {
             return false;
         };
-        let answer = *asked.entry((entity.0, query)).or_insert_with(|| {
+        let answer = *asked.entry((entity.get(), query)).or_insert_with(|| {
             holds(*entity, query).map(|now| (holder.answers.insert(query, now), now))
         });
         *left -= 1;
@@ -483,11 +477,11 @@ pub(crate) fn follow_for_test(entity: Entity, id: u32) {
             quest: 0x51,
             step: 0,
             role: Role::Done,
-            query: KnowledgeQuery {
-                id: KnowledgeId::new(id),
-                scope: Scope::Player,
-                test: KnowledgeTest::AtLeast(3),
-            },
+            query: KnowledgeQuery::new(
+                KnowledgeId::new(id),
+                Scope::Player,
+                KnowledgeTest::AtLeast(3),
+            ),
         }],
     );
     STATE.index.store(Some(Arc::new(index)));
@@ -495,7 +489,7 @@ pub(crate) fn follow_for_test(entity: Entity, id: u32) {
         .held
         .relock()
         .holders
-        .insert(entity.0, Holder::default());
+        .insert(entity.get(), Holder::default());
     STATE.mark(entity, true);
 }
 
@@ -506,7 +500,7 @@ pub(crate) fn held_for_test(entity: Entity, id: u32) -> Option<u32> {
         .held
         .relock()
         .holders
-        .get(&entity.0)
+        .get(&entity.get())
         .and_then(|holder| holder.values.get(&id).copied())
 }
 
@@ -534,11 +528,7 @@ mod tests {
     use enshwick_core::knowledge::Scope;
 
     fn query(id: u32, test: KnowledgeTest) -> KnowledgeQuery {
-        KnowledgeQuery {
-            id: KnowledgeId::new(id),
-            scope: Scope::Player,
-            test,
-        }
+        KnowledgeQuery::new(KnowledgeId::new(id), Scope::Player, test)
     }
 
     fn use_of(role: Role, test: KnowledgeTest) -> Use {
@@ -553,7 +543,7 @@ mod tests {
     #[test]
     fn a_step_raises_once_as_its_query_comes_to_hold() {
         let done = use_of(Role::Done, KnowledgeTest::AtLeast(3));
-        let player = Entity(2);
+        let player = Entity::from_engine(2);
         assert!(Raise::of(&done, player, false, false, 1, 2).is_none());
         let raised = Raise::of(&done, player, false, true, 2, 3);
         assert!(
@@ -573,11 +563,11 @@ mod tests {
     #[test]
     fn a_counted_part_raises_on_every_change_of_its_counter() {
         let part = use_of(Role::Part { part: 0, target: 5 }, KnowledgeTest::AtLeast(5));
-        let raised = Raise::of(&part, Entity(2), false, false, 2, 3);
+        let raised = Raise::of(&part, Entity::from_engine(2), false, false, 2, 3);
         assert!(
             matches!(raised, Some(Raise::Counted(data)) if (data.value, data.target) == (3, 5))
         );
-        assert!(Raise::of(&part, Entity(2), false, false, 3, 3).is_none());
+        assert!(Raise::of(&part, Entity::from_engine(2), false, false, 3, 3).is_none());
     }
 
     #[test]
@@ -621,9 +611,10 @@ mod tests {
             quest,
             step: 0,
             role: Role::Done,
-            query: KnowledgeQuery {
-                scope,
-                ..query(0x900, KnowledgeTest::Holds)
+            query: {
+                let mut value = query(0x900, KnowledgeTest::Holds);
+                value.scope = scope;
+                value
             },
         }
     }
@@ -637,7 +628,10 @@ mod tests {
         let mut holders = FxHashMap::default();
         holders.insert(2, Holder::default());
         holders.get_mut(&2).unwrap().answers.insert(0x900, false);
-        let mut pending = vec![(Entity(2), a, EXTERN_STEPS), (Entity(2), b, EXTERN_STEPS)];
+        let mut pending = vec![
+            (Entity::from_engine(2), a, EXTERN_STEPS),
+            (Entity::from_engine(2), b, EXTERN_STEPS),
+        ];
         let mut asked = 0;
         let raised = ask(&mut holders, &mut pending, |_, _| {
             asked += 1;
@@ -660,7 +654,7 @@ mod tests {
         let each = game_query_step(0x51, Scope::Player);
         let mut holders = FxHashMap::default();
         holders.insert(2, Holder::default());
-        let mut pending = vec![(Entity(2), each, EXTERN_STEPS)];
+        let mut pending = vec![(Entity::from_engine(2), each, EXTERN_STEPS)];
         assert!(ask(&mut holders, &mut pending, |_, _| None).is_empty());
         assert_eq!(pending[0].2, EXTERN_STEPS - 1, "unanswered, asked again");
         assert!(
@@ -680,24 +674,24 @@ mod tests {
             for holder in [0, 2, 3] {
                 state.holders.insert(holder, Holder::default());
             }
-            state.pending.push((Entity(2), player, 1));
+            state.pending.push((Entity::from_engine(2), player, 1));
         }
-        assert!(moved(&[player], Entity(2), 7, 1).is_empty());
+        assert!(moved(&[player], Entity::from_engine(2), 7, 1).is_empty());
         let mut pending = STATE.held.relock().pending.clone();
         assert_eq!(
             pending,
-            [(Entity(2), player, EXTERN_STEPS)],
+            [(Entity::from_engine(2), player, EXTERN_STEPS)],
             "counted again"
         );
-        assert!(moved(&[player, world], Entity(0), 7, 1).is_empty());
+        assert!(moved(&[player, world], Entity::from_engine(0), 7, 1).is_empty());
         pending = STATE.held.relock().pending.clone();
-        pending.sort_by_key(|(entity, each, _)| (entity.0, each.quest));
+        pending.sort_by_key(|(entity, each, _)| (entity.get(), each.quest));
         assert_eq!(
             pending,
             [
-                (Entity(0), world, EXTERN_STEPS),
-                (Entity(2), player, EXTERN_STEPS),
-                (Entity(3), player, EXTERN_STEPS),
+                (Entity::from_engine(0), world, EXTERN_STEPS),
+                (Entity::from_engine(2), player, EXTERN_STEPS),
+                (Entity::from_engine(3), player, EXTERN_STEPS),
             ],
             "a player's query is each player's, the world's the world's"
         );
@@ -708,14 +702,17 @@ mod tests {
     #[test]
     fn a_holder_is_seen_from_its_mark_until_it_goes() {
         forget();
-        assert!(!STATE.seen(Entity(4096)));
-        STATE.mark(Entity(4096), true);
-        STATE.mark(Entity(0), true);
-        assert!(STATE.seen(Entity(4096)) && STATE.seen(Entity(0)));
-        assert!(!STATE.seen(Entity(64)));
-        gone(Entity(4096));
-        assert!(!STATE.seen(Entity(4096)) && STATE.seen(Entity(0)));
-        assert!(!STATE.seen(Entity(u32::MAX)), "past every record");
+        assert!(!STATE.seen(Entity::from_engine(4096)));
+        STATE.mark(Entity::from_engine(4096), true);
+        STATE.mark(Entity::from_engine(0), true);
+        assert!(STATE.seen(Entity::from_engine(4096)) && STATE.seen(Entity::from_engine(0)));
+        assert!(!STATE.seen(Entity::from_engine(64)));
+        gone(Entity::from_engine(4096));
+        assert!(!STATE.seen(Entity::from_engine(4096)) && STATE.seen(Entity::from_engine(0)));
+        assert!(
+            !STATE.seen(Entity::from_engine(u32::MAX)),
+            "past every record"
+        );
         forget();
     }
 
@@ -723,10 +720,13 @@ mod tests {
     fn a_change_of_an_unseen_holder_raises_nothing_and_a_seen_one_its_move() {
         forget();
         let uses = [use_of(Role::Done, KnowledgeTest::AtLeast(3))];
-        assert!(moved(&uses, Entity(9), 7, 3).is_empty(), "not seen yet");
+        assert!(
+            moved(&uses, Entity::from_engine(9), 7, 3).is_empty(),
+            "not seen yet"
+        );
         STATE.held.relock().holders.insert(9, Holder::default());
-        assert_eq!(moved(&uses, Entity(9), 7, 3).len(), 1);
-        assert!(moved(&uses, Entity(9), 7, 4).is_empty());
+        assert_eq!(moved(&uses, Entity::from_engine(9), 7, 3).len(), 1);
+        assert!(moved(&uses, Entity::from_engine(9), 7, 4).is_empty());
         forget();
     }
 }

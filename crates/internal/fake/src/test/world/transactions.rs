@@ -382,7 +382,7 @@ impl FakeTransaction {
             .base
             .players
             .iter()
-            .find(|player| player.entity == enshwick_core::Entity(self.actor))
+            .find(|player| player.entity == enshwick_core::Entity::from_engine(self.actor))
             .map_or(0, |player| player.permissions);
         self.changes
             .iter()

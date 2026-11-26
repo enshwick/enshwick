@@ -765,6 +765,10 @@ impl Actions {
 /// `actions`: the arguments, subjects and outcomes an action takes.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a unit marker, which never gains a field"
+)]
 pub struct ActionFns;
 
 #[crate::script(action_fns)]

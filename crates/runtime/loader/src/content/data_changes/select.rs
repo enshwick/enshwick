@@ -217,13 +217,13 @@ pub fn traits_of(
             .flatten()
             .and_then(&slots)
     });
-    Some(ItemTraits {
-        max_stack,
-        category,
-        flags,
-        slots: placed,
-        backpack_slots,
-    })
+    let mut traits = ItemTraits::default();
+    traits.max_stack = max_stack;
+    traits.category = category;
+    traits.flags = flags;
+    traits.slots = placed;
+    traits.backpack_slots = backpack_slots;
+    Some(traits)
 }
 
 /// One line for each group of conflicts that differ only in their entry,
@@ -269,30 +269,28 @@ mod tests {
     }
 
     fn items() -> Vec<(Guid, ItemTraits)> {
-        let stack = |max_stack, category| ItemTraits {
-            max_stack,
-            category,
-            flags: 0,
-            slots: None,
-            backpack_slots: None,
+        let stack = |max_stack, category| {
+            let mut value = ItemTraits::default();
+            value.max_stack = max_stack;
+            value.category = category;
+            value.flags = 0;
+            value.slots = None;
+            value.backpack_slots = None;
+            value
         };
         vec![
             (guid(1), stack(20, 9)),
             (guid(2), stack(50, 8)),
-            (
-                guid(3),
-                ItemTraits {
-                    flags: ItemTypeInfo::HAS_PIDE,
-                    ..stack(1, 2)
-                },
-            ),
-            (
-                guid(4),
-                ItemTraits {
-                    slots: Some(24),
-                    ..stack(1, 6)
-                },
-            ),
+            (guid(3), {
+                let mut value = stack(1, 2);
+                value.flags = ItemTypeInfo::HAS_PIDE;
+                value
+            }),
+            (guid(4), {
+                let mut value = stack(1, 6);
+                value.slots = Some(24);
+                value
+            }),
         ]
     }
 
@@ -300,27 +298,9 @@ mod tests {
         Selectable {
             items: items(),
             recipes: vec![
-                (
-                    guid(10),
-                    RecipeTraits {
-                        kind: RecipeKind::Roof,
-                        workshop: 0,
-                    },
-                ),
-                (
-                    guid(11),
-                    RecipeTraits {
-                        kind: RecipeKind::Other,
-                        workshop: KILN.id(),
-                    },
-                ),
-                (
-                    guid(12),
-                    RecipeTraits {
-                        kind: RecipeKind::Roof,
-                        workshop: KILN.id(),
-                    },
-                ),
+                (guid(10), RecipeTraits::new(RecipeKind::Roof, 0)),
+                (guid(11), RecipeTraits::new(RecipeKind::Other, KILN.id())),
+                (guid(12), RecipeTraits::new(RecipeKind::Roof, KILN.id())),
             ],
         }
     }

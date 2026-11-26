@@ -19,14 +19,13 @@ impl Installed {
     /// use enshwick::abi::{Header, SaveInfo};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// loader.set_save_info(Some(SaveInfo {
-    ///     header: Header::of::<SaveInfo>(),
+    /// loader.set_save_info(Some(enshwick::abi::headed!(SaveInfo {
     ///     world: enshwick::abi::Guid([1; 16]),
     ///     saved_at: 60,
     ///     size: 10,
     ///     backups: 0,
     ///     reserved: 0,
-    /// }));
+    /// })));
     /// ```
     pub fn set_save_info(&self, info: Option<SaveInfo>) {
         table::with((), |s| s.world.save.info = info);
@@ -106,7 +105,7 @@ impl Installed {
                 .save
                 .unsaved
                 .iter()
-                .map(|&e| enshwick_core::Entity(e))
+                .map(|&e| enshwick_core::Entity::from_engine(e))
                 .collect()
         })
     }

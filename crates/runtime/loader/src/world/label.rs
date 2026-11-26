@@ -12,7 +12,7 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{Header, HookFlags, PlayerInfo, RenameCall, RenameFilterFn, Str};
+use enshwick_core::abi::{HookFlags, PlayerInfo, RenameCall, RenameFilterFn, Str};
 
 use crate::engine::filters::Filters;
 use crate::engine::fuse::Fuse;
@@ -230,7 +230,7 @@ pub(crate) fn set(loader: &Loader, entity: Entity, text: &str) -> Result<(), Lab
     // SAFETY: the game's component lookup at the table's `label.find`, with
     // the non-null world checked earlier and our own four-word out record, on
     // the game thread at a quiet moment, outside systems.
-    let slot = unsafe { (layout.find)(&raw mut found, world, layout.label_type, entity.0) };
+    let slot = unsafe { (layout.find)(&raw mut found, world, layout.label_type, entity.get()) };
     // SAFETY: the lookup returns its out record, whose first word is the
     // component pointer or null.
     let component = unsafe { enshwick_core::raw::read_ptr_at::<u8>(slot.cast_const().cast(), 0) };
@@ -265,7 +265,8 @@ pub(crate) fn set(loader: &Loader, entity: Entity, text: &str) -> Result<(), Lab
         // the non-null world checked earlier and a span over `id`, which
         // outlives the call; called as the game's rename path calls it, on the
         // game thread at a quiet moment.
-        let _added = unsafe { (layout.add)(world, entity.0, layout.label_type, &raw const data) };
+        let _added =
+            unsafe { (layout.add)(world, entity.get(), layout.label_type, &raw const data) };
     }
     Ok(())
 }
@@ -354,14 +355,13 @@ unsafe fn refused(text: *const [usize; 2]) -> bool {
         String::from_utf8_lossy(&bytes).into_owned()
     };
     let player = renamer(loader, machine);
-    let call = RenameCall {
-        header: Header::of::<RenameCall>(),
-        entity: Entity(entity),
+    let call = enshwick_abi::headed!(RenameCall {
+        entity: Entity::from_engine(entity),
         player: player
             .as_ref()
             .map_or(core::ptr::null(), core::ptr::from_ref),
         text: Str::new(&name),
-    };
+    });
     // SAFETY: the filter is the mod's registered `RenameFilterFn` in its DLL,
     // which stays loaded for the process, called with a `RenameCall` that
     // outlives the call and the mod's own `user` word; by the callback

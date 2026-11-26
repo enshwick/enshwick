@@ -79,6 +79,10 @@ pub fn is_reserved(word: &str) -> bool {
 
 /// A mod's command name and alias, the mod named by an `O`.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "hidden: only the loader and the fake host name it"
+)]
 pub struct Named<O> {
     /// The mod that named them.
     pub owner: O,
@@ -113,6 +117,10 @@ impl<O> Named<O> {
 
 /// Why a mod's commands are refused.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[expect(
+    clippy::exhaustive_enums,
+    reason = "hidden: only the loader and the fake host name it"
+)]
 pub enum Refusal<O> {
     /// A malformed or reserved alias, an alias not shorter than the name, or
     /// a mod whose own name is reserved.

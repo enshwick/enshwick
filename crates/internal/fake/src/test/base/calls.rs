@@ -7,8 +7,7 @@ use crate::test::table::entries;
 use core::ffi::c_void;
 
 use enshwick_core::abi::{CallFn, CallSpec, Status};
-#[cfg(feature = "unstable")]
-use enshwick_core::services::{Call, CallError};
+use enshwick_core::services::{Call, CallServiceError};
 
 use crate::test::Installed;
 use crate::test::table::{Registered, put, with};
@@ -25,7 +24,6 @@ struct Declared {
     output_size: u32,
 }
 
-#[cfg(feature = "unstable")]
 impl Declared {
     fn of<C: Call>() -> Self {
         let fields = |layout: &[enshwick_core::abi::LayoutField]| {
@@ -225,7 +223,6 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// loader.serve_call(|input: &PriceOf| input.item * 10);
     /// ```
-    #[cfg(feature = "unstable")]
     pub fn serve_call<C, F>(&self, handler: F)
     where
         C: Call,
@@ -244,13 +241,13 @@ impl Installed {
     ///
     /// # Errors
     ///
-    /// [`CallError::Unmatched`] when the mod serves no call that matches
+    /// [`CallServiceError::Unmatched`] when the mod serves no call that matches
     /// `C`, or what its handler answers.
     ///
     /// # Examples
     ///
     /// ```
-    /// use enshwick::services::CallError;
+    /// use enshwick::services::CallServiceError;
     ///
     /// #[enshwick::call(name = "price-of", output = u32)]
     /// #[derive(Clone, Copy, Debug)]
@@ -259,10 +256,9 @@ impl Installed {
     /// }
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert_eq!(loader.call(&PriceOf { item: 1 }), Err(CallError::Unmatched));
+    /// assert_eq!(loader.call(&PriceOf { item: 1 }), Err(CallServiceError::Unmatched));
     /// ```
-    #[cfg(feature = "unstable")]
-    pub fn call<C: Call>(&self, input: &C) -> Result<C::Output, CallError> {
+    pub fn call<C: Call>(&self, input: &C) -> Result<C::Output, CallServiceError> {
         let wanted = Declared::of::<C>();
         let server = with(None, |s| {
             s.base
@@ -273,7 +269,7 @@ impl Installed {
                 .cloned()
         });
         let Some(server) = server else {
-            return Err(CallError::Unmatched);
+            return Err(CallServiceError::Unmatched);
         };
         let mut answer = core::mem::MaybeUninit::<C::Output>::uninit();
         // SAFETY: the mod served the handler for a declaration equal to `C`'s
@@ -285,7 +281,7 @@ impl Installed {
                 user,
             )
         });
-        enshwick_core::__fake::outcome::<CallError>(status)?;
+        enshwick_core::__fake::outcome::<CallServiceError>(status)?;
         // SAFETY: an OK status means the handler wrote an answer of the
         // matched type, `C::Output`.
         Ok(unsafe { answer.assume_init() })

@@ -280,6 +280,7 @@ impl Arg {
 /// assert_eq!(locker.id, 42);
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct Subject {
     /// The mod's own id for it, such as a packed position.
     pub id: u64,
@@ -404,8 +405,8 @@ impl ActionTarget {
     /// # Examples
     ///
     /// ```
-    /// let chest = enshwick::actions::ActionTarget::entity(enshwick::Entity(4096));
-    /// assert_eq!(chest.entity, Some(enshwick::Entity(4096)));
+    /// let chest = enshwick::actions::ActionTarget::entity(enshwick::Entity::from_engine(4096));
+    /// assert_eq!(chest.entity, Some(enshwick::Entity::from_engine(4096)));
     /// ```
     #[must_use]
     pub const fn entity(entity: Entity) -> Self {
@@ -436,7 +437,7 @@ impl ActionTarget {
     /// ```
     /// use enshwick::actions::ActionTarget;
     ///
-    /// let chest = ActionTarget::entity(enshwick::Entity(4096)).with_position([1.0, 2.0, 3.0]);
+    /// let chest = ActionTarget::entity(enshwick::Entity::from_engine(4096)).with_position([1.0, 2.0, 3.0]);
     /// assert_eq!(chest.position, Some([1.0, 2.0, 3.0]));
     /// ```
     #[must_use]
@@ -458,13 +459,13 @@ impl ActionTarget {
     /// The object as the loader takes it.
     pub(crate) fn to_raw(self) -> crate::abi::ActionTarget {
         use crate::abi::ActionTarget as Raw;
-        Raw {
+        enshwick_abi::headed!(Raw {
             flags: self.entity.map_or(0, |_| Raw::ENTITY)
                 | self.position.map_or(0, |_| Raw::POSITION),
-            entity: self.entity.unwrap_or(Entity(0)),
+            entity: self.entity.unwrap_or(Entity::from_engine(0)),
             position: self.position.unwrap_or_default(),
             ..Raw::NONE
-        }
+        })
     }
 }
 

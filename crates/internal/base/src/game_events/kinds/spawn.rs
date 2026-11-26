@@ -61,6 +61,10 @@ pub struct PlayerSpawnInfoChangeEvent {
 /// ```
 #[cfg(feature = "unstable")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct UniqueSceneId(pub u32);
 
 #[cfg(feature = "unstable")]

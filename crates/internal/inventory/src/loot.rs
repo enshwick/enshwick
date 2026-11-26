@@ -45,6 +45,7 @@ const ROW_WORDS: usize = 9;
 ///
 /// See [`Container`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[non_exhaustive]
 pub struct InteractionOfferRuntime {
     /// The entity that last opened or looted the container; `None` before
     /// anyone did.
@@ -53,6 +54,22 @@ pub struct InteractionOfferRuntime {
     pub last_accept_time: i64,
     /// Whether the game offers no interaction now.
     pub is_disabled: bool,
+}
+
+impl InteractionOfferRuntime {
+    /// A `InteractionOfferRuntime` of its parts; `guest_id` starts as `None`.
+    ///
+    /// # Examples
+    ///
+    /// See [`InteractionOfferRuntime`].
+    #[must_use]
+    pub const fn new(last_accept_time: i64, is_disabled: bool) -> Self {
+        Self {
+            guest_id: None,
+            last_accept_time,
+            is_disabled,
+        }
+    }
 }
 
 /// What a loot container is and holds, read in one go.
@@ -65,18 +82,14 @@ pub struct InteractionOfferRuntime {
 /// use enshwick::Entity;
 /// use enshwick::loot::{Container, InteractionOfferRuntime};
 ///
-/// let corpse = Container {
-///     entity: Entity(900),
-///     position: [10.0, 2.0, -4.0],
-///     is_empty: false,
-///     expires: true,
-///     area_loot: Some(true),
-///     offer: Some(InteractionOfferRuntime { guest_id: None, last_accept_time: 0, is_disabled: false }),
-/// };
+/// let mut corpse = Container::new(Entity::from_engine(900), [10.0, 2.0, -4.0], false, true);
+/// corpse.area_loot = Some(true);
+/// corpse.offer = Some(InteractionOfferRuntime::new(0, false));
 /// assert!(corpse.is_enemy_loot());
 /// assert!(corpse.is_open());
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct Container {
     /// The container.
     pub entity: Entity,
@@ -92,6 +105,25 @@ pub struct Container {
     pub area_loot: Option<bool>,
     /// Its interaction offer; `None` without one.
     pub offer: Option<InteractionOfferRuntime>,
+}
+
+impl Container {
+    /// A `Container` of its parts; `area_loot` and `offer` start as `None`.
+    ///
+    /// # Examples
+    ///
+    /// See [`Container`].
+    #[must_use]
+    pub const fn new(entity: Entity, position: [f64; 3], is_empty: bool, expires: bool) -> Self {
+        Self {
+            entity,
+            position,
+            is_empty,
+            expires,
+            area_loot: None,
+            offer: None,
+        }
+    }
 }
 
 impl Container {
@@ -522,6 +554,10 @@ impl LoadMethods for crate::BaseLoad {
 /// The free functions of [`loot`](self) as a script's namespace `loot`.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a unit marker, which never gains a field"
+)]
 pub struct LootFns;
 
 impl crate::script::Bound for LootFns {
@@ -558,7 +594,7 @@ mod tests {
 
     fn corpse() -> Container {
         Container {
-            entity: Entity(900),
+            entity: Entity::from_engine(900),
             position: [0.0; 3],
             is_empty: false,
             expires: true,

@@ -17,14 +17,8 @@ mod tests {
         let ring = AffixDef::new(mask).weight(3);
         let amulet = AffixDef::new(mask).weight(5);
         let pool = [
-            Candidate {
-                key: AffixKey(1),
-                def: &ring,
-            },
-            Candidate {
-                key: AffixKey(2),
-                def: &amulet,
-            },
+            Candidate::new(AffixKey(1), &ring),
+            Candidate::new(AffixKey(2), &amulet),
         ];
         let expected = roll(&pool, category, RollRules::new(1, 2), 42);
         let keys: Vec<String> = expected.iter().map(|r| r.affix.0.to_string()).collect();

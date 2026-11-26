@@ -12,19 +12,19 @@ use crate::content::Guid;
 /// ```
 /// use enshwick::abi::{Header, TerrainMaterialInfo};
 ///
-/// let dirt = TerrainMaterialInfo {
-///     header: Header::of::<TerrainMaterialInfo>(),
+/// let dirt = enshwick::abi::headed!(TerrainMaterialInfo {
 ///     id: 1,
 ///     flags: TerrainMaterialInfo::FLATTENS,
 ///     hardness: 0,
 ///     reserved: 0,
 ///     item: enshwick::ItemId::new(0x0d9b_7a1c),
 ///     health: 100,
-/// };
+/// });
 /// assert_eq!(dirt.flags & TerrainMaterialInfo::FLATTENS, TerrainMaterialInfo::FLATTENS);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct TerrainMaterialInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -60,8 +60,7 @@ impl TerrainMaterialInfo {
 /// use enshwick::abi::{Header, TerrainMaterialAdd, TerrainMaterialInfo};
 /// use enshwick::content::{Guid, Id};
 ///
-/// let tar_sand = TerrainMaterialAdd {
-///     header: Header::of::<TerrainMaterialAdd>(),
+/// let tar_sand = enshwick::abi::headed!(TerrainMaterialAdd {
 ///     guid: Id::new("you.sands:tar-sand").guid(),
 ///     item: Guid([7; 16]),
 ///     health: 7,
@@ -71,11 +70,12 @@ impl TerrainMaterialInfo {
 ///     hardness: 0,
 ///     flags: TerrainMaterialInfo::FLATTENS,
 ///     reserved: [0; 3],
-/// };
+/// });
 /// assert_eq!(tar_sand.changes & TerrainMaterialAdd::HARDNESS, 0, "the hardness of 9 stays");
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct TerrainMaterialAdd {
     /// Size and version of this struct.
     pub header: Header,
@@ -130,8 +130,7 @@ impl TerrainMaterialAdd {
 /// ```
 /// use enshwick::abi::{Header, TerrainEdit};
 ///
-/// let hole = TerrainEdit {
-///     header: Header::of::<TerrainEdit>(),
+/// let hole = enshwick::abi::headed!(TerrainEdit {
 ///     kind: TerrainEdit::DIG,
 ///     shape: TerrainEdit::ROUND,
 ///     flags: 0,
@@ -140,11 +139,12 @@ impl TerrainMaterialAdd {
 ///     radius: 3.0,
 ///     height: 0.0,
 ///     protect: [0; 16],
-/// };
+/// });
 /// assert_eq!(hole.kind, TerrainEdit::DIG);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct TerrainEdit {
     /// Size and version of this struct.
     pub header: Header,
@@ -207,6 +207,10 @@ impl TerrainEdit {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct Voxel {
     /// [`Voxel::AIR`], [`Voxel::TERRAIN`] or [`Voxel::BUILDING`]; a reader
     /// treats a kind it does not know as neither.
@@ -293,6 +297,10 @@ impl Voxel {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct VoxelChange {
     /// The voxel's place, in voxels from the world's corner.
     pub at: [u32; 3],
@@ -317,18 +325,18 @@ pub struct VoxelChange {
 /// use enshwick::abi::{Header, ModHandle, VoxelChange, VoxelEditRequest};
 ///
 /// let changes = [VoxelChange::default()];
-/// let edit = VoxelEditRequest {
-///     header: Header::of::<VoxelEditRequest>(),
+/// let edit = enshwick::abi::headed!(VoxelEditRequest {
 ///     by: ModHandle::NONE,
 ///     min: [192, 72, 192],
 ///     size: [16, 16, 16],
 ///     changes: changes.as_ptr(),
 ///     count: 1,
-/// };
+/// });
 /// assert_eq!(edit.by, ModHandle::NONE, "a player or the game made it");
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct VoxelEditRequest {
     /// Size and version of this struct.
     pub header: Header,

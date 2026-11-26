@@ -180,8 +180,8 @@ mod tests {
             .unwrap();
 
         let loader = host
-            .component(Entity(77), history_type, &history)
-            .component(Entity(77), credit_type, &credit)
+            .component(Entity::from_engine(77), history_type, &history)
+            .component(Entity::from_engine(77), credit_type, &credit)
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Watcher)`.
         let status =
@@ -197,11 +197,11 @@ mod tests {
         let [hit] = hits.as_slice() else {
             panic!("{hits:?}")
         };
-        assert_eq!(hit.root_source_id, Some(Entity(5)));
-        assert_eq!(hit.target_id, Entity(77));
-        assert_eq!(hit.source_id, Some(Entity(9)));
+        assert_eq!(hit.root_source_id, Some(Entity::from_engine(5)));
+        assert_eq!(hit.target_id, Entity::from_engine(77));
+        assert_eq!(hit.source_id, Some(Entity::from_engine(9)));
         assert_eq!(hit.root_target_id, None);
-        assert_eq!(hit.weapon_pide_id, Some(Entity(3)));
+        assert_eq!(hit.weapon_pide_id, Some(Entity::from_engine(3)));
         assert_eq!((hit.health_change, hit.stamina_change), (-40, 0));
         assert_eq!(
             hit.damage_types,
@@ -216,11 +216,16 @@ mod tests {
         let [died] = deaths.as_slice() else {
             panic!("{deaths:?}")
         };
-        assert_eq!(died.dead_entity_id, Entity(77));
+        assert_eq!(died.dead_entity_id, Entity::from_engine(77));
         #[cfg(feature = "unstable")]
         {
-            assert_eq!(died.killer, Some(Entity(5)), "{:?}", loader.logs());
-            assert_eq!(died.killer_player, Some(Entity(6)));
+            assert_eq!(
+                died.killer,
+                Some(Entity::from_engine(5)),
+                "{:?}",
+                loader.logs()
+            );
+            assert_eq!(died.killer_player, Some(Entity::from_engine(6)));
         }
 
         for number in [shield, shield + 1] {

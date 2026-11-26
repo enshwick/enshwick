@@ -28,31 +28,25 @@ mod tests {
             );
             assert_eq!(
                 rules[1].grant,
-                [RuleGrant {
-                    id: KnowledgeId::new(VANILLA_PLAYER_KNOWLEDGE),
-                    grant: Grant::Set
-                }]
+                [RuleGrant::new(
+                    KnowledgeId::new(VANILLA_PLAYER_KNOWLEDGE),
+                    Grant::Set
+                )]
             );
-            let crown = RuleGrant {
-                id: KnowledgeId::new(CROWNED),
-                grant: Grant::Flag(1),
-            };
-            load.add_knowledge_rule(NewRule {
-                id: Id::new("you.rules:crown"),
-                scope: Scope::Player,
-                when: KnowledgeQuery::game(GameQuery::new(VANILLA_WORLD_QUERY)),
-                grant: vec![crown],
-            })?;
+            let crown = RuleGrant::new(KnowledgeId::new(CROWNED), Grant::Flag(1));
+            load.add_knowledge_rule(NewRule::new(
+                Id::new("you.rules:crown"),
+                Scope::Player,
+                KnowledgeQuery::game(GameQuery::new(VANILLA_WORLD_QUERY)),
+                vec![crown],
+            ))?;
             assert!(
-                load.add_knowledge_rule(NewRule {
-                    id: Id::new("you.rules:count"),
-                    scope: Scope::World,
-                    when: KnowledgeQuery::game(GameQuery::new(VANILLA_WORLD_QUERY)),
-                    grant: vec![RuleGrant {
-                        id: KnowledgeId::new(CROWNED),
-                        grant: Grant::Add(1)
-                    }],
-                })
+                load.add_knowledge_rule(NewRule::new(
+                    Id::new("you.rules:count"),
+                    Scope::World,
+                    KnowledgeQuery::game(GameQuery::new(VANILLA_WORLD_QUERY)),
+                    vec![RuleGrant::new(KnowledgeId::new(CROWNED), Grant::Add(1))]
+                ))
                 .is_err(),
                 "a counter repeats"
             );
@@ -61,9 +55,10 @@ mod tests {
                     scope: Scope::Player,
                     index: 0,
                 },
-                RuleChange {
-                    grant: Some(vec![crown]),
-                    ..RuleChange::default()
+                {
+                    let mut value = RuleChange::default();
+                    value.grant = Some(vec![crown]);
+                    value
                 },
             )?;
             load.remove_knowledge_rule(RuleId {

@@ -21,7 +21,7 @@
 //!     // Nobody throws the tonic away.
 //!     load.on_item(tonic, Kind::Trash, |_| false)?;
 //!     load.on_item(tonic, Kind::Consume, |used| {
-//!         enshwick::info!("player {} drank a tonic", used.player.0);
+//!         enshwick::info!("player {} drank a tonic", used.player);
 //!         true
 //!     })
 //! }
@@ -206,18 +206,16 @@ impl LoadMethods for crate::BaseLoad {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::abi::Header;
 
     fn raw(kind: u32, inventory: u32, slot: u32) -> RawItemAction {
-        RawItemAction {
-            header: Header::of::<RawItemAction>(),
+        enshwick_abi::headed!(RawItemAction {
             kind,
-            character: Entity(4096),
+            character: Entity::from_engine(4096),
             item: ItemId::new(0x5e01),
             count: 1,
-            inventory: Entity(inventory),
+            inventory: Entity::from_engine(inventory),
             slot,
-        }
+        })
     }
 
     #[test]
@@ -225,7 +223,7 @@ mod tests {
         let used = ItemAction::from_raw(&raw(RawItemAction::CONSUME, 4100, 3));
         assert_eq!(
             used.and_then(|a| a.slot),
-            Some(SlotRef::new(Entity(4100), 3))
+            Some(SlotRef::new(Entity::from_engine(4100), 3))
         );
         let picked = ItemAction::from_raw(&raw(RawItemAction::PICKUP, 0, 0));
         assert_eq!(picked.map(|a| (a.kind, a.slot)), Some((Kind::Pickup, None)));
@@ -247,7 +245,7 @@ mod tests {
             assert_eq!(kind.can_refuse(), refuses, "{kind:?}");
         }
         let mut nobody = raw(RawItemAction::CONSUME, 4100, 3);
-        nobody.character = Entity(0);
+        nobody.character = Entity::from_engine(0);
         assert_eq!(ItemAction::from_raw(&nobody), None, "no player, no action");
     }
 

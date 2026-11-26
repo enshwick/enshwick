@@ -34,7 +34,7 @@ impl FakeHost {
     ///
     /// let host = enshwick::test::FakeHost::new().world();
     /// let transform = host.hash(facts::CURRENT_TRANSFORM.id())?;
-    /// let loader = host.placed(transform, enshwick::Entity(2), [0.0; 3]).install();
+    /// let loader = host.placed(transform, enshwick::Entity::from_engine(2), [0.0; 3]).install();
     /// # let _ = loader;
     /// # Ok::<(), enshwick::Off>(())
     /// ```
@@ -87,8 +87,8 @@ impl FakeHost {
     /// ```
     /// let health = [80.0f32.to_le_bytes(), 100.0f32.to_le_bytes()].concat();
     /// let loader = enshwick::test::FakeHost::new()
-    ///     .component(enshwick::Entity(4096), 0x027a_c564, &health)
-    ///     .template(enshwick::Entity(4096), enshwick::abi::Guid([0x3a; 16]))
+    ///     .component(enshwick::Entity::from_engine(4096), 0x027a_c564, &health)
+    ///     .template(enshwick::Entity::from_engine(4096), enshwick::abi::Guid([0x3a; 16]))
     ///     .install();
     /// # let _ = loader;
     /// ```
@@ -119,7 +119,7 @@ impl FakeHost {
         }
         let data = Box::leak(words).as_mut_ptr();
         self.base.components.insert(
-            (entity.0, type_hash),
+            (entity.get(), type_hash),
             (data.expose_provenance(), bytes.len()),
         );
     }
@@ -182,7 +182,7 @@ impl FakeHost {
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new()
-    ///     .placed(0x027a_c564, enshwick::Entity(4096), [1.0, 2.0, 3.0])
+    ///     .placed(0x027a_c564, enshwick::Entity::from_engine(4096), [1.0, 2.0, 3.0])
     ///     .install();
     /// # let _ = loader;
     /// ```
@@ -196,7 +196,7 @@ impl FakeHost {
         self.world.placed.push((
             type_hash,
             EntityPlace {
-                entity: enshwick_core::Entity(entity.0),
+                entity: enshwick_core::Entity::from_engine(entity.get()),
                 reserved: 0,
                 position,
             },
@@ -212,7 +212,7 @@ impl FakeHost {
     /// ```
     /// use enshwick::abi::MapMarkerInfo;
     ///
-    /// let marker = MapMarkerInfo { position: [10.0, 40.0, 20.0], ..MapMarkerInfo::EMPTY };
+    /// let marker = enshwick::abi::headed!(MapMarkerInfo { position: [10.0, 40.0, 20.0], ..MapMarkerInfo::EMPTY });
     /// let loader = enshwick::test::FakeHost::new().map_marker(marker).install();
     /// # let _ = loader;
     /// ```
@@ -231,7 +231,7 @@ impl FakeHost {
     /// ```
     /// use enshwick::abi::MapFrameInfo;
     ///
-    /// let frame = MapFrameInfo { size: [10240.0; 2], metres_per_cell: 8.0, ..MapFrameInfo::EMPTY };
+    /// let frame = enshwick::abi::headed!(MapFrameInfo { size: [10240.0; 2], metres_per_cell: 8.0, ..MapFrameInfo::EMPTY });
     /// let loader = enshwick::test::FakeHost::new().map_frame(frame).install();
     /// # let _ = loader;
     /// ```
@@ -252,7 +252,7 @@ impl FakeHost {
         entity: enshwick_core::Entity,
         guid: enshwick_core::content::Guid,
     ) -> Self {
-        self.content.templates.insert(entity.0, guid);
+        self.content.templates.insert(entity.get(), guid);
         self
     }
 }
@@ -338,8 +338,7 @@ impl Installed {
     /// use enshwick::abi::{DaytimeInfo, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// loader.set_daytime(DaytimeInfo {
-    ///     header: Header::of::<DaytimeInfo>(),
+    /// loader.set_daytime(enshwick::abi::headed!(DaytimeInfo {
     ///     time_ns: 0,
     ///     day_start_ns: 6 * 3_600_000_000_000,
     ///     day_end_ns: 18 * 3_600_000_000_000,
@@ -347,7 +346,7 @@ impl Installed {
     ///     night_length_ns: 720_000_000_000,
     ///     speed: 1.0,
     ///     flags: 0,
-    /// });
+    /// }));
     /// assert_eq!(loader.daytime().map(|info| info.time_ns), Some(0));
     /// ```
     pub fn set_daytime(&self, info: enshwick_core::abi::DaytimeInfo) {
@@ -523,9 +522,9 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// let loader = enshwick::test::FakeHost::new().component(enshwick::Entity(7), 1, &[4, 2]).install();
-    /// assert_eq!(loader.component_bytes(enshwick::Entity(7), 1), Some(vec![4, 2]));
-    /// assert_eq!(loader.component_bytes(enshwick::Entity(7), 2), None);
+    /// let loader = enshwick::test::FakeHost::new().component(enshwick::Entity::from_engine(7), 1, &[4, 2]).install();
+    /// assert_eq!(loader.component_bytes(enshwick::Entity::from_engine(7), 1), Some(vec![4, 2]));
+    /// assert_eq!(loader.component_bytes(enshwick::Entity::from_engine(7), 2), None);
     /// ```
     #[must_use]
     pub fn component_bytes(
@@ -534,7 +533,11 @@ impl Installed {
         type_hash: u32,
     ) -> Option<Vec<u8>> {
         let (address, len) = table::with(None, |s| {
-            s.host.base.components.get(&(entity.0, type_hash)).copied()
+            s.host
+                .base
+                .components
+                .get(&(entity.get(), type_hash))
+                .copied()
         })?;
         let data: *const u8 = core::ptr::with_exposed_provenance(address);
         // SAFETY: `component` leaked `len` initialised bytes at `address`,
@@ -549,9 +552,9 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// let loader = enshwick::test::FakeHost::new().component(enshwick::Entity(7), 1, &[4, 2]).install();
-    /// assert!(loader.set_component(enshwick::Entity(7), 1, &[9]));
-    /// assert_eq!(loader.component_bytes(enshwick::Entity(7), 1), Some(vec![9, 2]));
+    /// let loader = enshwick::test::FakeHost::new().component(enshwick::Entity::from_engine(7), 1, &[4, 2]).install();
+    /// assert!(loader.set_component(enshwick::Entity::from_engine(7), 1, &[9]));
+    /// assert_eq!(loader.component_bytes(enshwick::Entity::from_engine(7), 1), Some(vec![9, 2]));
     /// ```
     #[must_use = "false means the fake gave `entity` no such component"]
     pub fn set_component(
@@ -561,7 +564,11 @@ impl Installed {
         bytes: &[u8],
     ) -> bool {
         let Some((address, len)) = table::with(None, |s| {
-            s.host.base.components.get(&(entity.0, type_hash)).copied()
+            s.host
+                .base
+                .components
+                .get(&(entity.get(), type_hash))
+                .copied()
         }) else {
             return false;
         };

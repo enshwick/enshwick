@@ -6,7 +6,7 @@ mod tests {
     use std::sync::{Mutex, OnceLock};
     use std::time::Duration;
 
-    use enshwick::abi::{ActionCall, Header, PlayerInfo, Status};
+    use enshwick::abi::{ActionCall, PlayerInfo, Status};
     use enshwick::actions::{Action, Actions, Arg, Outcome, Value, Via};
     use enshwick::commands::{self, Caller, CommandSet, MAX_LINE, RunCommandError};
     use enshwick::i18n::{Language, Texts};
@@ -91,15 +91,14 @@ mod tests {
     );
 
     fn player(entity: u32, key: u64, name: &str, permissions: u32) -> PlayerInfo {
-        let mut info = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let mut info = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: enshwick::Entity(entity),
+            entity: enshwick::Entity::from_engine(entity),
             key: enshwick::PlayerKey::new(key),
             permissions,
             name_len: u32::try_from(name.len()).unwrap(),
             name: [0; PlayerInfo::NAME_MAX],
-        };
+        });
         info.name[..name.len()].copy_from_slice(name.as_bytes());
         info
     }
@@ -255,12 +254,13 @@ mod tests {
         use enshwick::abi::{ModInfo, Str};
 
         let ann = player(3, 7, "Ann", 0);
-        let loader = start(enshwick::test::FakeHost::new().player(ann).loaded(ModInfo {
-            header: Header::of::<ModInfo>(),
-            id: Str::new("you.admin-tools"),
-            name: Str::new("Admin Tools"),
-            ..ModInfo::EMPTY
-        }));
+        let loader = start(enshwick::test::FakeHost::new().player(ann).loaded(
+            enshwick::abi::headed!(ModInfo {
+                id: Str::new("you.admin-tools"),
+                name: Str::new("Admin Tools"),
+                ..ModInfo::EMPTY
+            }),
+        ));
         for (line, command) in [("/adm", "/adm"), ("/admin-tools help", "/admin-tools")] {
             let help = loader.type_in_chat(&ann, 0, line).unwrap();
             assert!(
@@ -644,15 +644,16 @@ mod tests {
 
     #[test]
     fn a_player_has_exactly_the_permissions_their_bits_hold() {
-        let friend = enshwick::world::Player {
-            entity: enshwick::Entity(2),
-            slot: 0,
-            key: enshwick::PlayerKey::new(7),
-            permissions: PlayerInfo::CAN_EDIT_BASE | PlayerInfo::CAN_RECEIVE_EXP,
-            name: "Ann".into(),
-        };
+        let friend = enshwick::world::Player::new(
+            enshwick::Entity::from_engine(2),
+            0,
+            enshwick::PlayerKey::new(7),
+            PlayerInfo::CAN_EDIT_BASE | PlayerInfo::CAN_RECEIVE_EXP,
+            "Ann".into(),
+        );
         let held: Vec<PlayerPermissions> = PlayerPermissions::ALL
-            .into_iter()
+            .iter()
+            .copied()
             .filter(|p| friend.has(*p))
             .collect();
         assert_eq!(

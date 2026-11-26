@@ -370,12 +370,18 @@ impl ComponentType {
 
     /// A pointer to `entity`'s component of this type on the server's game
     /// thread, valid until the game thread returns to the game; `None` when
-    /// the entity has none.
-    #[must_use]
-    pub(crate) fn read(self, host: Host, entity: Entity) -> Option<*const core::ffi::c_void> {
+    /// the entity has none; the loader's status when it cannot read now.
+    pub(crate) fn read(
+        self,
+        host: Host,
+        entity: Entity,
+    ) -> Result<Option<*const core::ffi::c_void>, crate::abi::Status> {
         let mut out: *const core::ffi::c_void = core::ptr::null();
-        let status = (host.api().component)(host.handle(), entity, self.0, &raw mut out);
-        (status == crate::abi::Status::OK && !out.is_null()).then_some(out)
+        match (host.api().component)(host.handle(), entity, self.0, &raw mut out) {
+            crate::abi::Status::OK => Ok((!out.is_null()).then_some(out)),
+            crate::abi::Status::MISSING => Ok(None),
+            status => Err(status),
+        }
     }
 }
 
@@ -504,7 +510,7 @@ impl Components {
         // SAFETY: `world` is the live entity world of the hooked system and
         // `index` its registry's entry for `hash`; the read has no side
         // effects and writes two words to `out`, a local.
-        unsafe { (self.read)(&raw mut out, world, index, entity.0) };
+        unsafe { (self.read)(&raw mut out, world, index, entity.get()) };
         (out[0] != 0).then(|| core::ptr::with_exposed_provenance_mut(out[0]))
     }
 
@@ -540,7 +546,7 @@ impl Components {
             reason = "the error is the low byte, the root a u32"
         )]
         let (error, root) = (out[0] as u8, out[1] as u32);
-        (error == 0 && root != 0).then_some(Entity(root))
+        (error == 0 && root != 0).then_some(Entity::from_engine(root))
     }
 }
 
@@ -737,6 +743,10 @@ pub fn checked_fixed(metres: [f64; 3]) -> Option<[i64; 3]> {
 /// `ecs`: the world's fixed-point coordinates and metres.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a unit marker, which never gains a field"
+)]
 pub struct EcsFns;
 
 impl crate::script::Bound for EcsFns {

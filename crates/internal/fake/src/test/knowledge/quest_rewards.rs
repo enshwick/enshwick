@@ -23,16 +23,15 @@ impl Installed {
     /// use enshwick::abi::{Header, QuestPayment};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let quest = QuestPayment {
-    ///     header: Header::of::<QuestPayment>(),
-    ///     entity: enshwick::Entity(2),
+    /// let quest = enshwick::abi::headed!(QuestPayment {
+    ///     entity: enshwick::Entity::from_engine(2),
     ///     quest: enshwick::knowledge::KnowledgeId::new(0x51),
     ///     count: 1,
     ///     limit: 3,
     ///     allowed: 1,
     ///     reserved: [0; 3],
     ///     experience: [0x77; QuestPayment::MAX],
-    /// };
+    /// });
     /// assert_eq!(loader.pay_quest(quest), quest, "no filters, the game's payment");
     /// ```
     #[must_use]

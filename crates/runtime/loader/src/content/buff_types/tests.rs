@@ -1,4 +1,4 @@
-use enshwick_core::abi::{BuffTypeId, Header};
+use enshwick_core::abi::BuffTypeId;
 use enshwick_core::buffs::BuffLayout;
 use enshwick_core::content::{Blob, Guid};
 
@@ -11,30 +11,32 @@ const ICON: Guid = Guid([5; 16]);
 
 /// The offsets of client reflection 1269579.
 fn layout() -> BuffLayout {
-    BuffLayout {
-        buffs: 24,
-        entries: 0,
-        keys: 8,
-        values: 16,
-        bucket: 8,
-        bucket_start: 0,
-        bucket_count: 4,
-        size: 184,
-        id: 0,
-        slot: 4,
-        life_time: 8,
-        name: 16,
-        description: 32,
-        hide_in_ui: 49,
-        icon: 52,
-        hide_duration_in_ui: 72,
-        is_saved: 74,
-        impact: 76,
-        impact_size: 16,
-        on_timeout: 136,
-        on_timeout_size: 16,
-        on_timeout_is_set: 152,
-        relative: [96, 104, 112, 120, 128, 156, 164, 172],
+    {
+        let mut value = BuffLayout::default();
+        value.buffs = 24;
+        value.entries = 0;
+        value.keys = 8;
+        value.values = 16;
+        value.bucket = 8;
+        value.bucket_start = 0;
+        value.bucket_count = 4;
+        value.size = 184;
+        value.id = 0;
+        value.slot = 4;
+        value.life_time = 8;
+        value.name = 16;
+        value.description = 32;
+        value.hide_in_ui = 49;
+        value.icon = 52;
+        value.hide_duration_in_ui = 72;
+        value.is_saved = 74;
+        value.impact = 76;
+        value.impact_size = 16;
+        value.on_timeout = 136;
+        value.on_timeout_size = 16;
+        value.on_timeout_is_set = 152;
+        value.relative = [96, 104, 112, 120, 128, 156, 164, 172];
+        value
     }
 }
 
@@ -69,8 +71,7 @@ fn vanilla(layout: &BuffLayout, ids: &[BuffTypeId]) -> Vec<u8> {
 }
 
 fn request(n: u8, like: BuffTypeId) -> BuffTypeAdd {
-    BuffTypeAdd {
-        header: Header::of::<BuffTypeAdd>(),
+    enshwick_abi::headed!(BuffTypeAdd {
         guid: Guid([n; 16]),
         name: Guid::NIL,
         description: Guid::NIL,
@@ -80,7 +81,7 @@ fn request(n: u8, like: BuffTypeId) -> BuffTypeAdd {
         changes: BuffTypeAdd::ICON,
         slot: 0,
         flags: 0,
-    }
+    })
 }
 
 fn mod_index(n: usize) -> ModIndex {

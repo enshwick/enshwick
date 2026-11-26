@@ -26,7 +26,7 @@ mod tests {
             return 0;
         }
         // SAFETY: the fake host passes an `out` writable for one `Entity` for the call.
-        unsafe { out.write(Entity(5)) };
+        unsafe { out.write(Entity::from_engine(5)) };
         1
     }
 
@@ -85,7 +85,7 @@ mod tests {
         let ask = |survivor, entity| {
             loader.survivor_lookup(
                 survivor,
-                Some(Entity(10)),
+                Some(Entity::from_engine(10)),
                 SurvivorLookup::ROAMING,
                 entity,
                 [0; 3],
@@ -99,7 +99,10 @@ mod tests {
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert_eq!(ask(HOMELESS, None), Answer::Nobody);
-        assert_eq!(ask(ROAMER, Some(Entity(11))), Answer::Entity(Entity(11)));
+        assert_eq!(
+            ask(ROAMER, Some(Entity::from_engine(11))),
+            Answer::Entity(Entity::from_engine(11))
+        );
         assert_eq!(ask(NpcId(9), None), Answer::Vanilla);
     }
 
@@ -119,12 +122,12 @@ mod tests {
         };
         assert_eq!(
             ask(HOMELESS, None),
-            Answer::Entity(Entity(5)),
+            Answer::Entity(Entity::from_engine(5)),
             "the earlier mod decides"
         );
         assert_eq!(
-            ask(ROAMER, Some(Entity(11))),
-            Answer::Entity(Entity(11)),
+            ask(ROAMER, Some(Entity::from_engine(11))),
+            Answer::Entity(Entity::from_engine(11)),
             "the earlier mod passes on to the later"
         );
         assert_eq!(ask(NpcId(9), None), Answer::Vanilla, "both pass on");

@@ -7,7 +7,7 @@ use core::ffi::c_void;
 use crate::test::table::{Registered, put, with};
 use crate::test::{FakeChange, FakeTransaction};
 use enshwick_core::abi::{
-    BlockPlace, Header, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo, TransactionOp,
+    BlockPlace, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo, TransactionOp,
     TransactionSettledFn, Voxel, VoxelRegion, VoxelWrite,
 };
 
@@ -110,12 +110,11 @@ entries! {
             s.world.edits.transactions.push(FakeTransaction {
                 id: next,
                 owner: me,
-                actor: actor.0,
+                actor: actor.get(),
                 changes,
                 created: Vec::new(),
                 removed: Vec::new(),
-                info: TransactionInfo {
-                    header: Header::of::<TransactionInfo>(),
+                info: enshwick_core::headed!(TransactionInfo {
                     state: TransactionInfo::PENDING,
                     reason: Status::OK,
                     ops,
@@ -125,7 +124,7 @@ entries! {
                     reserved: 0,
                     holds: 0,
                     created: 0,
-                },
+                }),
             });
             put(id, next)
         })

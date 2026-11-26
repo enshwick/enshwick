@@ -333,11 +333,11 @@ impl ClientCommand {
         reason = "one arm per action, exhaustive so a new action cannot build without its raw form"
     )]
     fn raw(&self) -> RawCommand {
-        let mut raw = RawCommand {
+        let mut raw = enshwick_abi::headed!(RawCommand {
             session: self.session,
             expected_screen: self.expected_screen.as_deref().map_or(Str::EMPTY, Str::new),
             ..RawCommand::EMPTY
-        };
+        });
         match &self.action {
             CommandAction::OpenScreen(screen) => {
                 raw.kind = RawCommand::OPEN_SCREEN;
@@ -452,7 +452,7 @@ fn item_raw(action: &CommandAction, raw: &mut RawCommand) {
             raw.kind = RawCommand::CRAFT;
             raw.recipe = *recipe;
             raw.amount = u32::from(*count);
-            raw.entity = station.unwrap_or(Entity(0));
+            raw.entity = station.unwrap_or(Entity::from_engine(0));
         }
         CommandAction::MoveItem { from, to, count } => {
             raw.kind = RawCommand::MOVE_ITEM;
@@ -567,11 +567,11 @@ impl Input {
     /// ```
     #[script]
     pub fn cancel_command(self, id: CommandId) -> Result<(), WorldError> {
-        let raw = RawCommand {
+        let raw = enshwick_abi::headed!(RawCommand {
             kind: RawCommand::CANCEL,
             cancels: id.0,
             ..RawCommand::EMPTY
-        };
+        });
         let mut out = 0u64;
         let host = self.0.host;
         world_status((host.api().client_command)(
@@ -729,11 +729,17 @@ mod tests {
         .raw();
         assert_eq!(
             (craft.kind, craft.amount, craft.entity),
-            (RawCommand::CRAFT, 2, Entity(0))
+            (RawCommand::CRAFT, 2, Entity::from_engine(0))
         );
         assert!(craft.in_bounds());
-        assert!(!RawCommand { amount: 0, ..craft }.in_bounds(), "no craft");
-        let (from, to) = (SlotRef::new(Entity(0x41), 2), SlotRef::new(Entity(0x42), 0));
+        assert!(
+            !enshwick_abi::headed!(RawCommand { amount: 0, ..craft }).in_bounds(),
+            "no craft"
+        );
+        let (from, to) = (
+            SlotRef::new(Entity::from_engine(0x41), 2),
+            SlotRef::new(Entity::from_engine(0x42), 0),
+        );
         let split = ClientCommand::new(
             CommandAction::MoveItem {
                 from,
@@ -749,10 +755,10 @@ mod tests {
         );
         assert!(split.in_bounds());
         assert!(
-            !RawCommand {
+            !enshwick_abi::headed!(RawCommand {
                 target_slot: from.0,
                 ..split
-            }
+            })
             .in_bounds(),
             "a move onto its own slot"
         );
@@ -766,16 +772,16 @@ mod tests {
         )
         .raw();
         assert_eq!(whole.amount, 0, "the whole stack");
-        let take = ClientCommand::new(CommandAction::TakeAll(Entity(500)), 1).raw();
+        let take = ClientCommand::new(CommandAction::TakeAll(Entity::from_engine(500)), 1).raw();
         assert_eq!(
             (take.kind, take.entity),
-            (RawCommand::TAKE_ALL, Entity(500))
+            (RawCommand::TAKE_ALL, Entity::from_engine(500))
         );
         assert!(
-            !RawCommand {
-                entity: Entity(0),
+            !enshwick_abi::headed!(RawCommand {
+                entity: Entity::from_engine(0),
                 ..take
-            }
+            })
             .in_bounds()
         );
         let trash = ClientCommand::new(CommandAction::Trash(from), 1).raw();
@@ -784,7 +790,10 @@ mod tests {
 
     #[test]
     fn a_luau_move_item_takes_a_count_above_zero_or_none_for_the_whole_stack() {
-        let (from, to) = (SlotRef::new(Entity(9), 0), SlotRef::new(Entity(9), 1));
+        let (from, to) = (
+            SlotRef::new(Entity::from_engine(9), 0),
+            SlotRef::new(Entity::from_engine(9), 1),
+        );
         let luau = |count: Option<u16>| LuauCommand {
             kind: "move_item".to_owned(),
             session: 1,
@@ -875,11 +884,11 @@ mod tests {
 
     #[test]
     fn a_cancelled_status_names_its_reason() {
-        let raw = Raw {
+        let raw = enshwick_abi::headed!(Raw {
             state: Raw::CANCELLED,
             reason: Raw::PLAYER_INPUT,
             ..Raw::EMPTY
-        };
+        });
         assert_eq!(
             CommandState::from_raw(&raw),
             CommandState::Cancelled(CancelReason::PlayerInput)
@@ -943,12 +952,12 @@ mod tests {
             !format!("{join:?}").contains("hunter2"),
             "the password never shows"
         );
-        let failed = Raw {
+        let failed = enshwick_abi::headed!(Raw {
             state: Raw::FAILED,
             failure: Raw::FULL,
             phase: Raw::PHASE_MENU,
             ..Raw::EMPTY
-        };
+        });
         assert_eq!(
             CommandState::from_raw(&failed),
             CommandState::Failed(JoinFailure::Full)
@@ -960,11 +969,11 @@ mod tests {
 
     #[test]
     fn a_reason_a_newer_loader_adds_reads_as_other_not_as_a_known_one() {
-        let raw = Raw {
+        let raw = enshwick_abi::headed!(Raw {
             state: Raw::CANCELLED,
             reason: 99,
             ..Raw::EMPTY
-        };
+        });
         assert_eq!(
             CommandState::from_raw(&raw),
             CommandState::Cancelled(CancelReason::Other(99))

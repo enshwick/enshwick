@@ -6,7 +6,7 @@ mod tests {
     use std::sync::{Mutex, OnceLock};
 
     use enshwick::abi::{
-        Header, PROGRESS_ADD_EXPERIENCE, PROGRESS_SET_EXPERIENCE, PROGRESS_SET_LEVEL, PlayerInfo,
+        PROGRESS_ADD_EXPERIENCE, PROGRESS_SET_EXPERIENCE, PROGRESS_SET_LEVEL, PlayerInfo,
         ProgressWriteData, Status,
     };
     use enshwick::affixes::ItemRarity;
@@ -61,15 +61,14 @@ mod tests {
     }
 
     fn player(entity: u32) -> PlayerInfo {
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: Entity(entity),
+            entity: Entity::from_engine(entity),
             key: enshwick::PlayerKey::new(u64::from(entity)),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        }
+        })
     }
 
     /// The fake with the stat reads' facts, started with this file's mod.
@@ -116,43 +115,49 @@ mod tests {
     fn level_and_experience_writes_wait_for_the_level_step_for_players_in_game() {
         let (loader, world, _) = started(FakeHost::new().player(player(7)));
 
-        assert_eq!(world.set_level(Entity(7), 10), Ok(()));
-        assert_eq!(world.set_experience(Entity(7), 5), Ok(()));
-        assert_eq!(world.add_experience(Entity(7), 500), Ok(()));
-        assert_eq!(world.set_level(Entity(8), 3), Err(WorldError::Refused));
+        assert_eq!(world.set_level(Entity::from_engine(7), 10), Ok(()));
+        assert_eq!(world.set_experience(Entity::from_engine(7), 5), Ok(()));
+        assert_eq!(world.add_experience(Entity::from_engine(7), 500), Ok(()));
+        assert_eq!(
+            world.set_level(Entity::from_engine(8), 3),
+            Err(WorldError::Refused)
+        );
         assert_eq!(
             loader.progress_writes(),
             [
-                (Entity(7), PROGRESS_SET_LEVEL, 10),
-                (Entity(7), PROGRESS_SET_EXPERIENCE, 5),
-                (Entity(7), PROGRESS_ADD_EXPERIENCE, 500),
+                (Entity::from_engine(7), PROGRESS_SET_LEVEL, 10),
+                (Entity::from_engine(7), PROGRESS_SET_EXPERIENCE, 5),
+                (Entity::from_engine(7), PROGRESS_ADD_EXPERIENCE, 500),
             ]
         );
         for _ in 3..256 {
-            assert_eq!(world.add_experience(Entity(7), 1), Ok(()));
+            assert_eq!(world.add_experience(Entity::from_engine(7), 1), Ok(()));
         }
         assert_eq!(
-            world.add_experience(Entity(7), 1),
+            world.add_experience(Entity::from_engine(7), 1),
             Err(WorldError::Busy),
             "256 writes wait for the step"
         );
         let _handled = loader.tick(std::time::Duration::from_millis(50));
-        assert_eq!(world.add_experience(Entity(7), 1), Ok(()), "a new step");
+        assert_eq!(
+            world.add_experience(Entity::from_engine(7), 1),
+            Ok(()),
+            "a new step"
+        );
     }
 
-    /// What the mod hears of `what` `value` on `Entity(7)`.
+    /// What the mod hears of `what` `value` on entity 7.
     fn written(what: u32, value: u32, outcome: u32, left: [u32; 3]) -> ProgressWriteData {
         let [level, experience, gained] = left;
-        ProgressWriteData {
-            header: Header::of::<ProgressWriteData>(),
-            entity: Entity(7),
+        enshwick::abi::headed!(ProgressWriteData {
+            entity: Entity::from_engine(7),
             what,
             value,
             outcome,
             level,
             experience,
             gained,
-        }
+        })
     }
 
     fn step(loader: &Installed) {
@@ -167,9 +172,9 @@ mod tests {
                 .level_table(25, |level| level * 100),
         );
         HEARD.lock().unwrap().clear();
-        assert_eq!(world.set_level(Entity(7), 30), Ok(()));
-        assert_eq!(world.set_experience(Entity(7), 9_999), Ok(()));
-        assert_eq!(world.add_experience(Entity(7), 500), Ok(()));
+        assert_eq!(world.set_level(Entity::from_engine(7), 30), Ok(()));
+        assert_eq!(world.set_experience(Entity::from_engine(7), 9_999), Ok(()));
+        assert_eq!(world.add_experience(Entity::from_engine(7), 500), Ok(()));
         assert!(HEARD.lock().unwrap().is_empty(), "nothing before the step");
         step(&loader);
         let applied = ProgressWriteData::APPLIED;
@@ -212,7 +217,7 @@ mod tests {
             assert_eq!(subscribed, Status::OK);
         });
         HEARD.lock().unwrap().clear();
-        assert_eq!(world.set_level(Entity(7), 3), Ok(()));
+        assert_eq!(world.set_level(Entity::from_engine(7), 3), Ok(()));
         step(&loader);
         assert_eq!(HEARD.lock().unwrap().len(), 1);
         assert_eq!(OTHER_HEARD.load(Ordering::Relaxed), 0);
@@ -227,11 +232,16 @@ mod tests {
         // SAFETY: the fake's table is a static.
         let api = unsafe { &*loader.api() };
         assert_eq!(
-            (api.progress_write)(second, Entity(7), PROGRESS_SET_LEVEL, 5),
+            (api.progress_write)(second, Entity::from_engine(7), PROGRESS_SET_LEVEL, 5),
             Status::REFUSED
         );
         assert_eq!(
-            (api.progress_write)(loader.handle(), Entity(7), PROGRESS_SET_LEVEL, 5),
+            (api.progress_write)(
+                loader.handle(),
+                Entity::from_engine(7),
+                PROGRESS_SET_LEVEL,
+                5
+            ),
             Status::OK
         );
     }
@@ -240,16 +250,19 @@ mod tests {
     fn a_write_with_no_world_served_is_unavailable() {
         let (loader, world, _) = started(FakeHost::new().player(player(7)));
         loader.stop_world();
-        assert_eq!(world.set_level(Entity(7), 3), Err(WorldError::Unavailable));
+        assert_eq!(
+            world.set_level(Entity::from_engine(7), 3),
+            Err(WorldError::Unavailable)
+        );
     }
 
     #[test]
     fn a_gain_is_heard_in_its_own_step_and_the_next_step_starts_without_it() {
         let (loader, world, _) = started(FakeHost::new().player(player(7)));
         HEARD.lock().unwrap().clear();
-        assert_eq!(world.add_experience(Entity(7), 500), Ok(()));
+        assert_eq!(world.add_experience(Entity::from_engine(7), 500), Ok(()));
         step(&loader);
-        assert_eq!(world.add_experience(Entity(7), 100), Ok(()));
+        assert_eq!(world.add_experience(Entity::from_engine(7), 100), Ok(()));
         step(&loader);
         let applied = ProgressWriteData::APPLIED;
         assert_eq!(
@@ -264,12 +277,12 @@ mod tests {
     #[test]
     fn the_next_game_s_character_starts_afresh() {
         let (loader, world, _) = started(FakeHost::new().player(player(7)));
-        assert_eq!(world.set_level(Entity(7), 10), Ok(()));
+        assert_eq!(world.set_level(Entity::from_engine(7), 10), Ok(()));
         step(&loader);
         loader.end_game();
         HEARD.lock().unwrap().clear();
         step(&loader);
-        assert_eq!(world.add_experience(Entity(7), 5), Ok(()));
+        assert_eq!(world.add_experience(Entity::from_engine(7), 5), Ok(()));
         step(&loader);
         assert_eq!(
             *HEARD.lock().unwrap(),
@@ -286,7 +299,7 @@ mod tests {
     fn a_write_a_handler_asks_for_as_the_game_ends_goes_with_the_game() {
         let (loader, world, _) = started(FakeHost::new().player(player(7)));
         HEARD.lock().unwrap().clear();
-        assert_eq!(world.add_experience(Entity(7), 500), Ok(()));
+        assert_eq!(world.add_experience(Entity::from_engine(7), 500), Ok(()));
         *RETRIED.lock().unwrap() = Some(Vec::new());
         loader.end_game();
         let retried = RETRIED.lock().unwrap().take();
@@ -307,7 +320,7 @@ mod tests {
     fn a_write_for_a_character_that_left_is_heard_as_dropped_at_the_second_step() {
         let (loader, world, _) = started(FakeHost::new().player(player(7)));
         HEARD.lock().unwrap().clear();
-        assert_eq!(world.add_experience(Entity(7), 500), Ok(()));
+        assert_eq!(world.add_experience(Entity::from_engine(7), 500), Ok(()));
         loader.player_left(enshwick::PlayerKey::new(7));
         step(&loader);
         assert!(HEARD.lock().unwrap().is_empty(), "it waits one step");
@@ -327,24 +340,39 @@ mod tests {
     fn a_dead_character_is_revived_with_its_health_kept_in_bounds_and_a_living_one_is_refused() {
         let (_loader, world, _) = started(
             FakeHost::new()
-                .component(Entity(7), 1, &health(0, 200))
-                .component(Entity(8), 1, &health(0, 200))
-                .component(Entity(9), 1, &health(150, 200)),
+                .component(Entity::from_engine(7), 1, &health(0, 200))
+                .component(Entity::from_engine(8), 1, &health(0, 200))
+                .component(Entity::from_engine(9), 1, &health(150, 200)),
         );
         let meter = |current| Meter { current, max: 200 };
 
-        assert_eq!(world.set_health(Entity(7), 50), Err(WorldError::Refused));
-        assert_eq!(world.revive(Entity(7), 50), Ok(meter(50)));
-        assert_eq!(world.vitals(Entity(7)).map(|v| v.health), Some(meter(50)));
-        assert_eq!(world.revive(Entity(7), 80), Err(WorldError::Refused));
-        assert_eq!(world.revive(Entity(8), 999), Ok(meter(200)));
-        assert_eq!(world.revive(Entity(9), 10), Err(WorldError::Refused));
         assert_eq!(
-            world.set_health(Entity(9), 100),
+            world.set_health(Entity::from_engine(7), 50),
+            Err(WorldError::Refused)
+        );
+        assert_eq!(world.revive(Entity::from_engine(7), 50), Ok(meter(50)));
+        assert_eq!(
+            world.vitals(Entity::from_engine(7)).map(|v| v.health),
+            Some(meter(50))
+        );
+        assert_eq!(
+            world.revive(Entity::from_engine(7), 80),
+            Err(WorldError::Refused)
+        );
+        assert_eq!(world.revive(Entity::from_engine(8), 999), Ok(meter(200)));
+        assert_eq!(
+            world.revive(Entity::from_engine(9), 10),
+            Err(WorldError::Refused)
+        );
+        assert_eq!(
+            world.set_health(Entity::from_engine(9), 100),
             Ok(meter(100)),
             "the living"
         );
-        assert_eq!(world.revive(Entity(10), 10), Err(WorldError::Gone));
+        assert_eq!(
+            world.revive(Entity::from_engine(10), 10),
+            Err(WorldError::Gone)
+        );
     }
 
     #[test]
@@ -389,18 +417,17 @@ mod tests {
 
     #[test]
     fn a_far_drop_of_an_item_the_game_does_not_know_is_missing_as_the_loader_answers() {
-        use enshwick::abi::{DropRequest, Header, Status};
+        use enshwick::abi::{DropRequest, Status};
 
         let (loader, _, _) = started(FakeHost::new().item(ItemId(0x2a), 100, 0));
         let answer = |item: u32| {
-            let request = DropRequest {
-                header: Header::of::<DropRequest>(),
+            let request = enshwick::abi::headed!(DropRequest {
                 item: ItemId(item),
                 count: 5,
                 position: [1e300, 0.0, 0.0],
                 level: 0,
                 rarity: 0,
-            };
+            });
             let mut out = Entity::NONE;
             // SAFETY: the fake's table is a static; `request` and `out` live
             // for the call.

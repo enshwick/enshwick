@@ -4,7 +4,7 @@ use std::sync::atomic::Ordering;
 
 use enshwick_base::Relock;
 use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{Event, EventFn, Header, Status, Str, TickHandle};
+use enshwick_core::abi::{Event, EventFn, Status, Str, TickHandle};
 
 use crate::engine::kept_text::keep;
 use crate::engine::loader::{Loader, ModRecord, Subscription};
@@ -265,11 +265,10 @@ entries! {
             return Err(Status::BAD_ARGS.into());
         }
         let (id, live) = crate::base::points::registry().define(me.index, &me.record.id, declared)?;
-        out.put(api_frame::PointHandle {
-            header: Header::of::<api_frame::PointHandle>(),
+        out.put(enshwick_abi::headed!(api_frame::PointHandle {
             id,
             live,
-        })
+        }))
     }
 
     fn attach_point(

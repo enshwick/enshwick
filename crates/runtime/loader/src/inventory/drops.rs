@@ -16,7 +16,7 @@
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick_core::abi::{DropRequest, Header, Side, SpawnRequest};
+use enshwick_core::abi::{DropRequest, Side, SpawnRequest};
 use enshwick_core::affixes::ItemRarity;
 
 use crate::engine::fuse::{Fuse, Off};
@@ -266,15 +266,14 @@ pub(crate) fn drop_items(loader: &'static Loader, request: &DropRequest) -> Resu
     let layout = READING.layout().ok_or(DropError::Unread)?;
     let bytes = pickup(layout, request).ok_or(DropError::BadRequest)?;
     crate::inventory::transactions::item_info(loader, request.item.get())?;
-    let spawn = SpawnRequest {
-        header: Header::of::<SpawnRequest>(),
+    let spawn = enshwick_abi::headed!(SpawnRequest {
         template: enshwick_core::content::Guid(layout.template),
         position: request.position,
         orientation: [0.0, 0.0, 0.0, 1.0],
         level: 0,
         lifetime_ns: 0,
         flags: 0,
-    };
+    });
     Ok(crate::world::spawns::spawn_with(
         loader,
         &spawn,
@@ -298,14 +297,13 @@ mod tests {
     };
 
     fn request(count: u32, rarity: u32) -> DropRequest {
-        DropRequest {
-            header: Header::of::<DropRequest>(),
+        enshwick_abi::headed!(DropRequest {
             item: enshwick_core::ItemId::new(0x2a),
             count,
             position: [0.0; 3],
             level: 9,
             rarity,
-        }
+        })
     }
 
     #[test]

@@ -9,6 +9,8 @@ impl Load<'_> {
     /// The [`Quests`] of the running game; every call of one mod gives the
     /// same, which reads the journal once.
     ///
+    /// Unstable: needs the `typed` feature and may change in any release.
+    ///
     /// # Examples
     ///
     /// ```
@@ -29,6 +31,8 @@ impl Load<'_> {
     /// they left them, and keeps them, pays others or refuses, which pays
     /// nothing and still completes the quest. A payment the game puts off
     /// comes again, and the filter sees it again.
+    ///
+    /// Unstable: needs the `typed` feature and may change in any release.
     ///
     /// # Errors
     ///

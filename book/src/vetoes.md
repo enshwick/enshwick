@@ -6,8 +6,9 @@ description: A mod refuses a craft, a placement or a player's interaction with a
 # Crafting, building and interaction vetoes
 
 A mod may refuse a craft, a placement or a player's interaction with an
-entity before the game acts on it. Each filter returns `false` to refuse; one
-that panics turns the mod off and lets the action through.
+entity before the game acts. A filter answers a `bool` or a
+`vetoes::Verdict`. A panic turns the mod off and lets the action
+through.
 
 ## Crafting
 
@@ -53,7 +54,7 @@ these:
   also on the server for a character made in the step under way, until the
   next step.
 
-It answers a `BuildVerdict`:
+It answers a `Verdict`:
 
 - `Refuse` refuses the placement the way the game refuses one without
   building permission, so the building systems do not place it.
@@ -69,16 +70,16 @@ the same reason again only after that player's refusals stopped for a second.
 A `bool` turns into a verdict with `.into()`.
 
 ```rust
-use enshwick::vetoes::BuildVerdict;
+use enshwick::vetoes::Verdict;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     // Nothing is built in a ring around the world's centre.
     load.on_build(|placement| {
         let [x, _, z] = placement.position;
         if (x * x + z * z).sqrt() > 50.0 {
-            BuildVerdict::Allow
+            Verdict::Pass
         } else {
-            BuildVerdict::refuse_because("build.centre")
+            Verdict::refuse_because("build.centre")
         }
     })
 }

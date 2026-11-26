@@ -242,10 +242,10 @@ fn send(
         to,
         kept: Kept {
             play: spec,
-            info: SoundInfo {
+            info: enshwick_core::headed!(SoundInfo {
                 state: SoundInfo::PLAYING,
                 ..SoundInfo::EMPTY
-            },
+            }),
         },
     });
     Ok(sounds.sent.len() as u64)
@@ -333,17 +333,16 @@ entries! {
                 .ok()
                 .and_then(|id| id.checked_sub(1))
                 .and_then(|at| s.ui.sound.sounds.get_mut(at));
-            let info = match kept {
-                Some(kept) => {
-                    if off {
-                        end(kept);
-                    }
-                    kept.info
+            let info = if let Some(kept) = kept {
+                if off {
+                    end(kept);
                 }
-                None => SoundInfo {
+                kept.info
+            } else {
+                enshwick_core::headed!(SoundInfo {
                     state: SoundInfo::ENDED,
                     ..SoundInfo::EMPTY
-                },
+                })
             };
             put_headed(out, info)
         })

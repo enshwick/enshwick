@@ -114,7 +114,7 @@ mod tests {
             item,
             count: 1,
             player,
-            character: Entity(10),
+            character: Entity::from_engine(10),
             deal,
         }
     }

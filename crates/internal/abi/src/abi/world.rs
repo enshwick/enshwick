@@ -15,16 +15,16 @@ use crate::content::Guid;
 /// use enshwick::abi::{GameEventData, Header};
 ///
 /// let payload = [0u8; 16];
-/// let died = GameEventData {
-///     header: Header::of::<GameEventData>(),
+/// let died = enshwick::abi::headed!(GameEventData {
 ///     type_hash: 0x0042,
 ///     size: 16,
 ///     data: payload.as_ptr(),
-/// };
+/// });
 /// assert_eq!(died.size, 16);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct GameEventData {
     /// Size and version of this struct.
     pub header: Header,
@@ -48,16 +48,16 @@ impl_headed!(GameEventData);
 /// ```
 /// use enshwick::abi::{EventTypeInfo, Header, Str};
 ///
-/// let info = EventTypeInfo {
-///     header: Header::of::<EventTypeInfo>(),
+/// let info = enshwick::abi::headed!(EventTypeInfo {
 ///     name: Str::new("you::Event"),
 ///     hash: 1,
 ///     size: 16,
-/// };
+/// });
 /// assert_eq!(info.size, 16);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct EventTypeInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -94,11 +94,15 @@ pub type GameEventFn = unsafe extern "system" fn(event: *const GameEventData, us
 /// ```
 /// use enshwick::abi::EntityPlace;
 ///
-/// let chest = EntityPlace { entity: enshwick::Entity(4096), reserved: 0, position: [1.0, 0.0, 0.0] };
+/// let chest = EntityPlace { entity: enshwick::Entity::from_engine(4096), reserved: 0, position: [1.0, 0.0, 0.0] };
 /// assert_eq!(chest.position[0], 1.0);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct EntityPlace {
     /// The entity.
     pub entity: Entity,
@@ -108,6 +112,13 @@ pub struct EntityPlace {
     pub position: Metres,
 }
 
+// Entity 0, the ABI's "none", for a row the host fills.
+impl Default for EntityPlace {
+    fn default() -> Self {
+        bytemuck::Zeroable::zeroed()
+    }
+}
+
 /// A request to move an entity, for [`HostApi::teleport`](super::HostApi::teleport).
 ///
 /// # Examples
@@ -115,17 +126,17 @@ pub struct EntityPlace {
 /// ```
 /// use enshwick::abi::{Header, TeleportRequest};
 ///
-/// let to_spawn = TeleportRequest {
-///     header: Header::of::<TeleportRequest>(),
-///     entity: enshwick::Entity(2),
+/// let to_spawn = enshwick::abi::headed!(TeleportRequest {
+///     entity: enshwick::Entity::from_engine(2),
 ///     flags: TeleportRequest::BEST_SPAWN,
 ///     position: [100.0, 40.0, -20.0],
 ///     orientation: [0.0, 0.0, 0.0, 1.0],
-/// };
+/// });
 /// assert_eq!(to_spawn.flags, TeleportRequest::BEST_SPAWN);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct TeleportRequest {
     /// Size and version of this struct.
     pub header: Header,
@@ -160,17 +171,17 @@ impl TeleportRequest {
 /// ```
 /// use enshwick::abi::{Header, RespawnPointInfo};
 ///
-/// let altar = RespawnPointInfo {
-///     header: Header::of::<RespawnPointInfo>(),
-///     entity: enshwick::Entity(40),
+/// let altar = enshwick::abi::headed!(RespawnPointInfo {
+///     entity: enshwick::Entity::from_engine(40),
 ///     kind: RespawnPointInfo::BASE,
 ///     position: [100.0, 40.0, -20.0],
 ///     orientation: [0.0, 0.0, 0.0, 1.0],
-/// };
+/// });
 /// assert_eq!(altar.kind, RespawnPointInfo::BASE);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct RespawnPointInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -208,19 +219,19 @@ impl RespawnPointInfo {
 /// ```
 /// use enshwick::abi::{Header, SpawnRequest};
 ///
-/// let wolf = SpawnRequest {
-///     header: Header::of::<SpawnRequest>(),
+/// let wolf = enshwick::abi::headed!(SpawnRequest {
 ///     template: enshwick::abi::Guid([0x3a; 16]),
 ///     position: [100.0, 40.0, 0.0],
 ///     orientation: [0.0, 0.0, 0.0, 1.0],
 ///     level: 12,
 ///     lifetime_ns: 0,
 ///     flags: 0,
-/// };
+/// });
 /// assert_eq!(wolf.level, 12);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct SpawnRequest {
     /// Size and version of this struct.
     pub header: Header,
@@ -258,11 +269,12 @@ impl SpawnRequest {
 /// ```
 /// use enshwick::abi::{CraftCheck, Header};
 ///
-/// let craft = CraftCheck { header: Header::of::<CraftCheck>(), crafting_operator_id: enshwick::Entity(2), crafting_station_id: enshwick::Entity(0), recipe_id: enshwick::RecipeId::new(0x51), recipe_amount: 3, reserved: 0 };
-/// assert_eq!(craft.crafting_station_id, enshwick::Entity(0));
+/// let craft = enshwick::abi::headed!(CraftCheck { crafting_operator_id: enshwick::Entity::from_engine(2), crafting_station_id: enshwick::Entity::from_engine(0), recipe_id: enshwick::RecipeId::new(0x51), recipe_amount: 3, reserved: 0 });
+/// assert_eq!(craft.crafting_station_id, enshwick::Entity::from_engine(0));
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct CraftCheck {
     /// Size and version of this struct.
     pub header: Header,
@@ -301,18 +313,18 @@ pub type CraftFilterFn =
 /// ```
 /// use enshwick::abi::{BuildCheck, Header};
 ///
-/// let wall = BuildCheck {
-///     header: Header::of::<BuildCheck>(),
-///     character: enshwick::Entity(2),
+/// let wall = enshwick::abi::headed!(BuildCheck {
+///     character: enshwick::Entity::from_engine(2),
 ///     item: enshwick::ItemId::new(0x1d),
 ///     position: [0.0; 3],
 ///     reason: core::ptr::null_mut(),
 ///     account: enshwick::PlayerKey::new(7),
-/// };
+/// });
 /// assert_eq!(wall.item, enshwick::ItemId::new(0x1d));
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct BuildCheck {
     /// Size and version of this struct.
     pub header: Header,
@@ -361,8 +373,7 @@ pub type BuildFilterFn =
 /// ```
 /// use enshwick::abi::{DaytimeInfo, Header};
 ///
-/// let noon = DaytimeInfo {
-///     header: Header::of::<DaytimeInfo>(),
+/// let noon = enshwick::abi::headed!(DaytimeInfo {
 ///     time_ns: 12 * 3_600_000_000_000,
 ///     day_start_ns: 6 * 3_600_000_000_000,
 ///     day_end_ns: 18 * 3_600_000_000_000,
@@ -370,11 +381,12 @@ pub type BuildFilterFn =
 ///     night_length_ns: 720_000_000_000,
 ///     speed: 1.0,
 ///     flags: DaytimeInfo::DAY,
-/// };
+/// });
 /// assert_eq!(noon.flags & DaytimeInfo::DAY, DaytimeInfo::DAY);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct DaytimeInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -415,21 +427,21 @@ pub const DAMAGE_TYPES: usize = 13;
 /// ```
 /// use enshwick::abi::{DamageCheck, Header};
 ///
-/// let mut fall = DamageCheck {
-///     header: Header::of::<DamageCheck>(),
+/// let mut fall = enshwick::abi::headed!(DamageCheck {
 ///     cause: DamageCheck::FALL_DAMAGE,
-///     target: enshwick::Entity(2),
-///     source: enshwick::Entity(0),
-///     attacker: enshwick::Entity(0),
+///     target: enshwick::Entity::from_engine(2),
+///     source: enshwick::Entity::from_engine(0),
+///     attacker: enshwick::Entity::from_engine(0),
 ///     total: 40.0,
 ///     amount_count: 0,
 ///     amounts: core::ptr::null_mut(),
-/// };
+/// });
 /// fall.total *= 0.5;
 /// assert_eq!(fall.total, 20.0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct DamageCheck {
     /// Size and version of this struct.
     pub header: Header,
@@ -502,19 +514,19 @@ pub type DamageFilterFn = unsafe extern "system" fn(check: *mut DamageCheck, use
 /// ```
 /// use enshwick::abi::{Header, KnowledgeInfo};
 ///
-/// let recipe = KnowledgeInfo {
-///     header: Header::of::<KnowledgeInfo>(),
+/// let recipe = enshwick::abi::headed!(KnowledgeInfo {
 ///     id: enshwick::knowledge::KnowledgeId::new(0x1d),
 ///     kind: KnowledgeInfo::FLAGS,
 ///     scope: KnowledgeInfo::PLAYER,
 ///     reserved: 0,
 ///     value: 1,
 ///     flags: 3,
-/// };
+/// });
 /// assert_eq!(recipe.value & 1, 1);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct KnowledgeInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -558,20 +570,20 @@ impl KnowledgeInfo {
 /// ```
 /// use enshwick::abi::{Header, KnowledgeChange, KnowledgeInfo, PlayerKey};
 ///
-/// let unflag = KnowledgeChange {
-///     header: Header::of::<KnowledgeChange>(),
+/// let unflag = enshwick::abi::headed!(KnowledgeChange {
 ///     account: PlayerKey(7),
-///     entity: enshwick::Entity(0),
+///     entity: enshwick::Entity::from_engine(0),
 ///     id: enshwick::knowledge::KnowledgeId::new(0x1d),
 ///     value: 1,
 ///     kind: KnowledgeInfo::FLAGS,
 ///     op: KnowledgeChange::REVOKE,
 ///     reserved: 0,
-/// };
+/// });
 /// assert_eq!(unflag.op, KnowledgeChange::REVOKE);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct KnowledgeChange {
     /// Size and version of this struct.
     pub header: Header,
@@ -622,8 +634,7 @@ impl KnowledgeChange {
 /// ```
 /// use enshwick::abi::{Header, WeatherFront};
 ///
-/// let storm = WeatherFront {
-///     header: Header::of::<WeatherFront>(),
+/// let storm = enshwick::abi::headed!(WeatherFront {
 ///     layer: 0,
 ///     effect: WeatherFront::RAIN,
 ///     position: [0.0; 3],
@@ -631,11 +642,12 @@ impl KnowledgeChange {
 ///     reserved: 0,
 ///     remaining_ns: 300_000_000_000,
 ///     phenomenon: enshwick::abi::Guid::NIL,
-/// };
+/// });
 /// assert_eq!(storm.effect, WeatherFront::RAIN);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct WeatherFront {
     /// Size and version of this struct.
     pub header: Header,
@@ -667,17 +679,17 @@ impl_headed!(WeatherFront);
 /// ```
 /// use enshwick::abi::{Header, WeatherSample};
 ///
-/// let sample = WeatherSample {
-///     header: Header::of::<WeatherSample>(),
+/// let sample = enshwick::abi::headed!(WeatherSample {
 ///     clear: 0.75,
 ///     rain: 0.25,
 ///     snow: 0.0,
 ///     blizzard: 0.0,
-/// };
+/// });
 /// assert_eq!(sample.clear + sample.rain, 1.0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct WeatherSample {
     /// Size and version of this struct.
     pub header: Header,
@@ -707,18 +719,18 @@ impl_headed!(WeatherSample);
 /// ```
 /// use enshwick::abi::{Header, SaveInfo};
 ///
-/// let info = SaveInfo {
-///     header: Header::of::<SaveInfo>(),
+/// let info = enshwick::abi::headed!(SaveInfo {
 ///     world: enshwick::abi::Guid([7; 16]),
 ///     saved_at: 1_762_300_000,
 ///     size: 4_096,
 ///     backups: 2,
 ///     reserved: 0,
-/// };
+/// });
 /// assert_eq!(info.backups, 2);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct SaveInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -754,17 +766,17 @@ impl WeatherFront {
 /// ```
 /// use enshwick::abi::{BuildRights, Header};
 ///
-/// let check = BuildRights {
-///     header: Header::of::<BuildRights>(),
-///     character: enshwick::Entity(2),
+/// let check = enshwick::abi::headed!(BuildRights {
+///     character: enshwick::Entity::from_engine(2),
 ///     refusal: BuildRights::ALLOWED,
 ///     min: [100.0, 40.0, 100.0],
 ///     max: [104.0, 44.0, 104.0],
-/// };
+/// });
 /// assert_eq!(check.refusal, BuildRights::ALLOWED);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct BuildRights {
     /// Size and version of this struct.
     pub header: Header,
@@ -807,6 +819,7 @@ impl BuildRights {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct MapMarkerInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -840,11 +853,12 @@ impl MapMarkerInfo {
 /// ```
 /// use enshwick::abi::MapFrameInfo;
 ///
-/// let frame = MapFrameInfo { size: [10240.0; 2], metres_per_cell: 8.0, ..MapFrameInfo::EMPTY };
+/// let frame = enshwick::abi::headed!(MapFrameInfo { size: [10240.0; 2], metres_per_cell: 8.0, ..MapFrameInfo::EMPTY });
 /// assert_eq!(frame.size[0] / frame.metres_per_cell, 1280.0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct MapFrameInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -880,6 +894,10 @@ impl MapFrameInfo {
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct AccountActionType(pub u8);
 
 impl AccountActionType {
@@ -904,14 +922,14 @@ impl AccountActionType {
 /// ```
 /// use enshwick::abi::{Header, JoinCall};
 ///
-/// let call = JoinCall {
-///     header: Header::of::<JoinCall>(),
+/// let call = enshwick::abi::headed!(JoinCall {
 ///     account: enshwick::PlayerKey::new(7),
-/// };
+/// });
 /// assert_eq!(call.account.get(), 7);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct JoinCall {
     /// Size and version of this struct.
     pub header: Header,

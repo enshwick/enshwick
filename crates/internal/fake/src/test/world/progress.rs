@@ -4,7 +4,7 @@
 
 use enshwick_core::Entity;
 use enshwick_core::abi::{
-    Event, Header, ModHandle, PROGRESS_SET_EXPERIENCE, PROGRESS_SET_LEVEL, ProgressWriteData,
+    Event, ModHandle, PROGRESS_SET_EXPERIENCE, PROGRESS_SET_LEVEL, ProgressWriteData,
 };
 use rustc_hash::FxHashMap;
 
@@ -33,8 +33,7 @@ struct Waiting {
 impl Waiting {
     /// What its mod hears: `outcome`, with what an applied write `left`.
     fn heard(self, outcome: u32, left: Progress) -> (ModHandle, ProgressWriteData) {
-        let data = ProgressWriteData {
-            header: Header::of::<ProgressWriteData>(),
+        let data = enshwick_core::headed!(ProgressWriteData {
             entity: self.entity,
             what: self.what,
             value: self.value,
@@ -42,7 +41,7 @@ impl Waiting {
             level: left.level,
             experience: left.experience,
             gained: left.gained,
-        };
+        });
         (self.owner, data)
     }
 }
@@ -160,7 +159,7 @@ pub(crate) fn after_step() {
             if w.asked >= step {
                 true
             } else if in_step.contains(&w.entity) {
-                let progress = characters.entry(w.entity.0).or_insert(Progress::START);
+                let progress = characters.entry(w.entity.get()).or_insert(Progress::START);
                 progress.written(w, table);
                 applied.push(w.heard(ProgressWriteData::APPLIED, *progress));
                 false

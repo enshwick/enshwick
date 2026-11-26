@@ -6,7 +6,7 @@ use core::ops::BitOr;
 use crate::Entity;
 use crate::Host;
 use crate::engine_ids as ids;
-use crate::world::{ComponentType, Placed, World};
+use crate::world::{ComponentType, Placed, World, WorldError};
 
 /// Kinds of entities that hold items, for [`World::containers`]; combine
 /// them with `|`, or [`ContainerKinds::union`] in a `const`. The default is
@@ -175,14 +175,18 @@ impl Containers {
     fn kind(&self, world: World, entity: Entity) -> ContainerKinds {
         self.markers
             .iter()
-            .find(|&&(_, ty)| world.component(entity, ty).is_some())
+            .find(|&&(_, ty)| world.component_at(entity, ty).is_some())
             .map_or(ContainerKinds::OTHER, |&(kind, _)| kind)
     }
 
     /// The holders of a kind in `kinds`.
-    pub(crate) fn of(&self, world: World, kinds: ContainerKinds) -> Vec<Placed> {
-        let mut found = world.entities(self.setup);
+    pub(crate) fn of(
+        &self,
+        world: World,
+        kinds: ContainerKinds,
+    ) -> Result<Vec<Placed>, WorldError> {
+        let mut found = world.entities(self.setup)?;
         found.retain(|placed| kinds.contains(self.kind(world, placed.entity)));
-        found
+        Ok(found)
     }
 }

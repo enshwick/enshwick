@@ -21,12 +21,13 @@ mod tests {
                 Id::new("you.server-props:crate"),
                 PROP_ITEM,
             )));
-            let crafting = load.add_prop(NewProp {
-                crafting_prop: Some(CraftingPropSetup::default()),
-                ..NewProp::new(NewItem::new(
+            let crafting = load.add_prop({
+                let mut value = NewProp::new(NewItem::new(
                     Id::new("you.server-props:anvil"),
                     CRAFTING_PROP_ITEM,
-                ))
+                ));
+                value.crafting_prop = Some(CraftingPropSetup::default());
+                value
             });
             OUTCOMES.lock().unwrap().extend(
                 [plain.map(|_| ()), crafting.map(|_| ())]

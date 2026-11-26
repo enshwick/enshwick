@@ -251,7 +251,7 @@ fn a_build_without_the_checked_code_names_it_absent_not_moved() {
 fn operations_must_name_what_they_need() {
     let give = InventoryOp {
         kind: InventoryOp::GIVE,
-        target: Entity(2),
+        target: Entity::from_engine(2),
         item: enshwick_core::ItemId::new(7),
         count: 1,
         ..InventoryOp::default()
@@ -283,20 +283,20 @@ fn operations_must_name_what_they_need() {
     }));
     let all = InventoryOp {
         kind: InventoryOp::MOVE_ALL,
-        target: Entity(40),
-        other: Entity(2),
+        target: Entity::from_engine(40),
+        other: Entity::from_engine(2),
         ..InventoryOp::default()
     };
     assert!(valid(&all));
     assert!(!valid(&InventoryOp {
-        other: Entity(40),
+        other: Entity::from_engine(40),
         ..all
     }));
     let slot = InventoryOp {
         kind: InventoryOp::MOVE_SLOT,
-        target: Entity(0x29),
+        target: Entity::from_engine(0x29),
         slot: 3,
-        other: Entity(2),
+        other: Entity::from_engine(2),
         count: 70_000,
         ..InventoryOp::default()
     };

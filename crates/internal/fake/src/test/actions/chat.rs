@@ -2,7 +2,7 @@
 //! that hear the chat.
 
 use enshwick_core::PlayerKey;
-use enshwick_core::abi::{ChatLine, ChatRewrite, Entity, Event, Header, Str};
+use enshwick_core::abi::{ChatLine, ChatRewrite, Entity, Event, Str};
 
 use crate::test::Installed;
 use crate::test::table;
@@ -46,12 +46,11 @@ impl Installed {
         let mut buffer = vec![0u8; MAX_TEXT];
         for filter in filters {
             let line = line(player, ChatLine::PLAYER, &text);
-            let mut rewrite = ChatRewrite {
-                header: Header::of::<ChatRewrite>(),
+            let mut rewrite = enshwick_core::headed!(ChatRewrite {
                 buffer: buffer.as_mut_ptr(),
                 capacity: u32::try_from(MAX_TEXT).unwrap_or(u32::MAX),
                 len: 0,
-            };
+            });
             // SAFETY: a valid line and rewrite buffer for the call; `user` is
             // the mod's pointer.
             let rewritten = filter
@@ -102,12 +101,11 @@ fn admit(rate: &mut Vec<(PlayerKey, u64, u32)>, player: PlayerKey, now: u64) -> 
 
 /// A line of `kind` from `player`, viewing `text`.
 fn line(player: PlayerKey, kind: u32, text: &str) -> ChatLine {
-    ChatLine {
-        header: Header::of::<ChatLine>(),
+    enshwick_core::headed!(ChatLine {
         account: player,
-        entity: Entity(0),
+        entity: Entity::from_engine(0),
         kind,
         loca: [0; 2],
         text: Str::new(text),
-    }
+    })
 }

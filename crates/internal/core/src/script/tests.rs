@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use super::*;
-use crate::abi::{Header, ModHandle, PlayerData};
+use crate::abi::{ModHandle, PlayerData};
 use crate::schedule::Scheduler;
 use crate::world::{Notice, Player, World};
 use crate::{Entity, PlayerKey};
@@ -58,12 +58,11 @@ fn event_data_leaves_out_the_header_and_reserved_fields() {
 
 #[test]
 fn an_event_reads_its_data_as_a_record_in_field_order() {
-    let player = PlayerData {
-        header: Header::of::<PlayerData>(),
+    let player = enshwick_abi::headed!(PlayerData {
         slot: 2,
-        entity: Entity(9),
+        entity: Entity::from_engine(9),
         key: PlayerKey::new(u64::MAX),
-    };
+    });
     let joined = events().find(|e| e.name() == "PlayerJoined").unwrap();
     // SAFETY: `player` is a whole `PlayerData` on this stack frame, as the
     // loader passes with the event.
@@ -94,13 +93,13 @@ fn keys_travel_as_their_decimal_digits() {
 
 #[test]
 fn a_player_comes_back_from_its_record() {
-    let player = Player {
-        entity: Entity(5),
-        slot: 1,
-        key: PlayerKey::new(77),
-        permissions: 3,
-        name: "Ash".into(),
-    };
+    let player = Player::new(
+        Entity::from_engine(5),
+        1,
+        PlayerKey::new(77),
+        3,
+        "Ash".into(),
+    );
     assert_eq!(
         Player::from_value(player.clone().into_value()).unwrap(),
         player

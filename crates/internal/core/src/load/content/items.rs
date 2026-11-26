@@ -26,13 +26,12 @@ impl Load<'_> {
     /// use enshwick::content::items::{FuelSetup, NewItem};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.add_item(NewItem {
-    ///         meter: Some(FuelSetup { template: id!("charges"), max_fuel_charges: 3, start: 3 }),
-    ///         ..NewItem::new(
+    ///     let mut item = NewItem::new(
     ///             id!("charged-locker"),
     ///             Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
-    ///         )
-    ///     })
+    ///         );
+    ///     item.meter = Some(FuelSetup::new(id!("charges"), 3, 3));
+    ///     load.add_item(item)
     /// }
     /// ```
     #[script]

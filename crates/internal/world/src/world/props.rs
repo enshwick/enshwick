@@ -15,15 +15,28 @@ use super::{World, WorldError};
 /// # Examples
 ///
 /// ```
-/// let bounds = enshwick::world::PropPlacementBox { min: [-1.0, 0.0, -1.0], max: [1.0, 2.0, 1.0] };
+/// let bounds = enshwick::world::PropPlacementBox::new([-1.0, 0.0, -1.0], [1.0, 2.0, 1.0]);
 /// assert_eq!(bounds.max[1], 2.0);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct PropPlacementBox {
     /// The declared minimum corner, which may lie above `max` on some axes.
     pub min: [f32; 3],
     /// The declared maximum corner, above `min` on at least one axis.
     pub max: [f32; 3],
+}
+
+impl PropPlacementBox {
+    /// A `PropPlacementBox` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`PropPlacementBox`].
+    #[must_use]
+    pub const fn new(min: [f32; 3], max: [f32; 3]) -> Self {
+        Self { min, max }
+    }
 }
 
 /// An item's prop template and optional declared local placement box.
@@ -41,6 +54,7 @@ pub struct PropPlacementBox {
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct PropPlacementInfo {
     /// The queried item.
     pub item: ItemId,
@@ -60,16 +74,32 @@ pub struct PropPlacementInfo {
 /// ```
 /// use enshwick::world::WorldTransform;
 ///
-/// let upright = WorldTransform { position: [10.0, 2.0, 4.5], orientation: [0.0, 0.0, 0.0, 1.0] };
+/// let upright = WorldTransform::new([10.0, 2.0, 4.5], [0.0, 0.0, 0.0, 1.0]);
 /// assert_eq!(upright, WorldTransform::at([10.0, 2.0, 4.5]));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize, crate::Script)]
+#[non_exhaustive]
 pub struct WorldTransform {
     /// The position in metres, from the game's 32.32 fixed point.
     pub position: [f64; 3],
     /// The rotation as a unit quaternion, x, y, z then w, as the game
     /// stores it, with y up.
     pub orientation: [f32; 4],
+}
+
+impl WorldTransform {
+    /// A `WorldTransform` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`WorldTransform`].
+    #[must_use]
+    pub const fn new(position: [f64; 3], orientation: [f32; 4]) -> Self {
+        Self {
+            position,
+            orientation,
+        }
+    }
 }
 
 impl WorldTransform {
@@ -96,6 +126,7 @@ impl WorldTransform {
 ///
 /// See [`World::props_in`].
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct Prop {
     /// The prop's entity.
     pub entity: Entity,
@@ -103,6 +134,22 @@ pub struct Prop {
     pub item: ItemId,
     /// Where it stands and which way it faces, its `CurrentTransform`.
     pub transform: WorldTransform,
+}
+
+impl Prop {
+    /// A `Prop` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`Prop`].
+    #[must_use]
+    pub const fn new(entity: Entity, item: ItemId, transform: WorldTransform) -> Self {
+        Self {
+            entity,
+            item,
+            transform,
+        }
+    }
 }
 
 /// A prop as a [`Capture`](super::Capture) keeps it: the item to place and
@@ -114,16 +161,29 @@ pub struct Prop {
 /// use enshwick::ItemId;
 /// use enshwick::world::{CapturedProp, Prop, WorldTransform};
 ///
-/// let prop = Prop { entity: enshwick::Entity(41), item: ItemId::new(7), transform: WorldTransform::at([1.0, 2.0, 3.0]) };
+/// let prop = Prop::new(enshwick::Entity::from_engine(41), ItemId::new(7), WorldTransform::at([1.0, 2.0, 3.0]));
 /// assert_eq!(CapturedProp::from(prop).item, ItemId::new(7));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize, crate::Script)]
+#[non_exhaustive]
 pub struct CapturedProp {
     /// The item it was placed from, its `UsedItem`.
     pub item: ItemId,
     /// Where it stands and which way it faces, counted from the capture's
     /// corner.
     pub transform: WorldTransform,
+}
+
+impl CapturedProp {
+    /// A `CapturedProp` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`CapturedProp`].
+    #[must_use]
+    pub const fn new(item: ItemId, transform: WorldTransform) -> Self {
+        Self { item, transform }
+    }
 }
 
 impl From<Prop> for CapturedProp {
@@ -164,13 +224,12 @@ impl World {
     /// See [`PropPlacementInfo`].
     #[script]
     pub fn prop_placement_info(self, item: ItemId) -> Result<PropPlacementInfo, WorldError> {
-        let mut info = crate::abi::PropPlacementInfo {
-            header: crate::abi::Header::of::<crate::abi::PropPlacementInfo>(),
+        let mut info = enshwick_abi::headed!(crate::abi::PropPlacementInfo {
             template: Guid::NIL,
             min: [0.0; 3],
             max: [0.0; 3],
             flags: 0,
-        };
+        });
         let status =
             (self.0.host.api().prop_placement_info)(self.0.host.handle(), item, &raw mut info);
         WorldError::from_status(status)?;
@@ -227,7 +286,7 @@ impl World {
             .filter_map(|(entity, position)| {
                 if no_props
                     .iter()
-                    .any(|&marks| self.component(entity, marks).is_some())
+                    .any(|&marks| self.component_at(entity, marks).is_some())
                 {
                     return None;
                 }
@@ -236,7 +295,7 @@ impl World {
                 if self.template(entity) != Some(placed) {
                     return None;
                 }
-                let data = self.component(entity, self.0.transform)?;
+                let data = self.component_at(entity, self.0.transform)?;
                 // SAFETY: `component` returned the entity's live
                 // CurrentTransform, valid until the game thread moves on and
                 // read at once; the loader's `orientation` offset lies inside
@@ -256,7 +315,7 @@ impl World {
         if templates.found == 0 && templates.unknown > 0 {
             return Err(WorldError::Unavailable);
         }
-        props.sort_unstable_by_key(|prop| prop.entity.0);
+        props.sort_unstable_by_key(|prop| prop.entity.get());
         Ok(props)
     }
 }

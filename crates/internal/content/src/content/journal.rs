@@ -26,10 +26,9 @@
 //!         KnowledgeQuery::is_set(given, Scope::Player),
 //!         KnowledgeQuery::is_set(found, Scope::Player),
 //!     );
-//!     load.add_quest(NewQuest {
-//!         rewards: vec![QuestReward::Item(torch)],
-//!         ..NewQuest::new(id!("trail"), id!("trail.name").guid(), vec![step])
-//!     })?;
+//!     let mut quest = NewQuest::new(id!("trail"), id!("trail.name").guid(), vec![step]);
+//!     quest.rewards = vec![QuestReward::Item(torch)];
+//!     load.add_quest(quest)?;
 //!     Ok(())
 //! }
 //! ```
@@ -60,6 +59,7 @@ pub(crate) mod item_sets;
 pub mod lore_category;
 #[cfg(feature = "typed")]
 pub(crate) mod objectives;
+mod pages;
 
 use change::{
     Found, Others, Reads, change_page_in, change_quest_in, remove_page_in, remove_quest_in,
@@ -68,6 +68,7 @@ pub use change::{PageChange, QuestChange, StepChange, StepEdit, StepInsert, Step
 pub use item_sets::{
     ItemSetCategory, ItemSetChange, ItemSetEntry, ItemSetHint, ItemSetId, NewItemSet,
 };
+pub use pages::{NewJournalPage, PageEntry};
 
 #[cfg(feature = "typed")]
 #[doc(hidden)]
@@ -201,6 +202,7 @@ impl QuestReward {
 ///
 /// See the [module](self).
 #[derive(Clone, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct QuestStep {
     /// Its title's text tag; give it text with [`Load::add_text`](../../struct.Load.html#method.add_text).
     pub name: Guid,
@@ -338,6 +340,7 @@ impl QuestStep {
 ///
 /// See the [module](self).
 #[derive(Clone, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct NewQuest {
     /// Its content id; its quest id is the id's [`KnowledgeId::from_guid`].
     pub id: Id,
@@ -393,44 +396,6 @@ impl NewQuest {
             document: None,
         }
     }
-}
-
-/// One entry of a journal page, shown once `shown_when` holds.
-///
-/// # Examples
-///
-/// See `Load::add_journal_page`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
-pub struct PageEntry {
-    /// Its title's text tag.
-    pub name: Guid,
-    /// Its text's tag.
-    pub text: Guid,
-    /// When the journal shows it.
-    pub shown_when: KnowledgeQuery,
-}
-
-/// A new lore page for `Load::add_journal_page`.
-///
-/// The name is enshwick's; the game's is `JournalCollectionResource`.
-///
-/// # Examples
-///
-/// See `Load::add_journal_page`.
-#[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
-pub struct NewJournalPage {
-    /// Its content id.
-    pub id: Id,
-    /// The text tag of the game's lore category the journal lists it under:
-    /// the journal has a card only for its own categories, so
-    /// `Load::add_journal_page` refuses any other tag. Rust names them in
-    /// `journal::lore_category` behind the `unstable` feature; Luau has no
-    /// such names and passes the tag.
-    pub category: Guid,
-    /// Its title's text tag.
-    pub name: Guid,
-    /// Its entries, in order.
-    pub entries: Vec<PageEntry>,
 }
 
 /// The entry id of a journal entry.

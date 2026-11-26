@@ -5,6 +5,9 @@
 //! Mods depend on `enshwick`, which re-exports every module here at the
 //! same path; this crate's own paths carry no promise.
 #![cfg_attr(any(docsrs, enshwick_docs), feature(doc_cfg))]
+// The API grows after 1.0 without a major: a public struct or enum is
+// `#[non_exhaustive]`, or closed on purpose with an `#[expect]`.
+#![warn(clippy::exhaustive_enums, clippy::exhaustive_structs)]
 
 /// Fails when rustdoc builds this crate's examples one by one, which it does
 /// without a word when one of them does not merge.
@@ -39,9 +42,15 @@ pub use enshwick_base::{
 
 #[doc(inline)]
 pub use enshwick_abi::abi;
+#[doc(hidden)]
+pub use enshwick_abi::headed;
+#[doc(hidden)]
+pub use enshwick_abi::host_api;
+#[doc(inline)]
+pub use enshwick_actions::console;
 #[cfg(feature = "unstable")]
 #[doc(inline)]
-pub use enshwick_actions::{actions, commands, console, controls, input};
+pub use enshwick_actions::{actions, commands, controls, input};
 #[doc(inline)]
 pub use enshwick_actions::{chat, interactions, vetoes};
 #[doc(inline)]
@@ -108,10 +117,10 @@ pub use enshwick_base::{FnPtr, Hook, Host, Loading, Next, Relock, RelockRw, Relo
 #[cfg(not(feature = "unstable"))]
 pub(crate) use enshwick_macros::script;
 pub use enshwick_macros::{
-    Config, Shape, config, declare_mod, deps, event, hook, point, service, texts,
+    Config, Shape, call, config, declare_mod, deps, event, hook, point, service, texts,
 };
 #[cfg(feature = "unstable")]
-pub use enshwick_macros::{Script, call, script};
+pub use enshwick_macros::{Script, script};
 pub use enshwick_world::WorldError;
 pub use load::{Load, Mod, Off};
 #[doc(no_inline)]

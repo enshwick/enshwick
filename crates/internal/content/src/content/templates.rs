@@ -21,15 +21,14 @@
 //! const WOLF: Guid = Guid::parse("b7a4f1c0-4c1e-4f39-9d5b-2a0f3c6d8e11");
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-//!     let vukah_wolf = load.add_template(NewTemplate {
-//!         changes: vec![ComponentChange::edit(|faction: &mut Faction| {
+//!     let mut template = NewTemplate::new(id!("vukah-wolf"), WOLF);
+//!     template.changes = vec![ComponentChange::edit(|faction: &mut Faction| {
 //!             faction.faction = FactionType::Vukah;
-//!         })],
-//!         ..NewTemplate::new(id!("vukah-wolf"), WOLF)
-//!     })?;
+//!         })];
+//!     let vukah_wolf = load.add_template(template)?;
 //!     assert_eq!(vukah_wolf.guid(), Id::new("you.mod:vukah-wolf").guid());
 //!     Ok(())
-//! }
+//! # }
 //! # }
 //! ```
 
@@ -370,6 +369,7 @@ impl ComponentChange {
 /// assert!(copy.changes.is_empty());
 /// ```
 #[derive(Clone, Debug, crate::Script)]
+#[non_exhaustive]
 pub struct NewTemplate {
     /// The new template's content id.
     pub id: Id,

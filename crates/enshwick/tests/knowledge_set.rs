@@ -5,7 +5,7 @@
 mod tests {
     use std::sync::OnceLock;
 
-    use enshwick::abi::{Header, KnowledgeChange, KnowledgeInfo, Status};
+    use enshwick::abi::{KnowledgeChange, KnowledgeInfo, Status};
     use enshwick::knowledge::{Knowledge, KnowledgeId, KnowledgeNotice};
     use enshwick::{Entity, Load, Mod, Off, WorldError};
 
@@ -34,15 +34,14 @@ mod tests {
     );
 
     fn info(id: KnowledgeId, kind: u8, scope: u8, value: u32, flags: u32) -> KnowledgeInfo {
-        KnowledgeInfo {
-            header: Header::of::<KnowledgeInfo>(),
+        enshwick::abi::headed!(KnowledgeInfo {
             id,
             kind,
             scope,
             reserved: 0,
             value,
             flags,
-        }
+        })
     }
 
     fn started() -> (enshwick::test::Installed, &'static Knowledge) {
@@ -51,7 +50,7 @@ mod tests {
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.faults());
-        let player = Some(Entity(2));
+        let player = Some(Entity::from_engine(2));
         loader.set_knowledge(
             &[
                 (
@@ -86,22 +85,32 @@ mod tests {
     fn a_set_reaches_the_loader_with_its_value_and_notice() {
         let (loader, knowledge) = started();
         knowledge
-            .set(Entity(2), RECIPE, 0b11, KnowledgeNotice::Quiet)
+            .set(Entity::from_engine(2), RECIPE, 0b11, KnowledgeNotice::Quiet)
             .unwrap();
         knowledge
-            .set(Entity(2), VISITS, 1, KnowledgeNotice::Shown)
+            .set(Entity::from_engine(2), VISITS, 1, KnowledgeNotice::Shown)
             .unwrap();
         knowledge
             .set_world(PLACE, 1, KnowledgeNotice::Shown)
             .unwrap();
         knowledge
-            .set(Entity(2), PLACE, 0, KnowledgeNotice::Quiet)
+            .set(Entity::from_engine(2), PLACE, 0, KnowledgeNotice::Quiet)
             .unwrap();
         assert_eq!(
             loader.knowledge_sets(),
             [
-                (Some(Entity(2)), RECIPE, 0b11, KnowledgeChange::QUIET),
-                (Some(Entity(2)), VISITS, 1, KnowledgeChange::SHOWN),
+                (
+                    Some(Entity::from_engine(2)),
+                    RECIPE,
+                    0b11,
+                    KnowledgeChange::QUIET
+                ),
+                (
+                    Some(Entity::from_engine(2)),
+                    VISITS,
+                    1,
+                    KnowledgeChange::SHOWN
+                ),
                 (None, PLACE, 1, KnowledgeChange::SHOWN),
                 (None, PLACE, 0, KnowledgeChange::QUIET),
             ],
@@ -114,7 +123,12 @@ mod tests {
     fn a_set_of_an_unknown_id_a_bool_above_one_or_a_player_s_id_on_the_world_is_refused() {
         let (loader, knowledge) = started();
         let refused = [
-            knowledge.set(Entity(2), KnowledgeId::new(0x99), 1, KnowledgeNotice::Quiet),
+            knowledge.set(
+                Entity::from_engine(2),
+                KnowledgeId::new(0x99),
+                1,
+                KnowledgeNotice::Quiet,
+            ),
             knowledge.set_world(PLACE, 2, KnowledgeNotice::Quiet),
             knowledge.set_world(RECIPE, 1, KnowledgeNotice::Quiet),
         ];
@@ -128,14 +142,29 @@ mod tests {
     fn a_shown_set_refuses_a_gained_bit_the_game_does_not_expect_and_a_quiet_one_writes_it() {
         let (loader, knowledge) = started();
         assert_eq!(
-            knowledge.set(Entity(2), LISTED, 0b011, KnowledgeNotice::Shown),
+            knowledge.set(
+                Entity::from_engine(2),
+                LISTED,
+                0b011,
+                KnowledgeNotice::Shown
+            ),
             Err(WorldError::Refused)
         );
         knowledge
-            .set(Entity(2), LISTED, 0b101, KnowledgeNotice::Shown)
+            .set(
+                Entity::from_engine(2),
+                LISTED,
+                0b101,
+                KnowledgeNotice::Shown,
+            )
             .unwrap();
         knowledge
-            .set(Entity(2), LISTED, 0b011, KnowledgeNotice::Quiet)
+            .set(
+                Entity::from_engine(2),
+                LISTED,
+                0b011,
+                KnowledgeNotice::Quiet,
+            )
             .unwrap();
         assert_eq!(loader.knowledge_sets().len(), 2);
     }

@@ -2,12 +2,12 @@
 //! loader turns into one change per recipe from the game's data.
 
 use crate::Off;
-use crate::abi::{ChangeOp, DataChange, DataSelect, Header, Str};
+use crate::abi::{ChangeOp, DataChange, DataSelect, Str};
 use crate::content::Guid;
 use crate::content::recipes::RecipeKind;
 use crate::content::workshops::WorkshopId;
 
-use super::{Entry, Field, Value, ValueError, field_and_value};
+use super::{Entry, Field, SetFieldError, Value, field_and_value};
 
 /// The vanilla recipes a [`RecipesChange`] reaches at once.
 ///
@@ -20,7 +20,7 @@ use super::{Entry, Field, Value, ValueError, field_and_value};
 /// use enshwick::content::workshops::WorkshopId;
 ///
 /// let kiln = WorkshopId::new(Guid([7; 16]));
-/// let bricks = RecipeTraits { kind: RecipeKind::Other, workshop: kiln.id() };
+/// let bricks = RecipeTraits::new(RecipeKind::Other, kiln.id());
 /// assert!(Recipes::Workshop(kiln).picks(bricks));
 /// assert!(!Recipes::Kind(RecipeKind::Roof).picks(bricks));
 /// ```
@@ -39,11 +39,25 @@ pub enum Recipes {
 ///
 /// See [`Recipes`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct RecipeTraits {
     /// The kind of the item it makes.
     pub kind: RecipeKind,
     /// The game's id of its workshop, 0 for crafting by hand.
     pub workshop: u32,
+}
+
+impl RecipeTraits {
+    /// A `RecipeTraits` of its parts, as the loader reads them of one
+    /// vanilla recipe.
+    ///
+    /// # Examples
+    ///
+    /// See [`RecipeTraits`].
+    #[must_use]
+    pub const fn new(kind: RecipeKind, workshop: u32) -> Self {
+        Self { kind, workshop }
+    }
 }
 
 impl Recipes {
@@ -95,6 +109,7 @@ impl Recipes {
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct RecipesChange {
     /// The recipes.
     pub recipes: Recipes,
@@ -124,7 +139,7 @@ impl RecipesChange {
     ///
     /// # Errors
     ///
-    /// [`ValueError`] saying why not.
+    /// [`SetFieldError`] saying why not.
     ///
     /// # Examples
     ///
@@ -138,9 +153,9 @@ impl RecipesChange {
     ///     "burn_time is no field a selection of recipes changes"
     /// );
     /// ```
-    pub fn check(&self) -> Result<(), ValueError> {
+    pub fn check(&self) -> Result<(), SetFieldError> {
         if self.field.entry() != Entry::Recipe || self.field == Field::Ingredient {
-            return Err(ValueError::NotRecipeSelectable { field: self.field });
+            return Err(SetFieldError::NotRecipeSelectable { field: self.field });
         }
         self.field.check(self.value)
     }
@@ -168,7 +183,7 @@ impl RecipesChange {
     ///
     /// # Errors
     ///
-    /// [`ValueError`] for a field or value the selection does not take.
+    /// [`SetFieldError`] for a field or value the selection does not take.
     ///
     /// # Examples
     ///
@@ -176,8 +191,7 @@ impl RecipesChange {
     /// use enshwick::abi::{ChangeOp, DataChange, DataField, DataSelect, Guid, Header, RecipeKind, Str};
     /// use enshwick::content::changes::{Recipes, RecipesChange};
     ///
-    /// let raw = DataChange {
-    ///     header: Header::of::<DataChange>(),
+    /// let raw = enshwick::abi::headed!(DataChange {
     ///     entry: Guid::NIL,
     ///     field: DataField::RECIPE_TIME,
     ///     op: ChangeOp::TIMES,
@@ -186,12 +200,12 @@ impl RecipesChange {
     ///     item: Guid::NIL,
     ///     select: DataSelect::RECIPE_KIND,
     ///     categories: RecipeKind::ROOF.0,
-    /// };
+    /// });
     /// let change = RecipesChange::from_abi(&raw)?.ok_or("unknown")?;
     /// assert_eq!(change.recipes, Recipes::Kind(enshwick::content::recipes::RecipeKind::Roof));
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    pub fn from_abi(raw: &DataChange) -> Result<Option<Self>, ValueError> {
+    pub fn from_abi(raw: &DataChange) -> Result<Option<Self>, SetFieldError> {
         let Some(recipes) = Recipes::from_abi(raw) else {
             return Ok(None);
         };
@@ -210,8 +224,7 @@ impl RecipesChange {
             Value::Times(v) => (ChangeOp::TIMES, v),
         };
         let (select, entry, categories) = self.recipes.to_abi();
-        DataChange {
-            header: Header::of::<DataChange>(),
+        enshwick_abi::headed!(DataChange {
             entry,
             field: self.field.to_abi(),
             op,
@@ -220,7 +233,7 @@ impl RecipesChange {
             item: Guid::NIL,
             select,
             categories,
-        }
+        })
     }
 }
 

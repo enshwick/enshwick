@@ -8,7 +8,7 @@ mod tests {
     use std::time::Duration;
 
     use enshwick::__private::ids;
-    use enshwick::abi::{Header, ItemAction, KnowledgeInfo, PlayerInfo, Status, TickData};
+    use enshwick::abi::{ItemAction, KnowledgeInfo, PlayerInfo, Status, TickData};
     use enshwick::content::journal::{CraftTarget, KillTarget, NewQuest, Objective, QuestStep};
     use enshwick::content::{EngineFacts, Guid, Id};
     use enshwick::events::{Ticked, WorldLoaded};
@@ -18,8 +18,8 @@ mod tests {
     use enshwick::test::{FakeHost, Installed};
     use enshwick::{Entity, ItemId, Load, Mod, Off, PlayerKey, RecipeId};
 
-    const PLAYER: Entity = Entity(4096);
-    const WOLF: Entity = Entity(77);
+    const PLAYER: Entity = Entity::from_engine(4096);
+    const WOLF: Entity = Entity::from_engine(77);
     const COIN: u32 = 0x0c01;
     const RECIPE: u32 = 31;
     const CRAFT: u32 = 0x52;
@@ -42,9 +42,10 @@ mod tests {
         NewQuest::new(
             id,
             tag("name"),
-            vec![QuestStep {
-                objectives: vec![objective],
-                ..QuestStep::owned(tag("1"), tag("1.text"))
+            vec![{
+                let mut value = QuestStep::owned(tag("1"), tag("1.text"));
+                value.objectives = vec![objective];
+                value
             }],
         )
     }
@@ -103,15 +104,14 @@ mod tests {
     }
 
     fn info(id: KnowledgeId, kind: u8, value: u32) -> (Option<Entity>, KnowledgeInfo) {
-        let info = KnowledgeInfo {
-            header: Header::of::<KnowledgeInfo>(),
+        let info = enshwick::abi::headed!(KnowledgeInfo {
             id,
             kind,
             scope: KnowledgeInfo::PLAYER,
             reserved: 0,
             value,
             flags: 0,
-        };
+        });
         (Some(PLAYER), info)
     }
 
@@ -144,8 +144,11 @@ mod tests {
             host.hash(facts::INVENTORY_SETUP.id()).unwrap(),
             host.hash(facts::INVENTORY.id()).unwrap(),
         );
-        host.component(PLAYER, setup_type, &setup)
-            .component(Entity(41), inventory, &stacks)
+        host.component(PLAYER, setup_type, &setup).component(
+            Entity::from_engine(41),
+            inventory,
+            &stacks,
+        )
     }
 
     /// The player standing at `position`.
@@ -165,7 +168,7 @@ mod tests {
     /// A wolf whose kill credit names the player.
     fn wolf_killed_by_player(host: FakeHost) -> FakeHost {
         let mut credit = vec![0u8; host.size(facts::EXPERIENCE_CREDIT.id()).unwrap()];
-        let player = PLAYER.0.to_le_bytes();
+        let player = PLAYER.get().to_le_bytes();
         put(
             &host,
             &mut credit,
@@ -185,15 +188,14 @@ mod tests {
             .world()
             .game_events()
             .inventory_requests()
-            .player(PlayerInfo {
-                header: Header::of::<PlayerInfo>(),
+            .player(enshwick::abi::headed!(PlayerInfo {
                 slot: 0,
                 entity: PLAYER,
                 key: PlayerKey::new(7),
                 permissions: 0,
                 name_len: 0,
                 name: [0; PlayerInfo::NAME_MAX],
-            });
+            }));
         for (ty, hash) in [
             (ids::CRAFT_RECIPE_EVENT, CRAFT),
             (ids::CRAFT_RECIPE_SUCCESS_EVENT, CRAFTED),
@@ -256,7 +258,7 @@ mod tests {
         let events = FakeHost::new().game_events();
         let died_event = events.hash(facts::ENTITY_DIED_EVENT.id()).unwrap();
         let mut died = vec![0u8; events.size(facts::ENTITY_DIED_EVENT.id()).unwrap()];
-        let dead = WOLF.0.to_le_bytes();
+        let dead = WOLF.get().to_le_bytes();
         put(
             &events,
             &mut died,
@@ -276,7 +278,7 @@ mod tests {
     #[test]
     fn a_craft_the_player_asked_for_counts_once_per_success() {
         let loader = start(0, [0.0; 3]);
-        let ask = event(&[(8, PLAYER.0), (16, RECIPE), (20, 2)]);
+        let ask = event(&[(8, PLAYER.get()), (16, RECIPE), (20, 2)]);
         assert_eq!(loader.raise_game_event(CRAFT, &ask), 1);
         let success = event(&[(12, RECIPE)]);
         assert_eq!(loader.raise_game_event(CRAFTED, &success), 1);
@@ -292,15 +294,14 @@ mod tests {
     #[test]
     fn a_pickup_raises_the_counter_to_what_the_inventory_holds() {
         let loader = start(3, [0.0; 3]);
-        let picked = ItemAction {
-            header: Header::of::<ItemAction>(),
+        let picked = enshwick::abi::headed!(ItemAction {
             kind: ItemAction::PICKUP,
             character: PLAYER,
             item: ItemId::new(COIN),
             count: 3,
-            inventory: Entity(41),
+            inventory: Entity::from_engine(41),
             slot: 0,
-        };
+        });
         assert!(loader.item_action(&picked));
         assert_eq!(
             raised(&loader),

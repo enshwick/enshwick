@@ -334,7 +334,7 @@ impl ClientSnapshot {
     /// ```
     #[must_use]
     pub fn host(&self) -> Option<Entity> {
-        (self.reads(SnapshotPart::Screens) && self.raw.host.0 != 0).then_some(self.raw.host)
+        (self.reads(SnapshotPart::Screens) && self.raw.host.get() != 0).then_some(self.raw.host)
     }
 
     /// The tab the in-game menu shows, as the screen it stands for
@@ -525,7 +525,7 @@ impl ClientSnapshot {
     /// ```
     #[must_use]
     pub fn prompt_target(&self) -> Option<Entity> {
-        (self.reads(SnapshotPart::Prompt) && self.raw.prompt_target.0 != 0)
+        (self.reads(SnapshotPart::Prompt) && self.raw.prompt_target.get() != 0)
             .then_some(self.raw.prompt_target)
     }
 
@@ -824,13 +824,13 @@ mod tests {
 
     #[test]
     fn a_read_tab_with_no_menu_open_is_none_but_read() {
-        let world = snapshot(Raw {
+        let world = snapshot(enshwick_abi::headed!(Raw {
             state: Raw::FRESH,
             available: Raw::SCREENS | Raw::MENU_TAB,
             age_ms: 16,
             hud_screen: Str::new("InGame"),
             ..Raw::EMPTY
-        });
+        }));
         assert_eq!(world.menu_tab(), None);
         assert!(world.reads(SnapshotPart::MenuTab));
         assert_eq!(world.hud_screen(), Some("InGame"));
@@ -840,7 +840,7 @@ mod tests {
 
     #[test]
     fn luau_sees_the_parts_by_name_and_the_state_as_text() {
-        let raw = Raw {
+        let raw = enshwick_abi::headed!(Raw {
             state: Raw::STALE,
             available: Raw::SCREENS | Raw::HELD | Raw::PLAYER,
             session: 4,
@@ -848,49 +848,49 @@ mod tests {
             scene: Str::new("world1"),
             hud_screen: Str::new("SystemMenu"),
             held: 1,
-            player: Entity(12),
+            player: Entity::from_engine(12),
             server: Str::new("127.0.0.1:15637"),
             ..Raw::EMPTY
-        };
+        });
         let luau = LuauSnapshot::from(snapshot(raw));
         assert_eq!(luau.server.as_deref(), Some("127.0.0.1:15637"));
         assert_eq!(luau.state, "stale");
         assert_eq!(luau.reads, ["screens", "held", "player"]);
         assert_eq!(luau.held, Some(Vec::new()), "a bit the build names none of");
-        assert_eq!(luau.player, Some(Entity(12)));
+        assert_eq!(luau.player, Some(Entity::from_engine(12)));
         assert_eq!(luau.scene.as_deref(), Some("world1"));
     }
 
     #[test]
     fn a_read_prompt_names_its_target_and_verb_and_none_while_none_shows() {
-        let facing = snapshot(Raw {
+        let facing = snapshot(enshwick_abi::headed!(Raw {
             state: Raw::FRESH,
             available: Raw::PROMPT,
-            prompt_target: Entity(1052),
+            prompt_target: Entity::from_engine(1052),
             prompt_verb: 0x4e82_e309,
             ..Raw::EMPTY
-        });
-        assert_eq!(facing.prompt_target(), Some(Entity(1052)));
+        }));
+        assert_eq!(facing.prompt_target(), Some(Entity::from_engine(1052)));
         assert_eq!(facing.prompt_verb(), Some(0x4e82_e309));
-        let nothing = snapshot(Raw {
+        let nothing = snapshot(enshwick_abi::headed!(Raw {
             available: Raw::PROMPT,
             ..Raw::EMPTY
-        });
+        }));
         assert!(nothing.reads(SnapshotPart::Prompt));
         assert_eq!(
             (nothing.prompt_target(), nothing.prompt_verb()),
             (None, None)
         );
-        let unread = snapshot(Raw {
-            prompt_target: Entity(1052),
+        let unread = snapshot(enshwick_abi::headed!(Raw {
+            prompt_target: Entity::from_engine(1052),
             ..Raw::EMPTY
-        });
+        }));
         assert_eq!(unread.prompt_target(), None, "the build lacks the read");
     }
 
     #[test]
     fn the_local_player_s_parts_answer_only_while_read() {
-        let read = snapshot(Raw {
+        let read = snapshot(enshwick_abi::headed!(Raw {
             state: Raw::FRESH,
             available: Raw::POSITION | Raw::VITALS | Raw::ACTIONBAR,
             position: [1.5, 20.0, -3.0],
@@ -900,7 +900,7 @@ mod tests {
             stamina_max: 100,
             actionbar_slot: 3,
             ..Raw::EMPTY
-        });
+        }));
         assert_eq!(read.position(), Some([1.5, 20.0, -3.0]));
         assert_eq!(
             read.health(),
@@ -937,11 +937,11 @@ mod tests {
     #[test]
     fn the_selected_character_is_its_place_and_none_without_one() {
         let menu = |character| {
-            snapshot(Raw {
+            snapshot(enshwick_abi::headed!(Raw {
                 available: Raw::CHARACTER,
                 character,
                 ..Raw::EMPTY
-            })
+            }))
         };
         assert_eq!(menu(2).selected_character(), Some(2));
         assert_eq!(menu(Raw::NO_CHARACTER).selected_character(), None);

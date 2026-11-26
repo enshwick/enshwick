@@ -96,15 +96,14 @@ mod tests {
         let horn = Guid::named("you.horns:horn");
         let fake = FakeHost::new()
             .side(Side::SERVER)
-            .player(enshwick::abi::PlayerInfo {
-                header: enshwick::abi::Header::of::<enshwick::abi::PlayerInfo>(),
+            .player(enshwick::abi::headed!(enshwick::abi::PlayerInfo {
                 slot: 0,
-                entity: Entity(10),
+                entity: Entity::from_engine(10),
                 key: PlayerKey::new(7),
                 permissions: 0,
                 name_len: 0,
                 name: [0; 128],
-            })
+            }))
             .net_peer(Peer::Player(PlayerKey::new(7)));
         let loader = run(
             fake,

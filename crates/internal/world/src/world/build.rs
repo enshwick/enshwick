@@ -1,9 +1,9 @@
 //! Whether a player may edit a box of the world, by the server's own rule.
 
 use crate::PlayerKey;
-use crate::abi::{BuildRights, Header, PlayerInfo};
+use crate::abi::{BuildRights, PlayerInfo};
 
-use super::{Player, World, WorldError};
+use super::{PlayerRef, World, WorldError};
 
 /// A permission the server grants a player through its user groups, one bit
 /// of the game's `PlayerPermissions` (server 26430253).
@@ -13,7 +13,7 @@ use super::{Player, World, WorldError};
 ///
 /// # Examples
 ///
-/// See [`BuildRefusal`] and [`Player::has`].
+/// See [`BuildRefusal`] and [`Player::has`](super::Player::has).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 #[expect(
@@ -37,7 +37,7 @@ pub enum PlayerPermissions {
 
 impl PlayerPermissions {
     /// Every permission, in the game's bit order.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: &'static [Self] = &[
         Self::CanKickBan,
         Self::CanAccessInventories,
         Self::CanEditBase,
@@ -62,7 +62,7 @@ impl PlayerPermissions {
         bits
     };
 
-    /// The permission's bit in [`Player::permissions`].
+    /// The permission's bit in [`Player::permissions`](super::Player::permissions).
     ///
     /// # Examples
     ///
@@ -118,9 +118,9 @@ pub enum BuildRefusal {
 
 #[crate::script(build)]
 impl World {
-    /// Whether the server lets `player` edit the box between the corners
-    /// `a` and `b` in metres; a mod that edits the world for a player asks
-    /// first. The permissions are the game's terrain tool rule:
+    /// Checks that the server lets `player` edit the box between the corners
+    /// `a` and `b` in metres, and answers why not when it does not; a mod
+    /// that edits the world for a player asks first. The permissions are the game's terrain tool rule:
     /// `CanEditWorld` always, `CanEditBase` where the box overlaps a
     /// building zone. Enshwick adds two tests the game's building cursor
     /// runs for items: both corners inside the world's building area, and
@@ -152,15 +152,20 @@ impl World {
     /// }
     /// ```
     #[script]
-    pub fn can_build(self, player: &Player, a: [f64; 3], b: [f64; 3]) -> Result<(), BuildRefusal> {
+    pub fn can_build(
+        self,
+        player: impl Into<PlayerRef>,
+        a: [f64; 3],
+        b: [f64; 3],
+    ) -> Result<(), BuildRefusal> {
         let (min, max) = edit_box(a, b).ok_or(BuildRefusal::Unchecked(WorldError::Refused))?;
-        let mut check = BuildRights {
-            header: Header::of::<BuildRights>(),
-            character: player.entity,
+        let character = player.into().entity_in(self.0.host)?;
+        let mut check = enshwick_abi::headed!(BuildRights {
+            character,
             refusal: BuildRights::ALLOWED,
             min,
             max,
-        };
+        });
         let status = (self.0.host.api().build_rights)(self.0.host.handle(), &raw mut check);
         WorldError::from_status(status)?;
         BuildRefusal::from_code(check.refusal).map_or(Ok(()), Err)
@@ -214,7 +219,7 @@ impl World {
     /// player no longer in game. A permission any mod takes is gone even
     /// when another gives it. The change holds from the server's next step
     /// until the mod ends it or turns off, the player leaves or the world
-    /// ends; [`Player::permissions`] and the loader's own admin checks then
+    /// ends; [`Player::permissions`](super::Player::permissions) and the loader's own admin checks then
     /// read the bits in force. The player's client still acts by its
     /// group's bits: it may show an edit the server then refuses, and it
     /// never starts an edit that only a granted bit allows.

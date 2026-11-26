@@ -61,7 +61,7 @@ mod tests {
     fn each_handler_adds_its_lines_to_the_item_s_tooltip_in_registration_order() {
         let (loader, status) = started(Side::CLIENT);
         assert_eq!(status, Status::OK);
-        let staff = loader.open_tooltip(STAFF, Entity(900));
+        let staff = loader.open_tooltip(STAFF, Entity::from_engine(900));
         assert_eq!(
             staff,
             [
@@ -79,7 +79,7 @@ mod tests {
             *HEARD.lock().unwrap(),
             [(
                 ItemInstance {
-                    pide: Entity(900),
+                    pide: Entity::from_engine(900),
                     item: STAFF,
                 },
                 true
@@ -91,7 +91,7 @@ mod tests {
     fn a_handler_s_lines_stop_at_the_most_one_tooltip_takes() {
         let (loader, status) = started(Side::CLIENT);
         assert_eq!(status, Status::OK);
-        let sword = loader.open_tooltip(SWORD, Entity(901));
+        let sword = loader.open_tooltip(SWORD, Entity::from_engine(901));
         assert_eq!(sword.len(), UiTooltipItem::MAX_LINES as usize + 1);
         assert_eq!(
             HEARD.lock().unwrap().last().map(|&(_, kept)| kept),
@@ -104,7 +104,11 @@ mod tests {
     fn an_item_with_no_entity_of_its_own_gets_no_lines() {
         let (loader, status) = started(Side::CLIENT);
         assert_eq!(status, Status::OK);
-        assert!(loader.open_tooltip(STAFF, Entity(0)).is_empty());
+        assert!(
+            loader
+                .open_tooltip(STAFF, Entity::from_engine(0))
+                .is_empty()
+        );
         assert!(HEARD.lock().unwrap().is_empty(), "no handler ran");
     }
 
@@ -112,6 +116,10 @@ mod tests {
     fn a_server_turns_item_tooltips_away() {
         let (loader, status) = started(Side::SERVER);
         assert_ne!(status, Status::OK);
-        assert!(loader.open_tooltip(STAFF, Entity(900)).is_empty());
+        assert!(
+            loader
+                .open_tooltip(STAFF, Entity::from_engine(900))
+                .is_empty()
+        );
     }
 }

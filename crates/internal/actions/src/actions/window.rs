@@ -447,6 +447,7 @@ const ARG: &str = "\u{1f}";
 /// assert_eq!(window.items, [ItemView::Text("2 online".into()), ItemView::Action("say".into())]);
 /// ```
 #[derive(Clone, Debug, Default, PartialEq)]
+#[non_exhaustive]
 pub struct View {
     /// The title, in the player's language.
     pub title: String,
@@ -454,6 +455,22 @@ pub struct View {
     pub items: Vec<ItemView>,
     /// The sheet entries of the actions the items name.
     pub entries: Vec<Entry>,
+}
+
+impl View {
+    /// A `View` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`View`].
+    #[must_use]
+    pub const fn new(title: String, items: Vec<ItemView>, entries: Vec<Entry>) -> Self {
+        Self {
+            title,
+            items,
+            entries,
+        }
+    }
 }
 
 /// An item of a [`View`].
@@ -485,6 +502,7 @@ pub enum ItemView {
 ///
 /// See [`View`].
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct ButtonView {
     /// Its label.
     pub label: String,
@@ -492,6 +510,22 @@ pub struct ButtonView {
     pub action: String,
     /// The values it gives first.
     pub args: Vec<Value>,
+}
+
+impl ButtonView {
+    /// A `ButtonView` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`ButtonView`].
+    #[must_use]
+    pub const fn new(label: String, action: String, args: Vec<Value>) -> Self {
+        Self {
+            label,
+            action,
+            args,
+        }
+    }
 }
 
 /// The window of `text`, in bounds: `None` past [`MAX_BYTES`] or without

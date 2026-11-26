@@ -215,10 +215,10 @@ mod windows {
             return Err(SoundError::NotClient);
         }
         Ok(sounds(loader, owner).map_or(
-            SoundInfo {
+            enshwick_abi::headed!(SoundInfo {
                 state: SoundInfo::ENDED,
                 ..SoundInfo::EMPTY
-            },
+            }),
             |sounds| sounds.info(id),
         ))
     }

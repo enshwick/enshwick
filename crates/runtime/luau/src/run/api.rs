@@ -11,7 +11,7 @@ use enshwick_core::{Load, Relock as _};
 use mlua::{Function, Lua, MultiValue, Table, Value as LuaValue};
 
 use super::{Asked, Defined, Inner, Owned, Scope, Vm};
-use crate::bridge::{LuaArgs, call, failed, to_lua};
+use crate::bridge::{LuaArgs, call, failed, raising, refused, to_lua};
 use crate::calls::{CallDesc, ServedCall};
 use crate::files::{Requirer, Scripts};
 use crate::points::{EventDesc, PointDesc, Read, decode, encode};
@@ -273,14 +273,12 @@ impl Inner {
                 let opened = opened.clone();
                 let what = format!("enshwick.{}.{}", namespace.name(), declared.name());
                 let signature = declared.signature();
-                table.raw_set(
-                    declared.name(),
-                    lua.create_function(move |lua, args: LuaArgs| {
-                        call(lua, &scope, args, signature, &what, |slots| {
-                            opened.call(&declared, slots)
-                        })
-                    })?,
-                )?;
+                let function = lua.create_function(move |lua, args: LuaArgs| {
+                    call(lua, &scope, args, signature, &what, |slots| {
+                        opened.call(&declared, slots)
+                    })
+                })?;
+                table.raw_set(declared.name(), raising(lua, function)?)?;
             }
         }
         let settings = scope.clone();
@@ -629,6 +627,7 @@ impl Inner {
                         })
                     })?
                 };
+                let during = raising(lua, during)?;
                 table.raw_set(function.name(), start_only(vm, what, during)?)?;
             }
             if let Some(getter) = namespace.request_function() {
@@ -681,20 +680,17 @@ fn requested<'scope, 'env>(
         let (slot, bridge, ask) = (Arc::clone(&slot), bridge.clone(), ask.clone());
         let what = format!("enshwick.{}.{}", namespace.name(), declared.name());
         let signature = declared.signature();
-        table.raw_set(
-            declared.name(),
-            lua.create_function(move |lua, args: LuaArgs| {
-                let opened = slot.get().ok_or_else(|| {
-                    failed(
-                        &what,
-                        format_args!("call {ask}() at the top level of main.luau first"),
-                    )
-                })?;
-                call(lua, &bridge, args, signature, &what, |slots| {
-                    opened.call(&declared, slots)
-                })
-            })?,
-        )?;
+        let function = lua.create_function(move |lua, args: LuaArgs| {
+            let Some(opened) = slot.get() else {
+                let early =
+                    script::Error::new(format!("call {ask}() at the top level of main.luau first"));
+                return refused(lua, &what, &early);
+            };
+            call(lua, &bridge, args, signature, &what, |slots| {
+                opened.call(&declared, slots)
+            })
+        })?;
+        table.raw_set(declared.name(), raising(lua, function)?)?;
     }
     let during = {
         let (bridge, what) = (bridge.clone(), ask.clone());

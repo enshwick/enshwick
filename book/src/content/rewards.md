@@ -100,7 +100,7 @@ by name, within its limit and chance, or gives anything at once.
 
 ```rust
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    load.on_reward(|grant| grant.reward != "level-two" || grant.player != enshwick::Entity(1))?;
+    load.on_reward(|grant| grant.reward != "level-two" || grant.player != enshwick::Entity::from_engine(1))?;
     let rewards = load.rewards()?;
     load.on::<enshwick::events::PlayerJoined>(move |joined| {
         let _given = rewards.grant(joined.entity, "level-two");

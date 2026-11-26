@@ -6,7 +6,7 @@
 mod tests {
     use std::time::Duration;
 
-    use enshwick::abi::{Header, PlayerInfo, Side};
+    use enshwick::abi::{PlayerInfo, Side};
     use enshwick::controls::{GameAction, Key};
     use enshwick::test::FakeHost;
 
@@ -85,15 +85,14 @@ mod tests {
     #[test]
     fn a_game_action_fires_a_script_s_linked_control_with_its_player() {
         let loader = run(FakeHost::new(), MAIN);
-        let ann = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let ann = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: enshwick::Entity(2),
+            entity: enshwick::Entity::from_engine(2),
             key: enshwick::PlayerKey::new(7),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        };
+        });
         let fired = loader.game_actions(
             &ann,
             &[GameAction::ContextualAction],

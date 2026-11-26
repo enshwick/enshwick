@@ -392,7 +392,7 @@ pub(crate) fn forget() {
 }
 
 fn allowed(call: &Interaction) -> bool {
-    if crate::world::transactions::holds().is_held(call.target.0) {
+    if crate::world::transactions::holds().is_held(call.target.get()) {
         return false;
     }
     // SAFETY: a filter's mod runs, so its DLL that holds the callback stays
@@ -413,8 +413,8 @@ fn allowed(call: &Interaction) -> bool {
 unsafe fn interaction(kind: u32, player: u32, target: u32, ctx: *mut u64) -> Interaction {
     let mut call = Interaction::new(
         kind,
-        enshwick_core::Entity(player),
-        enshwick_core::Entity(target),
+        enshwick_core::Entity::from_engine(player),
+        enshwick_core::Entity::from_engine(target),
     );
     if let Some((_, layout, components)) = linked()
         && !ctx.is_null()
@@ -815,7 +815,7 @@ unsafe fn player_inputs(ctx: *mut u64) {
     let input = |player: enshwick_core::Entity| {
         // SAFETY: the caller guarantees the system's live context, at its
         // entry on its thread.
-        unsafe { components.component(ctx, player.0, layout.player_input) }
+        unsafe { components.component(ctx, player.get(), layout.player_input) }
     };
     // SAFETY: each pointer `input` gives is the player's live `PlayerInput`
     // component in the server's world, read at the system's entry on its

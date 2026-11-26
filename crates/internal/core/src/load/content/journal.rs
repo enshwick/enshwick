@@ -23,6 +23,8 @@ impl Load<'_> {
     /// A mod moves the quest on with [`Quests`](crate::quests::Quests) or by
     /// granting the knowledge its steps ask for.
     ///
+    /// Unstable: needs the `typed` feature and may change in any release.
+    ///
     /// # Errors
     ///
     /// [`Off`] for a quest without steps, a count query from 0, an
@@ -51,6 +53,8 @@ impl Load<'_> {
     /// category on the journal's world information screen. The card counts
     /// the page from the start and lists it once one entry shows.
     ///
+    /// Unstable: needs the `typed` and `unstable` features and may change in any release.
+    ///
     /// # Errors
     ///
     /// [`Off`] for a page without entries, a count query from 0, a category
@@ -67,16 +71,7 @@ impl Load<'_> {
     /// use enshwick::knowledge::{KnowledgeId, Scope};
     ///
     /// fn init(load: &mut enshwick::Load<'_>, read: KnowledgeId, general: Guid) -> Result<(), enshwick::Off> {
-    ///     load.add_journal_page(NewJournalPage {
-    ///         id: id!("shrine-lore"),
-    ///         category: general,
-    ///         name: id!("shrine-lore.name").guid(),
-    ///         entries: vec![PageEntry {
-    ///             name: id!("shrine-lore.first").guid(),
-    ///             text: id!("shrine-lore.first.text").guid(),
-    ///             shown_when: KnowledgeQuery::is_set(read, Scope::Player),
-    ///         }],
-    ///     })
+    ///     load.add_journal_page(NewJournalPage::new(id!("shrine-lore"), general, id!("shrine-lore.name").guid(), vec![PageEntry::new(id!("shrine-lore.first").guid(), id!("shrine-lore.first.text").guid(), KnowledgeQuery::is_set(read, Scope::Player))]))
     /// }
     /// ```
     #[cfg(feature = "unstable")]
@@ -86,13 +81,14 @@ impl Load<'_> {
     /// Changes the vanilla quest `quest` in memory, on the server and the
     /// client alike: its rewards, whether it unlocks for every player, and
     /// its steps' knowledge. Mods that change one quest change it in load
-    /// order, each on the one before's result; [`Knowledge::quests`]
-    /// lists the quest ids. The game gives an added reward's experience and
-    /// only draws an added item, which the mod gives on
+    /// order, each on the one before's result;
+    /// [`Knowledge::quests`](crate::knowledge::Knowledge::quests) lists the
+    /// quest ids. The game gives an added reward's experience and only draws
+    /// an added item, which the mod gives on
     /// [`QuestCompleted`](crate::events::QuestCompleted), as for its own
     /// quest (see [`QuestReward`](crate::content::journal::QuestReward)).
     ///
-    /// [`Knowledge::quests`]: crate::knowledge::Knowledge::quests
+    /// Unstable: needs the `typed` feature and may change in any release.
     ///
     /// # Errors
     ///
@@ -106,10 +102,9 @@ impl Load<'_> {
     /// use enshwick::content::journal::{QuestChange, QuestReward};
     ///
     /// fn init(load: &mut enshwick::Load<'_>, quest: enshwick::knowledge::KnowledgeId, torch: Guid) -> Result<(), enshwick::Off> {
-    ///     load.change_quest(quest, QuestChange {
-    ///         add_rewards: vec![QuestReward::Item(torch)],
-    ///         ..QuestChange::default()
-    ///     })
+    ///     let mut quest_change = QuestChange::default();
+    ///     quest_change.add_rewards = vec![QuestReward::Item(torch)];
+    ///     load.change_quest(quest, quest_change)
     /// }
     /// ```
     #[script]
@@ -127,6 +122,8 @@ impl Load<'_> {
     /// one of [`Load::add_query`], with the queries it names in turn; while
     /// the game's queries do not read, every game query counts. The game's
     /// own queries never hold a quest, even in a step another mod changed.
+    ///
+    /// Unstable: needs the `typed` feature and may change in any release.
     ///
     /// # Errors
     ///
@@ -146,6 +143,8 @@ impl Load<'_> {
     /// client alike: its category, title, priority, tutorial mark, document
     /// and entries. Mods that change one page change it in load order.
     ///
+    /// Unstable: needs the `typed` and `unstable` features and may change in any release.
+    ///
     /// # Errors
     ///
     /// [`Off`] when `page` is no page of the game's journal, a category no
@@ -160,10 +159,9 @@ impl Load<'_> {
     /// use enshwick::content::journal::{EntryId, PageChange};
     ///
     /// fn init(load: &mut enshwick::Load<'_>, page: EntryId) -> Result<(), enshwick::Off> {
-    ///     load.change_journal_page(page, PageChange {
-    ///         name: Some(id!("old-page.name").guid()),
-    ///         ..PageChange::default()
-    ///     })
+    ///     let mut page_change = PageChange::default();
+    ///     page_change.name = Some(id!("old-page.name").guid());
+    ///     load.change_journal_page(page, page_change)
     /// }
     /// ```
     #[cfg(feature = "unstable")]
@@ -176,6 +174,8 @@ impl Load<'_> {
 
     /// Removes the vanilla lore page `page` from the journal in memory, on
     /// the server and the client alike, with its entries.
+    ///
+    /// Unstable: needs the `typed` and `unstable` features and may change in any release.
     ///
     /// # Errors
     ///
@@ -210,6 +210,8 @@ impl Load<'_> {
     /// grants them is not read yet, so a mod that wants them granted grants
     /// them itself.
     ///
+    /// Unstable: needs the `typed` feature and may change in any release.
+    ///
     /// # Errors
     ///
     /// [`Off`] for a set without entries, a count query from 0, an id too
@@ -233,6 +235,8 @@ impl Load<'_> {
     /// load order; [`Quests::item_sets`](crate::quests::Quests::item_sets)
     /// lists the sets.
     ///
+    /// Unstable: needs the `typed` feature and may change in any release.
+    ///
     /// # Errors
     ///
     /// [`Off`] when `set` is no set of the game's journal, new entries are
@@ -246,10 +250,9 @@ impl Load<'_> {
     /// use enshwick::content::knowledge::ExperienceValue;
     ///
     /// fn init(load: &mut enshwick::Load<'_>, set: ItemSetId, more: ExperienceValue) -> Result<(), enshwick::Off> {
-    ///     load.change_item_set(set, ItemSetChange {
-    ///         experience: Some(more),
-    ///         ..ItemSetChange::default()
-    ///     })
+    ///     let mut item_set_change = ItemSetChange::default();
+    ///     item_set_change.experience = Some(more);
+    ///     load.change_item_set(set, item_set_change)
     /// }
     /// ```
     #[script]
@@ -262,6 +265,8 @@ impl Load<'_> {
     /// Removes the vanilla item set `set` from the journal in memory, on the
     /// server and the client alike, with its entries and its pay row; the
     /// knowledge its entries ask stays.
+    ///
+    /// Unstable: needs the `typed` feature and may change in any release.
     ///
     /// # Errors
     ///

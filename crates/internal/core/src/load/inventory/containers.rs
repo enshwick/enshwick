@@ -3,6 +3,7 @@
 use crate::ItemId;
 use crate::content::props::PropId;
 use crate::inventory::containers::{NewContainer, Put};
+use crate::vetoes::Verdict;
 use crate::{Load, Off};
 use enshwick_inventory::__load::*;
 
@@ -31,8 +32,8 @@ impl Load<'_> {
     pub fn add_container(&mut self, new: NewContainer) -> Result<PropId, Off>;
 
     /// Runs `rule` before a stack enters a slot of a container placed from
-    /// `item`, the mod's own or a vanilla one; returning `false` keeps the
-    /// stack out as a slot that does not take it does: it stays where it
+    /// `item`, the mod's own or a vanilla one; a refusal (`false` or a
+    /// [`Verdict`] that refuses) keeps the stack out as a slot that does not take it does: it stays where it
     /// was, or goes to another slot when the game picks the slots. The mods'
     /// rules for the item are asked in load order until one keeps the stack
     /// out; the rules after it are not called for that stack.
@@ -54,8 +55,28 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](crate::inventory::containers).
-    #[script]
-    pub fn container_rule<F>(&mut self, item: ItemId, rule: F) -> Result<(), Off>
+    pub fn container_rule<F, V>(&mut self, item: ItemId, rule: F) -> Result<(), Off>
     where
-        F: Fn(&Put) -> bool + Send + Sync + 'static;
+        F: Fn(&Put) -> V + Send + Sync + 'static,
+        V: Into<Verdict>;
+
+    /// Runs `rule` before a stack enters a slot of a container placed from
+    /// `item`, the mod's own or a vanilla one; `false` or a string keeps the
+    /// stack out as a slot that does not take it does, nil or `true` lets it
+    /// in, and any other value keeps it out. The mods' rules for the item
+    /// are asked in load order until one keeps the stack out. It answers for
+    /// whatever moves the stack, one call per stack, but not for gives
+    /// through `Inventories` or the game's own loot. It runs on the thread
+    /// of the system that moves the items, on both sides: keep it quick and
+    /// never block.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::container_rule`].
+    #[script(name = "container_rule")]
+    pub(crate) fn put_filter<F>(&mut self, item: ItemId, rule: F) -> Result<(), Off>
+    where
+        F: Fn(&Put) -> Verdict + Send + Sync + 'static;
 }

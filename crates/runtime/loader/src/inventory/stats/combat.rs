@@ -86,9 +86,9 @@ pub(super) fn expire(state: &mut World, now: Instant) {
 /// forgets the entities nothing keeps watched or that left the world;
 /// whether it forgot any.
 pub(super) fn follow(loader: &Loader, state: &mut World, players: &[PlayerInfo]) -> bool {
-    let online: FxHashSet<u32> = players.iter().map(|p| p.entity.0).collect();
+    let online: FxHashSet<u32> = players.iter().map(|p| p.entity.get()).collect();
     for p in players {
-        let watched = state.watched.entry(p.entity.0).or_default();
+        let watched = state.watched.entry(p.entity.get()).or_default();
         if watched.player.is_none() {
             watched.player = Some(p.key.get());
             watched.dirty = true;
@@ -104,7 +104,7 @@ pub(super) fn follow(loader: &Loader, state: &mut World, players: &[PlayerInfo])
             || w.dirty
             || w.applied.iter().any(|&points| points != 0)
             || w.modifiers.iter().any(|h| !h.saved);
-        keep && crate::engine::world::template(loader, Entity(*entity)).is_ok()
+        keep && crate::engine::world::template(loader, Entity::from_engine(*entity)).is_ok()
     });
     state.watched.len() != before
 }

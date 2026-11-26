@@ -536,7 +536,7 @@ unsafe fn dependency(raw: &Dependency) -> Result<resolve::Dependency, ManifestEr
 
 #[cfg(test)]
 mod tests {
-    use enshwick_core::abi::{ABI_MAJOR, ABI_MINOR, Header, ManifestFlags, Str};
+    use enshwick_core::abi::{ABI_MAJOR, ABI_MINOR, ManifestFlags, Str};
 
     use super::*;
 
@@ -547,8 +547,7 @@ mod tests {
     }];
 
     fn manifest(id: &'static str, version: &'static str) -> Manifest {
-        Manifest {
-            header: Header::of::<Manifest>(),
+        enshwick_abi::headed!(Manifest {
             id: Str::new(id),
             version: Str::new(version),
             side: Side::BOTH,
@@ -566,7 +565,7 @@ mod tests {
             points: Str::EMPTY,
             exports: core::ptr::null(),
             export_count: 0,
-        }
+        })
     }
 
     static AUTHORS: [Str; 2] = [Str::new("themaiby"), Str::new(" ")];

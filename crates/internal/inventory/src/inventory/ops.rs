@@ -12,11 +12,12 @@ use super::{MAX_INVENTORIES, MAX_OPS, OP_LOG, inventories};
 /// use enshwick::Entity;
 /// use enshwick::inventory::Op;
 ///
-/// let loot = Op::MoveAll { from: Entity(40), to: Entity(2), include_special: false };
+/// let loot = Op::MoveAll { from: Entity::from_engine(40), to: Entity::from_engine(2), include_special: false };
 /// let _ = loot;
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[script(name = "InventoryOp")]
+#[non_exhaustive]
 pub enum Op {
     /// New items: merged into stacks of the same item, then free slots.
     Give {
@@ -219,11 +220,11 @@ impl Op {
 ///
 /// ```
 /// let empty = enshwick::inventory::Batch::new();
-/// assert_eq!(empty.check(), Err(enshwick::inventory::BatchError::Empty));
+/// assert_eq!(empty.check(), Err(enshwick::inventory::RunBatchError::Empty));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, thiserror::Error)]
 #[non_exhaustive]
-pub enum BatchError {
+pub enum RunBatchError {
     /// No operations.
     #[error("the batch is empty")]
     Empty,
@@ -241,7 +242,7 @@ pub enum BatchError {
     TooLarge,
 }
 
-crate::load::off_from!(BatchError);
+crate::load::off_from!(RunBatchError);
 
 /// Operations to run as one transaction: every one succeeds, or nothing
 /// changes.
@@ -253,7 +254,7 @@ crate::load::off_from!(BatchError);
 /// use enshwick::inventory::{Batch, Op};
 ///
 /// // A trade: 5 coins out, a sword in, or neither.
-/// let player = Entity(2);
+/// let player = Entity::from_engine(2);
 /// let trade = Batch::new()
 ///     .with(Op::Take { from: player, item: enshwick::ItemId::new(0x0c01), count: 5 })
 ///     .with(Op::Give { to: player, item: enshwick::ItemId::new(0x5e01), count: 1, fill: None });
@@ -265,7 +266,7 @@ pub struct Batch {
     pub(super) allow_partial: bool,
     notify: bool,
     hide_in_ui: bool,
-    pub(super) actor: Entity,
+    pub(super) actor: Option<Entity>,
 }
 
 impl crate::script::Typed for Batch {
@@ -296,7 +297,7 @@ impl crate::script::Typed for Batch {
             crate::script::Field::defaulted(
                 "actor",
                 "The player it acts for; their character's entity.",
-                <Entity as crate::script::Typed>::TY,
+                <Option<Entity> as crate::script::Typed>::TY,
             ),
         ],
     ));
@@ -375,7 +376,7 @@ impl Batch {
     /// use enshwick::inventory::{Batch, Op};
     ///
     /// // As many as fit.
-    /// let _ = Batch::new().with(Op::Give { to: Entity(2), item: enshwick::ItemId::new(7), count: 500, fill: None }).allow_partial();
+    /// let _ = Batch::new().with(Op::Give { to: Entity::from_engine(2), item: enshwick::ItemId::new(7), count: 500, fill: None }).allow_partial();
     /// ```
     #[must_use]
     pub const fn allow_partial(mut self) -> Self {
@@ -394,7 +395,7 @@ impl Batch {
     /// use enshwick::Entity;
     /// use enshwick::inventory::{Batch, Op};
     ///
-    /// let (corpse, player) = (Entity(40), Entity(2));
+    /// let (corpse, player) = (Entity::from_engine(40), Entity::from_engine(2));
     /// let _ = Batch::new()
     ///     .with(Op::MoveAll { from: corpse, to: player, include_special: false })
     ///     .actor(player)
@@ -420,7 +421,7 @@ impl Batch {
     /// use enshwick::inventory::{Batch, Op};
     ///
     /// // A quiet reward.
-    /// let _ = Batch::new().with(Op::Give { to: Entity(2), item: enshwick::ItemId::new(7), count: 5, fill: None }).hide_in_ui();
+    /// let _ = Batch::new().with(Op::Give { to: Entity::from_engine(2), item: enshwick::ItemId::new(7), count: 5, fill: None }).hide_in_ui();
     /// ```
     #[cfg(feature = "unstable")]
     #[must_use]
@@ -439,11 +440,11 @@ impl Batch {
     /// use enshwick::Entity;
     /// use enshwick::inventory::{Batch, Op};
     ///
-    /// let _ = Batch::new().with(Op::MoveAll { from: Entity(40), to: Entity(41), include_special: false }).actor(Entity(2));
+    /// let _ = Batch::new().with(Op::MoveAll { from: Entity::from_engine(40), to: Entity::from_engine(41), include_special: false }).actor(Entity::from_engine(2));
     /// ```
     #[must_use]
     pub const fn actor(mut self, player: Entity) -> Self {
-        self.actor = player;
+        self.actor = Some(player);
         self
     }
 
@@ -466,21 +467,21 @@ impl Batch {
     /// # Examples
     ///
     /// See [`Batch`].
-    pub fn check(&self) -> Result<(), BatchError> {
+    pub fn check(&self) -> Result<(), RunBatchError> {
         if self.ops.is_empty() {
-            return Err(BatchError::Empty);
+            return Err(RunBatchError::Empty);
         }
         if !self.ops.iter().all(Op::is_valid) {
-            return Err(BatchError::Malformed);
+            return Err(RunBatchError::Malformed);
         }
         if self.ops.len() > MAX_OPS {
-            return Err(BatchError::TooManyOps);
+            return Err(RunBatchError::TooManyOps);
         }
         if inventories(&self.ops) > MAX_INVENTORIES {
-            return Err(BatchError::TooManyInventories);
+            return Err(RunBatchError::TooManyInventories);
         }
         if self.ops.iter().map(Op::cost).sum::<u32>() > OP_LOG {
-            return Err(BatchError::TooLarge);
+            return Err(RunBatchError::TooLarge);
         }
         Ok(())
     }
@@ -497,7 +498,7 @@ impl Batch {
     ///
     /// let mut everything = Batch::new();
     /// for chest in 100..120 {
-    ///     everything.push(Op::MoveAll { from: Entity(chest), to: Entity(2), include_special: false });
+    ///     everything.push(Op::MoveAll { from: Entity::from_engine(chest), to: Entity::from_engine(2), include_special: false });
     /// }
     /// let parts = everything.split();
     /// assert!(parts.len() > 1);
@@ -512,7 +513,7 @@ impl Batch {
         };
         for op in self.ops {
             part.ops.push(op);
-            if part.ops.len() > 1 && part.check().is_err_and(|e| e != BatchError::Malformed) {
+            if part.ops.len() > 1 && part.check().is_err_and(|e| e != RunBatchError::Malformed) {
                 part.ops.pop();
                 let full = std::mem::replace(&mut part.ops, vec![op]);
                 parts.push(Self {
@@ -542,8 +543,8 @@ impl Batch {
     }
 
     pub(super) fn actor_entity(&self) -> Entity {
-        if !self.actor.is_none() {
-            return self.actor;
+        if let Some(actor) = self.actor {
+            return actor;
         }
         self.ops
             .iter()

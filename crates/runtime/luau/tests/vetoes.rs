@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{BuildCheck, Header, PlayerInfo};
+    use enshwick::abi::{BuildCheck, PlayerInfo};
     use enshwick::test::FakeHost;
     use enshwick::{Entity, ItemId, PlayerKey};
 
@@ -25,13 +25,14 @@ mod tests {
             end)
             "#,
         );
-        let build = |item, y: i32| BuildCheck {
-            header: Header::of::<BuildCheck>(),
-            character: Entity(2),
-            item: ItemId::new(item),
-            position: [0.0, f64::from(y), 0.0],
-            reason: core::ptr::null_mut(),
-            account: PlayerKey::default(),
+        let build = |item, y: i32| {
+            enshwick::abi::headed!(BuildCheck {
+                character: Entity::from_engine(2),
+                item: ItemId::new(item),
+                position: [0.0, f64::from(y), 0.0],
+                reason: core::ptr::null_mut(),
+                account: PlayerKey::default(),
+            })
         };
         assert_eq!(loader.build(&build(7, 5)), Ok(()));
         assert_eq!(
@@ -43,7 +44,7 @@ mod tests {
 
     #[test]
     fn a_script_s_build_filter_judges_the_builder_by_account() {
-        let ann = PlayerInfo::with_name(Entity(2), PlayerKey::new(7), 0, "Ann");
+        let ann = PlayerInfo::with_name(Entity::from_engine(2), PlayerKey::new(7), 0, "Ann");
         let loader = run(
             FakeHost::new().player(ann),
             r#"
@@ -55,13 +56,14 @@ mod tests {
             end)
             "#,
         );
-        let build = |character| BuildCheck {
-            header: Header::of::<BuildCheck>(),
-            character: Entity(character),
-            item: ItemId::new(7),
-            position: [0.0; 3],
-            reason: core::ptr::null_mut(),
-            account: PlayerKey::default(),
+        let build = |character| {
+            enshwick::abi::headed!(BuildCheck {
+                character: Entity::from_engine(character),
+                item: ItemId::new(7),
+                position: [0.0; 3],
+                reason: core::ptr::null_mut(),
+                account: PlayerKey::default(),
+            })
         };
         assert_eq!(
             loader.build(&build(2)),

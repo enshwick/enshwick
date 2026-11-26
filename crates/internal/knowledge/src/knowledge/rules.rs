@@ -39,6 +39,10 @@ const EVENT: &str = "requiresEvent";
 /// assert_eq!(first.index, 0);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a rule's place: its side and its index there"
+)]
 pub struct RuleId {
     /// Its list: the world's rules, or each player's.
     pub scope: Scope,
@@ -52,12 +56,25 @@ pub struct RuleId {
 ///
 /// See [`NewRule`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[non_exhaustive]
 pub struct RuleGrant {
     /// The entry granted; the game grants only an entry its knowledge
     /// holds, the game's or a mod's.
     pub id: KnowledgeId,
     /// What of it.
     pub grant: Grant,
+}
+
+impl RuleGrant {
+    /// A `RuleGrant` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`RuleGrant`].
+    #[must_use]
+    pub const fn new(id: KnowledgeId, grant: Grant) -> Self {
+        Self { id, grant }
+    }
 }
 
 /// A new knowledge rule for [`Load::add_knowledge_rule`](../struct.Load.html#method.add_knowledge_rule).
@@ -72,15 +89,11 @@ pub struct RuleGrant {
 /// use enshwick::knowledge::{Grant, KnowledgeId, NewRule, RuleGrant, Scope};
 ///
 /// fn init(load: &mut enshwick::Load<'_>, both: KnowledgeQuery, crowned: KnowledgeId) -> Result<(), enshwick::Off> {
-///     load.add_knowledge_rule(NewRule {
-///         id: id!("crown-on-both"),
-///         scope: Scope::Player,
-///         when: both,
-///         grant: vec![RuleGrant { id: crowned, grant: Grant::Set }],
-///     })
+///     load.add_knowledge_rule(NewRule::new(id!("crown-on-both"), Scope::Player, both, vec![RuleGrant::new(crowned, Grant::Set)]))
 /// }
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct NewRule {
     /// Its content id, for the loader's refusals and logs.
     pub id: Id,
@@ -96,6 +109,23 @@ pub struct NewRule {
     pub grant: Vec<RuleGrant>,
 }
 
+impl NewRule {
+    /// A `NewRule` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`NewRule`].
+    #[must_use]
+    pub const fn new(id: Id, scope: Scope, when: KnowledgeQuery, grant: Vec<RuleGrant>) -> Self {
+        Self {
+            id,
+            scope,
+            when,
+            grant,
+        }
+    }
+}
+
 /// A change of a vanilla rule for [`Load::change_knowledge_rule`](../struct.Load.html#method.change_knowledge_rule); `None`
 /// keeps what the rule holds.
 ///
@@ -103,6 +133,7 @@ pub struct NewRule {
 ///
 /// See [`Load::change_knowledge_rule`](../struct.Load.html#method.change_knowledge_rule).
 #[derive(Clone, Debug, Default, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct RuleChange {
     /// When it grants.
     pub when: Option<KnowledgeQuery>,

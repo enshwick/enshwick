@@ -63,9 +63,10 @@ mod tests {
     }
 
     fn take(sound: Guid, chance: f32) -> Take {
-        Take {
-            chance,
-            ..Take::new(SoundId::from_guid(sound))
+        {
+            let mut value = Take::new(SoundId::from_guid(sound));
+            value.chance = chance;
+            value
         }
     }
 
@@ -101,27 +102,30 @@ mod tests {
         let chest_id = SoundContainerId::from_guid(CHEST);
         let first = run(&loader, 1, |load| {
             load.declare(BELL)?;
-            let replace = SoundChange {
-                takes: Some(Takes::Replace(vec![take(CREAK, 0.5)])),
-                ..SoundChange::default()
+            let replace = {
+                let mut value = SoundChange::default();
+                value.takes = Some(Takes::Replace(vec![take(CREAK, 0.5)]));
+                value
             };
             load.change_sound(chest_id, replace)
         });
         assert_eq!(first, Status::OK, "{:?}", loader.logs());
         let second = run(&loader, 2, |load| {
-            let unknown = SoundChange {
-                takes: Some(Takes::Add(vec![take(UNKNOWN, 1.0)])),
-                ..SoundChange::default()
+            let unknown = {
+                let mut value = SoundChange::default();
+                value.takes = Some(Takes::Add(vec![take(UNKNOWN, 1.0)]));
+                value
             };
             let refused = load.change_sound(chest_id, unknown).unwrap_err();
             assert!(
                 refused.to_string().contains(&UNKNOWN.to_string()),
                 "{refused}"
             );
-            let add = SoundChange {
-                volume: Some(0.25),
-                takes: Some(Takes::Add(vec![take(SLAM, 1.0), take(BELL.guid(), 0.75)])),
-                ..SoundChange::default()
+            let add = {
+                let mut value = SoundChange::default();
+                value.volume = Some(0.25);
+                value.takes = Some(Takes::Add(vec![take(SLAM, 1.0), take(BELL.guid(), 0.75)]));
+                value
             };
             load.change_sound(chest_id, add)
         });
@@ -192,9 +196,10 @@ mod tests {
         let first = run(&loader, 1, |load| load.declare(HORN).map(|_| ()));
         assert_eq!(first, Status::OK, "{:?}", loader.logs());
         let second = run(&loader, 2, |load| {
-            let horn = SoundChange {
-                takes: Some(Takes::Add(vec![take(HORN.guid(), 1.0)])),
-                ..SoundChange::default()
+            let horn = {
+                let mut value = SoundChange::default();
+                value.takes = Some(Takes::Add(vec![take(HORN.guid(), 1.0)]));
+                value
             };
             let refused = load
                 .change_sound(SoundContainerId::from_guid(CHEST), horn)

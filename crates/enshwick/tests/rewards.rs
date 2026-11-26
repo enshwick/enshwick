@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{Header, ItemAction, PlayerData, PlayerInfo, Status, TickData};
+    use enshwick::abi::{ItemAction, PlayerData, PlayerInfo, Status, TickData};
     use enshwick::events::{PlayerJoined, ShutdownStarted, Ticked, WorldLoaded, WorldSaved};
     use enshwick::progress::Experience;
     use enshwick::rewards::{Action, Give, Limit, Reward};
@@ -24,7 +24,7 @@ mod tests {
                 Reward::new("tonic", Action::Consume(TONIC)).with(Give::Experience(5)),
             )?;
             // Player 3 gets nothing.
-            load.on_reward(|grant| grant.player != Entity(3))?;
+            load.on_reward(|grant| grant.player != Entity::from_engine(3))?;
             assert!(
                 load.add_reward(Reward::new("tonic", Action::Join).with(Give::Experience(1)))
                     .is_err(),
@@ -43,24 +43,22 @@ mod tests {
     );
 
     fn player(entity: u32, key: u64) -> PlayerInfo {
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: Entity(entity),
+            entity: Entity::from_engine(entity),
             key: PlayerKey::new(key),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        }
+        })
     }
 
     fn join(loader: &Installed, entity: u32, key: u64) {
-        let joined = PlayerData {
-            header: Header::of::<PlayerData>(),
+        let joined = enshwick::abi::headed!(PlayerData {
             slot: 0,
-            entity: Entity(entity),
+            entity: Entity::from_engine(entity),
             key: PlayerKey::new(key),
-        };
+        });
         let _heard = loader.raise::<PlayerJoined>(&joined);
         let _ran = loader.raise::<Ticked>(&TickData::new(1));
     }
@@ -68,7 +66,7 @@ mod tests {
     /// The experience the next pass adds for `entity`, with room for 1000.
     fn gained(loader: &Installed, entity: u32) -> u32 {
         let mut rows = [Experience {
-            entity: Entity(entity),
+            entity: Entity::from_engine(entity),
             level: 1,
             progress: 0,
             need: 1000,
@@ -106,15 +104,14 @@ mod tests {
         join(&loader, 3, 8);
         assert_eq!(gained(&loader, 3), 0, "the filter holds player 3 back");
 
-        let used = ItemAction {
-            header: Header::of::<ItemAction>(),
+        let used = enshwick::abi::headed!(ItemAction {
             kind: ItemAction::CONSUME,
-            character: Entity(2),
+            character: Entity::from_engine(2),
             item: TONIC,
             count: 1,
-            inventory: Entity(40),
+            inventory: Entity::from_engine(40),
             slot: 0,
-        };
+        });
         for _ in 0..2 {
             assert!(loader.item_action(&used));
             let _ran = loader.raise::<Ticked>(&TickData::new(2));

@@ -173,8 +173,13 @@ mod tests {
     #[test]
     fn the_panel_beside_the_backpack_shows_three_slots_and_the_slot_under_the_cursor() {
         let loader = start(Side::CLIENT, false);
-        let at = SlotRef::new(Entity(41), 3);
-        loader.hover_slot(Some((at.0, ItemId::from_guid(LOGS), 7, Entity(0))));
+        let at = SlotRef::new(Entity::from_engine(41), 3);
+        loader.hover_slot(Some((
+            at.0,
+            ItemId::from_guid(LOGS),
+            7,
+            Entity::from_engine(0),
+        )));
         let drawn = loader.draw_screen(HudScreenType::Backpack);
         assert_eq!(drawn.len(), 1);
         assert_eq!(drawn[0].0, UiExtension::LEFT);
@@ -193,13 +198,13 @@ mod tests {
     #[test]
     fn the_vanilla_sword_s_tooltip_gets_a_line_and_another_item_none() {
         let loader = start(Side::CLIENT, false);
-        let sword = loader.open_tooltip(ItemId::from_guid(OLD_SWORD), Entity(900));
+        let sword = loader.open_tooltip(ItemId::from_guid(OLD_SWORD), Entity::from_engine(900));
         assert!(
             matches!(&sword[..], [Drawn::Label { text, .. }] if text == "Kept sharp by item-ui")
         );
         assert!(
             loader
-                .open_tooltip(ItemId::from_guid(TORCH), Entity(901))
+                .open_tooltip(ItemId::from_guid(TORCH), Entity::from_engine(901))
                 .is_empty()
         );
     }
@@ -218,12 +223,11 @@ mod tests {
     }
 
     fn join(loader: &enshwick::test::Installed, entity: u32) {
-        let joined = enshwick::abi::PlayerData {
-            header: enshwick::abi::Header::of::<enshwick::abi::PlayerData>(),
+        let joined = enshwick::abi::headed!(enshwick::abi::PlayerData {
             slot: 0,
-            entity: Entity(entity),
+            entity: Entity::from_engine(entity),
             key: enshwick::PlayerKey::new(7),
-        };
+        });
         assert_eq!(loader.raise::<PlayerJoined>(&joined), 1);
     }
 

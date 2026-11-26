@@ -3,9 +3,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{
-        ChangeId, ChangeOp, DataChange, DataField, DataSelect, Header, Status, Str,
-    };
+    use enshwick::abi::{ChangeId, ChangeOp, DataChange, DataField, DataSelect, Status, Str};
     use enshwick::content::Guid;
     use enshwick::content::changes::{Field, Target};
     use enshwick::test::FakeHost;
@@ -35,8 +33,7 @@ mod tests {
     /// A raw record of a change of `field` with `op` and `value` through
     /// `select`.
     fn record(field: DataField, select: DataSelect, op: ChangeOp, value: f64) -> DataChange {
-        DataChange {
-            header: Header::of::<DataChange>(),
+        enshwick::abi::headed!(DataChange {
             entry: if select == DataSelect::ENTRY {
                 Guid([7; 16])
             } else {
@@ -49,7 +46,7 @@ mod tests {
             item: Guid::NIL,
             select,
             categories: 0,
-        }
+        })
     }
 
     #[test]

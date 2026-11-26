@@ -28,9 +28,8 @@ mod tests {
 
     impl Mod for Sets {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            load.add_item_set(NewItemSet {
-                experience: Some(ExperienceValue::new(0x0e05)),
-                ..NewItemSet::new(
+            load.add_item_set({
+                let mut value = NewItemSet::new(
                     SHELLS,
                     ITEM_SET_CATEGORY,
                     Guid::named("you.sets:shells.name"),
@@ -38,7 +37,9 @@ mod tests {
                         ItemSetEntry::new(ItemId::new(0x51)),
                         ItemSetEntry::new(ItemId::new(0x52)),
                     ],
-                )
+                );
+                value.experience = Some(ExperienceValue::new(0x0e05));
+                value
             })?;
             assert!(
                 load.add_item_set(NewItemSet::new(
@@ -52,35 +53,30 @@ mod tests {
             );
             let vanilla = ItemSetId::new(VANILLA_ITEM_SET);
             assert!(
-                load.change_item_set(
-                    vanilla,
-                    ItemSetChange {
-                        entries: Some(vec![ItemSetEntry::new(ItemId::new(0x54))]),
-                        ..ItemSetChange::default()
-                    }
-                )
+                load.change_item_set(vanilla, {
+                    let mut value = ItemSetChange::default();
+                    value.entries = Some(vec![ItemSetEntry::new(ItemId::new(0x54))]);
+                    value
+                })
                 .is_err(),
                 "new entries without done_when"
             );
             assert!(
-                load.change_item_set(
-                    vanilla,
-                    ItemSetChange {
-                        entries: Some(Vec::new()),
-                        done_when: Some(KnowledgeQuery::game(GameQuery::new(VANILLA_PLAYER_QUERY))),
-                        ..ItemSetChange::default()
-                    }
-                )
+                load.change_item_set(vanilla, {
+                    let mut value = ItemSetChange::default();
+                    value.entries = Some(Vec::new());
+                    value.done_when =
+                        Some(KnowledgeQuery::game(GameQuery::new(VANILLA_PLAYER_QUERY)));
+                    value
+                })
                 .is_err(),
                 "a set without entries, as add_item_set refuses"
             );
-            load.change_item_set(
-                vanilla,
-                ItemSetChange {
-                    experience: Some(ExperienceValue::new(0x0e05)),
-                    ..ItemSetChange::default()
-                },
-            )?;
+            load.change_item_set(vanilla, {
+                let mut value = ItemSetChange::default();
+                value.experience = Some(ExperienceValue::new(0x0e05));
+                value
+            })?;
             assert!(load.remove_item_set(ItemSetId::new(1)).is_err());
             let _ = QUESTS.set(load.quests());
             Ok(Self)
@@ -115,11 +111,11 @@ mod tests {
         assert_eq!(set.entries.len(), 2);
         assert_eq!(
             set.entries[0].done_when,
-            Some(KnowledgeQuery {
-                id: KnowledgeId::new(0x51),
-                scope: enshwick::knowledge::Scope::Player,
-                test: KnowledgeTest::HasFlag(1),
-            })
+            Some(KnowledgeQuery::new(
+                KnowledgeId::new(0x51),
+                enshwick::knowledge::Scope::Player,
+                KnowledgeTest::HasFlag(1)
+            ))
         );
         let query = |part| GameQuery::new(SHELLS.part(part).guid().fnv1a());
         assert_eq!(set.done_when, Some(KnowledgeQuery::game(query("done"))));

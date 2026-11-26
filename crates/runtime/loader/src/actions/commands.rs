@@ -180,7 +180,7 @@ mod tests {
         assert_eq!(ALL_PERMISSIONS, 0x3f, "the game's six permission bits");
         let caller = remote_caller("rcon 10.0.0.2", u32::MAX);
         assert_eq!(caller.key, enshwick_core::PlayerKey::new(0));
-        assert_eq!(caller.entity, enshwick_core::Entity(0));
+        assert_eq!(caller.entity, enshwick_core::Entity::from_engine(0));
         assert_eq!(caller.permissions, ALL_PERMISSIONS);
         assert_eq!(
             &caller.name[..usize::try_from(caller.name_len).unwrap()],

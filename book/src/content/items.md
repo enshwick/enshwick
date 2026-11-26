@@ -37,11 +37,10 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
         ("locker.name", LOCKER_NAME),
         ("locker.description", LOCKER_DESCRIPTION),
     ])?;
-    load.add_item(NewItem {
-        name: Some(LOCKER_NAME.guid()),
-        description: Some(LOCKER_DESCRIPTION.guid()),
-        ..NewItem::new(LOCKER, storage_box)
-    })
+    let mut item_2 = NewItem::new(LOCKER, storage_box);
+    item_2.name = Some(LOCKER_NAME.guid());
+    item_2.description = Some(LOCKER_DESCRIPTION.guid());
+    load.add_item(item_2)
 }
 ```
 
@@ -175,10 +174,9 @@ const STAFF_ENTITY: Id = STAFF.part("entity");
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     // The Blacksmith's summoning staff.
     let vanilla_staff = vanilla::item("NPC_Crafter_Blacksmith01")?;
-    load.add_item(NewItem {
-        meter: Some(FuelSetup { template: STAFF_ENTITY, max_fuel_charges: 3, start: 3 }),
-        ..NewItem::new(STAFF, vanilla_staff)
-    })
+    let mut item_2 = NewItem::new(STAFF, vanilla_staff);
+    item_2.meter = Some(FuelSetup::new(STAFF_ENTITY, 3, 3));
+    load.add_item(item_2)
 }
 ```
 
@@ -220,10 +218,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let storage_box = vanilla::item("Prop_Storage_24_T1_Box")?;
     let texts = load.texts_from("[en]\nluck = \"Luck\"\n")?;
     load.add_texts(&texts, &[("luck", LUCK)])?;
-    load.add_item(NewItem {
-        stats: vec![ImpactUiValue { loca_id: LUCK.guid(), value: 5, value_format: StatFormat::Percent }],
-        ..NewItem::new(BOX, storage_box)
-    })
+    let mut item_2 = NewItem::new(BOX, storage_box);
+    item_2.stats = vec![ImpactUiValue::new(LUCK.guid(), 5, StatFormat::Percent)];
+    load.add_item(item_2)
 }
 ```
 
@@ -244,7 +241,7 @@ GUID, whose pixels it reads from its archive. An
 is a UI image the mod serves under a content id of its own, made when the
 client first shows it:
 
-- `Pixels::Tint(Tint { colour, amount })` recolours the vanilla icon
+- `Pixels::Tint(Tint::new(colour, amount))` recolours the vanilla icon
   `like`. Every pixel moves `amount` percent toward `colour` at its own
   brightness, so the shading stays. The pixels come from the player's own
   game files, so no game data ships with the mod;
@@ -262,14 +259,9 @@ const STAFF_ICON: Id = STAFF.part("icon");
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     // The Blacksmith's summoning staff; its icon is a portrait.
     let vanilla_staff = vanilla::item("NPC_Crafter_Blacksmith01")?;
-    load.add_item(NewItem {
-        icon: Some(Icon {
-            id: STAFF_ICON,
-            like: vanilla_staff,
-            pixels: Pixels::Tint(Tint { colour: [120, 170, 255], amount: 60 }),
-        }),
-        ..NewItem::new(STAFF, vanilla_staff)
-    })
+    let mut item_2 = NewItem::new(STAFF, vanilla_staff);
+    item_2.icon = Some(Icon::new(STAFF_ICON, vanilla_staff, Pixels::Tint(Tint::new([120, 170, 255], 60))));
+    load.add_item(item_2)
 }
 ```
 

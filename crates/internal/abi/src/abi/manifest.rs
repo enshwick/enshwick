@@ -15,6 +15,10 @@ use crate::content::Guid;
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct Fingerprint {
     /// The CodeView GUID.
     pub guid: Guid,
@@ -29,17 +33,17 @@ pub struct Fingerprint {
 /// ```
 /// use enshwick::abi::{BuildInfo, Fingerprint, Header, Side};
 ///
-/// let build = BuildInfo {
-///     header: Header::of::<BuildInfo>(),
+/// let build = enshwick::abi::headed!(BuildInfo {
 ///     side: Side::SERVER,
 ///     base: 0x1_4000_0000,
 ///     fingerprint: Fingerprint { guid: enshwick::abi::Guid::NIL, age: 0 },
 ///     complete: 1,
-/// };
+/// });
 /// assert_eq!(build.side, Side::SERVER);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct BuildInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -70,6 +74,10 @@ impl_headed!(BuildInfo);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct Symbol {
     /// The symbolic id, such as `npc.lookup`.
     pub name: Str,
@@ -138,6 +146,10 @@ const fn digit(c: u8) -> u8 {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct BuildRow {
     /// The binary the row is for.
     pub side: Side,
@@ -168,6 +180,10 @@ unsafe impl Sync for BuildRow {}
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct Relation(pub u8);
 
 impl Relation {
@@ -197,6 +213,10 @@ impl Relation {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct Dependency {
     /// The other mod's id.
     pub id: Str,
@@ -218,6 +238,10 @@ pub struct Dependency {
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct ManifestFlags(pub u32);
 
 impl ManifestFlags {
@@ -248,8 +272,7 @@ impl ManifestFlags {
 /// ```
 /// use enshwick::abi::{Header, Manifest, ManifestFlags, Side, Str};
 ///
-/// let manifest = Manifest {
-///     header: Header::of::<Manifest>(),
+/// let manifest = enshwick::abi::headed!(Manifest {
 ///     id: Str::new("you.lanterns"),
 ///     version: Str::new("0.1.0"),
 ///     side: Side::BOTH,
@@ -267,11 +290,12 @@ impl ManifestFlags {
 ///     points: Str::EMPTY,
 ///     exports: core::ptr::null(),
 ///     export_count: 0,
-/// };
+/// });
 /// assert_eq!(manifest.side, Side::BOTH);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct Manifest {
     /// Size and version of this struct.
     pub header: Header,
@@ -325,3 +349,56 @@ impl_headed!(Manifest);
 
 // SAFETY: a manifest is immutable static data; its pointers refer to statics.
 unsafe impl Sync for Manifest {}
+
+/// The fields of a [`Manifest`] that `declare_mod!` fills, in a `static`.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "the macro's own input, which grows with it"
+)]
+pub struct ManifestParts {
+    pub id: Str,
+    pub version: Str,
+    pub side: Side,
+    pub flags: ManifestFlags,
+    pub dependencies: *const Dependency,
+    pub dependency_count: u32,
+    pub builds: *const BuildRow,
+    pub build_count: u32,
+    pub name: Str,
+    pub description: Str,
+    pub authors: *const Str,
+    pub author_count: u32,
+    pub license: Str,
+    pub homepage: Str,
+}
+
+impl Manifest {
+    /// The manifest `declare_mod!` writes from `parts`, in a `const`, with
+    /// no points or exports.
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn declared(parts: ManifestParts) -> Self {
+        Self {
+            header: Header::of::<Self>(),
+            id: parts.id,
+            version: parts.version,
+            side: parts.side,
+            flags: parts.flags,
+            dependencies: parts.dependencies,
+            dependency_count: parts.dependency_count,
+            builds: parts.builds,
+            build_count: parts.build_count,
+            name: parts.name,
+            description: parts.description,
+            authors: parts.authors,
+            author_count: parts.author_count,
+            license: parts.license,
+            homepage: parts.homepage,
+            points: Str::EMPTY,
+            exports: core::ptr::null(),
+            export_count: 0,
+        }
+    }
+}

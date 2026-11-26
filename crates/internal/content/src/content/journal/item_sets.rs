@@ -116,6 +116,7 @@ impl ItemSetCategory {
 ///
 /// See [`NewItemSet`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct ItemSetHint {
     /// When the screen shows it.
     pub shown_when: KnowledgeQuery,
@@ -132,6 +133,31 @@ pub struct ItemSetHint {
     pub level: u8,
 }
 
+impl ItemSetHint {
+    /// A `ItemSetHint` of its parts; `marker` starts as `None`.
+    ///
+    /// # Examples
+    ///
+    /// See [`ItemSetHint`].
+    #[must_use]
+    pub const fn new(
+        shown_when: KnowledgeQuery,
+        done_when: KnowledgeQuery,
+        objective: Guid,
+        text: Guid,
+        level: u8,
+    ) -> Self {
+        Self {
+            shown_when,
+            done_when,
+            objective,
+            text,
+            marker: None,
+            level,
+        }
+    }
+}
+
 /// One entry of an item set: an item, done once `done_when` holds.
 ///
 /// The name is enshwick's; the game's is `JournalItemSetEntryResource`.
@@ -140,6 +166,7 @@ pub struct ItemSetHint {
 ///
 /// See [`NewItemSet`].
 #[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct ItemSetEntry {
     /// The item it shows.
     pub item: ItemId,
@@ -246,6 +273,7 @@ impl ItemSetEntry {
 /// }
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct NewItemSet {
     /// Its content id; its set id is the FNV-1a of the id's GUID.
     pub id: Id,
@@ -300,6 +328,7 @@ impl NewItemSet {
 ///
 /// See [`Load::change_item_set`](../../struct.Load.html#method.change_item_set).
 #[derive(Clone, Debug, Default, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct ItemSetChange {
     /// Its title's text tag.
     pub name: Option<Guid>,

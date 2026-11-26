@@ -50,6 +50,7 @@ impl FromScript for GameAction {
 /// A control as a script declares it: the fields of [`Control`]'s builder.
 #[derive(Clone, Debug, crate::Script)]
 #[script(name = "Control")]
+#[non_exhaustive]
 pub struct ScriptControl {
     /// The control's name, 1 to 32 of `[a-z0-9-]`, as [`Control::new`] takes it.
     pub name: String,
@@ -91,6 +92,7 @@ impl ScriptControl {
 /// A control that fired, as a script's handler gets it: [`Fired`]'s fields.
 #[derive(Clone, Debug, crate::Script)]
 #[script(name = "Fired")]
+#[non_exhaustive]
 pub struct ScriptFired {
     /// The control's name.
     pub control: String,
@@ -114,6 +116,10 @@ impl From<&Fired<'_>> for ScriptFired {
 /// as its text.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a unit marker, which never gains a field"
+)]
 pub struct ControlFns;
 
 #[crate::script(control_fns)]

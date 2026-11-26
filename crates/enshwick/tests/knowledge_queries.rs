@@ -37,9 +37,8 @@ mod tests {
                 QueryForm::All,
                 vec![counted],
             ))?;
-            load.add_query(NewQuery {
-                invert: true,
-                ..NewQuery::new(
+            load.add_query({
+                let mut value = NewQuery::new(
                     PLAYER,
                     Scope::Player,
                     QueryForm::Any,
@@ -47,7 +46,9 @@ mod tests {
                         KnowledgeQuery::game(GameQuery::new(VANILLA_WORLD_QUERY)),
                         KnowledgeQuery::game(world),
                     ],
-                )
+                );
+                value.invert = true;
+                value
             })?;
             load.add_query(NewQuery::new(
                 LOST,

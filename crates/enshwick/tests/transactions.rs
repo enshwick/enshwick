@@ -5,7 +5,7 @@ mod tests {
     use std::sync::OnceLock;
 
     use enshwick::WorldError;
-    use enshwick::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo, TransactionInfo};
+    use enshwick::abi::{Status, TerrainEdit, TerrainMaterialInfo, TransactionInfo};
     use enshwick::terrain::Shape;
     use enshwick::world::{TransactionStatus, World};
     use enshwick::{Load, Mod, Off};
@@ -30,15 +30,14 @@ mod tests {
     );
 
     fn rock() -> TerrainMaterialInfo {
-        TerrainMaterialInfo {
-            header: Header::of::<TerrainMaterialInfo>(),
+        enshwick::abi::headed!(TerrainMaterialInfo {
             id: 9,
             flags: 0,
             hardness: 3,
             reserved: 0,
             item: enshwick::ItemId::new(77),
             health: 500,
-        }
+        })
     }
 
     fn started() -> (enshwick::test::Installed, World) {
@@ -296,8 +295,7 @@ mod tests {
     fn an_op_with_a_reserved_field_set_is_refused() {
         let (loader, _world) = started();
         loader.set_terrain(&[rock()]);
-        let edit = TerrainEdit {
-            header: Header::of::<TerrainEdit>(),
+        let edit = enshwick::abi::headed!(TerrainEdit {
             kind: TerrainEdit::DIG,
             shape: TerrainEdit::ROUND,
             flags: 0,
@@ -306,7 +304,7 @@ mod tests {
             radius: 1.0,
             height: 0.0,
             protect: [0; 16],
-        };
+        });
         let op = enshwick::abi::TransactionOp {
             kind: enshwick::abi::TransactionOp::TERRAIN,
             reserved: 1,
@@ -318,7 +316,7 @@ mod tests {
         let api = unsafe { &*loader.api() };
         let status = (api.transaction_commit)(
             enshwick::abi::ModHandle(1),
-            enshwick::Entity(0),
+            enshwick::Entity::from_engine(0),
             &raw const op,
             1,
             &raw mut id,

@@ -8,7 +8,7 @@ mod tests {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-    use enshwick::abi::{Header, Side, Status, Str, UiExtension, UiFrame, UiWidget};
+    use enshwick::abi::{Side, Status, Str, UiExtension, UiFrame, UiWidget};
     use enshwick::test::{Drawn, Input};
     use enshwick::ui::{Edge, HudScreenType, Label, Style};
     use enshwick::{Load, Mod, Off};
@@ -36,8 +36,7 @@ mod tests {
             REFUSED.store(added.is_err() || left.is_err(), Ordering::Relaxed);
             let host = load.host();
             let raw = |screen: &str, edge: u32| {
-                let spec = UiExtension {
-                    header: Header::of::<UiExtension>(),
+                let spec = enshwick::abi::headed!(UiExtension {
                     screen: Str::new(screen),
                     edge,
                     reserved: 0,
@@ -48,7 +47,7 @@ mod tests {
                     shift: 0.0,
                     inset: 0.0,
                     reserved_place: 0,
-                };
+                });
                 (host.api().ui_extension)(host.handle(), &raw const spec, Some(nothing), null_mut())
             };
             *MALFORMED.lock().unwrap() = vec![

@@ -6,7 +6,7 @@ mod tests {
     use std::sync::atomic::{AtomicU32, Ordering};
 
     use enshwick::abi::{
-        Event, Header, HookFlags, Level, ManifestFlags, ModHandle, ModInfo, Side, Status, Str,
+        Event, HookFlags, Level, ManifestFlags, ModHandle, ModInfo, Side, Status, Str,
     };
     use enshwick::test::{FakeHost, address};
     use enshwick::{Next, events, hook};
@@ -104,8 +104,7 @@ mod tests {
             .system("anything", target)
             .settings("limit = 7\n")
             .log_level(Level::WARN)
-            .loaded(ModInfo {
-                header: Header::of::<ModInfo>(),
+            .loaded(enshwick::abi::headed!(ModInfo {
                 id: Str::new("enshwick"),
                 version: Str::new("0.2.0"),
                 side: Side::BOTH,
@@ -113,7 +112,7 @@ mod tests {
                 off: 0,
                 file: Str::new("mods/enshwick/enshwick.dll"),
                 ..ModInfo::EMPTY
-            })
+            }))
             .install();
         // SAFETY: `enshwick_mod_init` is the export of this file's `declare_mod!(Test)`.
         let status = unsafe { loader.init(enshwick_mod_init) };

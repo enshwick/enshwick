@@ -43,18 +43,18 @@ impl Audience {
     /// The audience as the loader takes it.
     fn raw(self) -> SoundAudience {
         match self {
-            Self::Player(player) => SoundAudience {
+            Self::Player(player) => enshwick_abi::headed!(SoundAudience {
                 kind: SoundAudience::PLAYER,
                 player,
                 ..SoundAudience::EMPTY
-            },
+            }),
             Self::Everyone => SoundAudience::EMPTY,
-            Self::Near { at, radius } => SoundAudience {
+            Self::Near { at, radius } => enshwick_abi::headed!(SoundAudience {
                 kind: SoundAudience::NEAR,
                 at,
                 radius: radius.unwrap_or(MAX_RADIUS),
                 ..SoundAudience::EMPTY
-            },
+            }),
         }
     }
 }
@@ -103,11 +103,11 @@ impl RemoteSound {
     /// See [`RemoteSound`].
     #[script]
     pub fn stop(self, fade: Duration) -> Result<(), Off> {
-        self.steer(SoundSteer {
+        self.steer(enshwick_abi::headed!(SoundSteer {
             kind: SoundSteer::STOP,
             fade_ms: millis(fade),
             ..SoundSteer::EMPTY
-        })
+        }))
     }
 
     /// Changes the sound's volume on its clients to `volume`, 0 to 1, over
@@ -123,12 +123,12 @@ impl RemoteSound {
     /// See [`RemoteSound`].
     #[script]
     pub fn set_volume(self, volume: f32, fade: Duration) -> Result<(), Off> {
-        self.steer(SoundSteer {
+        self.steer(enshwick_abi::headed!(SoundSteer {
             kind: SoundSteer::VOLUME,
             volume,
             fade_ms: millis(fade),
             ..SoundSteer::EMPTY
-        })
+        }))
     }
 
     /// Moves the sound on its clients to `at`, in metres.
@@ -147,11 +147,11 @@ impl RemoteSound {
     /// ```
     #[script]
     pub fn set_position(self, at: [f64; 3]) -> Result<(), Off> {
-        self.steer(SoundSteer {
+        self.steer(enshwick_abi::headed!(SoundSteer {
             kind: SoundSteer::POSITION,
             at,
             ..SoundSteer::EMPTY
-        })
+        }))
     }
 }
 

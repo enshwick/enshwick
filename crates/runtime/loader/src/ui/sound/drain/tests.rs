@@ -60,16 +60,16 @@ impl Mixer for Recorder {
 const BELL: Guid = Guid([7; 16]);
 
 fn play(place: u32) -> SoundPlay {
-    SoundPlay {
+    enshwick_abi::headed!(SoundPlay {
         container: BELL,
         place,
         entity: if place == SoundPlay::ON {
-            Entity(9)
+            Entity::from_engine(9)
         } else {
             Entity::NONE
         },
         ..SoundPlay::EMPTY
-    }
+    })
 }
 
 /// One frame over `mods`, none off, in session 1.
@@ -155,10 +155,10 @@ fn a_place_in_the_world_reaches_the_game_in_fixed_point() {
         ModSounds::new(),
     );
     let _at = sounds
-        .start(SoundPlay {
+        .start(enshwick_abi::headed!(SoundPlay {
             at: [1.5, -2.0, 0.0],
             ..play(SoundPlay::AT)
-        })
+        }))
         .unwrap();
     run(&mut drain, &mut mixer, &[&sounds], &followed);
     // The game truncates after adding 0.5, so -2 m lands one step above.
@@ -175,11 +175,11 @@ fn a_fade_in_starts_silent_and_rises_to_its_volume() {
         ModSounds::new(),
     );
     let _faded = sounds
-        .start(SoundPlay {
+        .start(enshwick_abi::headed!(SoundPlay {
             volume: 0.5,
             fade_in_ms: 300,
             ..play(SoundPlay::SCREEN)
-        })
+        }))
         .unwrap();
     run(&mut drain, &mut mixer, &[&sounds], &followed);
     assert_eq!(mixer.started[0].3, 0.0);
@@ -213,10 +213,10 @@ fn a_stale_id_changes_nothing_of_the_sound_that_took_its_slot() {
     sounds
         .queue(Op::Steer(
             old,
-            SoundSteer {
+            enshwick_abi::headed!(SoundSteer {
                 fade_ms: 0,
                 ..SoundSteer::EMPTY
-            },
+            }),
         ))
         .unwrap();
     run(&mut drain, &mut mixer, &[&sounds], &followed);
@@ -226,11 +226,11 @@ fn a_stale_id_changes_nothing_of_the_sound_that_took_its_slot() {
     sounds
         .queue(Op::Steer(
             old,
-            SoundSteer {
+            enshwick_abi::headed!(SoundSteer {
                 kind: SoundSteer::VOLUME,
                 volume: 0.1,
                 ..SoundSteer::EMPTY
-            },
+            }),
         ))
         .unwrap();
     sounds.queue(Op::Steer(old, SoundSteer::EMPTY)).unwrap();
@@ -360,11 +360,11 @@ fn moving_a_following_sound_stops_the_following() {
     run(&mut drain, &mut mixer, &[&sounds], &followed);
     followed.step(|_| Some([1, 2, 3]));
     run(&mut drain, &mut mixer, &[&sounds], &followed);
-    let steer = SoundSteer {
+    let steer = enshwick_abi::headed!(SoundSteer {
         kind: SoundSteer::POSITION,
         at: [0.0; 3],
         ..SoundSteer::EMPTY
-    };
+    });
     sounds.queue(Op::Steer(on, steer)).unwrap();
     run(&mut drain, &mut mixer, &[&sounds], &followed);
     followed.step(|_| None);
@@ -374,11 +374,11 @@ fn moving_a_following_sound_stops_the_following() {
 }
 
 fn steer(kind: u32) -> SoundSteer {
-    SoundSteer {
+    enshwick_abi::headed!(SoundSteer {
         kind,
         volume: 0.25,
         ..SoundSteer::EMPTY
-    }
+    })
 }
 
 #[test]
@@ -425,10 +425,10 @@ fn a_change_to_a_sound_waiting_for_its_entity_holds_when_it_starts() {
     run(&mut drain, &mut mixer, &[&sounds], &followed);
     assert_eq!(mixer.started, [(1, Scene::Game, Some([1, 2, 3]), 0.25)]);
     let placed = sounds
-        .start(SoundPlay {
-            entity: Entity(10),
+        .start(enshwick_abi::headed!(SoundPlay {
+            entity: Entity::from_engine(10),
             ..play(SoundPlay::ON)
-        })
+        }))
         .unwrap();
     run(&mut drain, &mut mixer, &[&sounds], &followed);
     sounds
@@ -453,9 +453,11 @@ fn a_sound_on_one_entity_more_than_the_client_follows_fails_with_its_reason() {
         Followed::new(),
         ModSounds::new(),
     );
-    let on = |entity| SoundPlay {
-        entity: Entity(entity),
-        ..play(SoundPlay::ON)
+    let on = |entity| {
+        enshwick_abi::headed!(SoundPlay {
+            entity: Entity::from_engine(entity),
+            ..play(SoundPlay::ON)
+        })
     };
     let most = u32::try_from(MAX_FOLLOWED).unwrap();
     for entity in 1..=most {

@@ -84,14 +84,14 @@ impl Hud<'_> {
     /// See [`Hud`].
     pub fn text<'t>(&mut self, anchor: Anchor, label: impl Into<Label<'t>>) {
         let label = label.into();
-        self.draw(UiWidget {
+        self.draw(enshwick_abi::headed!(UiWidget {
             kind: UiWidget::LABEL,
             flags: label.flags,
             style: label.style.to_raw(),
             text: Str::new(label.text),
             anchor: anchor.to_raw(),
             ..UiWidget::EMPTY
-        });
+        }));
     }
 
     /// Draws a bar filled to `fraction`, from 0 to 1, at `anchor`.
@@ -100,7 +100,7 @@ impl Hud<'_> {
     ///
     /// See [`Hud`].
     pub fn progress(&mut self, anchor: Anchor, fraction: f32) {
-        self.draw(UiWidget {
+        self.draw(enshwick_abi::headed!(UiWidget {
             kind: UiWidget::PROGRESS,
             value: if fraction.is_finite() {
                 fraction.clamp(0.0, 1.0)
@@ -111,7 +111,7 @@ impl Hud<'_> {
             max: 1.0,
             anchor: anchor.to_raw(),
             ..UiWidget::EMPTY
-        });
+        }));
     }
 }
 

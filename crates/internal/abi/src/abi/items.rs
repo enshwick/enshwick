@@ -18,19 +18,19 @@ use crate::abi::{Entity, Header, ItemId};
 /// ```
 /// use enshwick::abi::{Header, ItemAction};
 ///
-/// let call = ItemAction {
-///     header: Header::of::<ItemAction>(),
+/// let call = enshwick::abi::headed!(ItemAction {
 ///     kind: ItemAction::CONSUME,
-///     character: enshwick::Entity(4096),
+///     character: enshwick::Entity::from_engine(4096),
 ///     item: enshwick::ItemId::new(0x5e01),
 ///     count: 1,
-///     inventory: enshwick::Entity(4100),
+///     inventory: enshwick::Entity::from_engine(4100),
 ///     slot: 3,
-/// };
+/// });
 /// assert_eq!(call.kind, ItemAction::CONSUME);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct ItemAction {
     /// Size and version of this struct.
     pub header: Header,

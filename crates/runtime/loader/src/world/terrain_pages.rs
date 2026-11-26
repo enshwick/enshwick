@@ -18,7 +18,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 #[cfg(windows)]
-use enshwick_core::abi::{Event, Header, HookFlags, Registers, Side, TerrainPageData};
+use enshwick_core::abi::{Event, HookFlags, Registers, Side, TerrainPageData};
 
 #[cfg(windows)]
 use crate::base::wire::Drops;
@@ -442,12 +442,11 @@ pub(crate) fn after_step(loader: &Loader) {
         unsafe { crate::engine::memory::read(grid.at, index as usize * size_of::<u32>()) }
     });
     for (turn, index) in pages {
-        let data = TerrainPageData {
-            header: Header::of::<TerrainPageData>(),
+        let data = enshwick_abi::headed!(TerrainPageData {
             x: page_x(index, grid.width),
             z: page_z(index, grid.width),
             size: grid.metres,
-        };
+        });
         let event = if turn.loaded {
             Event::TERRAIN_PAGE_LOADED
         } else {

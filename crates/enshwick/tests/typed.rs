@@ -112,7 +112,7 @@ mod tests {
 
     #[test]
     fn a_component_an_event_and_a_resource_read_and_write_by_field_name() {
-        let entity = Entity(4096);
+        let entity = Entity::from_engine(4096);
         let hash = |name: &str| fnv1a32(name.as_bytes());
         let key = ResourceKey {
             guid: STONE,
@@ -147,7 +147,7 @@ mod tests {
         value.faction = FactionType::Vukah;
         faction.write(*world, entity, &value).unwrap();
         assert_eq!(loader.component_bytes(entity, hash(FACTION)), Some(vec![3]));
-        assert_eq!(faction.read(*world, Entity(1)).unwrap(), None);
+        assert_eq!(faction.read(*world, Entity::from_engine(1)).unwrap(), None);
 
         let mut died = [0u8; 16];
         died[8..12].copy_from_slice(&77u32.to_le_bytes());

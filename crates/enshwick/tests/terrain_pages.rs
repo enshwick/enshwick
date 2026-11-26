@@ -4,7 +4,7 @@
 mod tests {
     use std::sync::Mutex;
 
-    use enshwick::abi::{Header, Status, TerrainPageData};
+    use enshwick::abi::{Status, TerrainPageData};
     use enshwick::events::{TerrainPageLoaded, TerrainPageUnloaded};
     use enshwick::{Load, Mod, Off};
 
@@ -39,12 +39,7 @@ mod tests {
     );
 
     fn page(x: u32, z: u32) -> TerrainPageData {
-        TerrainPageData {
-            header: Header::of::<TerrainPageData>(),
-            x,
-            z,
-            size: 128,
-        }
+        enshwick::abi::headed!(TerrainPageData { x, z, size: 128 })
     }
 
     #[test]

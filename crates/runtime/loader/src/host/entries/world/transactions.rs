@@ -17,7 +17,7 @@ entries! {
         [ops, count] as UnalignedList<TransactionOp>,
         id as Out<u64>,
     ) -> Status {
-        let actor = (actor != enshwick_core::Entity(0)).then_some(actor.0);
+        let actor = (actor != enshwick_core::Entity::from_engine(0)).then_some(actor.get());
         id.put(commit(me, actor, ops)?)
     }
 
@@ -28,7 +28,7 @@ entries! {
     ) -> Status {
         let created = crate::world::transactions::entities(me.index, id).ok_or(Status::MISSING)?;
         let created: Vec<enshwick_core::Entity> =
-            created.into_iter().map(enshwick_core::Entity).collect();
+            created.into_iter().map(enshwick_core::Entity::from_engine).collect();
         out.put(&created)
     }
 
@@ -68,8 +68,7 @@ entries! {
 
 /// Where a transaction stands as its mod reads it, counts saturating.
 fn info(standing: &Standing) -> TransactionInfo {
-    TransactionInfo {
-        header: enshwick_core::abi::Header::of::<TransactionInfo>(),
+    enshwick_abi::headed!(TransactionInfo {
         state: standing.state,
         reason: standing.reason.map_or(Status::OK, |reason| reason.status()),
         ops: u32::try_from(standing.ops).unwrap_or(u32::MAX),
@@ -79,7 +78,7 @@ fn info(standing: &Standing) -> TransactionInfo {
         reserved: 0,
         holds: standing.holds,
         created: u32::try_from(standing.created).unwrap_or(u32::MAX),
-    }
+    })
 }
 
 /// Commits `ops` as the calling mod, for `actor` when it names one, and
@@ -200,13 +199,13 @@ unsafe fn change(
                 )
             }
             .ok_or(Status::BAD_ARGS)?;
-            if remove.entity == enshwick_core::Entity(0)
+            if remove.entity == enshwick_core::Entity::from_engine(0)
                 || remove.flags & !PropRemove::DISCARD_STATE != 0
             {
                 return Err(Status::BAD_ARGS.into());
             }
             Ok(Change::RemoveProp {
-                entity: remove.entity.0,
+                entity: remove.entity.get(),
                 discard_state: remove.flags & PropRemove::DISCARD_STATE != 0,
             })
         }

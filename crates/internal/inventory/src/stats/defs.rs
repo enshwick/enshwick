@@ -1,4 +1,4 @@
-use crate::abi::{Header, StatRef, StatSpec};
+use crate::abi::{StatRef, StatSpec};
 use crate::content::items::StatFormat;
 
 /// What a stat's number is.
@@ -294,8 +294,7 @@ impl StatDef {
     /// ```
     #[must_use]
     pub fn to_data(&self) -> StatSpec {
-        StatSpec {
-            header: Header::of::<StatSpec>(),
+        enshwick_abi::headed!(StatSpec {
             ty: match self.ty {
                 StatType::Additive => StatSpec::ADDITIVE,
                 StatType::Multiplicative => StatSpec::MULTIPLICATIVE,
@@ -312,7 +311,7 @@ impl StatDef {
             group: StatSpec::GROUP_NONE,
             flags: if self.hidden { StatSpec::HIDDEN } else { 0 },
             reserved_display: 0,
-        }
+        })
     }
 
     /// The definition the loader handed out, without its text; `None` for
@@ -381,6 +380,10 @@ pub(crate) struct DefineStatError {
     serde::Serialize,
     serde::Deserialize,
     crate::Script,
+)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
 )]
 pub struct StatKey(pub u32);
 

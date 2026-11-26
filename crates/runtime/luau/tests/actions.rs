@@ -4,7 +4,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{ActionCall, Header, PlayerInfo, Side};
+    use enshwick::abi::{ActionCall, PlayerInfo, Side};
     use enshwick::actions::sheet::ArgView;
     use enshwick::console;
     use enshwick::i18n::Language;
@@ -82,15 +82,14 @@ mod tests {
     "#;
 
     fn player(entity: u32, key: u64, name: &str, admin: bool) -> PlayerInfo {
-        let mut info = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let mut info = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: enshwick::Entity(entity),
+            entity: enshwick::Entity::from_engine(entity),
             key: enshwick::PlayerKey::new(key),
             permissions: if admin { PlayerInfo::CAN_KICK_BAN } else { 0 },
             name_len: u32::try_from(name.len()).unwrap(),
             name: [0; PlayerInfo::NAME_MAX],
-        };
+        });
         info.name[..name.len()].copy_from_slice(name.as_bytes());
         info
     }
@@ -292,7 +291,7 @@ mod tests {
             end)
             "#,
         );
-        let chest = enshwick::actions::ActionTarget::entity(enshwick::Entity(4096))
+        let chest = enshwick::actions::ActionTarget::entity(enshwick::Entity::from_engine(4096))
             .with_position([5.0, 0.0, 0.0]);
         assert_eq!(
             loader

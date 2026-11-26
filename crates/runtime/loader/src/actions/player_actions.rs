@@ -7,9 +7,7 @@
 //! the mod's handler answers. The reply reaches the player as one of the
 //! game's notices, in the language the client named when it joined.
 
-use enshwick_core::abi::{
-    ActionCall, ActionFn, ActionReply, ActionTarget, Header, PlayerInfo, Str,
-};
+use enshwick_core::abi::{ActionCall, ActionFn, ActionReply, ActionTarget, PlayerInfo, Str};
 
 use crate::actions::admission::{self, Path, Refusal, Verdict};
 use crate::base::remote::Message;
@@ -122,8 +120,7 @@ fn ask(
 ) -> Option<Answer> {
     let kind = question.kind;
     let mut written: ActionReply = bytemuck::Zeroable::zeroed();
-    let call = ActionCall {
-        header: Header::of::<ActionCall>(),
+    let call = enshwick_abi::headed!(ActionCall {
         kind,
         language,
         player: core::ptr::from_ref(player),
@@ -143,7 +140,7 @@ fn ask(
         word: Str::new(word),
         via: question.via,
         reason: question.reason,
-    };
+    });
     let mut reply = Str::EMPTY;
     crate::engine::filters::ask(
         [&registered],
@@ -573,7 +570,7 @@ mod tests {
     }
 
     fn places(entity: enshwick_core::Entity) -> Option<[f64; 3]> {
-        match entity.0 {
+        match entity.get() {
             2 => Some([100.0, 5.0, 100.0]),
             40 => Some([104.0, 5.0, 103.0]),
             41 => Some([400.0, 5.0, 100.0]),
@@ -582,35 +579,50 @@ mod tests {
     }
 
     fn named(flags: u32, entity: u32, position: [f64; 3]) -> ActionTarget {
-        ActionTarget {
+        enshwick_abi::headed!(ActionTarget {
             flags,
-            entity: enshwick_core::Entity(entity),
+            entity: enshwick_core::Entity::from_engine(entity),
             position,
             ..ActionTarget::NONE
-        }
+        })
     }
 
     #[test]
     fn a_named_position_counts_only_within_reach_of_the_player() {
         let near = named(ActionTarget::POSITION, 0, [108.0, 5.0, 100.0]);
-        assert_eq!(reached(near, enshwick_core::Entity(2), places), Some(near));
+        assert_eq!(
+            reached(near, enshwick_core::Entity::from_engine(2), places),
+            Some(near)
+        );
         let far = named(ActionTarget::POSITION, 0, [113.0, 5.0, 100.0]);
-        assert_eq!(reached(far, enshwick_core::Entity(2), places), None);
-        assert_eq!(reached(near, enshwick_core::Entity(9), places), None);
+        assert_eq!(
+            reached(far, enshwick_core::Entity::from_engine(2), places),
+            None
+        );
+        assert_eq!(
+            reached(near, enshwick_core::Entity::from_engine(9), places),
+            None
+        );
     }
 
     #[test]
     fn a_named_entity_counts_where_the_server_sees_it_not_where_the_client_says() {
         let both = ActionTarget::ENTITY | ActionTarget::POSITION;
         let lied = named(both, 41, [100.0, 5.0, 100.0]);
-        assert_eq!(reached(lied, enshwick_core::Entity(2), places), None);
+        assert_eq!(
+            reached(lied, enshwick_core::Entity::from_engine(2), places),
+            None
+        );
         let chest = reached(
             named(ActionTarget::ENTITY, 40, [0.0; 3]),
-            enshwick_core::Entity(2),
+            enshwick_core::Entity::from_engine(2),
             places,
         );
         assert_eq!(chest, Some(named(both, 40, [104.0, 5.0, 103.0])));
         let gone = named(ActionTarget::ENTITY, 77, [100.0, 5.0, 100.0]);
-        assert_eq!(reached(gone, enshwick_core::Entity(2), places), None);
+        assert_eq!(
+            reached(gone, enshwick_core::Entity::from_engine(2), places),
+            None
+        );
     }
 }

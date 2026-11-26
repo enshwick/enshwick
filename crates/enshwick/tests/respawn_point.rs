@@ -5,7 +5,7 @@
 mod tests {
     use std::sync::Mutex;
 
-    use enshwick::abi::{Header, PlayerInfo, RespawnPointInfo, Status};
+    use enshwick::abi::{PlayerInfo, RespawnPointInfo, Status};
     use enshwick::content::Guid;
     use enshwick::game_events::{PlayerSpawnInfoChangeEvent, UniqueSceneId};
     use enshwick::world::{Player, PlayerSpawnType, World};
@@ -14,11 +14,11 @@ mod tests {
     static WORLD: Mutex<Option<World>> = Mutex::new(None);
     static HEARD: Mutex<Vec<PlayerSpawnInfoChangeEvent>> = Mutex::new(Vec::new());
 
-    const CHARACTER: Entity = Entity(2);
-    const ALTAR: Entity = Entity(40);
-    const SPIRE: Entity = Entity(41);
-    const NOWHERE: Entity = Entity(42);
-    const CHEST: Entity = Entity(43);
+    const CHARACTER: Entity = Entity::from_engine(2);
+    const ALTAR: Entity = Entity::from_engine(40);
+    const SPIRE: Entity = Entity::from_engine(41);
+    const NOWHERE: Entity = Entity::from_engine(42);
+    const CHEST: Entity = Entity::from_engine(43);
     const BASE: Guid = Guid([0xb2; 16]);
 
     struct Homes;
@@ -34,15 +34,14 @@ mod tests {
     enshwick::test::declare_mod!(Homes, "id = \"test.respawn-point\"\nside = \"server\"");
 
     fn info() -> PlayerInfo {
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick::abi::headed!(PlayerInfo {
             slot: 0,
             entity: CHARACTER,
             key: PlayerKey::new(7),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        }
+        })
     }
 
     fn start() -> (enshwick::test::Installed, World, Player) {
@@ -99,7 +98,7 @@ mod tests {
     #[test]
     fn a_player_who_left_has_no_respawn_point_and_cannot_get_one() {
         let (_host, world, mut player) = start();
-        player.entity = Entity(9);
+        player.entity = Entity::from_engine(9);
         assert_eq!(world.respawn_point(&player), Ok(None));
         assert_eq!(
             world.set_respawn_point(&player, ALTAR),
@@ -154,7 +153,7 @@ mod tests {
         world.set_respawn_point(&player, SPIRE).unwrap();
         let heard = HEARD.lock().unwrap();
         let mut character = [0; 16];
-        character[..4].copy_from_slice(&CHARACTER.0.to_le_bytes());
+        character[..4].copy_from_slice(&CHARACTER.get().to_le_bytes());
         assert_eq!(heard.len(), 2);
         assert_eq!(heard[0].player_character_id, Guid(character));
         assert_eq!(heard[0].base_id, Some(BASE));

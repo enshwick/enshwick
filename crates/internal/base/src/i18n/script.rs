@@ -104,6 +104,10 @@ impl Texts {
 /// The free functions of [`i18n`](super) as a script's namespace `i18n`.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a unit marker, which never gains a field"
+)]
 pub struct I18nFns;
 
 impl crate::script::Bound for I18nFns {

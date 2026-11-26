@@ -18,7 +18,7 @@
 //! ```
 
 use crate::Off;
-use crate::abi::{ChangeOp, DataChange, DataField, DataSelect, Header, Str};
+use crate::abi::{ChangeOp, DataChange, DataField, DataSelect, Str};
 use crate::content::Guid;
 
 #[cfg(feature = "unstable")]
@@ -222,12 +222,12 @@ impl Field {
     ///
     /// # Errors
     ///
-    /// [`ValueError`] saying why not.
+    /// [`SetFieldError`] saying why not.
     ///
     /// # Examples
     ///
     /// See [`Field`].
-    pub fn check(self, value: Value) -> Result<(), ValueError> {
+    pub fn check(self, value: Value) -> Result<(), SetFieldError> {
         self.rules()
             .check(value)
             .map_err(|refusal| refusal.of(self))
@@ -394,7 +394,7 @@ impl core::fmt::Display for Value {
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, thiserror::Error)]
 #[non_exhaustive]
-pub enum ValueError {
+pub enum SetFieldError {
     /// A set outside the field's range.
     #[error("{field} {value} is not from {low} to {high}")]
     OutOfRange {
@@ -491,6 +491,7 @@ pub enum ValueError {
 ///
 /// See the [module](self).
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct Change {
     /// The vanilla entry, such as an item's GUID, or a fill table's for
     /// [`Change::in_table`].
@@ -597,7 +598,7 @@ impl Change {
     ///
     /// # Errors
     ///
-    /// [`ValueError`] saying why not.
+    /// [`SetFieldError`] saying why not.
     ///
     /// # Examples
     ///
@@ -608,14 +609,14 @@ impl Change {
     /// let change = Change::new(Guid([1; 16]), Field::Ingredient, Value::Set(2.0));
     /// assert_eq!(change.check().unwrap_err().to_string(), "ingredient needs an item");
     /// ```
-    pub fn check(&self) -> Result<(), ValueError> {
+    pub fn check(&self) -> Result<(), SetFieldError> {
         let fill_table = matches!(
             self.field,
             Field::Count | Field::SpawnProbability | Field::Weight
         );
         let wants_item = self.field == Field::Ingredient || (fill_table && self.item.is_some());
         if wants_item != self.item.is_some() {
-            return Err(ValueError::Item {
+            return Err(SetFieldError::Item {
                 field: self.field,
                 named: self.item.is_some(),
             });
@@ -629,7 +630,7 @@ impl Change {
     ///
     /// # Errors
     ///
-    /// [`ValueError`] for a value the field does not take.
+    /// [`SetFieldError`] for a value the field does not take.
     ///
     /// # Examples
     ///
@@ -637,8 +638,7 @@ impl Change {
     /// use enshwick::abi::{ChangeOp, DataChange, DataField, DataSelect, Guid, Header, Str};
     /// use enshwick::content::changes::{Change, Field, Value};
     ///
-    /// let raw = DataChange {
-    ///     header: Header::of::<DataChange>(),
+    /// let raw = enshwick::abi::headed!(DataChange {
     ///     entry: Guid([1; 16]),
     ///     field: DataField::RECIPE_TIME,
     ///     op: ChangeOp::TIMES,
@@ -647,12 +647,12 @@ impl Change {
     ///     item: Guid::NIL,
     ///     select: DataSelect::ENTRY,
     ///     categories: 0,
-    /// };
+    /// });
     /// let change = Change::from_abi(&raw)?.ok_or("unknown")?;
     /// assert_eq!(change.value, Value::Times(4.0));
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    pub fn from_abi(raw: &DataChange) -> Result<Option<Self>, ValueError> {
+    pub fn from_abi(raw: &DataChange) -> Result<Option<Self>, SetFieldError> {
         if raw.select != DataSelect::ENTRY {
             return Ok(None);
         }
@@ -676,8 +676,7 @@ impl Change {
             Value::Set(v) => (ChangeOp::SET, v),
             Value::Times(v) => (ChangeOp::TIMES, v),
         };
-        DataChange {
-            header: Header::of::<DataChange>(),
+        enshwick_abi::headed!(DataChange {
             entry: self.entry,
             field: self.field.to_abi(),
             op,
@@ -686,7 +685,7 @@ impl Change {
             item: self.item.unwrap_or(Guid::NIL),
             select: DataSelect::ENTRY,
             categories: 0,
-        }
+        })
     }
 }
 

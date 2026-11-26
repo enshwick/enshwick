@@ -4,9 +4,7 @@
 //! such as a world call's status as its outcome and a player as the loader
 //! hands them over.
 
-#[cfg(feature = "unstable")]
 use crate::abi::RecipeId;
-#[cfg(feature = "unstable")]
 use crate::content::Guid;
 use crate::{Entity, Host, Off};
 
@@ -23,14 +21,12 @@ pub mod typed_script {
 /// # Errors
 ///
 /// [`Off`] when the registry does not read or holds no altar claim recipe.
-#[cfg(feature = "unstable")]
 pub fn altar_upgrades_from(host: Host, max_level: u8) -> Result<Vec<RecipeId>, Off> {
     crate::altars::kinds::upgrades_in_registry(host, max_level)
 }
 
 /// The template of the altar `entity` stands for; `None` for another
 /// entity or one that does not read.
-#[cfg(feature = "unstable")]
 #[must_use]
 pub fn altar_template_of(host: Host, entity: Entity) -> Option<Guid> {
     crate::altars::template_of(host, entity)
@@ -119,6 +115,32 @@ pub fn player(info: &crate::abi::PlayerInfo) -> crate::world::Player {
 #[must_use]
 pub fn online(host: Host) -> Vec<crate::world::Player> {
     crate::world::online(host)
+}
+
+/// The account of `player`, found among the connected players when only
+/// the character was named.
+///
+/// # Errors
+///
+/// [`crate::WorldError::Gone`] when no connected player has the character.
+pub fn player_key(
+    host: Host,
+    player: crate::world::PlayerRef,
+) -> Result<crate::PlayerKey, crate::WorldError> {
+    player.key_in(host)
+}
+
+/// The character of `player`, found among the connected players when only
+/// the account was named.
+///
+/// # Errors
+///
+/// [`crate::WorldError::Gone`] when no connected player has the account.
+pub fn player_entity(
+    host: Host,
+    player: crate::world::PlayerRef,
+) -> Result<Entity, crate::WorldError> {
+    player.entity_in(host)
 }
 
 /// The players connected now, or the loader's status when it cannot list

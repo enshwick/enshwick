@@ -174,13 +174,11 @@ fn voxel(voxels: f64) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use enshwick_core::abi::Header;
 
     use super::*;
 
     fn edit(kind: u32, shape: u32, position: [f64; 3], radius: f32) -> TerrainEdit {
-        TerrainEdit {
-            header: Header::of::<TerrainEdit>(),
+        enshwick_abi::headed!(TerrainEdit {
             kind,
             shape,
             flags: 0,
@@ -189,7 +187,7 @@ mod tests {
             radius,
             height: 1.0,
             protect: [0; 16],
-        }
+        })
     }
 
     fn span(bricks: Bricks) -> [[u32; 2]; 3] {
@@ -273,51 +271,51 @@ mod tests {
     fn edits_the_terrain_refuses_are_refused_here_too() {
         let fine = edit(TerrainEdit::DIG, TerrainEdit::ROUND, [20.0; 3], 4.0);
         let refused = [
-            TerrainEdit {
+            enshwick_abi::headed!(TerrainEdit {
                 radius: 0.0,
                 ..fine
-            },
-            TerrainEdit {
+            }),
+            enshwick_abi::headed!(TerrainEdit {
                 radius: 16.5,
                 ..fine
-            },
-            TerrainEdit {
+            }),
+            enshwick_abi::headed!(TerrainEdit {
                 radius: f32::NAN,
                 ..fine
-            },
-            TerrainEdit { shape: 2, ..fine },
-            TerrainEdit { kind: 3, ..fine },
-            TerrainEdit {
+            }),
+            enshwick_abi::headed!(TerrainEdit { shape: 2, ..fine }),
+            enshwick_abi::headed!(TerrainEdit { kind: 3, ..fine }),
+            enshwick_abi::headed!(TerrainEdit {
                 flags: TerrainEdit::DRY_RUN,
                 ..fine
-            },
-            TerrainEdit {
+            }),
+            enshwick_abi::headed!(TerrainEdit {
                 position: [-0.5, 0.0, 0.0],
                 ..fine
-            },
-            TerrainEdit {
+            }),
+            enshwick_abi::headed!(TerrainEdit {
                 position: [f64::INFINITY, 0.0, 0.0],
                 ..fine
-            },
-            TerrainEdit {
+            }),
+            enshwick_abi::headed!(TerrainEdit {
                 position: [1e30, 0.0, 0.0],
                 ..fine
-            },
-            TerrainEdit {
+            }),
+            enshwick_abi::headed!(TerrainEdit {
                 kind: TerrainEdit::ADD,
                 material: 0,
                 ..fine
-            },
-            TerrainEdit {
+            }),
+            enshwick_abi::headed!(TerrainEdit {
                 kind: TerrainEdit::ADD,
                 height: 0.0,
                 ..fine
-            },
-            TerrainEdit {
+            }),
+            enshwick_abi::headed!(TerrainEdit {
                 kind: TerrainEdit::FLATTEN,
                 material: 0x80,
                 ..fine
-            },
+            }),
         ];
         assert!(check(&fine).is_ok());
         for edit in refused {

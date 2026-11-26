@@ -49,6 +49,7 @@ impl ScriptLabel {
 #[cfg(feature = "unstable")]
 #[derive(Clone, Copy, Debug, crate::Script)]
 #[script(name = "PanelPlacement")]
+#[non_exhaustive]
 pub struct ScriptPlacement {
     /// The screen's edge the panel sits at.
     pub edge: crate::ui::Edge,
@@ -424,7 +425,10 @@ impl ScriptFrame {
     ///
     /// As [`Frame::play`].
     #[script(name = "play")]
-    pub(crate) fn play_script(&self, sound: crate::content::Guid) -> Result<(), Off> {
+    pub(crate) fn play_script(
+        &self,
+        sound: crate::content::Guid,
+    ) -> Result<(), crate::ui::UiError> {
         self.frame()
             .play(crate::sound::SoundContainerId::from_guid(sound))
     }

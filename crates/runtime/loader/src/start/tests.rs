@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::path::PathBuf;
 
-use enshwick_core::abi::{Header, HostApi, Level, Manifest, ManifestFlags, ModHandle, Status, Str};
+use enshwick_core::abi::{HostApi, Level, Manifest, ManifestFlags, ModHandle, Status, Str};
 use enshwick_gamedata::reflect::{Fingerprint, Reflection};
 
 use super::library::InitFn;
@@ -53,8 +53,7 @@ impl TestMod {
     }
 
     fn manifest(&self) -> &'static Manifest {
-        Box::leak(Box::new(Manifest {
-            header: Header::of::<Manifest>(),
+        Box::leak(Box::new(enshwick_abi::headed!(Manifest {
             id: Str::new(self.id),
             version: Str::new("1.0.0"),
             side: Side::SERVER,
@@ -72,7 +71,7 @@ impl TestMod {
             points: Str::EMPTY,
             exports: core::ptr::null(),
             export_count: 0,
-        }))
+        })))
     }
 }
 

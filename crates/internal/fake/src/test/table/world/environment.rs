@@ -6,8 +6,8 @@ use crate::test::table::entries;
 use crate::test::table::{found_headed, get_headed, list, on_game_thread, with};
 use crate::test::world::{VoxelGrid, edit_loaded, edit_outside, outside};
 use enshwick_core::abi::{
-    DaytimeInfo, Header, Status, TerrainEdit, TerrainMaterialAdd, TerrainMaterialInfo, Voxel,
-    WeatherFront, WeatherSample,
+    DaytimeInfo, Status, TerrainEdit, TerrainMaterialAdd, TerrainMaterialInfo, Voxel, WeatherFront,
+    WeatherSample,
 };
 
 entries! {
@@ -164,13 +164,12 @@ entries! {
             return Status::BAD_ARGS;
         }
         let sample = with(None, |s| s.world.weather.as_ref().map(|w| w.0)).map(
-            |[clear, rain, snow, blizzard]| WeatherSample {
-                header: Header::of::<WeatherSample>(),
+            |[clear, rain, snow, blizzard]| enshwick_core::headed!(WeatherSample {
                 clear,
                 rain,
                 snow,
                 blizzard,
-            },
+            }),
         );
         found_headed(sample, out)
     }
@@ -227,7 +226,7 @@ fn added_info(
     id: u8,
 ) -> TerrainMaterialInfo {
     let set = |bit| material.changes & bit != 0;
-    let mut info = TerrainMaterialInfo { id, ..like };
+    let mut info = enshwick_core::headed!(TerrainMaterialInfo { id, ..like });
     if set(TerrainMaterialAdd::ITEM) {
         info.item = enshwick_core::ItemId::new(material.item.fnv1a());
     }

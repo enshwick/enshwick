@@ -109,14 +109,13 @@ impl BaseLoad {
     {
         let api = self.api();
         let user = Box::into_raw(Box::new(MidHook { address, handler }));
-        let spec = MidHookSpec {
-            header: crate::abi::Header::of::<MidHookSpec>(),
+        let spec = enshwick_abi::headed!(MidHookSpec {
             address,
             handler: Some(run_mid_hook::<F>),
             user: user.cast(),
             priority: 0,
             flags: HookFlags::NONE,
-        };
+        });
         let status = (api.hook_at)(self.host.handle(), &raw const spec);
         if !status.is_ok() {
             // SAFETY: refused, so the loader keeps no copy of the pointer.

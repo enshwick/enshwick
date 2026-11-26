@@ -492,11 +492,11 @@ mod tests {
         let loader = FakeHost::new()
             .types(types)
             .mod_dir(mod_dir.to_str().unwrap())
-            .loaded(enshwick::abi::ModInfo {
+            .loaded(enshwick::abi::headed!(enshwick::abi::ModInfo {
                 id: enshwick::abi::Str::new("you.luau"),
                 file: enshwick::abi::Str::new("mods/you.luau/pack.toml"),
                 ..enshwick::abi::ModInfo::EMPTY
-            })
+            }))
             .resource(
                 chest.key_by_hash(fnv1a32(b"demo::Item")),
                 registry.encode("demo::Item", &item, None).unwrap(),

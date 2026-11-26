@@ -6,7 +6,7 @@ mod tests {
     use std::sync::Mutex;
     use std::time::Duration;
 
-    use enshwick::abi::{Header, PlayerInfo, Status};
+    use enshwick::abi::{PlayerInfo, Status};
     use enshwick::content::EngineFacts;
     use enshwick::test::facts;
     use enshwick::{Entity, Load, Mod, Off, PlayerKey};
@@ -22,7 +22,7 @@ mod tests {
             load.on_tick(Duration::from_millis(100), move |_| {
                 let seen = (
                     targets.target(ANN).unwrap(),
-                    targets.target(Entity(99)).unwrap(),
+                    targets.target(Entity::from_engine(99)).unwrap(),
                 );
                 SEEN.lock().unwrap().push(seen);
             })?;
@@ -38,18 +38,17 @@ mod tests {
         "#
     );
 
-    const ANN: Entity = Entity(40);
+    const ANN: Entity = Entity::from_engine(40);
 
     fn ann() -> PlayerInfo {
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick::abi::headed!(PlayerInfo {
             slot: 0,
             entity: ANN,
             key: PlayerKey::new(7),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        }
+        })
     }
 
     #[test]
@@ -79,7 +78,7 @@ mod tests {
         let _chest = loader.tick(Duration::from_millis(100));
         assert_eq!(
             *SEEN.lock().unwrap(),
-            [(None, None), (Some(Entity(512)), None)],
+            [(None, None), (Some(Entity::from_engine(512)), None)],
             "slot 0 is the combat target, not the prompt's"
         );
     }

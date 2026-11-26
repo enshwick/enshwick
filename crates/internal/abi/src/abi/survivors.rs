@@ -18,20 +18,20 @@ use crate::content::Guid;
 /// ```
 /// use enshwick::abi::{Header, SurvivorLookup};
 ///
-/// let lookup = SurvivorLookup {
-///     header: Header::of::<SurvivorLookup>(),
+/// let lookup = enshwick::abi::headed!(SurvivorLookup {
 ///     survivor: enshwick::survivors::NpcId::new(0x47a1_5e4a),
-///     vanilla: enshwick::Entity(4096),
+///     vanilla: enshwick::Entity::from_engine(4096),
 ///     purpose: SurvivorLookup::SPAWN,
-///     entity: enshwick::Entity(0),
+///     entity: enshwick::Entity::from_engine(0),
 ///     cell: [10, 0, 10],
 ///     bed_of: None,
 ///     token: core::ptr::null_mut(),
-/// };
+/// });
 /// assert_eq!(lookup.purpose, SurvivorLookup::SPAWN);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct SurvivorLookup {
     /// Size and version of this struct.
     pub header: Header,
@@ -110,11 +110,12 @@ pub type SurvivorLookupFn = unsafe extern "system" fn(
 /// ```
 /// use enshwick::abi::{BedCheck, Header};
 ///
-/// let check = BedCheck { header: Header::of::<BedCheck>(), npc_id: enshwick::survivors::NpcId::new(7), entity: enshwick::Entity(4096), bed_id: enshwick::Entity(4100), home: [0; 3], bed_at: [4, 0, 4] };
-/// assert_eq!(check.bed_id, enshwick::Entity(4100));
+/// let check = enshwick::abi::headed!(BedCheck { npc_id: enshwick::survivors::NpcId::new(7), entity: enshwick::Entity::from_engine(4096), bed_id: enshwick::Entity::from_engine(4100), home: [0; 3], bed_at: [4, 0, 4] });
+/// assert_eq!(check.bed_id, enshwick::Entity::from_engine(4100));
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct BedCheck {
     /// Size and version of this struct.
     pub header: Header,
@@ -154,22 +155,22 @@ pub type BedCheckFn = unsafe extern "system" fn(check: *const BedCheck, user: *m
 /// ```
 /// use enshwick::abi::{Header, Summon};
 ///
-/// let summon = Summon {
-///     header: Header::of::<Summon>(),
+/// let summon = enshwick::abi::headed!(Summon {
 ///     item: enshwick::ItemId::new(0x5e01),
 ///     ammo: enshwick::ItemId::new(0),
 ///     template: enshwick::abi::Guid::NIL,
 ///     target: [0; 3],
 ///     slot: 0x3_0000_0041,
-///     pide: enshwick::Entity(900),
+///     pide: enshwick::Entity::from_engine(900),
 ///     meter: [2, 3],
 ///     consumed: 0,
 ///     reserved: [0; 3],
-/// };
+/// });
 /// assert_eq!(summon.meter, [2, 3]);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct Summon {
     /// Size and version of this struct.
     pub header: Header,

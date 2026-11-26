@@ -18,15 +18,15 @@ pub use script::{DataStore, StateFns};
 /// # Examples
 ///
 /// ```
-/// use enshwick::state::StoreError;
+/// use enshwick::state::StoreFileError;
 ///
-/// fn report(error: &StoreError) -> String {
+/// fn report(error: &StoreFileError) -> String {
 ///     format!("kept in memory: {error}")
 /// }
 /// ```
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
-pub enum StoreError {
+pub enum StoreFileError {
     /// The file could not be read, written or removed.
     #[error("cannot read or write {}: {source}", path.display())]
     #[non_exhaustive]
@@ -57,7 +57,7 @@ pub enum StoreError {
     },
 }
 
-impl StoreError {
+impl StoreFileError {
     fn io(path: &Path, source: std::io::Error) -> Self {
         Self::Io {
             path: path.to_owned(),
@@ -67,7 +67,7 @@ impl StoreError {
 }
 
 // A store's error at init turns the mod off with its text.
-crate::load::off_from!(StoreError);
+crate::load::off_from!(StoreFileError);
 
 /// A value kept in a TOML file, written atomically so a crash never leaves
 /// half a file: one world's file of a [`WorldStore`].
@@ -96,16 +96,16 @@ impl<T: serde::de::DeserializeOwned + serde::Serialize + Default> Store<T> {
     ///
     /// # Errors
     ///
-    /// [`StoreError`] when the file exists but cannot be read or does not
+    /// [`StoreFileError`] when the file exists but cannot be read or does not
     /// parse into `T`.
-    pub(crate) fn load(&self) -> Result<T, StoreError> {
+    pub(crate) fn load(&self) -> Result<T, StoreFileError> {
         match std::fs::read_to_string(&self.path) {
-            Ok(text) => with_defaults(&text).map_err(|e| StoreError::Parse {
+            Ok(text) => with_defaults(&text).map_err(|e| StoreFileError::Parse {
                 path: self.path.clone(),
                 message: e.message().to_owned(),
             }),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(T::default()),
-            Err(e) => Err(StoreError::io(&self.path, e)),
+            Err(e) => Err(StoreFileError::io(&self.path, e)),
         }
     }
 
@@ -114,15 +114,15 @@ impl<T: serde::de::DeserializeOwned + serde::Serialize + Default> Store<T> {
     ///
     /// # Errors
     ///
-    /// [`StoreError`] when the value cannot be serialised or the file
+    /// [`StoreFileError`] when the value cannot be serialised or the file
     /// written.
-    pub(crate) fn save(&self, value: &T) -> Result<(), StoreError> {
+    pub(crate) fn save(&self, value: &T) -> Result<(), StoreFileError> {
         write_atomically(&self.path, &self.text(value)?)
     }
 
     /// `value` as the file's text.
-    fn text(&self, value: &T) -> Result<String, StoreError> {
-        toml::to_string(value).map_err(|e| StoreError::Serialize {
+    fn text(&self, value: &T) -> Result<String, StoreFileError> {
+        toml::to_string(value).map_err(|e| StoreFileError::Serialize {
             path: self.path.clone(),
             message: e.to_string(),
         })
@@ -157,8 +157,8 @@ fn fill(table: &mut toml::Table, defaults: toml::Table) {
 }
 
 /// Writes `text` to `path` through [`crate::files::write_atomically`].
-fn write_atomically(path: &Path, text: &str) -> Result<(), StoreError> {
-    crate::files::write_atomically(path, text).map_err(|e| StoreError::io(path, e))
+fn write_atomically(path: &Path, text: &str) -> Result<(), StoreFileError> {
+    crate::files::write_atomically(path, text).map_err(|e| StoreFileError::io(path, e))
 }
 
 /// The file a [`Hold`] keeps in the folder it holds from.
@@ -196,7 +196,7 @@ pub const HOLD_FILE: &str = "hold.txt";
 /// );
 /// hold.clear()?;
 /// assert!(holds(&mods).is_empty());
-/// # Ok::<(), enshwick::state::StoreError>(())
+/// # Ok::<(), enshwick::state::StoreFileError>(())
 /// ```
 #[derive(Debug, Clone)]
 pub struct Hold {
@@ -225,13 +225,13 @@ impl Hold {
     ///
     /// # Errors
     ///
-    /// [`StoreError`] when the file cannot be written.
+    /// [`StoreFileError`] when the file cannot be written.
     ///
     /// # Examples
     ///
     /// See [`Hold`].
     #[script]
-    pub fn set(&self, reason: &str) -> Result<(), StoreError> {
+    pub fn set(&self, reason: &str) -> Result<(), StoreFileError> {
         self.write(first_line(reason))
     }
 
@@ -242,7 +242,7 @@ impl Hold {
     ///
     /// # Errors
     ///
-    /// [`StoreError`] when the file cannot be written.
+    /// [`StoreFileError`] when the file cannot be written.
     ///
     /// # Examples
     ///
@@ -253,19 +253,19 @@ impl Hold {
     /// hold.set_text("the world has 20 altars", "hold.altars", &[("altars", "20")])?;
     /// assert_eq!(hold.reason().as_deref(), Some("the world has 20 altars"));
     /// hold.clear()?;
-    /// # Ok::<(), enshwick::state::StoreError>(())
+    /// # Ok::<(), enshwick::state::StoreFileError>(())
     /// ```
     pub fn set_text(
         &self,
         reason: &str,
         key: &str,
         args: &[(&str, &str)],
-    ) -> Result<(), StoreError> {
+    ) -> Result<(), StoreFileError> {
         let text = crate::i18n::reason::encode(key, args);
         self.write(&format!("{}\n{text}", first_line(reason)))
     }
 
-    fn write(&self, contents: &str) -> Result<(), StoreError> {
+    fn write(&self, contents: &str) -> Result<(), StoreFileError> {
         write_atomically(&self.path, contents)
     }
 
@@ -273,18 +273,18 @@ impl Hold {
     ///
     /// # Errors
     ///
-    /// [`StoreError`] when the file exists and cannot be removed.
+    /// [`StoreFileError`] when the file exists and cannot be removed.
     ///
     /// # Examples
     ///
     /// See [`Hold`].
     #[script]
-    pub fn clear(&self) -> Result<(), StoreError> {
+    pub fn clear(&self) -> Result<(), StoreFileError> {
         let backup = crate::files::backup_path(&self.path);
         for path in [&self.path, &backup] {
             match std::fs::remove_file(path) {
                 Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
-                    return Err(StoreError::io(path, e));
+                    return Err(StoreFileError::io(path, e));
                 }
                 _ => {}
             }
@@ -512,9 +512,9 @@ where
     ///
     /// # Errors
     ///
-    /// [`StoreError`] when the open world's file cannot be written or the
+    /// [`StoreFileError`] when the open world's file cannot be written or the
     /// new one does not parse.
-    pub(crate) fn open(&self, key: &str, dir: &Path) -> Result<(), StoreError> {
+    pub(crate) fn open(&self, key: &str, dir: &Path) -> Result<(), StoreFileError> {
         self.close()?;
         let mut slot = self.relock();
         let store = Store::new(dir, &slot.name);
@@ -534,8 +534,8 @@ where
     ///
     /// # Errors
     ///
-    /// [`StoreError`] when the file cannot be written; the store stays open.
-    pub(crate) fn close(&self) -> Result<(), StoreError> {
+    /// [`StoreFileError`] when the file cannot be written; the store stays open.
+    pub(crate) fn close(&self) -> Result<(), StoreFileError> {
         drop(self.wait_for_writes());
         self.flush()?;
         let mut slot = self.relock();
@@ -549,7 +549,7 @@ where
     ///
     /// # Errors
     ///
-    /// [`StoreError`] when the value cannot be written.
+    /// [`StoreFileError`] when the value cannot be written.
     ///
     /// # Examples
     ///
@@ -562,7 +562,7 @@ where
     ///     }
     /// }
     /// ```
-    pub fn flush(&self) -> Result<(), StoreError> {
+    pub fn flush(&self) -> Result<(), StoreFileError> {
         let mut slot = self.relock();
         // A background write still running would land after this one.
         let _writing = self.wait_for_writes();

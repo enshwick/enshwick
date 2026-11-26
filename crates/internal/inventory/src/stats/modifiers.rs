@@ -130,6 +130,7 @@ pub fn aggregate(def: &StatDef, modifiers: impl IntoIterator<Item = (Op, f32)>) 
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct Modifier {
     /// The stat.
     pub stat: Stat,
@@ -187,6 +188,7 @@ impl Modifier {
 ///
 /// See [`ItemStats`].
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize, crate::Script)]
+#[non_exhaustive]
 pub struct ItemModifier {
     /// The stat.
     pub stat: StatKey,
@@ -194,6 +196,18 @@ pub struct ItemModifier {
     pub op: Op,
     /// Its value.
     pub value: f32,
+}
+
+impl ItemModifier {
+    /// A `ItemModifier` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`ItemModifier`].
+    #[must_use]
+    pub const fn new(stat: StatKey, op: Op, value: f32) -> Self {
+        Self { stat, op, value }
+    }
 }
 
 /// What a single item gives the entity that wears it, kept as its item data
@@ -205,15 +219,14 @@ pub struct ItemModifier {
 /// ```
 /// use enshwick::stats::{ItemModifier, ItemStats, Op, key_of};
 ///
-/// let ring = ItemStats {
-///     modifiers: vec![ItemModifier { stat: key_of("enshwick:resistance_fire"), op: Op::Add, value: 0.1 }],
-///     ..ItemStats::default()
-/// };
+/// let mut ring = ItemStats::default();
+/// ring.modifiers = vec![ItemModifier::new(key_of("enshwick:resistance_fire"), Op::Add, 0.1)];
 /// let bytes = postcard::to_allocvec(&ring)?;
 /// assert_eq!(postcard::from_bytes::<ItemStats>(&bytes)?, ring);
 /// # Ok::<(), postcard::Error>(())
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize, crate::Script)]
+#[non_exhaustive]
 pub struct ItemStats {
     /// The modifiers, in the order they apply.
     pub modifiers: Vec<ItemModifier>,

@@ -5,7 +5,7 @@
 mod tests {
     use std::sync::OnceLock;
 
-    use enshwick::abi::{Header, KnowledgeInfo, KnowledgeInput, Status};
+    use enshwick::abi::{KnowledgeInfo, KnowledgeInput, Status};
     use enshwick::knowledge::{Grant, Knowledge, KnowledgeId, Refusal, Revoke};
     use enshwick::{Entity, Load, Mod, Off, PlayerKey, WorldError};
 
@@ -38,15 +38,14 @@ mod tests {
     );
 
     fn info(id: KnowledgeId, kind: u8, scope: u8) -> KnowledgeInfo {
-        KnowledgeInfo {
-            header: Header::of::<KnowledgeInfo>(),
+        enshwick::abi::headed!(KnowledgeInfo {
             id,
             kind,
             scope,
             reserved: 0,
             value: 0,
             flags: 0,
-        }
+        })
     }
 
     /// The probe's ids as the game knows them, so every call names an id of
@@ -57,7 +56,7 @@ mod tests {
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.faults());
-        let player = Some(Entity(2));
+        let player = Some(Entity::from_engine(2));
         loader.set_knowledge(
             &[
                 (
@@ -83,18 +82,23 @@ mod tests {
     fn a_revoke_reaches_the_loader_with_its_kind_and_value() {
         let (loader, knowledge) = started();
         knowledge
-            .revoke(Entity(2), RECIPE, Revoke::Unflag(1))
+            .revoke(Entity::from_engine(2), RECIPE, Revoke::Unflag(1))
             .unwrap();
         knowledge
-            .revoke(Entity(2), TUTORIAL_COUNTER, Revoke::Sub(3))
+            .revoke(Entity::from_engine(2), TUTORIAL_COUNTER, Revoke::Sub(3))
             .unwrap();
         knowledge.revoke_world(PLACE, Revoke::Clear).unwrap();
         assert_eq!(
             loader.revokes(),
             [
-                (Some(Entity(2)), RECIPE, u32::from(KnowledgeInfo::FLAGS), 1),
                 (
-                    Some(Entity(2)),
+                    Some(Entity::from_engine(2)),
+                    RECIPE,
+                    u32::from(KnowledgeInfo::FLAGS),
+                    1
+                ),
+                (
+                    Some(Entity::from_engine(2)),
                     TUTORIAL_COUNTER,
                     u32::from(KnowledgeInfo::COUNTER),
                     3
@@ -128,11 +132,11 @@ mod tests {
         let (loader, knowledge) = started();
         let unknown = KnowledgeId::new(0x99);
         assert_eq!(
-            knowledge.revoke(Entity(2), unknown, Revoke::Clear),
+            knowledge.revoke(Entity::from_engine(2), unknown, Revoke::Clear),
             Err(WorldError::Refused)
         );
         assert_eq!(
-            knowledge.revoke(Entity(2), RECIPE, Revoke::Clear),
+            knowledge.revoke(Entity::from_engine(2), RECIPE, Revoke::Clear),
             Err(WorldError::Refused),
             "a bool revoke of flags"
         );
@@ -161,41 +165,42 @@ mod tests {
         loader.set_knowledge(
             &[
                 (
-                    Some(Entity(2)),
+                    Some(Entity::from_engine(2)),
                     info(RECIPE, KnowledgeInfo::FLAGS, KnowledgeInfo::PLAYER),
                 ),
                 (
-                    Some(Entity(2)),
-                    KnowledgeInfo {
+                    Some(Entity::from_engine(2)),
+                    enshwick::abi::headed!(KnowledgeInfo {
                         flags: 0b100,
                         ..info(listed, KnowledgeInfo::FLAGS, KnowledgeInfo::PLAYER)
-                    },
+                    }),
                 ),
             ],
             &[],
         );
         let refused = [
-            knowledge.revoke(Entity(2), RECIPE, Revoke::Unflag(32)),
+            knowledge.revoke(Entity::from_engine(2), RECIPE, Revoke::Unflag(32)),
             knowledge.revoke_world(RECIPE, Revoke::Unflag(1)),
-            knowledge.grant(Entity(2), RECIPE, Grant::Flag(32)),
-            knowledge.grant(Entity(2), listed, Grant::Flag(1)),
+            knowledge.grant(Entity::from_engine(2), RECIPE, Grant::Flag(32)),
+            knowledge.grant(Entity::from_engine(2), listed, Grant::Flag(1)),
             knowledge.grant_world(listed, Grant::Flag(2)),
         ];
         for (call, answer) in refused.into_iter().enumerate() {
             assert_eq!(answer, Err(WorldError::Refused), "call {call}");
         }
-        knowledge.grant(Entity(2), listed, Grant::Flag(2)).unwrap();
         knowledge
-            .revoke(Entity(2), listed, Revoke::Unflag(1))
+            .grant(Entity::from_engine(2), listed, Grant::Flag(2))
+            .unwrap();
+        knowledge
+            .revoke(Entity::from_engine(2), listed, Revoke::Unflag(1))
             .unwrap();
         assert_eq!(loader.grants().len(), 1);
         assert_eq!(loader.revokes().len(), 1);
     }
 
     fn input(id: KnowledgeId, kind: u8, refusal: u32, allowed: bool) -> KnowledgeInput {
-        KnowledgeInput {
-            header: Header::of::<KnowledgeInput>(),
-            character: Entity(2),
+        enshwick::abi::headed!(KnowledgeInput {
+            character: Entity::from_engine(2),
             id,
             kind,
             scope: KnowledgeInfo::PLAYER,
@@ -204,7 +209,7 @@ mod tests {
             refusal,
             allowed: u8::from(allowed),
             reserved_tail: [0; 3],
-        }
+        })
     }
 
     #[test]

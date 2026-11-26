@@ -12,6 +12,7 @@ use super::defs::{AffixDef, AffixId, AffixKey, ItemRarity};
 ///
 /// See [`roll`].
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize, crate::Script)]
+#[non_exhaustive]
 pub struct Rolled {
     /// The affix.
     pub affix: AffixKey,
@@ -25,11 +26,24 @@ pub struct Rolled {
 ///
 /// See [`roll`].
 #[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
 pub struct Candidate<'a> {
     /// The affix's key.
     pub key: AffixKey,
     /// Its definition.
     pub def: &'a AffixDef,
+}
+
+impl<'a> Candidate<'a> {
+    /// A `Candidate` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`Candidate`].
+    #[must_use]
+    pub const fn new(key: AffixKey, def: &'a AffixDef) -> Self {
+        Self { key, def }
+    }
 }
 
 #[cfg_attr(
@@ -99,7 +113,7 @@ impl RollRules {
 /// use enshwick::content::categories::ItemCategoryMask;
 ///
 /// let ring = AffixDef::new(ItemCategoryMask::EQUIPMENT);
-/// let pool = [Candidate { key: AffixKey(1), def: &ring }];
+/// let pool = [Candidate::new(AffixKey(1), &ring)];
 /// // An affix without ranges rolls no values.
 /// let first = roll(&pool, 1, RollRules::new(1, 1), 42);
 /// assert_eq!(first, roll(&pool, 1, RollRules::new(1, 1), 42));
@@ -166,7 +180,7 @@ pub fn roll(pool: &[Candidate<'_>], category: u8, rules: RollRules, seed: u64) -
 /// use enshwick::stats::ItemStats;
 ///
 /// let ring = AffixDef::new(ItemCategoryMask::EQUIPMENT);
-/// let pool = [Candidate { key: AffixKey(1), def: &ring }];
+/// let pool = [Candidate::new(AffixKey(1), &ring)];
 /// let rolled = reroll(&ItemStats::default(), &pool, 1, RollRules::new(1, 1), 7, true).unwrap();
 /// assert!(rolled.rolled);
 /// assert!(reroll(&rolled, &pool, 1, RollRules::new(1, 1), 7, true).is_none(), "once");
@@ -204,7 +218,8 @@ pub fn reroll(
 /// use enshwick::affixes::{lines_of, Candidate};
 /// use enshwick::stats::{ItemModifier, ItemStats, Op, StatKey};
 ///
-/// let stats = ItemStats { modifiers: vec![ItemModifier { stat: StatKey(9), op: Op::Add, value: 2.0 }], ..ItemStats::default() };
+/// let mut stats = ItemStats::default();
+/// stats.modifiers = vec![ItemModifier::new(StatKey(9), Op::Add, 2.0)];
 /// let lines = lines_of(&stats, &[], |key| (key == StatKey(9)).then_some(0));
 /// assert_eq!(lines.len(), 1);
 /// assert_eq!(lines[0].affix, 0);

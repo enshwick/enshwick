@@ -140,7 +140,7 @@ fn fields_fit(size: usize, id: usize, compare: usize, operator: usize, kind: usi
 }
 
 /// Whether the game query `query` holds for the character `entity`, or for
-/// the world for `Entity(0)`, as the game answers it now.
+/// the world for entity 0, as the game answers it now.
 pub(crate) fn holds(loader: &Loader, entity: Entity, query: u32) -> Result<bool, KnowledgeError> {
     let layout: &Layout = layout(loader).ok_or(KnowledgeError::Unread)?;
     let calls = layout.query.as_ref().ok_or(KnowledgeError::Unread)?;
@@ -152,7 +152,7 @@ pub(crate) fn holds(loader: &Loader, entity: Entity, query: u32) -> Result<bool,
     let knowledge = core::ptr::with_exposed_provenance(object);
     let mut data = calls.data;
     data[calls.id..calls.id + 4].copy_from_slice(&query.to_le_bytes());
-    if entity == Entity(0) {
+    if entity == Entity::from_engine(0) {
         answered(|answer| {
             // SAFETY: `knowledge` is the live knowledge object on the game thread
             // at a quiet moment (`world::server`); `answer` and `data`, the game's
@@ -170,7 +170,15 @@ pub(crate) fn holds(loader: &Loader, entity: Entity, query: u32) -> Result<bool,
             // writable on this stack for the call, `mode` as the game's own
             // callers pass it; `record` checked the character's record
             // exists and is active, which the evaluator indexes unchecked.
-            unsafe { (calls.player)(answer, knowledge, data.as_ptr(), entity.0, &raw mut mode) };
+            unsafe {
+                (calls.player)(
+                    answer,
+                    knowledge,
+                    data.as_ptr(),
+                    entity.get(),
+                    &raw mut mode,
+                )
+            };
         })
     }
 }

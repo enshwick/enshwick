@@ -57,9 +57,9 @@ mod tests {
         let _looking = loader.draw_frame();
         loader.show_prompt(None);
         loader.open_screen(Some(HudScreenType::StorageChest));
-        loader.host_screen(Some(Entity(512)));
+        loader.host_screen(Some(Entity::from_engine(512)));
         let _open = loader.draw_frame();
-        loader.host_screen(Some(Entity(513)));
+        loader.host_screen(Some(Entity::from_engine(513)));
         let _next = loader.draw_frame();
         let read = READ.lock().unwrap();
         assert_eq!(read[0], (None, None, None), "nothing outside a game");
@@ -71,13 +71,19 @@ mod tests {
             Some(vec![GameAction::Block]),
             "bit 12 has no name on this build"
         );
-        assert_eq!(read[2].1, Some(Entity(512)));
+        assert_eq!(read[2].1, Some(Entity::from_engine(512)));
         assert_eq!(read[2].0, None, "the prompt went");
         assert_eq!(
             *HOSTS.lock().unwrap(),
             [
-                (Some(HudScreenType::StorageChest), Some(Entity(512))),
-                (Some(HudScreenType::StorageChest), Some(Entity(513))),
+                (
+                    Some(HudScreenType::StorageChest),
+                    Some(Entity::from_engine(512))
+                ),
+                (
+                    Some(HudScreenType::StorageChest),
+                    Some(Entity::from_engine(513))
+                ),
             ],
             "the next chest on the same screen is a change"
         );

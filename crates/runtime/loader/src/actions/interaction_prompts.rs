@@ -705,18 +705,16 @@ fn live(prompts: &[Prompt], item: u32) -> Option<&Prompt> {
 #[cfg(test)]
 mod tests {
     use enshwick_core::ItemId;
-    use enshwick_core::abi::Header;
 
     use super::*;
 
     fn spec(item: u32, verb: u32, text: u32, flags: u32) -> InteractionPrompt {
-        InteractionPrompt {
-            header: Header::of::<InteractionPrompt>(),
+        enshwick_abi::headed!(InteractionPrompt {
             item: ItemId::new(item),
             verb,
             text,
             flags,
-        }
+        })
     }
 
     #[test]

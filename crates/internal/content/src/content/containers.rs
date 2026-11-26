@@ -14,10 +14,14 @@ const VARIANT: usize = 12;
 /// Where the fields a container edit touches sit on the running build,
 /// resolved by the loader.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// See [`ContainerLayout::resolve`] and [`resize_container`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
+#[non_exhaustive]
 pub struct ContainerLayout {
     /// A template's components.
     pub components: usize,
@@ -99,10 +103,13 @@ pub(crate) fn template_components(
 /// How many generic slots the container `template` sets up; `None` for a
 /// template without an inventory setup of its own.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// See [`resize_container`].
 #[must_use]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
 pub fn container_slots(layout: &ContainerLayout, template: &[u8]) -> Option<u8> {
     let blob = Blob::new(template);
     let setup = *components(layout, &blob, layout.setup)?.first()?;
@@ -111,6 +118,8 @@ pub fn container_slots(layout: &ContainerLayout, template: &[u8]) -> Option<u8> 
 
 /// Builds in `out` the container `template` with `slots` generic slots;
 /// `None` for a template without an inventory setup of its own.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// It writes the inventory setup's generic and loot counts and its
 /// override's count, which vanilla containers keep equal.
@@ -128,6 +137,7 @@ pub fn container_slots(layout: &ContainerLayout, template: &[u8]) -> Option<u8> 
 /// }
 /// ```
 #[must_use]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
 pub fn resize_container(
     layout: &ContainerLayout,
     template: &[u8],

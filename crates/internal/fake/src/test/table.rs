@@ -12,7 +12,7 @@
 use std::sync::{Mutex, MutexGuard};
 
 use enshwick_core::Relock;
-use enshwick_core::abi::{Header, HostApi, Status, Str};
+use enshwick_core::abi::{HostApi, Status, Str};
 
 use super::FakeHost;
 
@@ -168,8 +168,8 @@ pub(crate) fn with_open(f: impl FnOnce(&mut State) -> Status) -> Status {
 }
 
 /// The table every installed fake answers through.
-pub(crate) static TABLE: HostApi = HostApi {
-    header: Header::of::<HostApi>(),
+pub(crate) static TABLE: HostApi = enshwick_core::host_api! {
+
     host_version: Str::new("0.0.0-test"),
     build,
     symbol,

@@ -5,6 +5,9 @@
 //! own paths; this crate's own paths carry no promise.
 
 #![cfg_attr(enshwick_docs, feature(doc_cfg))]
+// The API grows after 1.0 without a major: a public struct or enum is
+// `#[non_exhaustive]`, or closed on purpose with an `#[expect]`.
+#![warn(clippy::exhaustive_enums, clippy::exhaustive_structs)]
 
 /// Fails when rustdoc builds this crate's examples one by one, which it does
 /// without a word when one of them does not merge.

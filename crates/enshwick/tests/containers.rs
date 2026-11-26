@@ -77,8 +77,10 @@ mod tests {
             host.type_hash("inventory_setup", SETUP),
             |host, (entity, markers)| {
                 markers.iter().fold(
-                    host.placed(SETUP, enshwick::Entity(entity), [0.0; 3]),
-                    |host, &marker| host.component(enshwick::Entity(entity), marker, &[0; 4]),
+                    host.placed(SETUP, enshwick::Entity::from_engine(entity), [0.0; 3]),
+                    |host, &marker| {
+                        host.component(enshwick::Entity::from_engine(entity), marker, &[0; 4])
+                    },
                 )
             },
         )
@@ -88,54 +90,67 @@ mod tests {
         holding_without("")
     }
 
-    fn found(host: FakeHost, kinds: ContainerKinds) -> Vec<u32> {
+    fn found(host: FakeHost, kinds: ContainerKinds) -> Result<Vec<u32>, enshwick::WorldError> {
         let loader = host.install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Holders)`.
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         let world = Holders::instance().unwrap().world;
-        world
-            .containers(kinds)
+        Ok(world
+            .containers(kinds)?
             .iter()
-            .map(|placed| placed.entity.0)
-            .collect()
+            .map(|placed| placed.entity.get())
+            .collect())
     }
 
     #[test]
     fn the_default_kinds_are_the_containers_players_build() {
         assert_eq!(ContainerKinds::default(), ContainerKinds::PLACED);
-        assert_eq!(found(holding(), ContainerKinds::default()), [10]);
-    }
-
-    #[test]
-    fn each_kind_finds_its_own_holders_and_the_rest_are_other() {
-        assert_eq!(found(holding(), ContainerKinds::CHARACTERS), [11]);
-        assert_eq!(found(holding(), ContainerKinds::DROPS), [12]);
-        assert_eq!(found(holding(), ContainerKinds::OTHER), [13]);
-        assert_eq!(found(holding(), ContainerKinds::ANIMALS), [14]);
-        assert_eq!(found(holding(), ContainerKinds::LOOT), [15]);
-        assert_eq!(found(holding(), ContainerKinds::NPCS), [16]);
-        assert_eq!(found(holding(), ContainerKinds::PLANTS), [17]);
-        let both = ContainerKinds::PLACED | ContainerKinds::CHARACTERS;
-        assert_eq!(found(holding(), both), [10, 11]);
         assert_eq!(
-            found(holding(), ContainerKinds::ALL),
-            [10, 11, 12, 13, 14, 15, 16, 17]
+            found(holding(), ContainerKinds::default()),
+            Ok([10].to_vec())
         );
     }
 
     #[test]
-    fn a_build_missing_any_marker_finds_no_containers_rather_than_wrong_ones() {
+    fn each_kind_finds_its_own_holders_and_the_rest_are_other() {
+        assert_eq!(
+            found(holding(), ContainerKinds::CHARACTERS),
+            Ok([11].to_vec())
+        );
+        assert_eq!(found(holding(), ContainerKinds::DROPS), Ok([12].to_vec()));
+        assert_eq!(found(holding(), ContainerKinds::OTHER), Ok([13].to_vec()));
+        assert_eq!(found(holding(), ContainerKinds::ANIMALS), Ok([14].to_vec()));
+        assert_eq!(found(holding(), ContainerKinds::LOOT), Ok([15].to_vec()));
+        assert_eq!(found(holding(), ContainerKinds::NPCS), Ok([16].to_vec()));
+        assert_eq!(found(holding(), ContainerKinds::PLANTS), Ok([17].to_vec()));
+        let both = ContainerKinds::PLACED | ContainerKinds::CHARACTERS;
+        assert_eq!(found(holding(), both), Ok([10, 11].to_vec()));
+        assert_eq!(
+            found(holding(), ContainerKinds::ALL),
+            Ok([10, 11, 12, 13, 14, 15, 16, 17].to_vec())
+        );
+    }
+
+    #[test]
+    fn a_build_missing_any_marker_answers_unavailable_rather_than_wrong_containers() {
         for (id, _) in MARKERS {
             let found = found(holding_without(id), ContainerKinds::ALL);
-            assert_eq!(found, Vec::<u32>::new(), "without {id}");
+            assert_eq!(
+                found,
+                Err(enshwick::WorldError::Unavailable),
+                "without {id}"
+            );
         }
     }
 
     #[test]
-    fn a_build_without_containers_finds_none() {
-        assert_eq!(found(world(), ContainerKinds::ALL), Vec::<u32>::new());
+    fn a_build_without_containers_answers_unavailable() {
+        assert_eq!(
+            found(world(), ContainerKinds::ALL),
+            Err(enshwick::WorldError::Unavailable)
+        );
     }
 
     #[test]

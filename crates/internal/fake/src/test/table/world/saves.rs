@@ -28,7 +28,7 @@ entries! {
         entity: enshwick_core::Entity,
         saved: u8,
     ) -> Status {
-        if entity == enshwick_core::Entity(0) {
+        if entity == enshwick_core::Entity::from_engine(0) {
             return Status::BAD_ARGS;
         }
         if with(false, |s| super::entity_calls_off(s)) {
@@ -43,7 +43,7 @@ entries! {
                 .spawns
                 .iter()
                 .zip(&s.world.spawn_steps)
-                .find(|((id, _), _)| *id == entity.0)
+                .find(|((id, _), _)| *id == entity.get())
                 .map(|(_, &at)| at);
             let placed = s
                 .world
@@ -56,7 +56,7 @@ entries! {
                 Some(_) => {}
                 None if placed => {}
                 None => {
-                    let vanilla = s.host.content.templates.contains_key(&entity.0)
+                    let vanilla = s.host.content.templates.contains_key(&entity.get())
                         || s.host.world.placed.iter().any(|(_, p)| p.entity == entity)
                         || s.host.world.props.iter().any(|p| p.entity == entity);
                     return if vanilla {
@@ -66,9 +66,9 @@ entries! {
                     };
                 }
             }
-            s.world.save.unsaved.retain(|&e| e != entity.0);
+            s.world.save.unsaved.retain(|&e| e != entity.get());
             if saved == 0 {
-                s.world.save.unsaved.push(entity.0);
+                s.world.save.unsaved.push(entity.get());
             }
             Status::OK
         })

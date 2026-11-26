@@ -215,12 +215,12 @@ impl Manifested {
             .iter()
             .map(|name| crate::abi::Str::new(name))
             .collect();
-        let manifest = Box::new(crate::abi::Manifest {
+        let manifest = Box::new(enshwick_abi::headed!(crate::abi::Manifest {
             points: crate::abi::Str::new(&text),
             exports: exports.as_ptr(),
             export_count: u32::try_from(exports.len()).unwrap_or(u32::MAX),
             ..*self.base
-        });
+        }));
         Built {
             manifest,
             unread,

@@ -52,10 +52,16 @@ pub(super) const NAMESPACES: &[Namespace] = &[
     #[cfg(feature = "unstable")]
     Namespace::starting("map", "", &[Load::SCRIPT_MAP_EVENTS]),
     #[cfg(feature = "unstable")]
-    Namespace::on_request::<FogOfWar>("fog_of_war"),
+    Namespace::on_request::<FogOfWar>(
+        "fog_of_war",
+        "Asks the loader to copy the client's fog of war for the mod from now on, and returns it; a dedicated server has none.",
+    ),
     Namespace::of::<Clock>(),
     Namespace::starting("daytime", "", &[Load::SCRIPT_DAYTIME]),
-    Namespace::on_request::<Altars>("altars"),
+    Namespace::on_request::<Altars>(
+        "altars",
+        "Asks the loader to follow the Flame Altars, for `list` and the `AltarsChanged` event.",
+    ),
     Namespace::starting(
         "altars",
         "",

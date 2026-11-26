@@ -31,6 +31,7 @@ pub(super) type Reads = Option<Vec<(u32, Vec<u32>)>>;
 ///
 /// See [`Load::change_quest`](../../struct.Load.html#method.change_quest).
 #[derive(Clone, Debug, Default, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct StepChange {
     /// The step, from 0, where the step edits before it leave it.
     pub step: u32,
@@ -61,6 +62,7 @@ pub struct StepChange {
 ///
 /// See [`Load::change_quest`](../../struct.Load.html#method.change_quest).
 #[derive(Clone, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct StepInsert {
     /// Where it goes, from 0; the step there and those after move down. The
     /// step count puts it last.
@@ -70,12 +72,28 @@ pub struct StepInsert {
     pub step: QuestStep,
 }
 
+impl StepInsert {
+    /// A `StepInsert` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`StepInsert`].
+    #[must_use]
+    pub const fn new(at: u32, step: QuestStep) -> Self {
+        Self { at, step }
+    }
+}
+
 /// A step moved inside a vanilla quest or page by [`StepEdit::Move`].
 ///
 /// # Examples
 ///
 /// See [`Load::change_quest`](../../struct.Load.html#method.change_quest).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a move of one step: where from and where to"
+)]
 pub struct StepMove {
     /// The step to move, from 0.
     pub from: u32,
@@ -111,6 +129,7 @@ pub enum StepEdit {
 ///
 /// See [`Load::change_quest`](../../struct.Load.html#method.change_quest).
 #[derive(Clone, Debug, Default, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct QuestChange {
     /// Its title's text tag.
     pub name: Option<Guid>,
@@ -147,6 +166,7 @@ pub struct QuestChange {
 ///
 /// See `Load::change_journal_page`.
 #[derive(Clone, Debug, Default, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct PageChange {
     /// The text tag of the game's lore category it moves to; refused as
     /// `Load::add_journal_page` refuses one.

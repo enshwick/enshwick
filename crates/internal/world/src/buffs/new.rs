@@ -4,7 +4,7 @@
 use core::time::Duration;
 
 use crate::Off;
-use crate::abi::{BuffTypeAdd, BuffTypeInfo, Header, Status};
+use crate::abi::{BuffTypeAdd, BuffTypeInfo, Status};
 use crate::content::icons::Icon;
 use crate::content::{Blob, Draft, EngineFacts, Guid, Id, ResourceType, sized};
 use crate::engine_ids as ids;
@@ -151,11 +151,7 @@ impl NewBuff {
     /// use enshwick::content::icons::{Icon, Pixels, Tint};
     /// use enshwick::content::{Guid, id};
     ///
-    /// let icon = Icon {
-    ///     id: id!("lucky").part("icon"),
-    ///     like: Guid::parse("02778393-2031-44cd-b7cd-3bc215acd7af"),
-    ///     pixels: Pixels::Tint(Tint { colour: [60, 200, 90], amount: 70 }),
-    /// };
+    /// let icon = Icon::new(id!("lucky").part("icon"), Guid::parse("02778393-2031-44cd-b7cd-3bc215acd7af"), Pixels::Tint(Tint::new([60, 200, 90], 70)));
     /// let lucky = NewBuff::new(id!("lucky"), BuffTypeId(0xf9b3_64f6)).icon(icon);
     /// assert!(lucky.icon.is_some());
     /// ```
@@ -221,7 +217,11 @@ impl NewBuff {
     ///
     /// See [`NewBuff::slot`].
     #[must_use]
-    pub const fn saved(mut self, saved: bool) -> Self {
+    #[expect(
+        clippy::wrong_self_convention,
+        reason = "a setter, named as its field after the game's isSaved"
+    )]
+    pub const fn is_saved(mut self, saved: bool) -> Self {
         self.is_saved = Some(saved);
         self
     }
@@ -266,7 +266,8 @@ impl BuffSlotType {
 ///     Ok(())
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct BuffLayout {
     /// The collection's buff types.
     pub buffs: usize,
@@ -482,6 +483,7 @@ impl Edit {
 /// Why the game's buff collection cannot take a new type.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum Refusal {
     /// The collection does not read with the build's layout.
     #[error("the game's buff collection does not read with this build's layout")]
@@ -722,8 +724,7 @@ impl NewBuff {
         changes |= life_time.map_or(0, |_| BuffTypeAdd::LIFE_TIME);
         changes |= slot.map_or(0, |_| BuffTypeAdd::SLOT);
         let plain = if self.plain { BuffTypeAdd::PLAIN } else { 0 };
-        Ok(BuffTypeAdd {
-            header: Header::of::<BuffTypeAdd>(),
+        Ok(enshwick_abi::headed!(BuffTypeAdd {
             guid: self.id.guid(),
             name: self.name.unwrap_or(Guid::NIL),
             description: self.description.unwrap_or(Guid::NIL),
@@ -733,7 +734,7 @@ impl NewBuff {
             changes,
             slot: slot.unwrap_or(0),
             flags: flags.iter().fold(plain, |all, (_, bit)| all | bit),
-        })
+        }))
     }
 }
 

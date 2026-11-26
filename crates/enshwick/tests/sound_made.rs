@@ -20,26 +20,22 @@ mod tests {
     impl Mod for Bells {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let bell = SoundContainerId::from_guid(BELL);
-            load.change_sound(
-                bell,
-                SoundChange {
-                    volume: Some(0.5),
-                    ..SoundChange::default()
-                },
-            )?;
+            load.change_sound(bell, {
+                let mut value = SoundChange::default();
+                value.volume = Some(0.5);
+                value
+            })?;
             load.declare(BELL_ID)?;
             load.serve(
                 types::SOUND_CONTAINER_RESOURCE.key(BELL)?,
                 types::SOUND_CONTAINER_RESOURCE.key(CHEST)?,
                 |chest, out| out.copy_from(chest),
             )?;
-            load.change_sound(
-                bell,
-                SoundChange {
-                    pitch: Some(2.0),
-                    ..SoundChange::default()
-                },
-            )?;
+            load.change_sound(bell, {
+                let mut value = SoundChange::default();
+                value.pitch = Some(2.0);
+                value
+            })?;
             assert!(
                 load.serve(
                     types::SOUND_CONTAINER_RESOURCE.key(BELL)?,

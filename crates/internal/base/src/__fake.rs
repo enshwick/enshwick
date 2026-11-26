@@ -1,24 +1,20 @@
 //! What the fake loader of `enshwick-fake` reads inside this crate; only
 //! the `fake` feature, which `enshwick-core`'s turns on, builds it.
 
-#[cfg(feature = "unstable")]
 use core::ffi::c_void;
 
 pub use crate::__internal::{as_loader, as_pack, refresh_levels};
 pub use crate::__private::{EXPERIENCE_SOURCES, MOD_OFF, copy_out, ids};
-#[cfg(feature = "unstable")]
 use crate::abi::CallFn;
 use crate::abi::PointFn;
 pub use crate::fresh::renew;
 pub use crate::load::outcome;
 use crate::points::{Point, Verdict};
-#[cfg(feature = "unstable")]
 use crate::services::Call;
 
 /// The handler and its user pointer that serve the call `C` with
 /// `handler`, as `Load::serve_call` registers them; the pointer stays valid
 /// for the process.
-#[cfg(feature = "unstable")]
 #[must_use = "the handler stays leaked unless the fake registers it"]
 pub fn served_call<C, F>(handler: F) -> (CallFn, *mut c_void)
 where

@@ -1,6 +1,6 @@
 //! Host functions for mods' commands and actions.
 
-use enshwick_core::abi::{ActionReply, CommandInfo, Header, Level, Status, Str};
+use enshwick_core::abi::{ActionReply, CommandInfo, Level, Status, Str};
 
 use crate::host::layer::guards::in_init;
 use crate::host::layer::{Caller, HeadedOut, Mod, SizedListOut, Text, entries};
@@ -15,11 +15,10 @@ thread_local! {
 fn kept(answer: crate::actions::player_actions::Answer) -> ActionReply {
     REPLY.with_borrow_mut(|kept| {
         *kept = answer.text;
-        ActionReply {
-            header: Header::of::<ActionReply>(),
+        enshwick_abi::headed!(ActionReply {
             done: u8::from(answer.done),
             text: Str::new(kept),
-        }
+        })
     })
 }
 

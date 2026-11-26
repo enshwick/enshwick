@@ -19,7 +19,7 @@ mod tests {
     const MAPPING: &str = "keen::BuildingMaterialMappingResource";
     const COMBAT_FLAGS: &str = "keen::ecs::CombatFlags";
     const STONE: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-    const ENTITY: Entity = Entity(4096);
+    const ENTITY: Entity = Entity::from_engine(4096);
 
     static CASE: Mutex<Option<Scripts>> = Mutex::new(None);
 
@@ -305,7 +305,7 @@ mod tests {
         let loader = run_on(
             FakeHost::new()
                 .world()
-                .tagged(Entity(4097), 3, &[Guid([0x11; 16])]),
+                .tagged(Entity::from_engine(4097), 3, &[Guid([0x11; 16])]),
             r#"
             local container = enshwick.typed.component_type("ecs.EntityTagContainer")
             local ok, why = pcall(container.read, container, 4097)

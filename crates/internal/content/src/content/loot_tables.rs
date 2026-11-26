@@ -11,10 +11,14 @@ use super::{Blob, EngineFacts, Guid};
 /// Where the fields a loot table edit touches sit on the running build,
 /// resolved by the loader.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// See [`LootLayout::resolve`] and [`change_random_loot`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
+#[non_exhaustive]
 pub struct LootLayout {
     /// The random loot table's list of items.
     pub items: usize,
@@ -93,10 +97,14 @@ impl LootLayout {
 /// Where a container's template names itself and the fill table it rolls,
 /// resolved by the loader or a tool.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// See [`FillTableLayout::resolve`] and [`template_table`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
+#[non_exhaustive]
 pub struct FillTableLayout {
     /// A template's name.
     pub name: usize,
@@ -137,6 +145,8 @@ impl FillTableLayout {
 /// The name of the container `template` and the GUID of the fill table it
 /// rolls; `None` for a template that rolls none or does not read.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// ```
@@ -148,6 +158,7 @@ impl FillTableLayout {
 /// }
 /// ```
 #[must_use]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
 pub fn template_table(layout: &FillTableLayout, template: &[u8]) -> Option<(String, Guid)> {
     let blob = Blob::new(template);
     let fill =
@@ -189,6 +200,8 @@ fn whole<T: TryFrom<i64>>(value: f64) -> Option<T> {
 /// The random loot table `table` with each item's stack sizes as `value`
 /// gives them, and how many items changed.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// The least and the largest change from their own values, and the ceiling
 /// of a scaled roll follows by [`scaled_ceiling`].
 ///
@@ -204,6 +217,7 @@ fn whole<T: TryFrom<i64>>(value: f64) -> Option<T> {
 /// }
 /// ```
 #[must_use]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
 pub fn change_random_loot(
     layout: &LootLayout,
     table: &[u8],
@@ -271,10 +285,13 @@ pub fn scaled_ceiling(scaled: u16, max: u16, new_max: u16) -> u16 {
 /// The item ids every stack of the fill table `table` names, its groups'
 /// stacks included.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// See [`change_fill_table`].
 #[must_use]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
 pub fn fill_items(layout: &LootLayout, table: &[u8]) -> Vec<ItemId> {
     let blob = Blob::new(table);
     let mut items = Vec::new();
@@ -315,6 +332,8 @@ fn walk(
 /// `value` gives them, and how many stacks changed; a stack of no item is
 /// left.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// ```
@@ -332,6 +351,7 @@ fn walk(
 /// }
 /// ```
 #[must_use]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
 pub fn change_fill_table(
     layout: &LootLayout,
     table: &[u8],

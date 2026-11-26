@@ -1,12 +1,26 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-use crate::vetoes::{BuildVerdict, Placement};
+use crate::game_events::CraftRecipeEvent;
+use crate::vetoes::{Placement, Verdict};
 use crate::{Load, Off};
 use enshwick_actions::__load::*;
 
 #[enshwick_macros::forward(base)]
 #[crate::script(vetoes_build)]
 impl Load<'_> {
+    /// Runs `filter` on each player's craft request in the server's world,
+    /// as [`Load::on_craft`] does. The filter returns `false` to refuse, nil
+    /// or `true` to allow; any other value refuses. It runs on the game
+    /// thread, where `World` reads work.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::on_craft`].
+    #[script(name = "on_craft")]
+    pub(crate) fn craft_filter<F>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&CraftRecipeEvent) -> Verdict + Send + Sync + 'static;
+
     /// Runs `filter` after the game's cursor check allows a placement, as
     /// [`Load::on_build`] does. The filter returns nil or `true` to allow,
     /// `false` to refuse as the game refuses a placement without building
@@ -22,5 +36,5 @@ impl Load<'_> {
     #[script(name = "on_build")]
     pub(crate) fn build_filter<F>(&mut self, filter: F) -> Result<(), Off>
     where
-        F: Fn(&Placement) -> BuildVerdict + Send + Sync + 'static;
+        F: Fn(&Placement) -> Verdict + Send + Sync + 'static;
 }

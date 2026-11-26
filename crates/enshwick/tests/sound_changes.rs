@@ -18,27 +18,24 @@ mod tests {
     impl Mod for Quieter {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let chest = SoundContainerId::from_guid(CHEST);
-            let louder = SoundChange {
-                volume: Some(9.0),
-                ..SoundChange::default()
+            let louder = {
+                let mut value = SoundChange::default();
+                value.volume = Some(9.0);
+                value
             };
             assert!(load.change_sound(chest, louder).is_err(), "past the bound");
-            load.change_sound(
-                chest,
-                SoundChange {
-                    volume: Some(0.5),
-                    looped: Some(true),
-                    ..SoundChange::default()
-                },
-            )?;
-            load.change_sound(
-                chest,
-                SoundChange {
-                    volume: Some(0.25),
-                    pitch: Some(2.0),
-                    ..SoundChange::default()
-                },
-            )?;
+            load.change_sound(chest, {
+                let mut value = SoundChange::default();
+                value.volume = Some(0.5);
+                value.looped = Some(true);
+                value
+            })?;
+            load.change_sound(chest, {
+                let mut value = SoundChange::default();
+                value.volume = Some(0.25);
+                value.pitch = Some(2.0);
+                value
+            })?;
             Ok(Self)
         }
     }

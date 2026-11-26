@@ -129,13 +129,13 @@ mod tests {
     use super::*;
 
     fn spec(edge: u32, align: u32, shift: f32, inset: f32) -> UiExtension {
-        UiExtension {
+        enshwick_abi::headed!(UiExtension {
             edge,
             align,
             shift,
             inset,
             ..bytemuck::Zeroable::zeroed()
-        }
+        })
     }
 
     #[test]
@@ -157,10 +157,10 @@ mod tests {
             spec(UiExtension::LEFT, 0, 0.0, -1.0),
             spec(UiExtension::LEFT, 0, 0.0, max + 1.0),
             spec(UiExtension::LEFT, 0, 0.0, f32::NAN),
-            UiExtension {
+            enshwick_abi::headed!(UiExtension {
                 reserved_place: 1,
                 ..spec(UiExtension::LEFT, 0, 0.0, 0.0)
-            },
+            }),
         ];
         for spec in refused {
             assert_eq!(Place::of(&spec), None, "{spec:?}");

@@ -6,7 +6,7 @@ mod tests {
     use std::time::Duration;
 
     use enshwick::ItemId;
-    use enshwick::abi::{Header, TerrainMaterialInfo};
+    use enshwick::abi::TerrainMaterialInfo;
     use enshwick::content::Guid;
     use enshwick::test::FakeHost;
 
@@ -68,15 +68,14 @@ mod tests {
             end)
             ",
         );
-        loader.set_terrain(&[TerrainMaterialInfo {
-            header: Header::of::<TerrainMaterialInfo>(),
+        loader.set_terrain(&[enshwick::abi::headed!(TerrainMaterialInfo {
             id: 9,
             flags: 0,
             hardness: 3,
             reserved: 0,
             item: ItemId::new(77),
             health: 500,
-        }]);
+        })]);
         let pass = || {
             let _ran = loader.tick(Duration::from_secs(1));
         };

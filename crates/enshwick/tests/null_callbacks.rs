@@ -8,7 +8,7 @@ mod tests {
     use core::ptr::{null, null_mut};
 
     use enshwick::abi::{
-        ActionCall, CallSpec, ChatLine, ChatRewrite, ControlSpec, Event, EventSpec, Headed, Header,
+        ActionCall, CallSpec, ChatLine, ChatRewrite, ControlSpec, Event, EventSpec, Headed,
         PointLink, Status, Str, TickHandle,
     };
     use enshwick::test::FakeHost;
@@ -58,22 +58,10 @@ mod tests {
         // SAFETY: the fake's table is a static, aligned and never written.
         let api = unsafe { &*loader.api() };
         let me = loader.handle();
-        let control = ControlSpec {
-            header: Header::of::<ControlSpec>(),
-            ..blank()
-        };
-        let link = PointLink {
-            header: Header::of::<PointLink>(),
-            ..blank()
-        };
-        let call = CallSpec {
-            header: Header::of::<CallSpec>(),
-            ..blank()
-        };
-        let spec = EventSpec {
-            header: Header::of::<EventSpec>(),
-            ..blank()
-        };
+        let control = enshwick::abi::headed!(ControlSpec { ..blank() });
+        let link = enshwick::abi::headed!(PointLink { ..blank() });
+        let call = enshwick::abi::headed!(CallSpec { ..blank() });
+        let spec = enshwick::abi::headed!(EventSpec { ..blank() });
         let answers = [
             (api.control)(me, &raw const control, None, null_mut()),
             (api.attach_point)(me, &raw const link, None, null_mut()),

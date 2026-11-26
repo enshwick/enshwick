@@ -4,7 +4,7 @@
 use crate::test::table::base::args;
 use crate::test::table::entries;
 use enshwick_core::Entity;
-use enshwick_core::abi::{Header, RespawnPointInfo, Status};
+use enshwick_core::abi::{RespawnPointInfo, Status};
 use enshwick_core::content::Guid;
 #[cfg(feature = "unstable")]
 use enshwick_core::game_events::UniqueSceneId;
@@ -30,7 +30,7 @@ pub(crate) struct FakeSpawnPoint {
 /// event: its entity id, little-endian, in the first four bytes.
 fn character_guid(character: Entity) -> Guid {
     let mut guid = [0; 16];
-    guid[..4].copy_from_slice(&character.0.to_le_bytes());
+    guid[..4].copy_from_slice(&character.get().to_le_bytes());
     Guid(guid)
 }
 
@@ -45,7 +45,7 @@ impl FakeHost {
     /// use enshwick::abi::RespawnPointInfo;
     ///
     /// let _loader = enshwick::test::FakeHost::new()
-    ///     .spawn_point(enshwick::Entity(40), RespawnPointInfo::BASE, [10.0, 2.0, 4.0])
+    ///     .spawn_point(enshwick::Entity::from_engine(40), RespawnPointInfo::BASE, [10.0, 2.0, 4.0])
     ///     .install();
     /// ```
     #[must_use]
@@ -77,8 +77,8 @@ impl FakeHost {
     ///
     /// let _loader = enshwick::test::FakeHost::new()
     ///     .game_events()
-    ///     .spawn_point(enshwick::Entity(40), RespawnPointInfo::SAVE_POINT, [0.0; 3])
-    ///     .spawn_point_names(enshwick::Entity(40), None, Some(UniqueSceneId(7)))
+    ///     .spawn_point(enshwick::Entity::from_engine(40), RespawnPointInfo::SAVE_POINT, [0.0; 3])
+    ///     .spawn_point_names(enshwick::Entity::from_engine(40), None, Some(UniqueSceneId(7)))
     ///     .install();
     /// ```
     #[cfg(feature = "unstable")]
@@ -110,13 +110,15 @@ impl FakeHost {
     /// use enshwick::abi::RespawnPointInfo;
     ///
     /// let _loader = enshwick::test::FakeHost::new()
-    ///     .spawn_point(enshwick::Entity(40), RespawnPointInfo::SAVE_POINT, [0.0; 3])
-    ///     .respawns_at(enshwick::Entity(2), enshwick::Entity(40))
+    ///     .spawn_point(enshwick::Entity::from_engine(40), RespawnPointInfo::SAVE_POINT, [0.0; 3])
+    ///     .respawns_at(enshwick::Entity::from_engine(2), enshwick::Entity::from_engine(40))
     ///     .install();
     /// ```
     #[must_use]
     pub fn respawns_at(mut self, character: Entity, spawn_point: Entity) -> Self {
-        self.world.respawn_points.insert(character.0, spawn_point);
+        self.world
+            .respawn_points
+            .insert(character.get(), spawn_point);
         self
     }
 }
@@ -222,20 +224,19 @@ entries! {
                 .host
                 .world
                 .respawn_points
-                .get(&character.0)
+                .get(&character.get())
                 .and_then(|at| s.host.world.spawn_points.iter().find(|p| p.entity == *at));
             let Some(point) = point else {
                 return Status::MISSING;
             };
             table::base::io::put_headed(
                 out,
-                RespawnPointInfo {
-                    header: Header::of::<RespawnPointInfo>(),
+                enshwick_core::headed!(RespawnPointInfo {
                     entity: point.entity,
                     kind: point.kind,
                     position: point.position,
                     orientation: point.orientation,
-                },
+                }),
             )
         })
     }
@@ -263,7 +264,7 @@ entries! {
             if !s.host.base.players.iter().any(|p| p.entity == character) {
                 return Err(Status::MISSING);
             }
-            s.host.world.respawn_points.insert(character.0, spawn_point);
+            s.host.world.respawn_points.insert(character.get(), spawn_point);
             Ok(point)
         });
         match set {

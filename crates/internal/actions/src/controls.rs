@@ -499,8 +499,7 @@ where
             control.name
         )));
     }
-    let spec = ControlSpec {
-        header: crate::abi::Header::of::<ControlSpec>(),
+    let spec = enshwick_abi::headed!(ControlSpec {
         name: Str::new(&control.name),
         label: Str::new(&control.label),
         key: control.keys[0].map_or(0, Key::bits),
@@ -509,7 +508,7 @@ where
         fires: control.fires,
         hold_ms: u32::try_from(control.hold.as_millis()).unwrap_or(u32::MAX),
         action: Str::new(action),
-    };
+    });
     let handler: Handler = Box::new(on);
     crate::load::hand_over(
         handler,

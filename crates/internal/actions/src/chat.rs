@@ -30,6 +30,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use crate::abi::{self, ChatRewrite, Event, Level};
 use crate::script::{Answer, Error, Ty, Value};
 use crate::{Entity, Host, Off, PlayerKey};
+use enshwick_base::vetoes::Verdict;
 
 /// What a chat line is.
 ///
@@ -76,7 +77,7 @@ impl ChatLine {
         let text = unsafe { line.text.as_str() }.unwrap_or_default();
         Self {
             player: (line.account.0 != 0).then_some(line.account),
-            entity: (line.entity.0 != 0).then_some(line.entity),
+            entity: (line.entity.get() != 0).then_some(line.entity),
             kind: match line.kind {
                 abi::ChatLine::PLAYER => ChatKind::Player,
                 abi::ChatLine::EMOTE => ChatKind::Emote,
@@ -107,6 +108,19 @@ pub enum ChatVerdict {
     /// boundary; the filters after this one see it. An empty text drops
     /// the line.
     Rewrite(String),
+}
+
+impl From<bool> for ChatVerdict {
+    fn from(kept: bool) -> Self {
+        if kept { Self::Keep } else { Self::Drop }
+    }
+}
+
+/// A refusal drops the line; its reason goes nowhere, as chat shows none.
+impl From<Verdict> for ChatVerdict {
+    fn from(verdict: Verdict) -> Self {
+        Self::from(verdict.passes())
+    }
 }
 
 impl Answer for ChatVerdict {
@@ -194,7 +208,14 @@ fn cut(text: &str, max: usize) -> &str {
 pub trait LoadMethods {
     /// As `Load::on_chat`.
     #[doc(hidden)]
-    fn on_chat<F>(&mut self, filter: F) -> Result<(), Off>
+    fn on_chat<F, V>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&ChatLine) -> V + Send + Sync + 'static,
+        V: Into<ChatVerdict>;
+
+    /// As `Load::chat_filter`.
+    #[doc(hidden)]
+    fn chat_filter<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&ChatLine) -> ChatVerdict + Send + Sync + 'static;
 
@@ -206,7 +227,15 @@ pub trait LoadMethods {
 }
 
 impl LoadMethods for crate::BaseLoad {
-    fn on_chat<F>(&mut self, filter: F) -> Result<(), Off>
+    fn on_chat<F, V>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&ChatLine) -> V + Send + Sync + 'static,
+        V: Into<ChatVerdict>,
+    {
+        self.chat_filter(move |line| filter(line).into())
+    }
+
+    fn chat_filter<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&ChatLine) -> ChatVerdict + Send + Sync + 'static,
     {
@@ -245,18 +274,30 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_bool_and_a_verdict_keep_or_drop_the_line() {
+        assert_eq!(ChatVerdict::from(true), ChatVerdict::Keep);
+        assert_eq!(ChatVerdict::from(false), ChatVerdict::Drop);
+        assert_eq!(ChatVerdict::from(Verdict::Pass), ChatVerdict::Keep);
+        assert_eq!(
+            ChatVerdict::from(Verdict::refuse_because("no")),
+            ChatVerdict::Drop
+        );
+    }
+
+    #[test]
     fn a_line_names_its_kind_and_no_sender_or_character_when_the_loader_gives_none() {
-        let line = |player, entity, kind| abi::ChatLine {
-            header: abi::Header::of::<abi::ChatLine>(),
-            account: PlayerKey::new(player),
-            entity: Entity(entity),
-            kind,
-            loca: [0; 2],
-            text: abi::Str::new("hi"),
+        let line = |player, entity, kind| {
+            enshwick_abi::headed!(abi::ChatLine {
+                account: PlayerKey::new(player),
+                entity: Entity::from_engine(entity),
+                kind,
+                loca: [0; 2],
+                text: abi::Str::new("hi"),
+            })
         };
         let emote = ChatLine::of(&line(7, 9, abi::ChatLine::EMOTE));
         assert_eq!(emote.player, Some(PlayerKey::new(7)));
-        assert_eq!(emote.entity, Some(Entity(9)));
+        assert_eq!(emote.entity, Some(Entity::from_engine(9)));
         assert_eq!(emote.kind, ChatKind::Emote);
         assert_eq!(emote.text, "hi");
         let notice = ChatLine::of(&line(0, 0, 4));

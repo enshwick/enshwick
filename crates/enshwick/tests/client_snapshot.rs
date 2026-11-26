@@ -55,7 +55,7 @@ side = "both""#
             .iter()
             .position(|action| *action == GameAction::Block)
             .unwrap();
-        loader.set_client_snapshot(Raw {
+        loader.set_client_snapshot(enshwick::abi::headed!(Raw {
             state: Raw::FRESH,
             available: Raw::SCREENS | Raw::MENU_TAB | Raw::HELD | Raw::PLAYER | Raw::RECIPE,
             session: 3,
@@ -64,10 +64,10 @@ side = "both""#
             hud_screen: Str::new("PlayerCrafting"),
             menu_tab: Str::new("Backpack"),
             held: 1 << block,
-            player: Entity(512),
+            player: Entity::from_engine(512),
             highlighted_recipe: RecipeId(0x7cd8_0a04),
             ..Raw::EMPTY
-        });
+        }));
         // Opening `Input` in init started the reads: the first ask after one
         // interface step answers, with no throwaway ask before it.
         let _drawn = loader.draw_frame();
@@ -78,7 +78,7 @@ side = "both""#
         assert_eq!(snapshot.hud_screen(), Some("PlayerCrafting"));
         assert_eq!(snapshot.menu_tab(), Some("Backpack"));
         assert_eq!(snapshot.return_screen(), None);
-        assert_eq!(snapshot.player(), Some(Entity(512)));
+        assert_eq!(snapshot.player(), Some(Entity::from_engine(512)));
         assert_eq!(snapshot.highlighted_recipe(), Some(RecipeId(0x7cd8_0a04)));
         assert_eq!(snapshot.held().map(|held| held.bits()), Some(1 << block));
     }
@@ -86,14 +86,14 @@ side = "both""#
     #[test]
     fn a_paused_game_s_snapshot_is_stale_with_its_age() {
         let (loader, input) = input(Side::CLIENT);
-        loader.set_client_snapshot(Raw {
+        loader.set_client_snapshot(enshwick::abi::headed!(Raw {
             state: Raw::STALE,
             available: Raw::SCREENS | Raw::MENU_TAB,
             session: 1,
             age_ms: 4200,
             hud_screen: Str::new("SystemMenu"),
             ..Raw::EMPTY
-        });
+        }));
         let _drawn = loader.draw_frame();
         let snapshot = input.client_snapshot().unwrap();
         assert_eq!(snapshot.state(), SnapshotState::Stale);
@@ -107,31 +107,31 @@ side = "both""#
     fn a_snapshot_names_the_prompt_s_target_and_verb_and_the_menu_s_character() {
         use enshwick::interactions::Verb;
         let (loader, input) = input(Side::CLIENT);
-        loader.set_client_snapshot(Raw {
+        loader.set_client_snapshot(enshwick::abi::headed!(Raw {
             state: Raw::FRESH,
             available: Raw::SCREENS | Raw::PROMPT | Raw::CHARACTER,
             session: 1,
             age_ms: 16,
             hud_screen: Str::new("InGame"),
-            prompt_target: Entity(1052),
+            prompt_target: Entity::from_engine(1052),
             prompt_verb: Verb::Open.id(),
             ..Raw::EMPTY
-        });
+        }));
         let _drawn = loader.draw_frame();
         let facing = input.client_snapshot().unwrap();
-        assert_eq!(facing.prompt_target(), Some(Entity(1052)));
+        assert_eq!(facing.prompt_target(), Some(Entity::from_engine(1052)));
         assert_eq!(
             facing.prompt_verb().and_then(Verb::from_id),
             Some(Verb::Open)
         );
         assert_eq!(facing.selected_character(), None, "no main menu shows");
         assert!(facing.reads(SnapshotPart::Character));
-        loader.set_client_snapshot(Raw {
+        loader.set_client_snapshot(enshwick::abi::headed!(Raw {
             state: Raw::NEVER,
             available: Raw::PROMPT | Raw::CHARACTER,
             character: 2,
             ..Raw::EMPTY
-        });
+        }));
         let _drawn = loader.draw_frame();
         let menu = input.client_snapshot().unwrap();
         assert_eq!(menu.selected_character(), Some(2));

@@ -164,11 +164,10 @@ entries! {
         match defined {
             Ok((id, live)) => crate::test::table::put_headed(
                 out,
-                PointHandle {
-                    header: enshwick_core::abi::Header::of::<PointHandle>(),
+                enshwick_core::headed!(PointHandle {
                     id,
                     live,
-                },
+                }),
             ),
             Err(status) => status,
         }

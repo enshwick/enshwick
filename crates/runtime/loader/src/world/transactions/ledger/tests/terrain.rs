@@ -194,10 +194,10 @@ fn an_undo_begun_waits_for_a_column_that_unloads_and_then_finishes() {
 
 /// A dig of radius 4 whose box ends past the far edge of the test world.
 fn past_the_edge() -> Change {
-    Change::Terrain(TerrainEdit {
+    Change::Terrain(enshwick_abi::headed!(TerrainEdit {
         position: [5119.0, 20.0, 20.0],
         ..terrain(20.0)
-    })
+    }))
 }
 
 #[test]
@@ -229,10 +229,10 @@ fn once_the_extent_is_known_a_commit_leaving_the_world_is_refused() {
         ledger.commit(ME, None, vec![dig(20.0), past_the_edge()]),
         Err(TransactionError::OutsideWorld)
     );
-    let high = TerrainEdit {
+    let high = enshwick_abi::headed!(TerrainEdit {
         position: [20.0, 1023.0, 20.0],
         ..terrain(20.0)
-    };
+    });
     assert_eq!(
         ledger.commit(ME, None, vec![Change::Terrain(high)]),
         Err(TransactionError::OutsideWorld)

@@ -569,7 +569,7 @@ pub(crate) fn component(
         // type index of `hash`, whose type has a static half (`names_static`
         // returned true), on the game thread (checked by `reader` inside
         // `type_at`).
-        return unsafe { halves.read(at.world, at.index, entity.0) }.map(<*const u8>::cast);
+        return unsafe { halves.read(at.world, at.index, entity.get()) }.map(<*const u8>::cast);
     }
     let mut out = [0usize; 2];
     // SAFETY: `read_component` is the table's `ecs.component_read_raw`;
@@ -581,7 +581,7 @@ pub(crate) fn component(
             &raw mut out,
             core::ptr::with_exposed_provenance(at.world),
             at.index,
-            entity.0,
+            entity.get(),
         );
     };
     match out[0] {
@@ -645,11 +645,12 @@ impl TemplateWalk {
     pub(crate) unsafe fn template(&self, world: usize, entity: Entity) -> Option<[u8; 16]> {
         // SAFETY: `entity_slot` is the table's `ecs.entity_slot`; `world` is
         // the caller's live entity world and the table's `ecs.entity_map`
-        // offset its id-to-slot map; `entity` lives across the call.
+        // offset its id-to-slot map; `entity`, a transparent `u32`, lives
+        // across the call.
         let slot = unsafe {
             (self.entity_slot)(
                 core::ptr::with_exposed_provenance(world + self.entity_map),
-                &raw const entity.0,
+                (&raw const entity).cast::<u32>(),
             )
         };
         // SAFETY: the table's `ecs.entity_map_capacity` offset of the
@@ -846,8 +847,8 @@ mod tests {
         assert_eq!(
             found,
             [
-                (Entity(7), CharacterId([0xa1; 16])),
-                (Entity(8), CharacterId([0xb2; 16]))
+                (Entity::from_engine(7), CharacterId([0xa1; 16])),
+                (Entity::from_engine(8), CharacterId([0xb2; 16]))
             ]
         );
     }

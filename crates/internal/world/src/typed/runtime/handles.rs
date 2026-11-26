@@ -112,7 +112,7 @@ impl RawComponent {
     /// Windows once or twice, 0.8 to 1.4 ms each on the game's 490 MB of
     /// set-up data.
     pub(crate) fn read(&self, world: World, entity: Entity) -> Result<Option<Value>, Off> {
-        let Some(data) = world.component(entity, self.ty) else {
+        let Some(data) = world.component_at(entity, self.ty) else {
             return Ok(None);
         };
         let registry = Registry::game()?;

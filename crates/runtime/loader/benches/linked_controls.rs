@@ -10,14 +10,14 @@ use enshwick_core::abi::ControlSpec;
 use enshwick_loader::actions::linked_controls::{Follow, Players};
 
 const PLAYERS: [Entity; 8] = [
-    Entity(11),
-    Entity(12),
-    Entity(13),
-    Entity(14),
-    Entity(15),
-    Entity(16),
-    Entity(17),
-    Entity(18),
+    Entity::from_engine(11),
+    Entity::from_engine(12),
+    Entity::from_engine(13),
+    Entity::from_engine(14),
+    Entity::from_engine(15),
+    Entity::from_engine(16),
+    Entity::from_engine(17),
+    Entity::from_engine(18),
 ];
 
 fn follows() -> [Follow; 2] {

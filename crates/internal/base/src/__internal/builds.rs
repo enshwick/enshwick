@@ -12,6 +12,10 @@ use crate::abi::{ResourceKey, Status};
 /// Why a served resource was not rebuilt or read, as the loader and the fake
 /// answer a mod. Exhaustive, so both handle every outcome.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[expect(
+    clippy::exhaustive_enums,
+    reason = "hidden: only the loader and the fake host name it"
+)]
 pub enum BuildResourceError {
     /// The mod serves no such key.
     #[error("the mod serves no such resource")]
@@ -54,6 +58,10 @@ impl BuildResourceError {
 
 /// Who a build of a served resource is for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[expect(
+    clippy::exhaustive_enums,
+    reason = "hidden: only the loader and the fake host name it"
+)]
 pub enum Build {
     /// The game's first build or a rebuild, whose bytes the game holds: a
     /// patch that fails turns its mod off, and a served read inside makes
@@ -70,6 +78,10 @@ pub enum Build {
 
 /// Bytes a build reads: where they lie and how many.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "hidden: only the loader and the fake host name it"
+)]
 pub struct View {
     /// Their address, exposed so the side that lent them reads them again.
     pub at: usize,
@@ -79,6 +91,10 @@ pub struct View {
 
 /// Why a patch did not build.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[expect(
+    clippy::exhaustive_enums,
+    reason = "hidden: only the loader and the fake host name it"
+)]
 pub enum PatchFailure {
     /// Its builder panicked: the patch turns off for the process, and its
     /// mod reports the resource as a feature off.
@@ -91,6 +107,10 @@ pub enum PatchFailure {
 
 /// What a side logs of a build that made nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[expect(
+    clippy::exhaustive_enums,
+    reason = "hidden: only the loader and the fake host name it"
+)]
 pub enum Unbuilt {
     /// The base is over 4 GiB, more than a patch can take.
     TooLarge,
@@ -106,6 +126,10 @@ pub enum Unbuilt {
 /// A finished build: its bytes, the mods whose patches made them, in order,
 /// and whether a patch read another served key.
 #[derive(Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "hidden: only the loader and the fake host name it"
+)]
 pub struct Built<B, O> {
     /// The bytes, owned by the side that lent their buffer.
     pub bytes: B,
@@ -119,6 +143,10 @@ pub struct Built<B, O> {
 
 /// What the game holds of a served key, for a rebuild.
 #[derive(Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "hidden: only the loader and the fake host name it"
+)]
 pub struct Held<K, O> {
     /// The base its first build kept; `None` when it kept none.
     pub base: Option<K>,
@@ -130,6 +158,10 @@ pub struct Held<K, O> {
 
 /// The game's first build of a served key, as its side records it.
 #[derive(Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "hidden: only the loader and the fake host name it"
+)]
 pub struct FirstBuild<B, O> {
     /// The build, or why there is none.
     pub built: Result<Built<B, O>, BuildResourceError>,
@@ -284,6 +316,10 @@ pub fn patch_runs<M: PartialEq>(
 /// The reasons the game's first build of a served key keeps a copy of its
 /// base for a rebuild; any one is enough.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "hidden: only the loader and the fake host name it"
+)]
 pub struct KeepBase {
     /// A mod asked during init to rebuild the key.
     pub asked: bool,

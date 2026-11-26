@@ -31,61 +31,51 @@ mod tests {
     impl Mod for Edits {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let vanilla = KnowledgeId::new(VANILLA_QUEST);
-            load.change_quest(
-                vanilla,
-                QuestChange {
-                    name: Some(tag("renamed")),
-                    main: Some(true),
-                    priority: Some(5),
-                    steps: vec![
-                        StepEdit::Insert(StepInsert {
-                            at: 0,
-                            step: QuestStep {
-                                marker: Some(tag("camp")),
-                                ..QuestStep::new(tag("first"), tag("first.text"), is(1), is(2))
-                            },
-                        }),
-                        StepEdit::Move(StepMove { from: 0, to: 1 }),
-                        StepEdit::Change(StepChange {
-                            step: 0,
-                            level: Some(9),
-                            ..StepChange::default()
-                        }),
-                    ],
-                    ..QuestChange::default()
-                },
-            )?;
-            load.change_journal_page(
-                PAGE,
-                PageChange {
-                    name: Some(tag("page")),
-                    tutorial: Some(true),
-                    entries: vec![StepEdit::Insert(StepInsert {
-                        at: 0,
-                        step: QuestStep {
-                            shown_when: Some(is(3)),
-                            ..QuestStep::owned(tag("entry"), tag("entry.text"))
-                        },
-                    })],
-                    ..PageChange::default()
-                },
-            )?;
+            load.change_quest(vanilla, {
+                let mut value = QuestChange::default();
+                value.name = Some(tag("renamed"));
+                value.main = Some(true);
+                value.priority = Some(5);
+                value.steps = vec![
+                    StepEdit::Insert(StepInsert::new(0, {
+                        let mut value =
+                            QuestStep::new(tag("first"), tag("first.text"), is(1), is(2));
+                        value.marker = Some(tag("camp"));
+                        value
+                    })),
+                    StepEdit::Move(StepMove { from: 0, to: 1 }),
+                    StepEdit::Change({
+                        let mut value = StepChange::default();
+                        value.step = 0;
+                        value.level = Some(9);
+                        value
+                    }),
+                ];
+                value
+            })?;
+            load.change_journal_page(PAGE, {
+                let mut value = PageChange::default();
+                value.name = Some(tag("page"));
+                value.tutorial = Some(true);
+                value.entries = vec![StepEdit::Insert(StepInsert::new(0, {
+                    let mut value = QuestStep::owned(tag("entry"), tag("entry.text"));
+                    value.shown_when = Some(is(3));
+                    value
+                }))];
+                value
+            })?;
             for refused in [
                 load.change_journal_page(EntryId::new(1), PageChange::default()),
-                load.change_journal_page(
-                    PAGE,
-                    PageChange {
-                        category: Some(tag("own-category")),
-                        ..PageChange::default()
-                    },
-                ),
-                load.change_quest(
-                    vanilla,
-                    QuestChange {
-                        steps: vec![StepEdit::Remove(3)],
-                        ..QuestChange::default()
-                    },
-                ),
+                load.change_journal_page(PAGE, {
+                    let mut value = PageChange::default();
+                    value.category = Some(tag("own-category"));
+                    value
+                }),
+                load.change_quest(vanilla, {
+                    let mut value = QuestChange::default();
+                    value.steps = vec![StepEdit::Remove(3)];
+                    value
+                }),
             ] {
                 assert!(refused.is_err());
             }

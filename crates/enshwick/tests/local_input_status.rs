@@ -1,7 +1,7 @@
 //! Cached sampler diagnostics are distinct from held gameplay controls.
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{Header, LocalInputInfo as Info, Side, Status};
+    use enshwick::abi::{LocalInputInfo as Info, Side, Status};
     use enshwick::input::Input;
     use enshwick::{Load, Mod, Off, WorldError};
     use std::sync::Mutex;
@@ -36,8 +36,7 @@ side = "both""#
         assert_eq!(never.age_ms, None);
         assert_eq!(input.local_status().unwrap(), never);
         loader.hold_locally(Some(0));
-        loader.set_local_input_status(Info {
-            header: Header::of::<Info>(),
+        loader.set_local_input_status(enshwick::abi::headed!(Info {
             flags: Info::REQUESTED
                 | Info::LAYOUT_AVAILABLE
                 | Info::LINK_AVAILABLE
@@ -46,7 +45,7 @@ side = "both""#
                 | Info::FRESH,
             reserved: 0,
             age_ms: 15,
-        });
+        }));
         let live = input.local_status().unwrap();
         assert!(
             live.requested
@@ -63,12 +62,11 @@ side = "both""#
         );
         let _step = loader.draw_frame();
         assert_eq!(input.local_held().unwrap().bits(), 0);
-        loader.set_local_input_status(Info {
-            header: Header::of::<Info>(),
+        loader.set_local_input_status(enshwick::abi::headed!(Info {
             flags: Info::SAMPLE_PRESENT,
             reserved: 0,
             age_ms: 1001,
-        });
+        }));
         let stale = input.local_status().unwrap();
         assert!(
             stale.sample_present
@@ -107,12 +105,11 @@ side = "both""#
         // The loader decides freshness and its own tests hold the 1000 ms
         // boundary; the SDK only copies the flag, so no age here implies it.
         for age_ms in [0, u64::MAX - 1, u64::MAX] {
-            loader.set_local_input_status(Info {
-                header: Header::of::<Info>(),
+            loader.set_local_input_status(enshwick::abi::headed!(Info {
                 flags: Info::SAMPLE_PRESENT | (1 << 31),
                 reserved: 0,
                 age_ms,
-            });
+            }));
             let observed = input.local_status().unwrap();
             assert_eq!(observed.age_ms, (age_ms != u64::MAX).then_some(age_ms));
             assert!(observed.requested && observed.sample_present);

@@ -68,10 +68,7 @@ pub(super) fn pool(sealed: &Sealed) -> Vec<Candidate<'_>> {
     sealed
         .affixes
         .iter()
-        .map(|affix| Candidate {
-            key: AffixKey::of(&affix.id),
-            def: &affix.def,
-        })
+        .map(|affix| Candidate::new(AffixKey::of(&affix.id), &affix.def))
         .collect()
 }
 
@@ -114,11 +111,11 @@ pub(crate) fn roll(loader: &Loader, roll: &AffixRoll) -> Result<u32, RollAffixes
         .filter(|_| wanted())
         .ok_or(RollAffixesError::Unopened)?;
     crate::engine::world::server()?;
-    if roll.pide == Entity(0) || roll.item == enshwick_core::ItemId::new(0) {
+    if roll.pide == Entity::from_engine(0) || roll.item == enshwick_core::ItemId::new(0) {
         return Err(RollAffixesError::NoItem);
     }
     let category = crate::inventory::transactions::item_info(loader, roll.item.get())?.category;
-    let current = crate::inventory::item_data::get_platform(roll.pide.0, roll.item.get())
+    let current = crate::inventory::item_data::get_platform(roll.pide.get(), roll.item.get())
         .and_then(|bytes| postcard::from_bytes::<ItemStats>(&bytes).ok())
         .unwrap_or_default();
     let rules = RollRules::new(roll.min, roll.max)
@@ -130,7 +127,7 @@ pub(crate) fn roll(loader: &Loader, roll: &AffixRoll) -> Result<u32, RollAffixes
         return Ok(0);
     }
     let bytes = postcard::to_allocvec(&next).map_err(|_| RollAffixesError::Encode)?;
-    crate::inventory::item_data::set_platform(roll.pide.0, roll.item.get(), &bytes)?;
+    crate::inventory::item_data::set_platform(roll.pide.get(), roll.item.get(), &bytes)?;
     Ok(u32::try_from(next.affixes.len()).unwrap_or(0))
 }
 

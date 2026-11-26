@@ -14,7 +14,7 @@
 
 use std::sync::OnceLock;
 
-use enshwick_core::abi::{Header, TerrainEdit, TerrainMaterialInfo};
+use enshwick_core::abi::{TerrainEdit, TerrainMaterialInfo};
 
 use crate::engine::loader::Loader;
 use crate::engine::memory::{BlobArray, read};
@@ -347,8 +347,7 @@ pub(crate) fn materials(loader: &Loader) -> Result<Vec<TerrainMaterialInfo>, Ter
             // `keen::TerrainTerraformingConfig` places its `canBeFlattened`
             // byte at `config_flatten`.
             let flatten: u8 = unsafe { read(config, layout.config_flatten) };
-            TerrainMaterialInfo {
-                header: Header::of::<TerrainMaterialInfo>(),
+            enshwick_abi::headed!(TerrainMaterialInfo {
                 // SAFETY: `config` is entry `i < count` of the array the
                 // header points at, `config_size` bytes each; the reflected
                 // `keen::TerrainTerraformingConfig` places its
@@ -371,7 +370,7 @@ pub(crate) fn materials(loader: &Loader) -> Result<Vec<TerrainMaterialInfo>, Ter
                 // `keen::TerrainTerraformingConfig` places its `healthPoints`
                 // at `config_health`.
                 health: unsafe { read(config, layout.config_health) },
-            }
+            })
         })
         .filter(|info| !crate::content::terrain_materials::padding(info.id))
         .collect())

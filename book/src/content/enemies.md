@@ -59,18 +59,15 @@ use enshwick::content::enemies::{ArsenalChange, NewArsenal, NewEnemy};
 use enshwick::typed::FactionType;
 
 fn init(load: &mut enshwick::Load<'_>, wolf: Guid, wolf_arsenal: Guid, bite: Guid) -> Result<(), enshwick::Off> {
-    let biter = load.add_arsenal(NewArsenal {
-        id: id!("biter"),
-        like: wolf_arsenal,
-        change: ArsenalChange { attacks: Some(vec![bite]), ..ArsenalChange::default() },
-    })?;
-    load.add_enemy(NewEnemy {
-        level: Some(20),
-        health: Some(2.0),
-        faction: Some(FactionType::Vukah),
-        arsenal: Some(biter),
-        ..NewEnemy::new(id!("elder-wolf"), wolf)
-    })?;
+    let mut arsenal_change = ArsenalChange::default();
+    arsenal_change.attacks = Some(vec![bite]);
+    let biter = load.add_arsenal(NewArsenal::new(id!("biter"), wolf_arsenal, arsenal_change))?;
+    let mut enemy = NewEnemy::new(id!("elder-wolf"), wolf);
+    enemy.level = Some(20);
+    enemy.health = Some(2.0);
+    enemy.faction = Some(FactionType::Vukah);
+    enemy.arsenal = Some(biter);
+    load.add_enemy(enemy)?;
     Ok(())
 }
 ```

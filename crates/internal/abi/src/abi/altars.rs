@@ -19,6 +19,10 @@ use crate::abi::{Entity, Header};
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct Bounds {
     /// The inclusive lower corner.
     pub min: Cell,
@@ -48,7 +52,7 @@ pub const ALTAR_LEVELS: usize = 16;
 /// use enshwick::abi::{AltarInfo, Bounds, Header};
 ///
 /// let mut altar = AltarInfo::EMPTY;
-/// altar.entity = enshwick::Entity(4096);
+/// altar.entity = enshwick::Entity::from_engine(4096);
 /// altar.level = 1;
 /// altar.level_count = 1;
 /// altar.zone = Bounds { min: [0, 0, 0], max: [80, 80, 80] };
@@ -57,6 +61,7 @@ pub const ALTAR_LEVELS: usize = 16;
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct AltarInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -116,11 +121,12 @@ impl AltarInfo {
 /// ```
 /// use enshwick::abi::{AltarZone, Header};
 ///
-/// let zone = AltarZone { header: Header::of::<AltarZone>(), altar: enshwick::Entity(4096), level: 2, reserved: [0; 3], grow: 0, height: 60 };
+/// let zone = enshwick::abi::headed!(AltarZone { altar: enshwick::Entity::from_engine(4096), level: 2, reserved: [0; 3], grow: 0, height: 60 });
 /// assert_eq!(zone.grow, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct AltarZone {
     /// Size and version of this struct.
     pub header: Header,
@@ -163,17 +169,17 @@ pub type AltarZoneFilterFn = unsafe extern "system" fn(zone: *mut AltarZone, use
 /// ```
 /// use enshwick::abi::{BuildingZoneCheck, Extent, Header};
 ///
-/// let check = BuildingZoneCheck {
-///     header: Header::of::<BuildingZoneCheck>(),
+/// let check = enshwick::abi::headed!(BuildingZoneCheck {
 ///     zones: core::ptr::null(),
 ///     zone_count: 0,
 ///     object: Extent::default(),
 ///     margin: 0.0,
-/// };
+/// });
 /// assert_eq!(check.zone_count, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct BuildingZoneCheck {
     /// Size and version of this struct.
     pub header: Header,
@@ -202,6 +208,10 @@ impl_headed!(BuildingZoneCheck);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct Extent {
     /// The lowest corner.
     pub min: Metres,

@@ -28,14 +28,13 @@ mod tests {
 
     fn hook_spec() -> HookSpec {
         let detour = enshwick::test::address(detour as extern "system" fn());
-        HookSpec {
-            header: Header::of::<HookSpec>(),
+        enshwick::abi::headed!(HookSpec {
             target: CODE.as_ptr().addr() as u64,
             detour: usize::try_from(detour).unwrap_or(usize::MAX),
             next: &raw const NEXT,
             priority: 0,
             flags: HookFlags::NONE,
-        }
+        })
     }
 
     /// A callback of the type `F` that an entry takes; the entries answer

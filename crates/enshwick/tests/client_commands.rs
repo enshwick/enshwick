@@ -363,7 +363,7 @@ side = "both""#
         let equip = |equipment: &str| {
             ClientCommand::new(
                 CommandAction::Equip {
-                    slot: enshwick::inventory::SlotRef::new(enshwick::Entity(41), 0),
+                    slot: enshwick::inventory::SlotRef::new(enshwick::Entity::from_engine(41), 0),
                     equipment: equipment.to_owned(),
                 },
                 1,
@@ -539,10 +539,10 @@ side = "both""#
             matches!(input.client_command(&leave), Err(WorldError::Refused)),
             "no world to leave"
         );
-        loader.set_client_snapshot(enshwick::abi::ClientSnapshot {
+        loader.set_client_snapshot(enshwick::abi::headed!(enshwick::abi::ClientSnapshot {
             session: 2,
             ..enshwick::abi::ClientSnapshot::EMPTY
-        });
+        }));
         assert!(matches!(
             input.client_command(&join("127.0.0.1:15637")),
             Err(WorldError::Refused)
@@ -616,10 +616,10 @@ side = "both""#
             input.client_command(&on_a_screen),
             Err(WorldError::Refused)
         ));
-        loader.set_client_snapshot(enshwick::abi::ClientSnapshot {
+        loader.set_client_snapshot(enshwick::abi::headed!(enshwick::abi::ClientSnapshot {
             session: 2,
             ..enshwick::abi::ClientSnapshot::EMPTY
-        });
+        }));
         assert!(
             matches!(input.client_command(&host(0, 0)), Err(WorldError::Refused)),
             "in a world"
@@ -628,17 +628,16 @@ side = "both""#
 
     #[test]
     fn the_mods_screen_and_a_mod_s_page_open_by_command_and_the_snapshot_names_them() {
-        use enshwick::abi::{Header, ModInfo, Str};
+        use enshwick::abi::{ModInfo, Str};
         use enshwick::input::LoaderPage;
         let (loader, input) = started(
             enshwick::test::FakeHost::new()
                 .side(Side::CLIENT)
                 .player_input()
-                .loaded(ModInfo {
-                    header: Header::of::<ModInfo>(),
+                .loaded(enshwick::abi::headed!(ModInfo {
                     id: Str::new("you.trail"),
                     ..ModInfo::EMPTY
-                }),
+                })),
         );
         let open = ClientCommand::new(CommandAction::OpenMods, 1);
         let id = input.client_command(&open).unwrap();
@@ -663,12 +662,12 @@ side = "both""#
             input.command_status(id).unwrap().state,
             CommandState::Observed
         );
-        loader.set_client_snapshot(enshwick::abi::ClientSnapshot {
+        loader.set_client_snapshot(enshwick::abi::headed!(enshwick::abi::ClientSnapshot {
             available: enshwick::abi::ClientSnapshot::LOADER_SCREEN,
             loader_screen: enshwick::abi::ClientSnapshot::MOD_PAGE,
             loader_screen_mod: Str::new("you.trail"),
             ..enshwick::abi::ClientSnapshot::EMPTY
-        });
+        }));
         let _asked = input.client_snapshot().unwrap();
         let _drawn = loader.draw_frame();
         let snapshot = input.client_snapshot().unwrap();
@@ -698,21 +697,21 @@ side = "both""#
                 id,
             )
         };
-        let open = Raw {
+        let open = enshwick::abi::headed!(Raw {
             kind: Raw::OPEN_SCREEN,
             session: 1,
             target: Str::new("Backpack"),
             expected_screen: Str::new("InGame"),
             ..Raw::EMPTY
-        };
+        });
         let (status, theirs) = queue(open);
         assert_eq!(status, Code::OK, "one of a kind per mod, as the loader");
-        let ping = Raw {
+        let ping = enshwick::abi::headed!(Raw {
             kind: Raw::PING,
             session: 1,
             position: [10.0, 5.0, 20.0],
             ..Raw::EMPTY
-        };
+        });
         assert_eq!(queue(ping).0, Code::OK, "a waypoint or ping per mod");
         assert_eq!(queue(open).0, Code::REFUSED, "its own still waits");
         assert!(
@@ -734,11 +733,11 @@ side = "both""#
                 .is_err(),
             "nor this mod the other's"
         );
-        let cancel = Raw {
+        let cancel = enshwick::abi::headed!(Raw {
             kind: Raw::CANCEL,
             cancels: mine.as_u64(),
             ..Raw::EMPTY
-        };
+        });
         let _cancelled = queue(cancel);
         assert_eq!(
             input.command_status(mine).unwrap().state,
@@ -779,11 +778,11 @@ side = "both""#
         let loader = enshwick::test::FakeHost::new()
             .side(Side::CLIENT)
             .player_input()
-            .map_frame(enshwick::abi::MapFrameInfo {
+            .map_frame(enshwick::abi::headed!(enshwick::abi::MapFrameInfo {
                 size: [10240.0; 2],
                 metres_per_cell: 8.0,
                 ..enshwick::abi::MapFrameInfo::EMPTY
-            })
+            }))
             .install();
         // SAFETY: these are this file's generated exports.
         let status =
@@ -859,16 +858,15 @@ side = "both""#
 
     #[test]
     fn dialogs_do_not_show_in_game_before_the_mod_s_init_returned() {
-        use enshwick::abi::{ClientSnapshot, Header};
+        use enshwick::abi::ClientSnapshot;
 
         let loader = enshwick::test::FakeHost::new()
             .side(Side::CLIENT)
             .player_input()
             .install();
-        let mut snapshot = ClientSnapshot {
-            header: Header::of::<ClientSnapshot>(),
+        let mut snapshot = enshwick::abi::headed!(ClientSnapshot {
             ..ClientSnapshot::EMPTY
-        };
+        });
         // SAFETY: the fake's table is a static; `snapshot` is writable and
         // headed for the call.
         let status =
@@ -968,7 +966,7 @@ side = "both""#
         use enshwick::input::WindowItemKind;
         let (loader, input) = input(Side::CLIENT);
         assert_eq!(input.client_windows().unwrap(), []);
-        loader.set_client_windows(vec![ClientWindowItem {
+        loader.set_client_windows(vec![enshwick::abi::headed!(ClientWindowItem {
             kind: ClientWindowItem::FIELD,
             field: ClientWindowItem::TEXT,
             flags: ClientWindowItem::SHOWN,
@@ -977,7 +975,7 @@ side = "both""#
             label: Str::new("Message"),
             line: Str::new("Announce"),
             ..ClientWindowItem::EMPTY
-        }]);
+        })]);
         let items = input.client_windows().unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(

@@ -6,7 +6,7 @@ mod tests {
     use core::ffi::c_void;
     use std::sync::Mutex;
 
-    use enshwick::abi::{self, Header, Side, Status};
+    use enshwick::abi::{self, Side, Status};
     use enshwick::survivors::{NpcId, SummonVerdict};
     use enshwick::{Entity, ItemId, Load, Mod, Off};
 
@@ -75,29 +75,27 @@ mod tests {
     }
 
     fn bed(home: [i64; 3], bed_at: [i64; 3]) -> abi::BedCheck {
-        abi::BedCheck {
-            header: Header::of::<abi::BedCheck>(),
+        enshwick::abi::headed!(abi::BedCheck {
             npc_id: FARMER,
-            entity: Entity(1),
-            bed_id: Entity(2),
+            entity: Entity::from_engine(1),
+            bed_id: Entity::from_engine(2),
             home,
             bed_at,
-        }
+        })
     }
 
     fn summon(item: ItemId, ammo: ItemId, consumed: u8) -> abi::Summon {
-        abi::Summon {
-            header: Header::of::<abi::Summon>(),
+        enshwick::abi::headed!(abi::Summon {
             item,
             ammo,
             template: enshwick::content::Guid([0; 16]),
             target: [1, 2, 3],
             slot: 0,
-            pide: Entity(900),
+            pide: Entity::from_engine(900),
             meter: [3, 10],
             consumed,
             reserved: [0; 3],
-        }
+        })
     }
 
     #[test]
@@ -132,7 +130,7 @@ mod tests {
         assert_eq!(loader.summoned(&summon(STAFF, ItemId::new(0), 1)), 1);
         assert_eq!(
             *SUMMONED.lock().unwrap(),
-            [(STAFF, Some(Entity(900)), Some([3, 10]), true)]
+            [(STAFF, Some(Entity::from_engine(900)), Some([3, 10]), true)]
         );
     }
 

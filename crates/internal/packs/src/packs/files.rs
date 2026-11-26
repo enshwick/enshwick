@@ -22,6 +22,7 @@ use super::{
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("{file}:{line}:{column}: {message}")]
+#[non_exhaustive]
 pub struct PackError {
     /// The file, as the pack names it, such as `items.toml`.
     pub file: String,

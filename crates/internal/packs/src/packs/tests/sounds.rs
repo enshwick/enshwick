@@ -125,9 +125,10 @@ fn a_change_names_any_container_and_takes_the_pack_s_own_recordings() {
     assert_eq!(creak.change.max_count, Some(2));
     assert_eq!(
         creak.change.takes,
-        Some(Takes::Add(vec![Take {
-            chance: 0.5,
-            ..Take::new(SoundId::from_guid(Guid::named("you.horns:horn.sound")))
+        Some(Takes::Add(vec![{
+            let mut value = Take::new(SoundId::from_guid(Guid::named("you.horns:horn.sound")));
+            value.chance = 0.5;
+            value
         }]))
     );
     assert_eq!(horn.container, Guid::named("you.horns:horn"));

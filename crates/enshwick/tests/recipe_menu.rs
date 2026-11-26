@@ -30,29 +30,22 @@ mod tests {
                 Id::new("you.menu:bench"),
                 stations::WORKBENCH,
             ))?;
-            load.add_recipe(NewRecipe {
-                id: SAFE_RECIPE,
-                like: CHEST,
-                output: Guid::named("you.menu:safe"),
-                output_count: 1,
-                cost: 2,
-                workshop: None,
-            })?;
-            load.add_recipe_with(move || NewRecipe {
-                id: LOCKER_RECIPE,
-                like: CHEST,
-                output: Guid::named("you.menu:locker"),
-                output_count: 1,
-                cost: 3,
-                workshop: Some(bench),
+            load.add_recipe(NewRecipe::new(
+                SAFE_RECIPE,
+                CHEST,
+                Guid::named("you.menu:safe"),
+                1,
+                2,
+            ))?;
+            load.add_recipe_with(move || {
+                let mut value =
+                    NewRecipe::new(LOCKER_RECIPE, CHEST, Guid::named("you.menu:locker"), 1, 3);
+                value.workshop = Some(bench);
+                value
             })?;
             load.derive_recipes("menu", |recipe| {
                 let name = recipe.debug_name();
-                (name.starts_with("Block_") || name == "Prop_Chest").then_some(Derived {
-                    output: 2,
-                    cost: 1,
-                    workshop: None,
-                })
+                (name.starts_with("Block_") || name == "Prop_Chest").then_some(Derived::new(2, 1))
             })?;
             Ok(Self)
         }

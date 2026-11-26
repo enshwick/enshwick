@@ -58,6 +58,8 @@ game's chat post, after the chat mute. It answers one of:
 - `Drop`
 - `Rewrite(text)`
 
+A `bool` answer keeps the line or drops it, and so does a `vetoes::Verdict`.
+
 Filters of all mods run in load order: a drop
 stops the filters after it, and a rewrite hands its text on. A muted
 player's line reaches no filter and no handler. A filter that panics turns
@@ -190,8 +192,8 @@ A line is one of:
 [`console::run(line)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/actions/src/console.rs)
 runs a line and returns its answer. Call it on the server's game thread, from
 a scheduled task or a game event; elsewhere it returns
-`RunError::NotOnGameThread`. A first word that neither the loader nor a
-running mod with actions answers returns `RunError::Unknown`.
+`RunLineError::NotOnGameThread`. A first word that neither the loader nor a
+running mod with actions answers returns `RunLineError::Unknown`.
 
 ```rust
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

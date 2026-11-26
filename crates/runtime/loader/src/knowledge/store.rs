@@ -22,7 +22,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{Event, Header, KnowledgeData, KnowledgeInfo, QuestData};
+use enshwick_core::abi::{Event, KnowledgeData, KnowledgeInfo, QuestData};
 use rustc_hash::FxHashSet;
 
 use crate::engine::live::{self, Broken};
@@ -451,7 +451,7 @@ fn record(layout: &Layout, state: usize, entity: Entity) -> Result<usize, Knowle
     // SAFETY: `state` is the live store `store_of` found; its u64 record
     // count sits at the build table's `knowledge.record_count` offset.
     let count: u64 = unsafe { read(state, layout.record_count) };
-    let index = (entity.0 as usize)
+    let index = (entity.get() as usize)
         .checked_sub(1)
         .ok_or(KnowledgeError::NoRecord)?;
     if records == 0 || index as u64 >= count {
@@ -486,7 +486,7 @@ fn marked(loader: &Loader, entity: Entity, id: u32) -> Result<(KnowledgeInfo, u8
     let layout = layout(loader).ok_or(KnowledgeError::Unread)?;
     let (_, state) = store(layout)?;
     let (scope, def) = definition(layout, state, id).ok_or(KnowledgeError::Unknown)?;
-    let raw = if scope == KnowledgeInfo::WORLD || entity == Entity(0) {
+    let raw = if scope == KnowledgeInfo::WORLD || entity == Entity::from_engine(0) {
         if scope == KnowledgeInfo::PLAYER {
             return Err(KnowledgeError::PlayerOnly);
         }
@@ -504,12 +504,11 @@ fn marked(loader: &Loader, entity: Entity, id: u32) -> Result<(KnowledgeInfo, u8
             (layout.player_value)(
                 core::ptr::with_exposed_provenance(state),
                 &raw const id,
-                entity.0,
+                entity.get(),
             )
         }
     };
-    let info = KnowledgeInfo {
-        header: Header::of::<KnowledgeInfo>(),
+    let info = enshwick_abi::headed!(KnowledgeInfo {
         id: enshwick_core::abi::KnowledgeId::new(id),
         // SAFETY: `def` is the definition `definition` found in the live
         // blob; its kind sits at the reflected `type` field.
@@ -521,7 +520,7 @@ fn marked(loader: &Loader, entity: Entity, id: u32) -> Result<(KnowledgeInfo, u8
         // SAFETY: `def` is the definition `definition` found in the live
         // blob; its flags sit at the reflected `expectedFlags` field.
         flags: unsafe { read(def, layout.def_flags) },
-    };
+    });
     #[expect(
         clippy::cast_possible_truncation,
         reason = "the mark is the byte above the value"
@@ -582,8 +581,8 @@ pub(crate) fn grant(
         return Err(KnowledgeError::BadChange);
     }
     let target = if scope == KnowledgeInfo::PLAYER {
-        record(layout, state, Entity(entity))?;
-        if !changes::character_loaded(loader, Entity(entity)) {
+        record(layout, state, Entity::from_engine(entity))?;
+        if !changes::character_loaded(loader, Entity::from_engine(entity)) {
             return Err(KnowledgeError::NotLoaded);
         }
         // One player: a 1 in the low byte and the character in the high
@@ -701,8 +700,8 @@ pub(crate) fn after_step(loader: &Loader) {
     // its u32 world log count sits at the build table's
     // `knowledge.world_log_count` offset.
     let count: u32 = unsafe { read(state, layout.world_log_count) };
-    super::quest_events::look(loader, Entity(0));
-    raise(loader, layout, game, Entity(0), log, count);
+    super::quest_events::look(loader, Entity::from_engine(0));
+    raise(loader, layout, game, Entity::from_engine(0), log, count);
     // SAFETY: `state` is the live store `store` found on the game thread;
     // its record array pointer sits at the build table's `knowledge.records`
     // offset.
@@ -715,7 +714,7 @@ pub(crate) fn after_step(loader: &Loader) {
         return;
     }
     for index in 0..usize::try_from(record_count).unwrap_or(0) {
-        let entity = Entity(u32::try_from(index + 1).unwrap_or(0));
+        let entity = Entity::from_engine(u32::try_from(index + 1).unwrap_or(0));
         let record = records + index * layout.record_size;
         // SAFETY: `records` is non-null by the check before it and `index` below
         // the record count, so `record` is a record of the array; its u8
@@ -759,23 +758,21 @@ fn raise(loader: &Loader, layout: &Layout, game: usize, entity: Entity, log: usi
         if id == 0 {
             continue;
         }
-        let data = KnowledgeData {
-            header: Header::of::<KnowledgeData>(),
+        let data = enshwick_abi::headed!(KnowledgeData {
             entity,
             id: enshwick_core::abi::KnowledgeId::new(id),
             value,
-        };
+        });
         loader.emit(Event::KNOWLEDGE_CHANGED, None, (&raw const data).cast());
         super::quest_events::changed(loader, entity, id, value);
-        if entity != Entity(0)
+        if entity != Entity::from_engine(0)
             && value != 0
             && quest_set(layout, game).is_some_and(|set| set.contains(&id))
         {
-            let quest = QuestData {
-                header: Header::of::<QuestData>(),
+            let quest = enshwick_abi::headed!(QuestData {
                 entity,
                 quest: enshwick_core::abi::KnowledgeId::new(id),
-            };
+            });
             loader.emit(Event::QUEST_COMPLETED, None, (&raw const quest).cast());
         }
     }

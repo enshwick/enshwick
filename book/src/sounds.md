@@ -158,7 +158,9 @@ use enshwick::sound::{SoundChange, SoundContainerId};
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let bell = SoundContainerId::from_guid(Guid::named("you.bells:bell"));
-    load.change_sound(bell, SoundChange { volume: Some(0.2), ..SoundChange::default() })
+    let mut sound_change = SoundChange::default();
+    sound_change.volume = Some(0.2);
+    load.change_sound(bell, sound_change)
 }
 ```
 
@@ -187,10 +189,10 @@ use enshwick::sound::{SoundChange, SoundContainerId, SoundId, Take, Takes};
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let chest = SoundContainerId::from_guid(Guid::named("you.bells:chest"));
     let creak = SoundId::from_guid(Guid::named("you.bells:creak.sound"));
-    let change = SoundChange {
-        takes: Some(Takes::Add(vec![Take { chance: 0.5, ..Take::new(creak) }])),
-        ..SoundChange::default()
-    };
+    let mut change = SoundChange::default();
+    let mut take = Take::new(creak);
+    take.chance = 0.5;
+    change.takes = Some(Takes::Add(vec![take]));
     load.change_sound(chest, change)
 }
 ```
@@ -392,11 +394,11 @@ use enshwick::content::id;
 use enshwick::sound::{Channels, NewSound, NewTake};
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let steps = NewSound {
-        takes: vec![NewTake::new("steps/1.ogg"), NewTake { chance: Some(0.5), ..NewTake::new("steps/2.flac") }],
-        channels: Channels::Mono,
-        ..NewSound::new(id!("steps"), "steps/1.ogg")
-    };
+    let mut steps = NewSound::new(id!("steps"), "steps/1.ogg");
+    let mut take = NewTake::new("steps/2.flac");
+    take.chance = Some(0.5);
+    steps.takes = vec![NewTake::new("steps/1.ogg"), take];
+    steps.channels = Channels::Mono;
     let _added = load.feature("steps", |load| load.add_sound(steps));
     Ok(())
 }
@@ -449,14 +451,14 @@ use enshwick::content::{Guid, id};
 use enshwick::sound::{NewVoiceover, SoundChange, VoiceLine, VoiceoverId};
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let welcome = NewVoiceover {
-        fallback: Some("english".into()),
-        container: SoundChange { has_position: Some(false), ..SoundChange::default() },
-        ..NewVoiceover::new(
+    let mut welcome = NewVoiceover::new(
             id!("welcome"),
             vec![VoiceLine::new("english", "voice/en/welcome.ogg"), VoiceLine::new("german", "voice/de/welcome.ogg")],
-        )
-    };
+        );
+    welcome.fallback = Some("english".into());
+    let mut sound_change = SoundChange::default();
+    sound_change.has_position = Some(false);
+    welcome.container = sound_change;
     let _line = load.feature("welcome", |load| load.add_voiceover(welcome));
     let reading = VoiceoverId::from_guid(Guid::parse("3a7b1c90-5e2d-4f68-9c41-0d8e6b2f7a15"));
     let german = NewVoiceover::new(id!("reading"), vec![VoiceLine::new("german", "voice/de/reading.ogg")]);
@@ -499,14 +501,12 @@ use enshwick::content::id;
 use enshwick::sound::NewMusic;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let night = NewMusic {
-        environment: Some("Grassland".into()),
-        in_battle: Some(false),
-        start_time: Some(Duration::from_hours(22)),
-        end_time: Some(Duration::from_hours(6)),
-        sleep: Duration::from_secs(30),
-        ..NewMusic::new(id!("night"), vec!["music/night1.ogg".into(), "music/night2.ogg".into()])
-    };
+    let mut night = NewMusic::new(id!("night"), vec!["music/night1.ogg".into(), "music/night2.ogg".into()]);
+    night.environment = Some("Grassland".into());
+    night.in_battle = Some(false);
+    night.start_time = Some(Duration::from_hours(22));
+    night.end_time = Some(Duration::from_hours(6));
+    night.sleep = Duration::from_secs(30);
     let _music = load.feature("night", |load| load.add_music(night));
     Ok(())
 }

@@ -33,10 +33,9 @@ impl Load<'_> {
     /// const WOLF: Guid = Guid::parse("b7a4f1c0-4c1e-4f39-9d5b-2a0f3c6d8e11");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let calm = load.add_template(NewTemplate {
-    ///         changes: vec![ComponentChange::remove_named("ecs::Aggro")],
-    ///         ..NewTemplate::new(id!("calm-wolf"), WOLF)
-    ///     })?;
+    ///     let mut template = NewTemplate::new(id!("calm-wolf"), WOLF);
+    ///     template.changes = vec![ComponentChange::remove_named("ecs::Aggro")];
+    ///     let calm = load.add_template(template)?;
     ///     enshwick::info!("calm wolves are {}", calm.guid());
     ///     Ok(())
     /// }

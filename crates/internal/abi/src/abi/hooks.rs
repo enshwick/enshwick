@@ -17,6 +17,10 @@ use super::Header;
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct HookFlags(pub u32);
 
 impl HookFlags {
@@ -54,18 +58,18 @@ impl HookFlags {
 /// static NEXT: AtomicUsize = AtomicUsize::new(0);
 /// extern "system" fn detour() {}
 ///
-/// let spec = HookSpec {
-///     header: Header::of::<HookSpec>(),
+/// let spec = enshwick::abi::headed!(HookSpec {
 ///     target: 0x1_4009_0a60,
 ///     detour: detour as usize,
 ///     next: &NEXT,
 ///     priority: 0,
 ///     flags: HookFlags::NONE,
-/// };
+/// });
 /// assert_eq!(spec.priority, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct HookSpec {
     /// Size and version of this struct.
     pub header: Header,
@@ -99,6 +103,10 @@ impl_headed!(HookSpec);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct CallerFrame {
     /// The stack pointer at entry; it points at the return address.
     pub rsp: u64,
@@ -181,6 +189,10 @@ impl CallerFrame {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct Registers {
     /// `rax`.
     pub rax: u64,
@@ -249,18 +261,18 @@ pub type MidHookFn = unsafe extern "system" fn(registers: *mut Registers, user: 
 ///     }
 /// }
 ///
-/// let spec = MidHookSpec {
-///     header: Header::of::<MidHookSpec>(),
+/// let spec = enshwick::abi::headed!(MidHookSpec {
 ///     address: 0x1_4009_0a6c,
 ///     handler: Some(handler),
 ///     user: core::ptr::null_mut(),
 ///     priority: 0,
 ///     flags: HookFlags::NONE,
-/// };
+/// });
 /// assert_eq!(spec.priority, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct MidHookSpec {
     /// Size and version of this struct.
     pub header: Header,

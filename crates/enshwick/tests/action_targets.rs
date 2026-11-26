@@ -6,7 +6,7 @@ mod tests {
     use std::sync::OnceLock;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use enshwick::abi::{Header, PlayerInfo, Side, Status};
+    use enshwick::abi::{PlayerInfo, Side, Status};
     use enshwick::actions::{Action, ActionTarget, Actions, Outcome, Subject};
     use enshwick::i18n::Texts;
     use enshwick::{Load, Mod, Off};
@@ -37,7 +37,7 @@ mod tests {
             actions.add(
                 Action::per_player("access", "Who may open", |ask, _subject| {
                     match ask.target.and_then(|t| t.entity) {
-                        Some(enshwick::Entity(4096)) => {
+                        Some(entity) if entity.get() == 4096 => {
                             vec![(enshwick::PlayerKey::new(0x63), "Olga".to_owned())]
                         }
                         _ => Vec::new(),
@@ -80,21 +80,21 @@ mod tests {
     }
 
     fn owner() -> PlayerInfo {
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: enshwick::Entity(2),
+            entity: enshwick::Entity::from_engine(2),
             key: enshwick::PlayerKey::new(7),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        }
+        })
     }
 
     #[test]
     fn the_server_hands_the_named_object_to_the_action_s_at_and_handler() {
         let loader = start(enshwick::test::FakeHost::new().player(owner()));
-        let near = ActionTarget::entity(enshwick::Entity(4096)).with_position([3.0, 1.0, -2.0]);
+        let near = ActionTarget::entity(enshwick::Entity::from_engine(4096))
+            .with_position([3.0, 1.0, -2.0]);
         assert_eq!(
             loader
                 .ask_action_at(&owner(), 0, "switch", "", near)
@@ -120,7 +120,7 @@ mod tests {
     #[test]
     fn an_offline_player_on_the_named_object_s_list_is_switched_from_its_panel() {
         let loader = start(enshwick::test::FakeHost::new().player(owner()));
-        let safe = ActionTarget::entity(enshwick::Entity(4096));
+        let safe = ActionTarget::entity(enshwick::Entity::from_engine(4096));
         let off = "p0000000000000063\tb0";
         assert_eq!(
             loader
@@ -133,7 +133,7 @@ mod tests {
     #[test]
     fn one_run_finds_its_subject_once_from_the_panel_and_the_console() {
         let loader = start(enshwick::test::FakeHost::new().player(owner()));
-        let safe = ActionTarget::entity(enshwick::Entity(4096));
+        let safe = ActionTarget::entity(enshwick::Entity::from_engine(4096));
         let off = "p0000000000000063\tb0";
         let ran = loader.ask_action_at(&owner(), 0, "access", off, safe);
         assert_eq!(ran.as_deref(), Some("1Olga switched"));
@@ -153,7 +153,11 @@ mod tests {
         let loader = start(enshwick::test::FakeHost::new().side(Side::CLIENT));
         let actions = ACTIONS.get().expect("init kept the actions");
         actions
-            .run_at("switch", &[], ActionTarget::entity(enshwick::Entity(9)))
+            .run_at(
+                "switch",
+                &[],
+                ActionTarget::entity(enshwick::Entity::from_engine(9)),
+            )
             .unwrap();
         actions.run("switch", &[]).unwrap();
         assert!(
@@ -164,7 +168,10 @@ mod tests {
         assert_eq!(loader.action_runs().len(), 2);
         assert_eq!(
             loader.action_targets(),
-            [Some(ActionTarget::entity(enshwick::Entity(9))), None]
+            [
+                Some(ActionTarget::entity(enshwick::Entity::from_engine(9))),
+                None
+            ]
         );
     }
 }

@@ -5,15 +5,13 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{Header, Layout, LayoutField, Str};
+use crate::abi::{Layout, LayoutField, Str};
 use crate::load::{hand_over, ok};
 use crate::points::DescribedField;
 use crate::{BaseLoad, Host, Off};
 
 /// A mod event as its schema describes it, for code that reads and writes
 /// its data as bytes.
-///
-/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Examples
 ///
@@ -62,22 +60,19 @@ impl DescribedEvent {
                 hash: f.hash,
             })
             .collect();
-        let spec = crate::abi::EventSpec {
-            header: Header::of::<crate::abi::EventSpec>(),
+        let spec = enshwick_abi::headed!(crate::abi::EventSpec {
             name: Str::new(&self.name),
             layout: Layout {
                 fields: fields.as_ptr(),
                 count: u32::try_from(fields.len()).unwrap_or(u32::MAX),
                 size: self.size,
             },
-        };
+        });
         with(&spec)
     }
 }
 
 /// Sends a described mod event this mod defined, from any thread.
-///
-/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Examples
 ///

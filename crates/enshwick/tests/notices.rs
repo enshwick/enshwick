@@ -5,7 +5,7 @@ mod tests {
     use std::sync::OnceLock;
 
     use enshwick::Entity;
-    use enshwick::abi::{Header, PlayerInfo, Status};
+    use enshwick::abi::{PlayerInfo, Status};
     use enshwick::net::Peer;
     use enshwick::world::{Notice, World};
     use enshwick::{Load, Mod, Off};
@@ -30,15 +30,14 @@ mod tests {
     );
 
     fn player(entity: u32, key: u64) -> PlayerInfo {
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick::abi::headed!(PlayerInfo {
             slot: entity,
-            entity: Entity(entity),
+            entity: Entity::from_engine(entity),
             key: enshwick::PlayerKey::new(key),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        }
+        })
     }
 
     #[test]
@@ -54,8 +53,8 @@ mod tests {
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let world = WORLD.get().unwrap();
-        let modded = world.player(Entity(2)).unwrap();
-        let vanilla = world.player(Entity(3)).unwrap();
+        let modded = world.player(Entity::from_engine(2)).unwrap();
+        let vanilla = world.player(Entity::from_engine(3)).unwrap();
         assert_eq!(world.notify(&modded, "Low fuel"), Notice::OnScreen);
         assert_eq!(world.notify(&vanilla, "Low fuel"), Notice::Chat);
         assert_eq!(

@@ -33,7 +33,7 @@
 //! assert!(run("/adm online", &operator).is_err());
 //! ```
 
-use crate::abi::{ActionReply, CommandInfo, Header, Status, Str};
+use crate::abi::{ActionReply, CommandInfo, Status, Str};
 use crate::actions::Outcome;
 use crate::schedule::Scheduler;
 use crate::world::PlayerPermissions;
@@ -91,11 +91,14 @@ impl Caller {
     /// use enshwick::world::PlayerPermissions;
     ///
     /// let owner = Caller::new("owner").with_all();
-    /// assert_eq!(owner, PlayerPermissions::ALL.into_iter().fold(Caller::new("owner"), Caller::with));
+    /// assert_eq!(owner, PlayerPermissions::ALL.iter().copied().fold(Caller::new("owner"), Caller::with));
     /// ```
     #[must_use]
     pub fn with_all(self) -> Self {
-        PlayerPermissions::ALL.into_iter().fold(self, Self::with)
+        PlayerPermissions::ALL
+            .iter()
+            .copied()
+            .fold(self, Self::with)
     }
 }
 
@@ -158,10 +161,9 @@ pub fn run(line: &str, caller: &Caller) -> Result<Outcome, RunCommandError> {
         return Err(RunCommandError::TooLong);
     }
     let host = crate::host().ok_or(RunCommandError::NoLoader)?;
-    let mut out = ActionReply {
-        header: Header::of::<ActionReply>(),
+    let mut out = enshwick_abi::headed!(ActionReply {
         ..bytemuck::Zeroable::zeroed()
-    };
+    });
     let status = (host.api().run_command)(
         host.handle(),
         Str::new(line),
@@ -261,10 +263,9 @@ pub fn list() -> Vec<CommandSet> {
     if !(api.command_list)(host.handle(), null, entry_size, 0, &raw mut count).is_ok() {
         return Vec::new();
     }
-    let blank = CommandInfo {
-        header: Header::of::<CommandInfo>(),
+    let blank = enshwick_abi::headed!(CommandInfo {
         ..bytemuck::Zeroable::zeroed()
-    };
+    });
     let mut infos = vec![blank; usize::try_from(count).unwrap_or(0)];
     let capacity = u32::try_from(infos.len()).unwrap_or(0);
     let status = (api.command_list)(
@@ -295,6 +296,10 @@ pub fn list() -> Vec<CommandSet> {
 /// `commands`.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a unit marker, which never gains a field"
+)]
 pub struct CommandFns;
 
 #[crate::script(command_fns)]

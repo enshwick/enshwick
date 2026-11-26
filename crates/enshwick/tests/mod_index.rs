@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{Header, ManifestFlags, ModInfo, Side, Status, Str};
+    use enshwick::abi::{ManifestFlags, ModInfo, Side, Status, Str};
     use enshwick::mods::ModIndex;
     use enshwick::{Load, Mod, Off};
 
@@ -23,8 +23,7 @@ mod tests {
     );
 
     fn info(id: &'static str) -> ModInfo {
-        ModInfo {
-            header: Header::of::<ModInfo>(),
+        enshwick::abi::headed!(ModInfo {
             id: Str::new(id),
             version: Str::new("1.0.0"),
             side: Side::BOTH,
@@ -32,7 +31,7 @@ mod tests {
             off: 0,
             file: Str::new("mods/any.dll"),
             ..ModInfo::EMPTY
-        }
+        })
     }
 
     #[test]

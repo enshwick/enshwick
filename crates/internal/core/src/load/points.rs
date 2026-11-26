@@ -1,6 +1,5 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
-#[cfg(feature = "unstable")]
 use crate::points::{DescribedOwnedPoint, DescribedPoint, DescribedVerdict};
 use crate::points::{Order, OwnedPoint, Point, Verdict};
 use crate::{Load, Off};
@@ -97,7 +96,6 @@ impl Load<'_> {
     ) -> Result<(), Off>;
 }
 
-#[cfg(feature = "unstable")]
 #[enshwick_macros::forward(base)]
 impl Load<'_> {
     /// Links `link` into another mod's extension point described by

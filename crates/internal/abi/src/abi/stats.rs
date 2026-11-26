@@ -12,8 +12,7 @@ use crate::abi::{Entity, Header, ItemId, Str};
 /// ```
 /// use enshwick::abi::{Header, StatSpec};
 ///
-/// let crit = StatSpec {
-///     header: Header::of::<StatSpec>(),
+/// let crit = enshwick::abi::headed!(StatSpec {
 ///     ty: StatSpec::ADDITIVE,
 ///     format: StatSpec::PERCENT,
 ///     reserved: 0,
@@ -23,11 +22,12 @@ use crate::abi::{Entity, Header, ItemId, Str};
 ///     group: StatSpec::GROUP_PRIMARY,
 ///     flags: 0,
 ///     reserved_display: 0,
-/// };
+/// });
 /// assert!(crit.min <= crit.default && crit.default <= crit.max);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct StatSpec {
     /// Size and version of this struct.
     pub header: Header,
@@ -109,6 +109,10 @@ impl StatSpec {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct StatRef {
     /// The index in this process.
     pub index: u32,
@@ -128,6 +132,10 @@ pub struct StatRef {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct StatModifier {
     /// The stat's index.
     pub stat: u32,
@@ -159,18 +167,18 @@ impl StatModifier {
 /// ```
 /// use enshwick::abi::{Header, StatModifier, StatModify};
 ///
-/// let blessing = StatModify {
-///     header: Header::of::<StatModify>(),
-///     entity: enshwick::Entity(2),
+/// let blessing = enshwick::abi::headed!(StatModify {
+///     entity: enshwick::Entity::from_engine(2),
 ///     key: 7,
 ///     modifier: StatModifier { stat: 0, op: StatModifier::ADD, reserved: [0; 3], value: 50.0 },
 ///     flags: 0,
 ///     duration_ms: 60_000,
-/// };
+/// });
 /// assert_eq!(blessing.flags & StatModify::REMOVE, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct StatModify {
     /// Size and version of this struct.
     pub header: Header,
@@ -205,11 +213,12 @@ impl StatModify {
 /// ```
 /// use enshwick::abi::{Header, StatChange, StatRef};
 ///
-/// let change = StatChange { header: Header::of::<StatChange>(), entity: enshwick::Entity(2), stat: StatRef { index: 0, key: 0x1234 }, old: 0.0, new: 50.0, reserved: 0 };
+/// let change = enshwick::abi::headed!(StatChange { entity: enshwick::Entity::from_engine(2), stat: StatRef { index: 0, key: 0x1234 }, old: 0.0, new: 50.0, reserved: 0 });
 /// assert!(change.new > change.old);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct StatChange {
     /// Size and version of this struct.
     pub header: Header,
@@ -251,6 +260,10 @@ pub type StatChangeFn = unsafe extern "system" fn(change: *const StatChange, use
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct StatSource {
     /// [`StatSource::ITEM`], [`StatSource::BUFF`] or
     /// [`StatSource::ENTITY`].
@@ -277,8 +290,7 @@ pub struct StatSource {
 /// use enshwick::abi::{AffixSpec, AffixModifierSpec, Header, StatModifier, Str};
 ///
 /// let ranges = [AffixModifierSpec { stat: 0, op: StatModifier::ADD, reserved: [0; 3], min: 10.0, max: 30.0, step: 1.0 }];
-/// let sturdy = AffixSpec {
-///     header: Header::of::<AffixSpec>(),
+/// let sturdy = enshwick::abi::headed!(AffixSpec {
 ///     group: Str::EMPTY,
 ///     modifiers: ranges.as_ptr(),
 ///     modifier_count: 1,
@@ -286,11 +298,12 @@ pub struct StatSource {
 ///     categories: 1 << 1,
 ///     rarity: 0,
 ///     reserved: [0; 3],
-/// };
+/// });
 /// assert_eq!(sturdy.modifier_count, 1);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct AffixSpec {
     /// Size and version of this struct.
     pub header: Header,
@@ -320,6 +333,10 @@ impl_headed!(AffixSpec);
 /// See [`AffixSpec`].
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct AffixModifierSpec {
     /// The stat's index.
     pub stat: u32,
@@ -342,11 +359,12 @@ pub struct AffixModifierSpec {
 /// ```
 /// use enshwick::abi::{AffixRoll, Header};
 ///
-/// let roll = AffixRoll { header: Header::of::<AffixRoll>(), pide: enshwick::Entity(900), item: enshwick::ItemId::new(7), min: 1, max: 2, max_rarity: 4, flags: AffixRoll::ONCE, seed: 42 };
+/// let roll = enshwick::abi::headed!(AffixRoll { pide: enshwick::Entity::from_engine(900), item: enshwick::ItemId::new(7), min: 1, max: 2, max_rarity: 4, flags: AffixRoll::ONCE, seed: 42 });
 /// assert!(roll.min <= roll.max);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct AffixRoll {
     /// Size and version of this struct.
     pub header: Header,
@@ -388,6 +406,10 @@ impl AffixRoll {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct ItemLine {
     /// The modifier.
     pub modifier: StatModifier,

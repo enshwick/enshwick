@@ -250,7 +250,7 @@ impl RawReader {
                     Resolved::F32(f) => RawValue::Number(f64::from(event.get(*f)?)),
                     Resolved::F64(f) => RawValue::Number(event.get(*f)?),
                     Resolved::Bool(f) => RawValue::Bool(event.get(*f)?),
-                    Resolved::Entity(f) => RawValue::Number(f64::from(event.get(*f)?.0)),
+                    Resolved::Entity(f) => RawValue::Number(f64::from(event.get(*f)?.get())),
                 };
                 Some((std::sync::Arc::clone(name), value))
             })

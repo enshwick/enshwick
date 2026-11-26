@@ -20,7 +20,7 @@ mod values;
 
 use core::marker::PhantomData;
 
-use crate::abi::{EventTypeInfo, GameEventData, Header, Str};
+use crate::abi::{EventTypeInfo, GameEventData, Str};
 use crate::{BaseLoad, Off};
 use crate::{Entity, ItemId, PlayerKey, RecipeId};
 
@@ -237,12 +237,11 @@ impl BaseLoad {
         let mut count = 0;
         let status = (api.event_types)(me, core::ptr::null_mut(), entry_size, 0, &raw mut count);
         crate::load::ok(status, (), || "event types".to_owned())?;
-        let empty = EventTypeInfo {
-            header: Header::of::<EventTypeInfo>(),
+        let empty = enshwick_abi::headed!(EventTypeInfo {
             name: Str::new(""),
             hash: 0,
             size: 0,
-        };
+        });
         let mut infos = vec![empty; usize::try_from(count).unwrap_or(0)];
         let capacity = u32::try_from(infos.len()).unwrap_or(0);
         let mut written = 0;
@@ -356,11 +355,11 @@ impl sealed::Sealed for Entity {}
 
 impl Scalar for Entity {
     fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        u32::from_bytes(bytes).map(Entity)
+        u32::from_bytes(bytes).map(Entity::from_engine)
     }
 
     fn to_bytes(self, bytes: &mut [u8]) -> bool {
-        self.0.to_bytes(bytes)
+        self.get().to_bytes(bytes)
     }
 }
 
@@ -594,7 +593,10 @@ mod tests {
     fn scalars_read_little_endian() {
         let bytes = [0x01, 0x02, 0x03, 0x04, 0, 0, 0x80, 0x3f];
         assert_eq!(u16::from_bytes(&bytes), Some(0x0201));
-        assert_eq!(Entity::from_bytes(&bytes), Some(Entity(0x0403_0201)));
+        assert_eq!(
+            Entity::from_bytes(&bytes),
+            Some(Entity::from_engine(0x0403_0201))
+        );
         assert_eq!(f32::from_bytes(&bytes[4..]), Some(1.0));
         assert_eq!(bool::from_bytes(&bytes[4..]), Some(false));
         assert_eq!(u64::from_bytes(&bytes[1..]), None);

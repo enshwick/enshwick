@@ -4,7 +4,7 @@
 mod tests {
     use std::sync::atomic::{AtomicU32, Ordering};
 
-    use enshwick::abi::{Header, ItemAction, Status};
+    use enshwick::abi::{ItemAction, Status};
     use enshwick::content::{Id, id};
     use enshwick::items::Kind;
     use enshwick::{Entity, ItemId, Load, Mod, Off};
@@ -44,15 +44,14 @@ mod tests {
     );
 
     fn action(kind: u32, item: ItemId, inventory: u32) -> ItemAction {
-        ItemAction {
-            header: Header::of::<ItemAction>(),
+        enshwick::abi::headed!(ItemAction {
             kind,
-            character: Entity(4096),
+            character: Entity::from_engine(4096),
             item,
             count: 3,
-            inventory: Entity(inventory),
+            inventory: Entity::from_engine(inventory),
             slot: 2,
-        }
+        })
     }
 
     #[test]

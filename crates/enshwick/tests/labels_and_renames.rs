@@ -5,13 +5,13 @@
 mod tests {
     use std::sync::OnceLock;
 
-    use enshwick::abi::{Header, PlayerInfo, Status};
+    use enshwick::abi::{PlayerInfo, Status};
     use enshwick::world::World;
     use enshwick::{Entity, Load, Mod, Off, PlayerKey};
 
     static WORLD: OnceLock<World> = OnceLock::new();
 
-    const CHEST: Entity = Entity(4096);
+    const CHEST: Entity = Entity::from_engine(4096);
 
     struct Signs;
 
@@ -45,28 +45,31 @@ mod tests {
     fn player(name: &str) -> PlayerInfo {
         let mut bytes = [0; PlayerInfo::NAME_MAX];
         bytes[..name.len()].copy_from_slice(name.as_bytes());
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: Entity(2),
+            entity: Entity::from_engine(2),
             key: PlayerKey::new(0x0110_0001_0000_0042),
             permissions: 0,
             name_len: name.len().try_into().unwrap(),
             name: bytes,
-        }
+        })
     }
 
     #[test]
     fn a_label_reaches_the_loader_with_its_entity_and_text() {
         let loader = started();
         let world = WORLD.get().unwrap();
-        assert!(world.set_label(CHEST, "Built by Ada"));
-        assert!(world.set_label(CHEST, ""), "an empty text removes the name");
+        assert_eq!(world.set_label(CHEST, "Built by Ada"), Ok(()));
+        assert_eq!(
+            world.set_label(CHEST, ""),
+            Ok(()),
+            "an empty text removes the name"
+        );
         assert_eq!(
             loader.labels(),
             [
-                (CHEST.0, "Built by Ada".to_owned()),
-                (CHEST.0, String::new())
+                (CHEST.get(), "Built by Ada".to_owned()),
+                (CHEST.get(), String::new())
             ]
         );
     }

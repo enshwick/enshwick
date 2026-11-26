@@ -5,7 +5,7 @@ mod tests {
     use std::sync::OnceLock;
 
     use enshwick::WorldError;
-    use enshwick::abi::{Header, PlayerInfo, Status};
+    use enshwick::abi::{PlayerInfo, Status};
     use enshwick::world::{AccountAction, World};
     use enshwick::{Load, Mod, Off};
 
@@ -29,15 +29,14 @@ mod tests {
     );
 
     fn player(entity: u32, key: u64, permissions: u32) -> PlayerInfo {
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick::abi::headed!(PlayerInfo {
             slot: entity,
-            entity: enshwick::Entity(entity),
+            entity: enshwick::Entity::from_engine(entity),
             key: enshwick::PlayerKey::new(key),
             permissions,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        }
+        })
     }
 
     #[test]

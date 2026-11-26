@@ -4,7 +4,7 @@
 mod tests {
     use std::sync::{Mutex, OnceLock};
 
-    use enshwick::abi::{Header, Status, TerrainMaterialInfo};
+    use enshwick::abi::{Status, TerrainMaterialInfo};
     use enshwick::content::{Guid, Id};
     use enshwick::terrain::{NewTerrainMaterial, Terrain};
     use enshwick::{Load, Mod, Off};
@@ -69,15 +69,14 @@ mod tests {
     );
 
     fn sand() -> TerrainMaterialInfo {
-        TerrainMaterialInfo {
-            header: Header::of::<TerrainMaterialInfo>(),
+        enshwick::abi::headed!(TerrainMaterialInfo {
             id: SAND,
             flags: TerrainMaterialInfo::FLATTENS,
             hardness: 1,
             reserved: 0,
             item: enshwick::ItemId::new(77),
             health: 3,
-        }
+        })
     }
 
     #[test]

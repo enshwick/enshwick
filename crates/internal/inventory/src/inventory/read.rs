@@ -1,17 +1,19 @@
 use core::ffi::c_void;
 use core::ops::ControlFlow;
 
-use crate::abi::{Header, InventoryOp, InventoryRequest};
+use enshwick_base::load::StatusError;
+
+use crate::abi::{InventoryOp, InventoryRequest};
 use crate::ecs::{ComponentType, Components};
 use crate::engine_ids as ids;
 use crate::raw::read_at;
 use crate::schedule::Scheduler;
-use crate::{BaseLoad, Host, Off};
+use crate::{BaseLoad, Host, Off, WorldError};
 use crate::{Entity, ItemId};
 
 use super::links::{SetupLayout, walk};
 use super::ops::{Batch, Op};
-use super::results::{Done, OpError, OpErrors, Outcome, Pending, Ticket, deliver};
+use super::results::{Done, OpErrors, Outcome, Pending, RunOpError, Ticket, deliver};
 use super::slots::{Bar, Fill, InventoryCategory, ItemInfo, Slot, SlotRef};
 use super::{MAX_DEPTH, MAX_OWNERS, SLOTS};
 
@@ -43,10 +45,12 @@ pub(super) struct Layout {
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let inventories = load.inventories()?;
-///     let (corpse, player) = (Entity(40), Entity(2));
+///     let (corpse, player) = (Entity::from_engine(40), Entity::from_engine(2));
 ///     load.scheduler()?.next_tick(move || {
-///         let full = inventories.read().slots(corpse).iter().filter(|s| !s.is_empty()).count();
-///         enshwick::info!("{full} stacks to loot");
+///         if let Ok(slots) = inventories.read().slots(corpse) {
+///             let full = slots.iter().filter(|s| !s.is_empty()).count();
+///             enshwick::info!("{full} stacks to loot");
+///         }
 ///         inventories.move_all(corpse, player, |outcome| {
 ///             enshwick::info!("looted: {}", outcome.is_committed());
 ///         });
@@ -67,25 +71,25 @@ pub struct Inventories {
 impl Inventories {
     /// The stack in `slot`, as `Reader::slot` reads it.
     #[script(name = "slot")]
-    pub(crate) fn slot_script(&self, slot: SlotRef) -> Option<Slot> {
+    pub(crate) fn slot_script(&self, slot: SlotRef) -> Result<Option<Slot>, WorldError> {
         self.read().slot(slot)
     }
 
     /// The inventory at the root of `slot`'s, as `Reader::root` reads it.
     #[script(name = "root")]
-    pub(crate) fn root_script(&self, slot: SlotRef) -> Option<Entity> {
+    pub(crate) fn root_script(&self, slot: SlotRef) -> Result<Option<Entity>, WorldError> {
         self.read().root(slot)
     }
 
     /// The durability of the item `pide`, as `Reader::durability` reads it.
     #[script(name = "durability")]
-    pub(crate) fn durability_script(&self, pide: Entity) -> Option<Bar> {
+    pub(crate) fn durability_script(&self, pide: Entity) -> Result<Option<Bar>, WorldError> {
         self.read().durability(pide)
     }
 
     /// The meter of the item `pide`, as `Reader::meter` reads it.
     #[script(name = "meter")]
-    pub(crate) fn meter_script(&self, pide: Entity) -> Option<Bar> {
+    pub(crate) fn meter_script(&self, pide: Entity) -> Result<Option<Bar>, WorldError> {
         self.read().meter(pide)
     }
 }
@@ -132,12 +136,14 @@ impl Inventories {
             components,
             scheduler,
             layout,
-            errors: OpErrors::resolve(load, OpError::IDS),
+            errors: OpErrors::resolve(load, RunOpError::IDS),
         })
     }
 
     /// Reads on the server's game thread, between steps: from a game event
-    /// or a [`Scheduler`] task. Elsewhere they return nothing.
+    /// or a [`Scheduler`] task. Elsewhere they fail with
+    /// [`WorldError::WrongThread`] or, where no world runs,
+    /// [`WorldError::Unavailable`].
     ///
     /// # Examples
     ///
@@ -150,7 +156,8 @@ impl Inventories {
         }
     }
 
-    /// Reads from inside a hooked ECS system, through its context.
+    /// Reads from inside a hooked ECS system, through its context; its reads
+    /// never fail.
     ///
     /// # Safety
     ///
@@ -161,7 +168,7 @@ impl Inventories {
     /// # Examples
     ///
     /// ```
-    /// unsafe fn held(inventories: &enshwick::inventory::Inventories, ctx: *mut u64, player: enshwick::Entity) -> u32 {
+    /// unsafe fn held(inventories: &enshwick::inventory::Inventories, ctx: *mut u64, player: enshwick::Entity) -> Result<u32, enshwick::WorldError> {
     ///     // SAFETY: called from a system's hook with its live context, used at once.
     ///     unsafe { inventories.read_in(ctx) }.count(player, enshwick::ItemId::new(0x0c01))
     /// }
@@ -230,16 +237,17 @@ impl Inventories {
         character: Entity,
         item: ItemId,
         count: u32,
-    ) -> Result<(), crate::WorldError> {
+    ) -> Result<(), WorldError> {
         let host = self.host;
         let status = (host.api().show_pickup)(host.handle(), character, item, count);
         enshwick_world::__internal::world_status(status)
     }
 
     /// Submits `batch` from any thread. `done` runs on the game thread after
-    /// a later step with the outcome, which the returned [`Ticket`] also
-    /// holds. A batch that breaks a limit is refused without reaching the
-    /// game. If the mod is turned off first, `done` never runs.
+    /// a later step with the outcome; in Rust the returned [`Ticket`] holds
+    /// it as well, and Luau returns nothing. A batch that breaks a limit is
+    /// refused without reaching the game. If the mod is turned off first,
+    /// `done` never runs.
     ///
     /// # Examples
     ///
@@ -269,14 +277,13 @@ impl Inventories {
             return ticket;
         }
         let ops: Vec<InventoryOp> = batch.ops.iter().map(Op::raw).collect();
-        let request = InventoryRequest {
-            header: Header::of::<InventoryRequest>(),
+        let request = enshwick_abi::headed!(InventoryRequest {
             flags: batch.request_flags(),
             actor: batch.actor_entity(),
             ops: ops.as_ptr(),
             op_count: u32::try_from(ops.len()).unwrap_or(0),
             reserved: 0,
-        };
+        });
         let user = Box::into_raw(Box::new(pending));
         let status = (self.host.api().inventory_submit)(
             self.host.handle(),
@@ -293,35 +300,40 @@ impl Inventories {
         ticket
     }
 
-    /// Every slot of the inventory `root`, as a [reader](Reader::slots) reads it
-    /// on the server's game thread; empty elsewhere.
+    /// Every slot of the inventory `root`, as a [reader](Reader::slots) reads it.
+    ///
+    /// # Errors
+    ///
+    /// As [`Inventories::read`].
     ///
     /// # Examples
     ///
     /// ```
-    /// fn first_item(inventories: &enshwick::inventory::Inventories, player: enshwick::Entity) -> Option<enshwick::ItemId> {
-    ///     inventories.slots(player).into_iter().find(|s| !s.is_empty()).map(|s| s.item)
+    /// fn first_item(inventories: &enshwick::inventory::Inventories, player: enshwick::Entity) -> Result<Option<enshwick::ItemId>, enshwick::WorldError> {
+    ///     Ok(inventories.slots(player)?.into_iter().find(|s| !s.is_empty()).map(|s| s.item))
     /// }
     /// ```
-    #[must_use]
     #[script]
-    pub fn slots(&self, root: Entity) -> Vec<Slot> {
+    pub fn slots(&self, root: Entity) -> Result<Vec<Slot>, WorldError> {
         self.read().slots(root)
     }
 
     /// How many items `item` the inventory `root` holds, as a [reader](Reader::count)
-    /// reads it on the server's game thread; 0 elsewhere.
+    /// reads it.
+    ///
+    /// # Errors
+    ///
+    /// As [`Inventories::read`].
     ///
     /// # Examples
     ///
     /// ```
-    /// fn coins(inventories: &enshwick::inventory::Inventories, player: enshwick::Entity) -> u32 {
+    /// fn coins(inventories: &enshwick::inventory::Inventories, player: enshwick::Entity) -> Result<u32, enshwick::WorldError> {
     ///     inventories.count(player, enshwick::ItemId::new(0x0c01))
     /// }
     /// ```
-    #[must_use]
     #[script]
-    pub fn count(&self, root: Entity, item: ItemId) -> u32 {
+    pub fn count(&self, root: Entity, item: ItemId) -> Result<u32, WorldError> {
         self.read().count(root, item)
     }
 
@@ -491,6 +503,10 @@ impl Inventories {
     /// [`Inventories::read`]; `None` when nothing needs it, without calling
     /// `done`.
     ///
+    /// # Errors
+    ///
+    /// As [`Inventories::read`], without calling `done`.
+    ///
     /// # Examples
     ///
     /// ```
@@ -502,7 +518,9 @@ impl Inventories {
     ///     let inventories = load.inventories()?;
     ///     load.on::<PlayerJoined>(move |joined| {
     ///         let player = joined.entity;
-    ///         let _renewed = inventories.renew(player, &[STAFF], Fill::FULL, |_| {});
+    ///         if let Err(error) = inventories.renew(player, &[STAFF], Fill::FULL, |_| {}) {
+    ///             enshwick::warn!("staff not renewed: {error}");
+    ///         }
     ///     })
     /// }
     /// ```
@@ -513,9 +531,9 @@ impl Inventories {
         items: &[ItemId],
         fill: Fill,
         done: impl FnOnce(&Outcome) + Send + 'static,
-    ) -> Option<Ticket> {
+    ) -> Result<Option<Ticket>, WorldError> {
         let mut batch = Batch::new();
-        for slot in self.read().slots(root) {
+        for slot in self.read().slots(root)? {
             if !slot.is_empty() && slot.pide.is_none() && items.contains(&slot.item) {
                 batch.push(Op::Renew {
                     slot: slot.at,
@@ -526,7 +544,7 @@ impl Inventories {
                 });
             }
         }
-        (!batch.ops().is_empty()).then(|| self.submit(&batch, done))
+        Ok((!batch.ops().is_empty()).then(|| self.submit(&batch, done)))
     }
 }
 
@@ -544,32 +562,48 @@ pub struct Reader<'a> {
 }
 
 impl Reader<'_> {
-    fn component(&self, entity: Entity, ty: ComponentType) -> Option<*const u8> {
+    /// `entity`'s component of type `ty`, or why the loader cannot read now,
+    /// which holds for every read of the same moment: a walk checks its first
+    /// read here and takes the rest through [`Self::component`].
+    fn checked(&self, entity: Entity, ty: ComponentType) -> Result<Option<*const u8>, WorldError> {
         if entity.is_none() {
-            return None;
+            return Ok(None);
         }
         if self.ctx.is_null() {
-            enshwick_base::__internal::component(ty, self.inventories.host, entity)
-                .map(<*const c_void>::cast)
+            enshwick_base::__internal::component_status(ty, self.inventories.host, entity)
+                .map(|data| data.map(<*const c_void>::cast))
+                .map_err(WorldError::of)
         } else {
             // SAFETY: a non-null `ctx` comes only from `read_in`, whose caller
             // guarantees the hooked system's live context, used on its thread
             // during the hook, which is the contract of `component`.
-            unsafe { self.inventories.components.component(self.ctx, entity, ty) }
-                .map(<*mut u8>::cast_const)
+            Ok(
+                unsafe { self.inventories.components.component(self.ctx, entity, ty) }
+                    .map(<*mut u8>::cast_const),
+            )
         }
+    }
+
+    fn component(&self, entity: Entity, ty: ComponentType) -> Option<*const u8> {
+        self.checked(entity, ty).ok().flatten()
     }
 
     /// Every slot of the inventory `root`, its virtual links followed, empty
     /// slots included, in the game's order; empty when `root` has no
     /// inventory.
     ///
+    /// # Errors
+    ///
+    /// As [`Inventories::read`].
+    ///
     /// # Examples
     ///
     /// See [`Inventories`].
-    #[must_use]
-    pub fn slots(&self, root: Entity) -> Vec<Slot> {
+    pub fn slots(&self, root: Entity) -> Result<Vec<Slot>, WorldError> {
         let layout = &self.inventories.layout;
+        if self.checked(root, layout.setup)?.is_none() {
+            return Ok(Vec::new());
+        }
         let skip = if layout.skip == 0 {
             0
         } else {
@@ -599,13 +633,13 @@ impl Reader<'_> {
             walk(
                 root,
                 MAX_DEPTH,
-                Entity(skip),
+                Entity::from_engine(skip),
                 &layout.links,
                 &mut setup,
                 &mut visit,
             )
         };
-        out
+        Ok(out)
     }
 
     /// The stack `index` of the `Inventory` at `slots`.
@@ -642,90 +676,109 @@ impl Reader<'_> {
         }
     }
 
-    /// What `slot` holds, with [`InventoryCategory::INVALID`].
+    /// What `slot` holds, with [`InventoryCategory::INVALID`]; `None` for a
+    /// slot of no inventory.
+    ///
+    /// # Errors
+    ///
+    /// As [`Inventories::read`].
     ///
     /// # Examples
     ///
     /// ```
-    /// fn holds(reader: &enshwick::inventory::Reader<'_>, slot: enshwick::inventory::SlotRef) -> bool {
-    ///     reader.slot(slot).is_some_and(|s| !s.is_empty())
+    /// fn holds(reader: &enshwick::inventory::Reader<'_>, slot: enshwick::inventory::SlotRef) -> Result<bool, enshwick::WorldError> {
+    ///     Ok(reader.slot(slot)?.is_some_and(|s| !s.is_empty()))
     /// }
     /// ```
-    #[must_use]
-    pub fn slot(&self, slot: SlotRef) -> Option<Slot> {
+    pub fn slot(&self, slot: SlotRef) -> Result<Option<Slot>, WorldError> {
+        let Some(slots) = self.checked(slot.inventory(), self.inventories.layout.inventory)? else {
+            return Ok(None);
+        };
         if slot.index() >= SLOTS {
-            return None;
+            return Ok(None);
         }
-        let slots = self.component(slot.inventory(), self.inventories.layout.inventory)?;
         // SAFETY: `component` returned the inventory's live Inventory, and
         // `index < SLOTS` was checked above.
-        Some(unsafe {
+        Ok(Some(unsafe {
             self.stack(
                 slots,
                 slot.inventory(),
                 slot.index(),
                 InventoryCategory::INVALID,
             )
-        })
+        }))
     }
 
     /// How many items `item` the inventory `root` holds.
     ///
+    /// # Errors
+    ///
+    /// As [`Inventories::read`].
+    ///
     /// # Examples
     ///
     /// See [`Inventories::read_in`].
-    #[must_use]
-    pub fn count(&self, root: Entity, item: ItemId) -> u32 {
-        self.slots(root)
+    pub fn count(&self, root: Entity, item: ItemId) -> Result<u32, WorldError> {
+        Ok(self
+            .slots(root)?
             .iter()
             .filter(|s| s.item == item && !s.is_empty())
-            .fold(0, |sum, s| sum.saturating_add(s.count))
+            .fold(0, |sum, s| sum.saturating_add(s.count)))
     }
 
     /// The inventory a slot belongs to at the root, the chest or player,
     /// found by climbing `OwnerRelationship` from its sub-inventory; `None`
     /// when the sub-inventory has no owner.
     ///
+    /// # Errors
+    ///
+    /// As [`Inventories::read`].
+    ///
     /// # Examples
     ///
     /// ```
-    /// fn owner(reader: &enshwick::inventory::Reader<'_>, slot: enshwick::inventory::SlotRef) {
-    ///     if let Some(root) = reader.root(slot) {
-    ///         enshwick::info!("slot of {}", root.0);
+    /// fn owner(reader: &enshwick::inventory::Reader<'_>, slot: enshwick::inventory::SlotRef) -> Result<(), enshwick::WorldError> {
+    ///     if let Some(root) = reader.root(slot)? {
+    ///         enshwick::info!("slot of {}", root);
     ///     }
+    ///     Ok(())
     /// }
     /// ```
-    #[must_use]
-    pub fn root(&self, slot: SlotRef) -> Option<Entity> {
+    pub fn root(&self, slot: SlotRef) -> Result<Option<Entity>, WorldError> {
         let mut entity = slot.inventory();
         let mut climbed = false;
         for _ in 0..MAX_OWNERS {
-            let Some(owner) = self.component(entity, self.inventories.layout.owner) else {
+            let Some(owner) = self.checked(entity, self.inventories.layout.owner)? else {
                 break;
             };
             // SAFETY: `component` returned the entity's live
             // OwnerRelationship, which is the owner's u32 entity id alone.
-            let owner = Entity(unsafe { read_at(owner, 0) });
+            let owner = Entity::from_engine(unsafe { read_at(owner, 0) });
             if owner.is_none() || owner == entity {
                 break;
             }
             entity = owner;
             climbed = true;
         }
-        climbed.then_some(entity)
+        Ok(climbed.then_some(entity))
     }
 
-    /// The durability of an item's own entity, its PIDE, as clients see it.
+    /// The durability of an item's own entity, its PIDE, as clients see it;
+    /// `None` for an item without one.
+    ///
+    /// # Errors
+    ///
+    /// As [`Inventories::read`].
     ///
     /// # Examples
     ///
     /// ```
-    /// fn worn(reader: &enshwick::inventory::Reader<'_>, slot: &enshwick::inventory::Slot) -> bool {
-    ///     slot.pide.and_then(|pide| reader.durability(pide)).is_some_and(|d| d.current * 4 < d.max)
+    /// fn worn(reader: &enshwick::inventory::Reader<'_>, slot: &enshwick::inventory::Slot) -> Result<bool, enshwick::WorldError> {
+    ///     let Some(pide) = slot.pide else { return Ok(false) };
+    ///     Ok(reader.durability(pide)?.is_some_and(|d| d.current * 4 < d.max))
     /// }
     /// ```
-    #[must_use]
-    pub fn durability(&self, pide: Entity) -> Option<Bar> {
+    pub fn durability(&self, pide: Entity) -> Result<Option<Bar>, WorldError> {
         let layout = &self.inventories.layout;
         self.bar(pide, layout.durability, layout.durability_max)
     }
@@ -734,22 +787,28 @@ impl Reader<'_> {
     /// [`FuelSetup`](crate::content::items::FuelSetup)), as clients see it; `None`
     /// for an item without one.
     ///
+    /// # Errors
+    ///
+    /// As [`Inventories::read`].
+    ///
     /// # Examples
     ///
     /// ```
-    /// fn charges(reader: &enshwick::inventory::Reader<'_>, slot: &enshwick::inventory::Slot) -> u16 {
-    ///     slot.pide.and_then(|pide| reader.meter(pide)).map_or(0, |m| m.current)
+    /// fn charges(reader: &enshwick::inventory::Reader<'_>, slot: &enshwick::inventory::Slot) -> Result<u16, enshwick::WorldError> {
+    ///     let Some(pide) = slot.pide else { return Ok(0) };
+    ///     Ok(reader.meter(pide)?.map_or(0, |m| m.current))
     /// }
     /// ```
-    #[must_use]
-    pub fn meter(&self, pide: Entity) -> Option<Bar> {
+    pub fn meter(&self, pide: Entity) -> Result<Option<Bar>, WorldError> {
         let layout = &self.inventories.layout;
         self.bar(pide, layout.fuel, layout.fuel_max)
     }
 
-    fn bar(&self, pide: Entity, ty: ComponentType, max: usize) -> Option<Bar> {
-        let data = self.component(pide, ty)?;
-        Some(Bar {
+    fn bar(&self, pide: Entity, ty: ComponentType, max: usize) -> Result<Option<Bar>, WorldError> {
+        let Some(data) = self.checked(pide, ty)? else {
+            return Ok(None);
+        };
+        Ok(Some(Bar {
             // SAFETY: `component` returned the item's live NetworkDurability
             // or NetworkFuel, which starts with its u16 current value.
             current: unsafe { read_at(data, 0) },
@@ -757,6 +816,6 @@ impl Reader<'_> {
             // NetworkFuel, whose u16 maximum sits at the reflected offset
             // `max`.
             max: unsafe { read_at(data, max) },
-        })
+        }))
     }
 }

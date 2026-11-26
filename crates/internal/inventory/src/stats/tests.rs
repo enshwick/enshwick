@@ -114,16 +114,15 @@ fn deliver<F: Fn(&StatChange)>(change: &StatChangeData, handler: &F) {
 fn a_change_shorter_than_its_first_version_reaches_no_handler() {
     let seen = core::cell::RefCell::new(Vec::new());
     let handler = |change: &StatChange| seen.borrow_mut().push((change.entity, change.new));
-    let mut change = StatChangeData {
-        header: Header::of::<StatChangeData>(),
-        entity: Entity(2),
+    let mut change = enshwick_abi::headed!(StatChangeData {
+        entity: Entity::from_engine(2),
         stat: StatRef { index: 0, key: 1 },
         old: 0.0,
         new: 50.0,
         reserved: 0,
-    };
+    });
     deliver(&change, &handler);
     change.header.size = 12;
     deliver(&change, &handler);
-    assert_eq!(*seen.borrow(), [(Entity(2), 50.0)]);
+    assert_eq!(*seen.borrow(), [(Entity::from_engine(2), 50.0)]);
 }

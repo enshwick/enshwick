@@ -246,6 +246,8 @@ impl crate::Loading for Load<'_> {
     }
 }
 
+impl crate::facts::sealed::Sealed for Load<'_> {}
+
 impl crate::facts::EngineFacts for Load<'_> {
     fn offset(&self, id: &str) -> Result<usize, Off> {
         crate::facts::EngineFacts::offset(&self.base, id)

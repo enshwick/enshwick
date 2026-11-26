@@ -6,7 +6,7 @@ mod tests {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicBool, Ordering};
 
-    use enshwick::abi::{ActionCall, Header, PlayerInfo, Status};
+    use enshwick::abi::{ActionCall, PlayerInfo, Status};
     use enshwick::actions::{Action, Arg, Outcome, RefusedReason, Value, Via};
     use enshwick::content::Guid;
     use enshwick::i18n::Texts;
@@ -70,15 +70,14 @@ mod tests {
     );
 
     fn player(entity: u32, key: u64, name: &str, permissions: u32) -> PlayerInfo {
-        let mut info = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let mut info = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: enshwick::Entity(entity),
+            entity: enshwick::Entity::from_engine(entity),
             key: PlayerKey::new(key),
             permissions,
             name_len: u32::try_from(name.len()).unwrap(),
             name: [0; PlayerInfo::NAME_MAX],
-        };
+        });
         info.name[..name.len()].copy_from_slice(name.as_bytes());
         info
     }

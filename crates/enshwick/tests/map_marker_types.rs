@@ -40,26 +40,26 @@ mod tests {
 
     fn registry() -> Vec<MapMarkerTypeInfo> {
         vec![
-            MapMarkerTypeInfo {
+            enshwick::abi::headed!(MapMarkerTypeInfo {
                 type_name: NAME,
                 marker_id: DUNGEON,
                 sorting_category: RawSorting::DUNGEONS,
                 show_label: 1,
                 ..MapMarkerTypeInfo::EMPTY
-            },
-            MapMarkerTypeInfo {
+            }),
+            enshwick::abi::headed!(MapMarkerTypeInfo {
                 marker_id: ALTAR,
                 sorting_category: RawSorting::FLAME_RELATED,
                 is_fast_travel_destination: 1,
                 show_above_fog_of_war: 1,
                 ..MapMarkerTypeInfo::EMPTY
-            },
-            MapMarkerTypeInfo {
+            }),
+            enshwick::abi::headed!(MapMarkerTypeInfo {
                 marker_id: ODD,
                 sorting_category: RawSorting::UNKNOWN,
                 is_custom_marker_type: 1,
                 ..MapMarkerTypeInfo::EMPTY
-            },
+            }),
         ]
     }
 
@@ -135,12 +135,7 @@ mod tests {
         );
         assert_eq!(
             loader.markers()[1],
-            FakeMarker {
-                position: [2.0, 0.0, 0.0],
-                label: String::new(),
-                color: UiMarker::WHITE,
-                marker_type: 0,
-            }
+            FakeMarker::new([2.0, 0.0, 0.0], String::new(), UiMarker::WHITE, 0)
         );
     }
 

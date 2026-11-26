@@ -598,22 +598,9 @@ pub(crate) fn recipe_words(id: u32) -> String {
 #[cfg(feature = "test")]
 #[doc(hidden)]
 pub fn bench_recipe_filter(disabled: &[u32]) -> impl FnMut() -> u64 {
-    let _first = STATE.layout.set(Some(RecipeLayout {
-        recipes: 0,
-        recipe: size_of::<u32>(),
-        guid: 0,
-        id: 0,
-        workshop_guid: 0,
-        workshop: 0,
-        input: 0,
-        output: 0,
-        completion: 0,
-        relative: [0; 4],
-        input_size: 0,
-        stack_size: 0,
-        stack_item: 0,
-        stack_count: 0,
-    }));
+    let mut layout = RecipeLayout::default();
+    layout.recipe = size_of::<u32>();
+    let _first = STATE.layout.set(Some(layout));
     STATE.set_disabled(disabled.iter().copied().collect());
     let recipes: Box<[u32]> = (1..=8).collect();
     let list: Box<[u64]> = recipes

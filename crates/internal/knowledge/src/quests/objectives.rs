@@ -193,7 +193,7 @@ impl Counting {
         for entry in entries {
             let holder = match entry.step.scope {
                 Scope::World => Holder::World,
-                _ => Holder::Player(player),
+                _ => Holder::player(player),
             };
             self.credit(holder, entry, to(&entry.step.objectives[entry.at].0));
         }
@@ -240,7 +240,7 @@ impl Counting {
     fn open(&self, holder: Holder, step: &CountedStep) -> bool {
         let reader = match holder {
             Holder::World => None,
-            Holder::Player(player) => Some(player),
+            Holder::Player(player) => player.entity(),
         };
         self.quests.holds(reader, step.shown_when) == Some(true)
             && self.quests.holds(reader, step.done_when) == Some(false)
@@ -549,7 +549,9 @@ fn subscribe(
         let inventories = load.inventories()?;
         load.on_item(item, crate::items::Kind::Pickup, move |picked| {
             let table = counting.table.load();
-            let holds = inventories.count(picked.player, item);
+            let Ok(holds) = inventories.count(picked.player, item) else {
+                return true;
+            };
             let entries = table.entries(&Key::Collect(item));
             counting.count(picked.player, entries, |_| Count::UpTo(holds));
             true
@@ -641,11 +643,14 @@ impl Quests {
     /// use enshwick::quests::{Holder, Quests};
     ///
     /// fn lit(quests: &Quests, player: enshwick::Entity) {
-    ///     quests.signal(Holder::Player(player), id!("beacon-lit"), 1);
+    ///     quests.signal(Holder::player(player), id!("beacon-lit"), 1);
     /// }
     /// ```
     #[script]
     pub fn signal(&self, holder: Holder, signal: crate::content::Id, amount: u32) {
+        let Ok(holder) = holder.resolved(self.knowledge.host) else {
+            return;
+        };
         let Some(counting) = self.counting.get() else {
             return;
         };

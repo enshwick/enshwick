@@ -23,7 +23,7 @@ mod check;
 
 use std::sync::OnceLock;
 
-use enshwick_core::abi::{ChunkData, Event, Header, HookFlags, WeatherFront};
+use enshwick_core::abi::{ChunkData, Event, HookFlags, WeatherFront};
 use enshwick_core::raw::read_at;
 
 use crate::engine::fuse::Fuse;
@@ -469,8 +469,7 @@ pub(crate) fn fronts(loader: &Loader) -> Result<Vec<WeatherFront>, WeatherError>
         // despawn time sits at the build table's `weather.instance_despawn`
         // offset.
         let despawn: i64 = unsafe { read(data, layout.instance_despawn) };
-        out.push(WeatherFront {
-            header: Header::of::<WeatherFront>(),
+        out.push(enshwick_abi::headed!(WeatherFront {
             layer: u32::try_from(layer).unwrap_or(u32::MAX),
             effect,
             // SAFETY: `data` is a live instance, checked by `instance`; its
@@ -486,7 +485,7 @@ pub(crate) fn fronts(loader: &Loader) -> Result<Vec<WeatherFront>, WeatherError>
             reserved: 0,
             remaining_ns: despawn.saturating_sub(now).max(0),
             phenomenon: enshwick_core::content::Guid(phenomenon),
-        });
+        }));
     }
     Ok(out)
 }
@@ -970,12 +969,11 @@ unsafe fn record(event: Event, entities: *mut u8, chunk: *mut u8) {
     if width == 0 || index >= width.saturating_mul(height) {
         return;
     }
-    let data = ChunkData {
-        header: Header::of::<ChunkData>(),
+    let data = enshwick_abi::headed!(ChunkData {
         x: index % width,
         z: index / width,
         size: CHUNK_METRES,
-    };
+    });
     CHUNK_EVENTS.push((event, data));
 }
 

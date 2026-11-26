@@ -20,18 +20,17 @@ mod tests {
 
     impl Mod for Spawns {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            load.add_spawn_entry(SpawnEntry {
-                weight: 2.0,
-                ..SpawnEntry::new(SpawnerPick::Listing(ENEMY), ELDER)
+            load.add_spawn_entry({
+                let mut value = SpawnEntry::new(SpawnerPick::Listing(ENEMY), ELDER);
+                value.weight = 2.0;
+                value
             })?;
-            load.change_spawner(
-                SpawnerPick::Spawner(NEST),
-                SpawnerChange {
-                    max_entities_alive: Some(9),
-                    min_spawn_timeout: Some(1.5),
-                    ..SpawnerChange::default()
-                },
-            )?;
+            load.change_spawner(SpawnerPick::Spawner(NEST), {
+                let mut value = SpawnerChange::default();
+                value.max_entities_alive = Some(9);
+                value.min_spawn_timeout = Some(1.5);
+                value
+            })?;
             // A GUID no spawner holds, and one the nest holds but not as a template.
             for listed in [Guid([7; 16]), NEST_GROUP] {
                 if let Err(off) =

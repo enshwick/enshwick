@@ -5,7 +5,7 @@ mod tests {
     use std::sync::{Arc, Mutex, OnceLock};
     use std::time::Duration;
 
-    use enshwick::abi::{Header, Status, TerrainMaterialInfo};
+    use enshwick::abi::{Status, TerrainMaterialInfo};
     use enshwick::world::{Settled, TransactionId, TransactionStatus, World, WorldTransform};
     use enshwick::{Entity, ItemId, Load, Mod, Off, WorldError};
 
@@ -40,15 +40,14 @@ mod tests {
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        loader.set_terrain(&[TerrainMaterialInfo {
-            header: Header::of::<TerrainMaterialInfo>(),
+        loader.set_terrain(&[enshwick::abi::headed!(TerrainMaterialInfo {
             id: 9,
             flags: 0,
             hardness: 3,
             reserved: 0,
             item: ItemId::new(77),
             health: 500,
-        }]);
+        })]);
         (loader, *WORLD.get().unwrap())
     }
 
@@ -110,7 +109,7 @@ mod tests {
         let (loader, world) = started();
         let id = world
             .transaction()
-            .remove_prop(Entity(999))
+            .remove_prop(Entity::from_engine(999))
             .commit()
             .unwrap();
         let seen = settled_into(world, id, Duration::from_secs(60));

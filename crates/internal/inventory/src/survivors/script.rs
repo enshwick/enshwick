@@ -144,6 +144,10 @@ impl WorkshopSurvivor {
 /// `survivors`.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a unit marker, which never gains a field"
+)]
 pub struct SurvivorFns;
 
 impl crate::script::Bound for SurvivorFns {

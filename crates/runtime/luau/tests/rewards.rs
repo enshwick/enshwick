@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{Header, ItemAction, PlayerInfo, QuestData, TickData};
+    use enshwick::abi::{ItemAction, PlayerInfo, QuestData, TickData};
     use enshwick::events::{QuestCompleted, Ticked, WorldLoaded};
     use enshwick::knowledge::KnowledgeId;
     use enshwick::progress::Experience;
@@ -13,15 +13,14 @@ mod tests {
 
     #[test]
     fn a_script_declares_a_reward_its_item_use_grants_and_grants_another_by_name() {
-        let player = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let player = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: Entity(2),
+            entity: Entity::from_engine(2),
             key: PlayerKey::new(7),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        };
+        });
         let data =
             std::env::temp_dir().join(format!("enshwick-luau-rewards-{}", std::process::id()));
         let loader = run(
@@ -44,15 +43,14 @@ mod tests {
             2,
             "the mod's and its rewards'"
         );
-        let used = ItemAction {
-            header: Header::of::<ItemAction>(),
+        let used = enshwick::abi::headed!(ItemAction {
             kind: ItemAction::CONSUME,
-            character: Entity(2),
+            character: Entity::from_engine(2),
             item: enshwick::ItemId::named("you.luau:tonic"),
             count: 1,
-            inventory: Entity(40),
+            inventory: Entity::from_engine(40),
             slot: 0,
-        };
+        });
         assert!(loader.item_action(&used));
         let _ran = loader.raise::<Ticked>(&TickData::new(1));
         assert!(
@@ -61,7 +59,7 @@ mod tests {
             loader.logs()
         );
         let mut rows = [Experience {
-            entity: Entity(2),
+            entity: Entity::from_engine(2),
             level: 1,
             progress: 0,
             need: 1000,
@@ -74,15 +72,14 @@ mod tests {
 
     #[test]
     fn a_script_rewards_any_quest_by_name_and_one_quest_by_its_id() {
-        let player = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let player = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: Entity(2),
+            entity: Entity::from_engine(2),
             key: PlayerKey::new(7),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        };
+        });
         let data = std::env::temp_dir().join(format!(
             "enshwick-luau-quest-rewards-{}",
             std::process::id()
@@ -101,15 +98,14 @@ mod tests {
         assert!(loader.faults().is_empty(), "{:?}", loader.faults());
         let _loaded = loader.raise::<WorldLoaded>(&());
         for quest in [0x52, 0x51] {
-            let _heard = loader.raise::<QuestCompleted>(&QuestData {
-                header: Header::of::<QuestData>(),
-                entity: Entity(2),
+            let _heard = loader.raise::<QuestCompleted>(&enshwick::abi::headed!(QuestData {
+                entity: Entity::from_engine(2),
                 quest: KnowledgeId::new(quest),
-            });
+            }));
         }
         let _ran = loader.raise::<Ticked>(&TickData::new(1));
         let mut rows = [Experience {
-            entity: Entity(2),
+            entity: Entity::from_engine(2),
             level: 1,
             progress: 0,
             need: 1000,
@@ -127,15 +123,14 @@ mod tests {
 
     #[test]
     fn an_error_in_a_reward_filter_turns_the_mod_off_naming_the_error() {
-        let player = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let player = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: Entity(2),
+            entity: Entity::from_engine(2),
             key: PlayerKey::new(7),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        };
+        });
         let data =
             std::env::temp_dir().join(format!("enshwick-luau-reward-error-{}", std::process::id()));
         let loader = run(

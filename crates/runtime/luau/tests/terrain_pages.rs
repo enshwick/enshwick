@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{Header, TerrainPageData};
+    use enshwick::abi::TerrainPageData;
     use enshwick::events::{TerrainPageLoaded, TerrainPageUnloaded};
     use enshwick::test::FakeHost;
 
@@ -22,12 +22,11 @@ mod tests {
             end)
             "#,
         );
-        let page = TerrainPageData {
-            header: Header::of::<TerrainPageData>(),
+        let page = enshwick::abi::headed!(TerrainPageData {
             x: 40,
             z: 7,
             size: 128,
-        };
+        });
         assert_ne!(loader.raise::<TerrainPageUnloaded>(&page), 0);
         assert_ne!(loader.raise::<TerrainPageLoaded>(&page), 0);
         assert!(logged(&loader, "dropped 40,7 128"), "{:?}", loader.logs());

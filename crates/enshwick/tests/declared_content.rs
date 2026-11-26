@@ -10,7 +10,7 @@ mod tests {
     use std::sync::Mutex;
 
     use enshwick::abi::{
-        ContentRename, Header, HostApi, ModHandle, ResourceKey, Side, Status, TerrainMaterialAdd,
+        ContentRename, HostApi, ModHandle, ResourceKey, Side, Status, TerrainMaterialAdd,
     };
     use enshwick::content::{Guid, Id};
     use enshwick::test::{FakeHost, Installed};
@@ -104,8 +104,7 @@ mod tests {
         match call {
             Call::ServeResource => serve(api, me, ResourceKey { guid, ..GAME }, GAME),
             Call::TerrainMaterialAdd => {
-                let material = TerrainMaterialAdd {
-                    header: Header::of::<TerrainMaterialAdd>(),
+                let material = enshwick::abi::headed!(TerrainMaterialAdd {
                     guid,
                     item: Guid::NIL,
                     health: 0,
@@ -115,7 +114,7 @@ mod tests {
                     hardness: 0,
                     flags: 0,
                     reserved: [0; 3],
-                };
+                });
                 let mut id = 0u8;
                 (api.terrain_material_add)(me, &raw const material, &raw mut id)
             }

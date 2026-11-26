@@ -2,7 +2,6 @@
 //! mods and their exports and services, the mod's features and status, and
 //! its messages.
 
-use enshwick_core::abi::Header;
 use enshwick_core::abi::ModInfo;
 use enshwick_core::abi::Side;
 use enshwick_core::abi::Str;
@@ -90,6 +89,7 @@ impl FakeHost {
         let raw = match peer {
             enshwick_core::net::Peer::Server => enshwick_core::abi::NetMessage::SERVER,
             enshwick_core::net::Peer::Player(key) => key,
+            _ => return self,
         };
         self.base.net_peers.insert(raw.get());
         #[cfg(feature = "unstable")]
@@ -169,8 +169,7 @@ impl FakeHost {
     /// use enshwick::abi::{Header, ManifestFlags, ModInfo, Side, Str};
     ///
     /// let loader = enshwick::test::FakeHost::new()
-    ///     .loaded(ModInfo {
-    ///         header: Header::of::<ModInfo>(),
+    ///     .loaded(enshwick::abi::headed!(ModInfo {
     ///         id: Str::new("enshwick"),
     ///         version: Str::new("0.2.0"),
     ///         side: Side::BOTH,
@@ -178,7 +177,7 @@ impl FakeHost {
     ///         off: 0,
     ///         file: Str::new("mods/enshwick/enshwick.dll"),
     ///         ..ModInfo::EMPTY
-    ///     })
+    ///     }))
     ///     .install();
     /// # let _ = loader;
     /// ```
@@ -235,14 +234,13 @@ impl FakeHost {
     /// use enshwick::abi::{Header, ModInfo, Side, Str};
     ///
     /// let loader = enshwick::test::FakeHost::new()
-    ///     .join_missing(ModInfo {
-    ///         header: Header::of::<ModInfo>(),
+    ///     .join_missing(enshwick::abi::headed!(ModInfo {
     ///         id: Str::new("you.trading-post"),
     ///         version: Str::new("0.2.0"),
     ///         side: Side::BOTH,
     ///         off: 1,
     ///         ..ModInfo::EMPTY
-    ///     })
+    ///     }))
     ///     .install();
     /// // SAFETY: the installed fake's table.
     /// let api = unsafe { &*loader.api() };
@@ -316,12 +314,14 @@ impl Installed {
                 // SAFETY: the fake keeps only the static names its tests gave.
                 (unsafe { off.name.as_str() }) == Some(name)
             }) {
-                s.base.loader_off.push(enshwick_core::abi::LoaderOff {
-                    name: Str::new(name),
-                    reason: Str::new(reason),
-                    at: 1,
-                    ..enshwick_core::abi::LoaderOff::EMPTY
-                });
+                s.base
+                    .loader_off
+                    .push(enshwick_core::headed!(enshwick_core::abi::LoaderOff {
+                        name: Str::new(name),
+                        reason: Str::new(reason),
+                        at: 1,
+                        ..enshwick_core::abi::LoaderOff::EMPTY
+                    }));
             }
         });
     }
@@ -430,16 +430,16 @@ impl Installed {
         let peer = match from {
             enshwick_core::net::Peer::Server => enshwick_core::abi::NetMessage::SERVER,
             enshwick_core::net::Peer::Player(key) => key,
+            _ => return false,
         };
-        let raw = enshwick_core::abi::NetMessage {
-            header: Header::of::<enshwick_core::abi::NetMessage>(),
+        let raw = enshwick_core::headed!(enshwick_core::abi::NetMessage {
             channel: id,
             reserved: 0,
             peer,
             data: bytes.as_ptr(),
             size: u32::try_from(bytes.len()).unwrap_or(0),
             reserved_tail: 0,
-        };
+        });
         // SAFETY: a handler the mod registered with its own pointer.
         handler.run(|callback, user| unsafe { callback(&raw const raw, user) });
         true

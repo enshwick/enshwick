@@ -30,13 +30,13 @@ pub struct PlayerSlot {
 impl PlayerSlot {
     fn from_raw(raw: &Raw) -> Self {
         Self {
-            slot: Slot {
-                at: SlotRef(raw.slot),
-                category: InventoryCategory(raw.category),
-                item: ItemId::new(raw.item),
-                count: raw.count,
-                pide: (raw.pide.0 != 0).then_some(raw.pide),
-            },
+            slot: Slot::new(
+                SlotRef(raw.slot),
+                InventoryCategory(raw.category),
+                ItemId::new(raw.item),
+                raw.count,
+                (!raw.pide.is_none()).then_some(raw.pide),
+            ),
             actionbar: raw.flags & Raw::ACTIONBAR != 0,
         }
     }
@@ -103,28 +103,28 @@ mod tests {
 
     #[test]
     fn a_raw_slot_names_its_place_item_and_the_action_bar() {
-        let raw = Raw {
+        let raw = enshwick_abi::headed!(Raw {
             slot: 0x41 | 2 << 32,
             item: 7,
             count: 3,
-            pide: Entity(0),
+            pide: Entity::from_engine(0),
             category: 4,
             flags: Raw::ACTIONBAR,
             ..Raw::EMPTY
-        };
+        });
         let slot = PlayerSlot::from_raw(&raw);
         assert_eq!(
             (slot.slot.at.inventory(), slot.slot.at.index()),
-            (Entity(0x41), 2)
+            (Entity::from_engine(0x41), 2)
         );
         assert_eq!(slot.slot.category, InventoryCategory::GENERIC);
         assert_eq!((slot.slot.count, slot.slot.pide), (3, None));
         assert!(slot.actionbar);
-        let worn = PlayerSlot::from_raw(&Raw {
-            pide: Entity(900),
+        let worn = PlayerSlot::from_raw(&enshwick_abi::headed!(Raw {
+            pide: Entity::from_engine(900),
             ..Raw::EMPTY
-        });
-        assert_eq!(worn.slot.pide, Some(Entity(900)));
+        }));
+        assert_eq!(worn.slot.pide, Some(Entity::from_engine(900)));
         assert!(!worn.actionbar);
     }
 }

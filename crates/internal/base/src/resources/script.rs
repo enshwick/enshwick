@@ -26,6 +26,10 @@ use enshwick_values::content::Guid;
 /// assert_eq!(bytes.0.len(), 3);
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct Bytes(pub Vec<u8>);
 
 impl Typed for Bytes {

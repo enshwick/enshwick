@@ -7,7 +7,7 @@ use crate::engine_ids as ids;
 use crate::locks::Relock;
 use crate::script::{Choice, Error as ScriptError, FromScript, IntoScript, Ty, Typed, Value};
 
-use super::ops::BatchError;
+use super::ops::RunBatchError;
 
 /// How a request ended.
 ///
@@ -15,6 +15,7 @@ use super::ops::BatchError;
 ///
 /// See [`Outcome`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum Done {
     /// Every operation succeeded and the transaction was committed.
     Committed,
@@ -27,7 +28,7 @@ pub enum Done {
     /// online; nothing changed.
     TimedOut,
     /// The batch was refused before it reached the game.
-    Refused(BatchError),
+    Refused(RunBatchError),
 }
 
 /// Why an operation failed; the loader reads the game's code for each
@@ -36,15 +37,15 @@ pub enum Done {
 /// # Examples
 ///
 /// ```
-/// use enshwick::inventory::{OpError, Outcome};
+/// use enshwick::inventory::{RunOpError, Outcome};
 ///
 /// fn split(outcome: &Outcome) -> bool {
-///     outcome.ops.iter().any(|op| op.error == Some(OpError::OutOfMemory))
+///     outcome.ops.iter().any(|op| op.error == Some(RunOpError::OutOfMemory))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum OpError {
+pub enum RunOpError {
     /// An operation before it failed, so it did not run; the loader's
     /// name, not the game's.
     NotRun,
@@ -57,7 +58,7 @@ pub enum OpError {
     Other(u32),
 }
 
-impl OpError {
+impl RunOpError {
     /// Each error with the id of the game's constant for it.
     pub(super) const IDS: [(Self, &'static str); 2] = [
         (Self::InvalidState, ids::INVENTORY_ERROR_INVALID_STATE),
@@ -65,8 +66,8 @@ impl OpError {
     ];
 }
 
-/// The game's code of each [`OpError`] it names, for the running build.
-pub(super) type OpErrors = Values<OpError, 2>;
+/// The game's code of each [`RunOpError`] it names, for the running build.
+pub(super) type OpErrors = Values<RunOpError, 2>;
 
 /// The result of one operation.
 ///
@@ -74,9 +75,10 @@ pub(super) type OpErrors = Values<OpError, 2>;
 ///
 /// See [`Outcome`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
+#[non_exhaustive]
 pub struct OpResult {
     /// Why it failed; none when it ran without an error.
-    pub error: Option<OpError>,
+    pub error: Option<RunOpError>,
     /// How much of the count the operation could not do.
     pub remaining: u32,
 }
@@ -95,11 +97,11 @@ impl OpResult {
     fn from_raw(raw: InventoryOpResult, errors: &OpErrors) -> Self {
         let error = match raw.error {
             0 => None,
-            InventoryOpResult::NOT_RUN => Some(OpError::NotRun),
+            InventoryOpResult::NOT_RUN => Some(RunOpError::NotRun),
             code => Some(
                 errors
                     .variant(u64::from(code))
-                    .unwrap_or(OpError::Other(code)),
+                    .unwrap_or(RunOpError::Other(code)),
             ),
         };
         Self {
@@ -128,11 +130,24 @@ impl OpResult {
 /// }
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct Outcome {
     /// How it ended.
     pub done: Done,
     /// One per operation when the request ran, else empty.
     pub ops: Vec<OpResult>,
+}
+
+impl Outcome {
+    /// A `Outcome` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`Outcome`].
+    #[must_use]
+    pub const fn new(done: Done, ops: Vec<OpResult>) -> Self {
+        Self { done, ops }
+    }
 }
 
 impl Outcome {
@@ -348,9 +363,9 @@ impl FromScript for Done {
 
 /// A script reads an op's error as the variant's name; `Other` drops the
 /// game's code.
-impl Typed for OpError {
+impl Typed for RunOpError {
     const TY: &'static Ty = &Ty::Choice(&Choice::new(
-        "OpError",
+        "RunOpError",
         "Why an operation failed.",
         &[
             (
@@ -367,7 +382,7 @@ impl Typed for OpError {
     ));
 }
 
-impl IntoScript for OpError {
+impl IntoScript for RunOpError {
     fn into_value(self) -> Value {
         Value::Name(match self {
             Self::NotRun => "NotRun",
@@ -378,7 +393,7 @@ impl IntoScript for OpError {
     }
 }
 
-impl FromScript for OpError {
+impl FromScript for RunOpError {
     fn from_value(value: Value) -> Result<Self, ScriptError> {
         let name = String::from_value(value)?;
         Ok(match name.as_str() {

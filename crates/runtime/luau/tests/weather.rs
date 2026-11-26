@@ -5,14 +5,13 @@
 mod tests {
     use std::time::Duration;
 
-    use enshwick::abi::{Header, WeatherFront};
+    use enshwick::abi::WeatherFront;
     use enshwick::test::FakeHost;
 
     use crate::harness::{logged, run};
 
     fn front(phenomenon: u8) -> WeatherFront {
-        WeatherFront {
-            header: Header::of::<WeatherFront>(),
+        enshwick::abi::headed!(WeatherFront {
             layer: 0,
             effect: WeatherFront::RAIN,
             position: [0.0; 3],
@@ -20,7 +19,7 @@ mod tests {
             reserved: 0,
             remaining_ns: 90_000_000_000,
             phenomenon: enshwick::content::Guid([phenomenon; 16]),
-        }
+        })
     }
 
     #[test]

@@ -2,7 +2,7 @@ use core::ops::ControlFlow;
 use std::sync::OnceLock;
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{Header, Summon};
+use enshwick_core::abi::Summon;
 use enshwick_core::altars::cell_of_fixed;
 use enshwick_core::raw::{read_at, write_at};
 
@@ -68,8 +68,8 @@ pub(super) fn meter(loader: &Loader, pide: u32) -> [u16; 2] {
     let ty = FUEL_TYPE.get_or_init(|| {
         crate::engine::catalogue::component_hash(loader, crate::engine::catalogue::ids::FUEL)
     });
-    let Some(data) =
-        ty.and_then(|ty| crate::engine::world::component(loader, Entity(pide), ty).ok())
+    let Some(data) = ty
+        .and_then(|ty| crate::engine::world::component(loader, Entity::from_engine(pide), ty).ok())
     else {
         return [0; 2];
     };
@@ -125,14 +125,13 @@ pub(super) unsafe fn summon(request: *mut u8) -> Option<Asked> {
     // which keeps the used item's `u32` entity at the table's
     // `survivors.spawn_used_pide`.
     let pide: u32 = unsafe { read_at(request, o.spawn_used_pide) };
-    let mut call = Summon {
-        header: Header::of::<Summon>(),
+    let mut call = enshwick_abi::headed!(Summon {
         item,
         ammo,
         template,
         target,
         slot,
-        pide: Entity(pide),
+        pide: Entity::from_engine(pide),
         meter: if pide == 0 {
             [0; 2]
         } else {
@@ -140,7 +139,7 @@ pub(super) unsafe fn summon(request: *mut u8) -> Option<Asked> {
         },
         consumed: 0,
         reserved: [0; 3],
-    };
+    });
     let mut consume = false;
     let refused = crate::engine::filters::ask(summons, Feature::Survivors, |callback| {
         // SAFETY: the registered `SummonFilterFn` lives in the mod's DLL, which

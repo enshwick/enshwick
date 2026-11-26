@@ -900,21 +900,23 @@ mod tests {
     }
 
     fn layout() -> RecipeLayout {
-        RecipeLayout {
-            recipes: 8,
-            recipe: 0xa8,
-            guid: 0,
-            id: 0x10,
-            workshop_guid: 0x14,
-            workshop: 0x24,
-            input: 0x28,
-            output: 0x30,
-            completion: 0x5c,
-            relative: [0x28, 0x30, 0x40, 0x78],
-            input_size: 48,
-            stack_size: 24,
-            stack_item: 0x10,
-            stack_count: 0x14,
+        {
+            let mut value = RecipeLayout::default();
+            value.recipes = 8;
+            value.recipe = 0xa8;
+            value.guid = 0;
+            value.id = 0x10;
+            value.workshop_guid = 0x14;
+            value.workshop = 0x24;
+            value.input = 0x28;
+            value.output = 0x30;
+            value.completion = 0x5c;
+            value.relative = [0x28, 0x30, 0x40, 0x78];
+            value.input_size = 48;
+            value.stack_size = 24;
+            value.stack_item = 0x10;
+            value.stack_count = 0x14;
+            value
         }
     }
 

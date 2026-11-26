@@ -462,7 +462,7 @@ impl Quests {
     /// the game has not answered, or a form enshwick does not read.
     fn holds(&self, player: Option<Entity>, query: KnowledgeQuery) -> Option<bool> {
         if query.test == KnowledgeTest::Holds {
-            return self.game_query(player.unwrap_or(Entity(0)), query.id.get());
+            return self.game_query(player.unwrap_or(Entity::from_engine(0)), query.id.get());
         }
         let known = match (player, query.scope) {
             (Some(player), _) => self.knowledge.get(player, query.id)?,
@@ -473,7 +473,7 @@ impl Quests {
     }
 
     /// Whether the game query `query` holds for the character `entity`, or
-    /// for the world for `Entity(0)`, as the game answers it.
+    /// for the world for entity 0, as the game answers it.
     fn game_query(&self, entity: Entity, query: u32) -> Option<bool> {
         let host = self.knowledge.host;
         let mut holds = 0u32;
@@ -713,11 +713,8 @@ mod tests {
             enshwick_content::__internal::passes(KnowledgeTest::Unknown, 0),
             None
         );
-        let unknown = KnowledgeQuery {
-            id: KnowledgeId::new(7),
-            scope: Scope::World,
-            test: KnowledgeTest::Unknown,
-        };
+        let unknown =
+            KnowledgeQuery::new(KnowledgeId::new(7), Scope::World, KnowledgeTest::Unknown);
         assert_eq!(unknown.not(), None);
     }
 
@@ -734,11 +731,7 @@ mod tests {
             KnowledgeTest::HasFlag(0b101),
             KnowledgeTest::Holds,
         ] {
-            let query = KnowledgeQuery {
-                id,
-                scope: Scope::Player,
-                test,
-            };
+            let query = KnowledgeQuery::new(id, Scope::Player, test);
             let value = enshwick_content::__fake::query_value(query).unwrap();
             let data = KnowledgeQueryData::from_value(&value).unwrap();
             assert_eq!(
@@ -764,11 +757,7 @@ mod tests {
             KnowledgeTest::HasFlag(0),
             KnowledgeTest::Unknown,
         ] {
-            let query = KnowledgeQuery {
-                id,
-                scope: Scope::World,
-                test: refused,
-            };
+            let query = KnowledgeQuery::new(id, Scope::World, refused);
             assert!(
                 enshwick_content::__fake::query_value(query).is_err(),
                 "{refused:?}"
@@ -815,9 +804,8 @@ mod tests {
 
     #[test]
     fn a_quest_reads_its_steps_rewards_and_lore_fields() {
-        let new = crate::content::journal::NewQuest {
-            rewards: vec![QuestReward::Experience(ExperienceValue::new(9))],
-            ..crate::content::journal::NewQuest::new(
+        let new = {
+            let mut value = crate::content::journal::NewQuest::new(
                 crate::content::Id::new("you.trail:trail"),
                 crate::content::Guid([5; 16]),
                 vec![crate::content::journal::QuestStep::new(
@@ -826,7 +814,9 @@ mod tests {
                     KnowledgeQuery::is_set(KnowledgeId::new(3), Scope::Player),
                     KnowledgeQuery::at_least(KnowledgeId::new(4), Scope::World, 5),
                 )],
-            )
+            );
+            value.rewards = vec![QuestReward::Experience(ExperienceValue::new(9))];
+            value
         };
         let value = enshwick_content::__fake::quest_value(&new, 0).unwrap();
         let quest = QuestInfo::of(&JournalQuestResource::from_value(&value).unwrap());

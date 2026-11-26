@@ -5,7 +5,7 @@ use core::time::Duration;
 
 use crate::Entity;
 use crate::abi::{
-    BlockPlace, Header, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo, TransactionOp,
+    BlockPlace, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo, TransactionOp,
     VoxelRegion, VoxelWrite,
 };
 use crate::terrain::{Shape, add_edit, dig_edit, flatten_edit};
@@ -227,13 +227,12 @@ impl Change {
         let Self::Voxels { min, size, voxels } = self else {
             return None;
         };
-        Some(VoxelWrite {
-            header: Header::of::<VoxelWrite>(),
+        Some(enshwick_abi::headed!(VoxelWrite {
             min: *min,
             size: *size,
             voxels: voxels.as_ptr(),
             count: u32::try_from(voxels.len()).unwrap_or(u32::MAX),
-        })
+        }))
     }
 
     /// The op the loader reads, pointing into this change, or for a voxel
@@ -390,11 +389,11 @@ impl Transaction {
     /// ```
     #[script]
     pub fn erase_block(mut self, min: VoxelPos, size: [u32; 3]) -> Self {
-        self.changes.push(Change::Erase(VoxelRegion {
-            header: Header::of::<VoxelRegion>(),
-            min: min.to_array(),
-            size,
-        }));
+        self.changes
+            .push(Change::Erase(enshwick_abi::headed!(VoxelRegion {
+                min: min.to_array(),
+                size,
+            })));
         self
     }
 
@@ -424,13 +423,13 @@ impl Transaction {
     /// ```
     #[script]
     pub fn place_block(mut self, shape: ItemId, material: ItemId, at: WorldTransform) -> Self {
-        self.changes.push(Change::Block(BlockPlace {
-            header: Header::of::<BlockPlace>(),
-            shape,
-            material,
-            position: at.position,
-            rotation: at.orientation,
-        }));
+        self.changes
+            .push(Change::Block(enshwick_abi::headed!(BlockPlace {
+                shape,
+                material,
+                position: at.position,
+                rotation: at.orientation,
+            })));
         self
     }
 
@@ -460,13 +459,13 @@ impl Transaction {
     /// ```
     #[script]
     pub fn place_prop(mut self, item: ItemId, at: WorldTransform) -> Self {
-        self.changes.push(Change::PlaceProp(PropPlace {
-            header: Header::of::<PropPlace>(),
-            item,
-            reserved: 0,
-            position: at.position,
-            orientation: at.orientation,
-        }));
+        self.changes
+            .push(Change::PlaceProp(enshwick_abi::headed!(PropPlace {
+                item,
+                reserved: 0,
+                position: at.position,
+                orientation: at.orientation,
+            })));
         self
     }
 
@@ -494,11 +493,11 @@ impl Transaction {
     /// ```
     #[script]
     pub fn remove_prop(mut self, entity: Entity) -> Self {
-        self.changes.push(Change::RemoveProp(PropRemove {
-            header: Header::of::<PropRemove>(),
-            entity,
-            flags: 0,
-        }));
+        self.changes
+            .push(Change::RemoveProp(enshwick_abi::headed!(PropRemove {
+                entity,
+                flags: 0,
+            })));
         self
     }
 
@@ -522,11 +521,11 @@ impl Transaction {
     /// ```
     #[script]
     pub fn remove_prop_discarding_state(mut self, entity: Entity) -> Self {
-        self.changes.push(Change::RemoveProp(PropRemove {
-            header: Header::of::<PropRemove>(),
-            entity,
-            flags: PropRemove::DISCARD_STATE,
-        }));
+        self.changes
+            .push(Change::RemoveProp(enshwick_abi::headed!(PropRemove {
+                entity,
+                flags: PropRemove::DISCARD_STATE,
+            })));
         self
     }
 
@@ -796,8 +795,7 @@ impl World {
     #[script]
     pub fn transaction_status(self, id: TransactionId) -> Option<TransactionStatus> {
         let host = self.0.host;
-        let mut info = TransactionInfo {
-            header: Header::of::<TransactionInfo>(),
+        let mut info = enshwick_abi::headed!(TransactionInfo {
             state: TransactionInfo::PENDING,
             reason: Status::OK,
             ops: 0,
@@ -807,7 +805,7 @@ impl World {
             reserved: 0,
             holds: 0,
             created: 0,
-        };
+        });
         let status = (host.api().transaction_status)(host.handle(), id.0, &raw mut info);
         status.is_ok().then(|| TransactionStatus::from_info(&info))
     }

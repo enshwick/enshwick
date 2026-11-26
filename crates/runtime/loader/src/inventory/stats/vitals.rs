@@ -114,7 +114,7 @@ pub(super) fn add_max(loader: &Loader, entity: Entity, pool: Pool, delta: i32) -
         return false;
     };
     let set = layout.sets[pool as usize];
-    let Ok(data) = crate::world::writes::component_mut(loader, entity.0, set.ty) else {
+    let Ok(data) = crate::world::writes::component_mut(loader, entity.get(), set.ty) else {
         return false;
     };
     let data = data.cast::<u8>();

@@ -1,4 +1,4 @@
-use enshwick_core::abi::{Header, TerrainMaterialInfo};
+use enshwick_core::abi::TerrainMaterialInfo;
 
 use super::*;
 
@@ -53,8 +53,7 @@ pub(super) fn palette() -> Palette {
 }
 
 pub(super) fn request(n: u8) -> TerrainMaterialAdd {
-    TerrainMaterialAdd {
-        header: Header::of::<TerrainMaterialAdd>(),
+    enshwick_abi::headed!(TerrainMaterialAdd {
         guid: guid(n),
         item: Guid::NIL,
         health: 0,
@@ -64,7 +63,7 @@ pub(super) fn request(n: u8) -> TerrainMaterialAdd {
         hardness: 0,
         flags: 0,
         reserved: [0; 3],
-    }
+    })
 }
 
 /// Adds the requests in turn, as mods in load order.

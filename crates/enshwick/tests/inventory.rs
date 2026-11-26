@@ -7,17 +7,17 @@
 mod tests {
     use std::sync::{Mutex, OnceLock};
 
-    use enshwick::Entity;
     use enshwick::abi::{
         InventoryOp, InventoryOpResult, InventoryResult, ItemTypeInfo, Status, TickData,
     };
     use enshwick::content::{EngineFacts, Guid};
     use enshwick::events::Ticked;
     use enshwick::inventory::{
-        Bar, Batch, BatchError, Done, Fill, Inventories, InventoryCategory, Op, Outcome, SlotRef,
+        Bar, Batch, Done, Fill, Inventories, InventoryCategory, Op, Outcome, RunBatchError, SlotRef,
     };
     use enshwick::test::FakeHost;
     use enshwick::test::facts::{self, Fact};
+    use enshwick::{Entity, WorldError};
 
     const CORPSE: u32 = 40;
     const PLAYER: u32 = 2;
@@ -127,14 +127,14 @@ mod tests {
         let global = stacks(&host, &[(COIN, 99, 0)]);
         let worn = bar(&host, facts::DURABILITY_MAX, 40, 160);
         let lamp = bar(&host, facts::FUEL_MAX, 2, 3);
-        host.component(Entity(CORPSE), setup_type, &corpse)
-            .component(Entity(42), setup_type, &linked)
-            .component(Entity(41), inventory, &first)
-            .component(Entity(43), inventory, &second)
-            .component(Entity(44), inventory, &global)
-            .component(Entity(41), owner, &CORPSE.to_le_bytes())
-            .component(Entity(900), durability, &worn)
-            .component(Entity(901), fuel, &lamp)
+        host.component(Entity::from_engine(CORPSE), setup_type, &corpse)
+            .component(Entity::from_engine(42), setup_type, &linked)
+            .component(Entity::from_engine(41), inventory, &first)
+            .component(Entity::from_engine(43), inventory, &second)
+            .component(Entity::from_engine(44), inventory, &global)
+            .component(Entity::from_engine(41), owner, &CORPSE.to_le_bytes())
+            .component(Entity::from_engine(900), durability, &worn)
+            .component(Entity::from_engine(901), fuel, &lamp)
             .item(enshwick::ItemId::new(SWORD), 1, ItemTypeInfo::HAS_PIDE)
             .item(enshwick::ItemId::new(LANTERN), 8, 0)
             .item_places(enshwick::ItemId::new(LANTERN), Guid(LANTERN_PLACES))
@@ -146,42 +146,49 @@ mod tests {
 
     #[test]
     fn a_mod_reads_a_corpse_and_takes_everything() {
+        let e = Entity::from_engine;
         let loader = world().install();
         // SAFETY: `enshwick_mod_init` is the export of this file's `declare_mod!(Looter)`.
         assert_eq!(unsafe { loader.init(enshwick_mod_init) }, Status::OK);
         let inventories = INVENTORIES.get().unwrap();
 
         let reader = inventories.read();
-        let slots = reader.slots(Entity(CORPSE));
+        let slots = reader.slots(e(CORPSE)).unwrap();
         assert_eq!(slots.len(), 16);
-        assert_eq!(slots[0].at, SlotRef::new(Entity(41), 0));
+        assert_eq!(slots[0].at, SlotRef::new(e(41), 0));
         assert_eq!(
             (slots[0].item, slots[0].pide, slots[0].category),
             (
                 enshwick::ItemId::new(SWORD),
-                Some(Entity(900)),
+                Some(e(900)),
                 InventoryCategory::GENERIC
             )
         );
-        assert_eq!(slots[9].at, SlotRef::new(Entity(43), 1));
+        assert_eq!(slots[9].at, SlotRef::new(e(43), 1));
         assert_eq!(slots.iter().filter(|s| !s.is_empty()).count(), 3);
+        assert_eq!(reader.count(e(CORPSE), enshwick::ItemId::new(COIN)), Ok(12));
         assert_eq!(
-            reader.count(Entity(CORPSE), enshwick::ItemId::new(COIN)),
-            12
+            reader
+                .slot(SlotRef::new(e(41), 1))
+                .map(|s| s.map(|s| s.count)),
+            Ok(Some(7))
         );
-        assert_eq!(
-            reader.slot(SlotRef::new(Entity(41), 1)).map(|s| s.count),
-            Some(7)
-        );
-        assert_eq!(
-            reader.root(SlotRef::new(Entity(41), 1)),
-            Some(Entity(CORPSE))
-        );
-        assert_eq!(reader.root(SlotRef::new(Entity(43), 1)), None);
-        let durability = reader.durability(Entity(900)).unwrap();
+        assert_eq!(reader.root(SlotRef::new(e(41), 1)), Ok(Some(e(CORPSE))));
+        assert_eq!(reader.root(SlotRef::new(e(43), 1)), Ok(None));
+        let durability = reader.durability(e(900)).unwrap().unwrap();
         assert_eq!((durability.current, durability.max), (40, 160));
-        assert_eq!(reader.meter(Entity(900)), None);
-        assert_eq!(reader.meter(Entity(901)), Some(Bar { current: 2, max: 3 }));
+        assert_eq!(reader.meter(e(900)), Ok(None));
+        assert_eq!(reader.meter(e(901)), Ok(Some(Bar { current: 2, max: 3 })));
+        let elsewhere = std::thread::spawn(move || {
+            (
+                inventories.slots(e(CORPSE)),
+                inventories.count(e(CORPSE), enshwick::ItemId::new(COIN)),
+            )
+        })
+        .join()
+        .unwrap();
+        assert_eq!(elsewhere.0, Err(WorldError::WrongThread));
+        assert_eq!(elsewhere.1, Err(WorldError::WrongThread));
         assert!(
             inventories
                 .item_info(enshwick::ItemId::new(SWORD))
@@ -196,14 +203,14 @@ mod tests {
         assert_eq!(lantern.placed_entity_template, Some(Guid(LANTERN_PLACES)));
         assert!(!lantern.has_pide(), "the placed template is not its own");
 
-        let ticket = inventories.move_all(Entity(CORPSE), Entity(PLAYER), record);
+        let ticket = inventories.move_all(e(CORPSE), e(PLAYER), record);
         let requests = loader.inventory_requests();
         assert_eq!(requests.len(), 1);
         assert_eq!((requests[0].flags, requests[0].actor), (0, PLAYER));
         let op = requests[0].ops[0];
         assert_eq!(
             (op.kind, op.target, op.other),
-            (InventoryOp::MOVE_ALL, Entity(40), Entity(2))
+            (InventoryOp::MOVE_ALL, e(40), e(2))
         );
         assert!(!ticket.is_done());
         let ran = InventoryOpResult {
@@ -214,7 +221,7 @@ mod tests {
         assert!(ticket.outcome().is_some_and(|o| o.is_committed()));
 
         let filled = Op::Give {
-            to: Entity(PLAYER),
+            to: e(PLAYER),
             item: enshwick::ItemId::new(SWORD),
             count: 1,
             fill: Some(Fill::of(2, 3)),
@@ -236,7 +243,7 @@ mod tests {
         assert_eq!(loader.raise::<Ticked>(&tick), 1);
         assert_eq!(
             refused.outcome().map(|o| o.done),
-            Some(Done::Refused(BatchError::Empty))
+            Some(Done::Refused(RunBatchError::Empty))
         );
         let outcomes = OUTCOMES.lock().unwrap();
         assert_eq!(outcomes.len(), 3);

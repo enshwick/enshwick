@@ -57,7 +57,10 @@ mod tests {
             again, first,
             "the retry names the build's refusal, not a twin"
         );
-        assert!(!rewards.grant(Entity(2), "tonic"), "code cannot grant it");
+        assert!(
+            !rewards.grant(Entity::from_engine(2), "tonic"),
+            "code cannot grant it"
+        );
         let _gone = std::fs::remove_dir_all(&data);
     }
 }

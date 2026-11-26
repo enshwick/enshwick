@@ -28,18 +28,19 @@ mod tests {
     }
 
     fn node(name: &'static str, y: f32) -> NewSkillNode {
-        NewSkillNode {
-            links_from: vec![SkillNodeId::new(ROOT_NODE)],
-            cost: Some(2),
-            kind: Some(SkillNodeType::PassiveSkill),
-            ..NewSkillNode::new(
+        {
+            let mut value = NewSkillNode::new(
                 Id::new(name),
                 SkillNodeId::new(ATTRIBUTE_NODE),
                 0.0,
                 y,
                 Guid::named("you.skills:name"),
                 Guid::named("you.skills:text"),
-            )
+            );
+            value.links_from = vec![SkillNodeId::new(ROOT_NODE)];
+            value.cost = Some(2);
+            value.kind = Some(SkillNodeType::PassiveSkill);
+            value
         }
     }
 
@@ -49,31 +50,33 @@ mod tests {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             *LISTED.lock().unwrap() = load.skill_nodes()?;
             let first = load.add_skill_node(node("you.skills:first", 300.0))?;
-            load.add_skill_node(NewSkillNode {
-                links_from: vec![SkillNodeId::new(9)],
-                ..node("you.skills:nowhere", 900.0)
+            load.add_skill_node({
+                let mut value = node("you.skills:nowhere", 900.0);
+                value.links_from = vec![SkillNodeId::new(9)];
+                value
             })?;
-            load.add_skill_node(NewSkillNode {
-                links_from: vec![first],
-                ..node("you.skills:second", 600.0)
+            load.add_skill_node({
+                let mut value = node("you.skills:second", 600.0);
+                value.links_from = vec![first];
+                value
             })?;
             refused(load.add_skill_node(node("you.skills:near", 50.0)));
             // Passes at init against the vanilla tree; the room is gone once
             // the first two are in.
             let third = load.add_skill_node(node("you.skills:third", -300.0))?;
             ADDED.lock().unwrap().extend([first, third]);
-            *PERK.lock().unwrap() = Some(load.add_perk(NewPerk {
-                id: Id::new("you.skills:thirst"),
-                like: VANILLA_PERK,
-                name: Guid::named("you.skills:thirst.name"),
-                description: Guid::named("you.skills:thirst.text"),
-            })?);
-            refused(load.add_perk(NewPerk {
-                id: Id::new("you.skills:nothing"),
-                like: Guid([9; 16]),
-                name: Guid::named("you.skills:n"),
-                description: Guid::named("you.skills:n.text"),
-            }));
+            *PERK.lock().unwrap() = Some(load.add_perk(NewPerk::new(
+                Id::new("you.skills:thirst"),
+                VANILLA_PERK,
+                Guid::named("you.skills:thirst.name"),
+                Guid::named("you.skills:thirst.text"),
+            ))?);
+            refused(load.add_perk(NewPerk::new(
+                Id::new("you.skills:nothing"),
+                Guid([9; 16]),
+                Guid::named("you.skills:n"),
+                Guid::named("you.skills:n.text"),
+            )));
             Ok(Self)
         }
     }

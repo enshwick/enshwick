@@ -175,12 +175,12 @@ impl Installed {
             // The mod's scheduler counts on this clock, so a test waits no
             // real time.
             enshwick_core::__fake::move_clock(now);
-            let tick = TickData {
+            let tick = enshwick_core::headed!(TickData {
                 elapsed_ns: elapsed,
                 step_ns: elapsed,
                 game: ticks.games_ended + 1,
                 ..TickData::new(step)
-            };
+            });
             let off = &s.base.off;
             let every_step = s
                 .base
@@ -200,11 +200,11 @@ impl Installed {
                     // As the loader's: a call before the first step leaves
                     // the handler to run on that step too.
                     t.last = (step != 0).then_some((step, now));
-                    let data = TickData {
+                    let data = enshwick_core::headed!(TickData {
                         elapsed_steps: steps,
                         elapsed_ns: nanos,
                         ..tick
-                    };
+                    });
                     (t.handler, data)
                 });
             every_step.chain(periodic).collect()

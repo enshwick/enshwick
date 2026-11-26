@@ -117,16 +117,12 @@ pub unsafe extern "system" fn enshwick_mod_ready(_: *const HostApi, _: ModHandle
 /// take, which `declare_mod!` would refuse to compile. The fields it leaves
 /// zero are empty strings and lists.
 const BAD_ID_MANIFEST: &str = r#"{
-    use enshwick::abi::{Header, Manifest, Side, Str};
-    let manifest = Manifest {
-        header: Header::of::<Manifest>(),
+    use enshwick::abi::{Manifest, Side, Str};
+    let manifest = enshwick::abi::headed!(Manifest {
         id: Str::new("Lanterns"),
         version: Str::new("0.1.0"),
         side: Side::BOTH,
-        // SAFETY: a manifest of zeros is empty strings and lists, which the
-        // loader reads as absent.
-        ..unsafe { core::mem::zeroed() }
-    };
+    });
     Box::leak(Box::new(manifest))
 }"#;
 

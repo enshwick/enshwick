@@ -1,6 +1,6 @@
 //! Writes of the world's voxels, as the loader raises them after a step.
 
-use enshwick_core::abi::{self, Event, Header, ModHandle};
+use enshwick_core::abi::{self, Event, ModHandle};
 use enshwick_core::voxels::{EditSource, VoxelChange};
 
 use super::VoxelGrid;
@@ -53,14 +53,13 @@ impl Installed {
             let last = changes.iter().map(|c| c.at[axis]).max().unwrap_or(0);
             (last / BRICK).saturating_add(1).saturating_mul(BRICK)
         });
-        let edit = abi::VoxelEditRequest {
-            header: Header::of::<abi::VoxelEditRequest>(),
+        let edit = enshwick_core::headed!(abi::VoxelEditRequest {
             by,
             min,
             size: [0, 1, 2].map(|axis| end[axis] - min[axis]),
             changes: changes.as_ptr(),
             count: u32::try_from(changes.len()).unwrap_or(u32::MAX),
-        };
+        });
         // SAFETY: `edit` is the data of `VOXELS_CHANGED`, its `changes`
         // pointing at `count` changes, all living for the call.
         unsafe { self.raise_raw(Event::VOXELS_CHANGED, (&raw const edit).cast()) }

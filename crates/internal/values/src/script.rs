@@ -739,39 +739,92 @@ impl Callback {
 }
 
 /// Why a call between Rust and a script failed: an argument of the wrong
-/// type, the API's own error, or the script's.
+/// type, the API's own error, or the script's; a script reads its
+/// [kind](Error::kind) and its message.
 ///
 /// # Examples
 ///
 /// ```rust,standalone_crate
 /// let error = enshwick::script::Error::new("count: expected a number");
 /// assert_eq!(error.to_string(), "count: expected a number");
+/// assert_eq!(error.kind(), enshwick::script::Error::BAD_ARGS);
 /// ```
 #[derive(Clone, Debug, thiserror::Error)]
-#[error("{0}")]
-pub struct Error(String);
+#[error("{message}")]
+pub struct Error {
+    kind: String,
+    message: String,
+}
 
 impl Error {
-    /// An error saying `message`.
+    /// The kind of an argument or value the call cannot take.
+    pub const BAD_ARGS: &'static str = "BadArgs";
+
+    /// An error saying `message`, of the kind [`Error::BAD_ARGS`].
     ///
     /// # Examples
     ///
     /// See [`Error`].
     pub fn new(message: impl Into<String>) -> Self {
-        Self(message.into())
+        Self {
+            kind: Self::BAD_ARGS.to_owned(),
+            message: message.into(),
+        }
+    }
+
+    /// The error a call of the API answered, its kind the name of `error`'s
+    /// variant (`WrongThread` of [`WorldError::WrongThread`]), or of its type
+    /// when it has no variants.
+    ///
+    /// [`WorldError::WrongThread`]: ../enum.WorldError.html#variant.WrongThread
+    ///
+    /// # Examples
+    ///
+    /// ```rust,standalone_crate
+    /// let error = enshwick::script::Error::failed(&enshwick::WorldError::WrongThread);
+    /// assert_eq!((error.kind(), error.to_string().as_str()), ("WrongThread", "not on the server's game thread"));
+    /// ```
+    pub fn failed<E: core::fmt::Display + core::fmt::Debug>(error: &E) -> Self {
+        let debug = format!("{error:?}");
+        let kind: String = debug
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        Self {
+            kind: if kind.is_empty() {
+                Self::BAD_ARGS.to_owned()
+            } else {
+                kind
+            },
+            message: error.to_string(),
+        }
+    }
+
+    /// What went wrong, as a name a script compares: the variant of the
+    /// API's error, such as `WrongThread`, or [`Error::BAD_ARGS`].
+    ///
+    /// # Examples
+    ///
+    /// See [`Error`].
+    #[must_use]
+    pub fn kind(&self) -> &str {
+        &self.kind
     }
 
     /// The same error under `context`, such as a parameter's name.
     #[doc(hidden)]
     #[must_use]
     pub fn within(self, context: &str) -> Self {
-        Self(format!("{context}: {}", self.0))
+        Self {
+            kind: self.kind,
+            message: format!("{context}: {}", self.message),
+        }
     }
 }
 
 impl From<Error> for crate::Off {
     fn from(error: Error) -> Self {
-        Self::new(error.0)
+        Self::new(error.message)
     }
 }
 

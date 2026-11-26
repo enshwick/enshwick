@@ -18,7 +18,7 @@ use crate::abi::Str;
 ///     ItemLayout::resolve(facts)
 /// }
 /// ```
-pub trait EngineFacts {
+pub trait EngineFacts: sealed::Sealed {
     /// The byte offset the id names.
     ///
     /// # Errors
@@ -39,6 +39,17 @@ pub trait EngineFacts {
     ///
     /// [`Off`] when the build lacks it.
     fn hash(&self, id: &str) -> Result<u32, Off>;
+}
+
+/// Keeps [`EngineFacts`] to the loader's answers, the fake host's and a
+/// tool's reflection, so a fact never comes from a mod of its own.
+#[doc(hidden)]
+pub mod sealed {
+    /// Implemented by the API's own answerers of engine facts only.
+    pub trait Sealed {}
+
+    impl Sealed for crate::BaseLoad {}
+    impl Sealed for crate::Host {}
 }
 
 impl EngineFacts for crate::BaseLoad {

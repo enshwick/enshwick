@@ -45,7 +45,7 @@
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     let engravings = load.item_data::<Engraving>("engraving")?;
-//!     let ring = ItemInstance { pide: enshwick::Entity(900), item: enshwick::ItemId::new(0x5e01) };
+//!     let ring = ItemInstance { pide: enshwick::Entity::from_engine(900), item: enshwick::ItemId::new(0x5e01) };
 //!     let _set = engravings.set(ring, &Engraving { by: "Balthazar".into() });
 //!     let _by = engravings.get(ring).map(|e| e.by);
 //!     Ok(())
@@ -67,13 +67,13 @@ pub const MAX_VALUE: usize = 512;
 /// # Examples
 ///
 /// ```
-/// use enshwick::item_data::SetError;
+/// use enshwick::item_data::SetItemDataError;
 ///
-/// assert_eq!(SetError::NoEntity.to_string(), "no such entity");
+/// assert_eq!(SetItemDataError::NoEntity.to_string(), "no such entity");
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
-pub enum SetError {
+pub enum SetItemDataError {
     /// The value did not encode.
     #[error("the value does not encode: {0}")]
     Encode(String),
@@ -107,7 +107,7 @@ pub enum SetError {
     Refused(u32),
 }
 
-crate::load::off_from!(SetError);
+crate::load::off_from!(SetItemDataError);
 
 /// A kind of item data with values of type `T`; get it from
 /// [`Load::item_data`](../struct.Load.html#method.item_data). Copy it anywhere.
@@ -173,17 +173,18 @@ where
     ///
     /// # Errors
     ///
-    /// [`SetError`] when the value does not encode or is too long, off the
+    /// [`SetItemDataError`] when the value does not encode or is too long, off the
     /// server, before the world has loaded, or for an item without an
     /// entity.
     ///
     /// # Examples
     ///
     /// See the [module](self).
-    pub fn set(&self, item: ItemInstance, value: &T) -> Result<(), SetError> {
-        let bytes = postcard::to_allocvec(value).map_err(|e| SetError::Encode(e.to_string()))?;
+    pub fn set(&self, item: ItemInstance, value: &T) -> Result<(), SetItemDataError> {
+        let bytes =
+            postcard::to_allocvec(value).map_err(|e| SetItemDataError::Encode(e.to_string()))?;
         if bytes.is_empty() || bytes.len() > MAX_VALUE {
-            return Err(SetError::TooLarge(bytes.len()));
+            return Err(SetItemDataError::TooLarge(bytes.len()));
         }
         self.write(item, &bytes)
     }
@@ -201,11 +202,11 @@ where
     ///     let _removed = kind.remove(item);
     /// }
     /// ```
-    pub fn remove(&self, item: ItemInstance) -> Result<(), SetError> {
+    pub fn remove(&self, item: ItemInstance) -> Result<(), SetItemDataError> {
         self.write(item, &[])
     }
 
-    fn write(&self, item: ItemInstance, bytes: &[u8]) -> Result<(), SetError> {
+    fn write(&self, item: ItemInstance, bytes: &[u8]) -> Result<(), SetItemDataError> {
         let status = (self.host.api().set_item_data)(
             self.host.handle(),
             self.kind,
@@ -218,7 +219,7 @@ where
     }
 }
 
-impl enshwick_base::load::StatusError for SetError {
+impl enshwick_base::load::StatusError for SetItemDataError {
     fn of(status: Status) -> Self {
         match status {
             Status::UNAVAILABLE => Self::NotServer,
@@ -324,7 +325,11 @@ impl ItemData<Data> {
     ///
     /// As [`ItemData::set`].
     #[script(name = "set")]
-    pub(crate) fn set_script(&self, item: ItemInstance, value: &Data) -> Result<(), SetError> {
+    pub(crate) fn set_script(
+        &self,
+        item: ItemInstance,
+        value: &Data,
+    ) -> Result<(), SetItemDataError> {
         self.set(item, value)
     }
 
@@ -334,7 +339,7 @@ impl ItemData<Data> {
     ///
     /// As [`ItemData::set`].
     #[script(name = "remove")]
-    pub(crate) fn remove_script(&self, item: ItemInstance) -> Result<(), SetError> {
+    pub(crate) fn remove_script(&self, item: ItemInstance) -> Result<(), SetItemDataError> {
         self.remove(item)
     }
 }

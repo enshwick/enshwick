@@ -57,14 +57,16 @@ mod tests {
 
     impl Mod for Templates {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let tame = load.add_template(NewTemplate {
-                changes: vec![vukah(), ComponentChange::remove::<Aggro>()],
-                ..NewTemplate::new(TAME, CREATURE)
+            let tame = load.add_template({
+                let mut value = NewTemplate::new(TAME, CREATURE);
+                value.changes = vec![vukah(), ComponentChange::remove::<Aggro>()];
+                value
             })?;
             let boss = Boss::from_value(&Value::Struct(Vec::new()))?;
-            let bossy = load.add_template(NewTemplate {
-                changes: vec![ComponentChange::set(&boss)],
-                ..NewTemplate::new(BOSSY, CREATURE)
+            let bossy = load.add_template({
+                let mut value = NewTemplate::new(BOSSY, CREATURE);
+                value.changes = vec![ComponentChange::set(&boss)];
+                value
             })?;
             ADDED.lock().unwrap().extend([tame, bossy]);
             // Two changes of one vanilla template apply in the order served.
@@ -87,9 +89,10 @@ mod tests {
                     Value::Struct(vec![("value".into(), Value::Uint(1))]),
                 ),
             ]))?;
-            refused(load.add_template(NewTemplate {
-                changes: vec![ComponentChange::set(&crafting)],
-                ..NewTemplate::new(Id::new("you.templates:crafting-wolf"), CREATURE)
+            refused(load.add_template({
+                let mut value = NewTemplate::new(Id::new("you.templates:crafting-wolf"), CREATURE);
+                value.changes = vec![ComponentChange::set(&crafting)];
+                value
             }));
             refused(load.change_template(BOSS_CREATURE, vec![ComponentChange::remove::<Aggro>()]));
             refused(load.change_template(Guid([9; 16]), vec![vukah()]));
@@ -97,16 +100,13 @@ mod tests {
             load.add_template(NewTemplate::new(first, CREATURE))?;
             refused(load.add_template(NewTemplate::new(second, CREATURE)));
             load.add_workshop(NewWorkshop::new(BENCH, stations::WORKBENCH))?;
-            load.add_item(NewItem {
-                meter: Some(FuelSetup {
-                    template: METER,
-                    max_fuel_charges: 4,
-                    start: 1,
-                }),
-                ..NewItem::new(
+            load.add_item({
+                let mut value = NewItem::new(
                     Id::new("you.templates:charged"),
                     Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
-                )
+                );
+                value.meter = Some(FuelSetup::new(METER, 4, 1));
+                value
             })?;
             Ok(Self)
         }

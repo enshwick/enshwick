@@ -26,10 +26,14 @@ pub const GROUP_ENTRIES: usize = 512;
 /// Where the fields of the crafting menu sit on the running build, resolved
 /// by the loader.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// See [`MenuLayout::resolve`] and [`list_recipes`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
+#[non_exhaustive]
 pub struct MenuLayout {
     /// The recipe collection inside the UI bundle.
     pub collection: usize,
@@ -101,6 +105,7 @@ impl MenuLayout {
 ///
 /// See [`list_recipes`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct MenuEntry {
     /// The recipe; its id is [`Guid::fnv1a`].
     pub recipe: Guid,
@@ -112,8 +117,26 @@ pub struct MenuEntry {
     pub workshop: Option<WorkshopId>,
 }
 
+impl MenuEntry {
+    /// A `MenuEntry` of its parts; `after` and `workshop` start as `None`.
+    ///
+    /// # Examples
+    ///
+    /// See [`MenuEntry`].
+    #[must_use]
+    pub const fn new(recipe: Guid) -> Self {
+        Self {
+            recipe,
+            after: None,
+            workshop: None,
+        }
+    }
+}
+
 /// Builds in `out` the UI bundle with each of `entries` listed in the crafting
 /// menu, right after the recipe it follows.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// A recipe with no place to go, or whose group already shows [`GROUP_ENTRIES`]
 /// recipes, is left out with a warning; `None` only when the bundle does not
@@ -127,16 +150,14 @@ pub struct MenuEntry {
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let layout = MenuLayout::resolve(load)?;
-///     let entry = MenuEntry {
-///         recipe: id!("locker.recipe").guid(),
-///         after: Some(Guid::parse("45390726-8a83-4538-91a2-db2a633c8eac")),
-///         workshop: None,
-///     };
+///     let mut entry = MenuEntry::new(id!("locker.recipe").guid());
+///     entry.after = Some(Guid::parse("45390726-8a83-4538-91a2-db2a633c8eac"));
 ///     let bundle = types::FB_UI_BUNDLE.key(UI_BUNDLE)?;
 ///     load.serve(bundle, bundle, move |base, out| list_recipes(&layout, base, &[entry], out))
 /// }
 /// ```
 #[must_use]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
 pub fn list_recipes(
     layout: &MenuLayout,
     bundle: &[u8],
@@ -195,6 +216,8 @@ fn list_in(layout: &MenuLayout, blob: &mut Blob<impl Grow>, entries: &[MenuEntry
 /// every workshop's crafting menu but its new workshop's, where it goes last
 /// in the first set unless it is listed there already.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// A recipe whose new workshop has no menu is only taken out; `None` when
 /// the bundle does not read with `layout`.
 ///
@@ -214,6 +237,7 @@ fn list_in(layout: &MenuLayout, blob: &mut Blob<impl Grow>, entries: &[MenuEntry
 /// }
 /// ```
 #[must_use]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
 pub fn move_recipes(
     layout: &MenuLayout,
     bundle: &[u8],
@@ -392,6 +416,8 @@ fn group_entries(
 /// Builds in `out` the UI bundle with a crafting menu for `workshop`: one
 /// group with one empty set, where recipes that name the workshop go.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// A workshop the menu already has keeps its tree; `None` when the bundle does
 /// not read with `layout`.
 ///
@@ -410,6 +436,7 @@ fn group_entries(
 /// }
 /// ```
 #[must_use]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
 pub fn list_workshop(
     layout: &MenuLayout,
     bundle: &[u8],

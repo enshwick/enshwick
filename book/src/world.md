@@ -271,7 +271,7 @@ first.
 ## Finding entities
 
 `entities(ty)` returns every entity with a component of type `ty` and a place
-in the world. Each comes as `Placed { entity, position }`, position in
+in the world. Each comes as `Placed::new(entity, position)`, position in
 metres. `near(point, radius, ty)` returns those near `point`, nearest first. They
 lie within `radius` metres of it. `transform_type()` is the component every placed
 entity has. So `near(point, radius, world.transform_type())` finds
@@ -295,7 +295,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let beds = enshwick::ecs::ComponentType::resolve(load, "keen::ecs::NpcBed")?;
     let actions = load.actions(enshwick::i18n::Texts::default())?;
     actions.add(Action::new("beds", "Count the beds"), move |_request| {
-        Outcome::done(format!("{} beds", world.entities(beds).len()))
+        Outcome::done(format!("{} beds", world.entities(beds).map_or(0, |beds| beds.len())))
     })
 }
 ```
@@ -724,7 +724,7 @@ use enshwick::events::PlayerDied;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
-    let altar = enshwick::Entity(40);
+    let altar = enshwick::Entity::from_engine(40);
     load.on::<PlayerDied>(move |died| {
         if let Some(player) = world.player(died.entity) {
             if let Err(why) = world.set_respawn_point(&player, altar) {

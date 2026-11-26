@@ -19,10 +19,8 @@ use crate::{ItemId, Off, RecipeId};
 /// use enshwick::content::journal::{CraftTarget, NewQuest, Objective, QuestStep};
 ///
 /// fn init(load: &mut enshwick::Load<'_>, bow: enshwick::RecipeId) -> Result<(), enshwick::Off> {
-///     let step = QuestStep {
-///         objectives: vec![Objective::Craft { target: CraftTarget::Recipe(bow), count: 2 }],
-///         ..QuestStep::owned(id!("bows.make").guid(), id!("bows.make.text").guid())
-///     };
+///     let mut step = QuestStep::owned(id!("bows.make").guid(), id!("bows.make.text").guid());
+///     step.objectives = vec![Objective::Craft { target: CraftTarget::Recipe(bow), count: 2 }];
 ///     load.add_quest(NewQuest::new(id!("bows"), id!("bows.name").guid(), vec![step]))?;
 ///     Ok(())
 /// }
@@ -152,6 +150,10 @@ impl Objective {
 /// filled it.
 #[doc(hidden)]
 #[derive(Clone, Debug, PartialEq)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "the content crate builds it and the knowledge crate reads it; no mod names it"
+)]
 pub struct CountedStep {
     /// The quest.
     pub quest: KnowledgeId,

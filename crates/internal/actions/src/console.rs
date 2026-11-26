@@ -2,11 +2,9 @@
 //! administrator with no character, such as each line of a dedicated
 //! server's command file.
 //!
-//! Unstable: needs the `unstable` feature and may change in any release.
-//!
 //! A line is `enshwick ...` for the loader's own tools (`enshwick help`
 //! lists them), or a mod's id followed by the text form of one of its
-//! [actions](crate::actions), such as `you.lockers access Ann on`. Players never
+//! actions, such as `you.lockers access Ann on`. Players never
 //! type these: they use the game's interface.
 
 use crate::abi::{Status, Str};
@@ -16,13 +14,13 @@ use crate::abi::{Status, Str};
 /// # Examples
 ///
 /// ```
-/// use enshwick::console::{RunError, run};
+/// use enshwick::console::{RunLineError, run};
 ///
-/// assert_eq!(run("   "), Err(RunError::Empty));
+/// assert_eq!(run("   "), Err(RunLineError::Empty));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
-pub enum RunError {
+pub enum RunLineError {
     /// The line holds no word.
     #[error("the line is empty")]
     Empty,
@@ -41,7 +39,7 @@ pub enum RunError {
     Refused(u32),
 }
 
-crate::load::off_from!(RunError);
+crate::load::off_from!(RunLineError);
 
 /// Runs the console line `line`, such as `enshwick status` or
 /// `you.my-mod world`, as the server's console, and returns its answer.
@@ -51,31 +49,31 @@ crate::load::off_from!(RunError);
 ///
 /// # Errors
 ///
-/// [`RunError`] when the line is empty, nothing answers its first word, the
+/// [`RunLineError`] when the line is empty, nothing answers its first word, the
 /// call is not on the game thread or no loader runs.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick::console::{RunError, run};
+/// use enshwick::console::{RunLineError, run};
 ///
 /// // Outside the game no loader answers.
-/// assert_eq!(run("enshwick status"), Err(RunError::NoLoader));
+/// assert_eq!(run("enshwick status"), Err(RunLineError::NoLoader));
 /// ```
-pub fn run(line: &str) -> Result<String, RunError> {
+pub fn run(line: &str) -> Result<String, RunLineError> {
     let line = line.trim();
     if line.is_empty() {
-        return Err(RunError::Empty);
+        return Err(RunLineError::Empty);
     }
-    let host = crate::host().ok_or(RunError::NoLoader)?;
+    let host = crate::host().ok_or(RunLineError::NoLoader)?;
     let mut out = Str::EMPTY;
     let status = (host.api().run_console)(host.handle(), Str::new(line), &raw mut out);
-    enshwick_base::load::outcome::<RunError>(status)?;
+    enshwick_base::load::outcome::<RunLineError>(status)?;
     // SAFETY: the reply stays valid until the next call on this thread.
     Ok(unsafe { out.as_str() }.unwrap_or("").to_owned())
 }
 
-impl enshwick_base::load::StatusError for RunError {
+impl enshwick_base::load::StatusError for RunLineError {
     fn of(status: Status) -> Self {
         match status {
             Status::MISSING => Self::Unknown,
@@ -89,6 +87,10 @@ impl enshwick_base::load::StatusError for RunError {
 /// `console`.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a unit marker, which never gains a field"
+)]
 pub struct ConsoleFns;
 
 #[crate::script(console_fns)]
@@ -104,7 +106,7 @@ impl ConsoleFns {
     ///
     /// As [`run`].
     #[script]
-    pub fn run(self, line: &str) -> Result<String, RunError> {
+    pub fn run(self, line: &str) -> Result<String, RunLineError> {
         run(line)
     }
 }

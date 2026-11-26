@@ -26,7 +26,9 @@ impl Load<'_> {
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let chest = SoundContainerId::from_guid(Guid::named("you.bells:bell"));
-    ///     load.change_sound(chest, SoundChange { volume: Some(0.2), ..SoundChange::default() })
+    ///     let mut sound_change = SoundChange::default();
+    ///     sound_change.volume = Some(0.2);
+    ///     load.change_sound(chest, sound_change)
     /// }
     /// ```
     pub fn change_sound(&mut self, sound: SoundContainerId, change: SoundChange)

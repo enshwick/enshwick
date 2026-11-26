@@ -145,14 +145,19 @@ mod tests {
             enshwick.ui.on_frame(function(frame)
                 frame:play("{held}")
                 local ok, why = pcall(frame.play, frame, "{typo}")
-                enshwick.log.info(`refused {{not ok}} {{why}}`)
+                enshwick.log.info(`refused {{not ok}} {{why.kind}} {{why.call}} {{why}}`)
+                local _, bad = pcall(frame.play, frame, 7)
+                enshwick.log.info(`bad {{bad.kind}}: {{bad.message}}`)
             end)
             "#
         );
         let loader = run(host, &main);
         assert_eq!(loader.draw_frame(), [Drawn::Play(held)]);
         assert!(
-            logged(&loader, "refused true") && logged(&loader, &typo.to_string()),
+            logged(
+                &loader,
+                "refused true Missing Frame:play Frame:play: nothing goes by that name"
+            ) && logged(&loader, "bad BadArgs: "),
             "{:?}",
             loader.logs()
         );
@@ -209,10 +214,10 @@ mod tests {
 
     #[test]
     fn a_script_reads_the_marker_types_and_clears_its_markers() {
-        let altar = MapMarkerTypeInfo {
+        let altar = enshwick::abi::headed!(MapMarkerTypeInfo {
             marker_id: 0x0a0b_0c0d,
             ..MapMarkerTypeInfo::EMPTY
-        };
+        });
         let loader = run(
             FakeHost::new()
                 .side(Side::CLIENT)
@@ -265,7 +270,7 @@ mod tests {
 
     #[test]
     fn a_script_observes_cached_sampler_flags_and_nil_zero_or_stale_age() {
-        use enshwick::abi::{Header, LocalInputInfo as Info};
+        use enshwick::abi::LocalInputInfo as Info;
         let loader = run(
             FakeHost::new().side(Side::CLIENT).player_input(),
             r"
@@ -278,19 +283,17 @@ mod tests {
             ",
         );
         let _drawn = loader.draw_frame();
-        loader.set_local_input_status(Info {
-            header: Header::of::<Info>(),
+        loader.set_local_input_status(enshwick::abi::headed!(Info {
             flags: Info::SAMPLE_PRESENT | Info::FRESH,
             reserved: 0,
             age_ms: 0,
-        });
+        }));
         let _drawn = loader.draw_frame();
-        loader.set_local_input_status(Info {
-            header: Header::of::<Info>(),
+        loader.set_local_input_status(enshwick::abi::headed!(Info {
             flags: Info::SAMPLE_PRESENT,
             reserved: 0,
             age_ms: 1001,
-        });
+        }));
         let _drawn = loader.draw_frame();
         for line in [
             "sample false age nil fresh false",
@@ -303,7 +306,7 @@ mod tests {
 
     #[test]
     fn sampler_age_keeps_full_u64_precision_and_the_never_sampled_sentinel() {
-        use enshwick::abi::{Header, LocalInputInfo as Info};
+        use enshwick::abi::LocalInputInfo as Info;
         let loader = run(
             FakeHost::new().side(Side::CLIENT).player_input(),
             r"
@@ -314,12 +317,11 @@ mod tests {
             ",
         );
         for age_ms in [u64::MAX - 1, u64::MAX] {
-            loader.set_local_input_status(Info {
-                header: Header::of::<Info>(),
+            loader.set_local_input_status(enshwick::abi::headed!(Info {
                 flags: Info::SAMPLE_PRESENT | (1 << 31),
                 reserved: 0,
                 age_ms,
-            });
+            }));
             let _drawn = loader.draw_frame();
         }
         for line in ["boundary age 18446744073709551614", "boundary age nil"] {
@@ -357,7 +359,7 @@ mod tests {
             ",
         );
         let _drawn = loader.draw_frame();
-        loader.set_client_snapshot(ClientSnapshot {
+        loader.set_client_snapshot(enshwick::abi::headed!(ClientSnapshot {
             state: ClientSnapshot::FRESH,
             available: ClientSnapshot::SCREENS | ClientSnapshot::MENU_TAB,
             session: 2,
@@ -365,7 +367,7 @@ mod tests {
             hud_screen: Str::new("InGameMenu"),
             menu_tab: Str::new("Character"),
             ..ClientSnapshot::EMPTY
-        });
+        }));
         let _drawn = loader.draw_frame();
         for line in ["never 0 nil nil nil 1", "fresh 2 InGameMenu Character 16 3"] {
             assert!(logged(&loader, line), "{line}: {:?}", loader.logs());
@@ -385,14 +387,14 @@ mod tests {
             ",
         );
         let _drawn = loader.draw_frame();
-        loader.set_client_snapshot(ClientSnapshot {
+        loader.set_client_snapshot(enshwick::abi::headed!(ClientSnapshot {
             state: ClientSnapshot::FRESH,
             available: ClientSnapshot::PROMPT | ClientSnapshot::CHARACTER,
-            prompt_target: enshwick::Entity(1052),
+            prompt_target: enshwick::Entity::from_engine(1052),
             prompt_verb: 7,
             character: 1,
             ..ClientSnapshot::EMPTY
-        });
+        }));
         let _drawn = loader.draw_frame();
         assert!(
             logged(&loader, "prompt 1052 7 character 1"),
@@ -413,14 +415,14 @@ mod tests {
             end)
             ",
         );
-        loader.set_client_snapshot(ClientSnapshot {
+        loader.set_client_snapshot(enshwick::abi::headed!(ClientSnapshot {
             state: ClientSnapshot::FRESH,
             available: ClientSnapshot::SCREENS,
             session: 1,
             age_ms: 16,
             hud_screen: Str::new("Backpack"),
             ..ClientSnapshot::EMPTY
-        });
+        }));
         let _drawn = loader.draw_frame();
         assert!(
             logged(&loader, "first frame fresh Backpack"),
@@ -496,11 +498,10 @@ mod tests {
 
     #[test]
     fn a_script_opens_a_mod_s_page_and_reads_it_from_the_snapshot() {
-        let trail = enshwick::abi::ModInfo {
-            header: enshwick::abi::Header::of::<enshwick::abi::ModInfo>(),
+        let trail = enshwick::abi::headed!(enshwick::abi::ModInfo {
             id: enshwick::abi::Str::new("you.trail"),
             ..enshwick::abi::ModInfo::EMPTY
-        };
+        });
         let loader = run(
             FakeHost::new()
                 .side(Side::CLIENT)
@@ -524,12 +525,12 @@ mod tests {
                 "you.trail".to_owned()
             )]
         );
-        loader.set_client_snapshot(enshwick::abi::ClientSnapshot {
+        loader.set_client_snapshot(enshwick::abi::headed!(enshwick::abi::ClientSnapshot {
             available: enshwick::abi::ClientSnapshot::LOADER_SCREEN,
             loader_screen: enshwick::abi::ClientSnapshot::MOD_PAGE,
             loader_screen_mod: enshwick::abi::Str::new("you.trail"),
             ..enshwick::abi::ClientSnapshot::EMPTY
-        });
+        }));
         let _first = loader.draw_frame();
         let _second = loader.draw_frame();
         for line in ["queued 1 bare false", "page mod_page of you.trail"] {
@@ -566,7 +567,7 @@ mod tests {
                 "you.admin:panel".to_owned()
             )]
         );
-        loader.set_client_windows(vec![ClientWindowItem {
+        loader.set_client_windows(vec![enshwick::abi::headed!(ClientWindowItem {
             kind: ClientWindowItem::FIELD,
             field: ClientWindowItem::TEXT,
             flags: ClientWindowItem::SHOWN,
@@ -575,7 +576,7 @@ mod tests {
             label: enshwick::abi::Str::new("Message"),
             line: enshwick::abi::Str::new("Announce"),
             ..ClientWindowItem::EMPTY
-        }]);
+        })]);
         let _drawn = loader.draw_frame();
         for line in [
             "queued 1 bare false",
@@ -635,7 +636,7 @@ mod tests {
             loader.client_commands(),
             [(1, enshwick::abi::ClientCommand::CRAFT, String::new())]
         );
-        loader.set_client_snapshot(ClientSnapshot {
+        loader.set_client_snapshot(enshwick::abi::headed!(ClientSnapshot {
             state: ClientSnapshot::FRESH,
             available: ClientSnapshot::VITALS | ClientSnapshot::ACTIONBAR,
             session: 1,
@@ -644,15 +645,15 @@ mod tests {
             health_max: 120,
             actionbar_slot: 2,
             ..ClientSnapshot::EMPTY
-        });
-        loader.set_client_slots(Some(vec![ClientSlot {
+        }));
+        loader.set_client_slots(Some(vec![enshwick::abi::headed!(ClientSlot {
             slot: 0x41,
             item: 7,
             count: 3,
             category: 4,
             flags: ClientSlot::ACTIONBAR,
             ..ClientSlot::EMPTY
-        }]));
+        })]));
         let _drawn = loader.draw_frame();
         for line in [
             "queued 1 twice false bare false",
@@ -775,7 +776,7 @@ mod tests {
         loader.hold_locally(Some(1 << 30));
         let _drawn = loader.draw_frame();
         loader.open_screen(Some(HudScreenType::StorageChest));
-        loader.host_screen(Some(enshwick::Entity(512)));
+        loader.host_screen(Some(enshwick::Entity::from_engine(512)));
         let _drawn = loader.draw_frame();
         for line in [
             "host nil held nil",
@@ -828,7 +829,7 @@ mod tests {
         );
         loader.game_action("ContextualAction", true);
         loader.open_screen(Some(HudScreenType::StorageChest));
-        loader.host_screen(Some(enshwick::Entity(512)));
+        loader.host_screen(Some(enshwick::Entity::from_engine(512)));
         assert!(
             loader.draw_screen(HudScreenType::StorageChest).is_empty(),
             "no read yet"
@@ -863,7 +864,12 @@ mod tests {
             "#,
         );
         loader.slot_input(torch, Input::Click);
-        loader.hover_slot(Some((0x3_0000_0041, torch, 2, enshwick::Entity(0))));
+        loader.hover_slot(Some((
+            0x3_0000_0041,
+            torch,
+            2,
+            enshwick::Entity::from_engine(0),
+        )));
         let under_slots = enshwick::ui::PanelPlacement::new(enshwick::ui::Edge::Left)
             .align(enshwick::ui::Align::Start)
             .shift(362.0)
@@ -887,7 +893,7 @@ mod tests {
             loader.logs()
         );
         assert_eq!(
-            loader.open_tooltip(torch, enshwick::Entity(900)),
+            loader.open_tooltip(torch, enshwick::Entity::from_engine(900)),
             [Drawn::Label {
                 text: format!("Uses left: {}", 0x5e01),
                 style: UiWidget::STYLE_POSITIVE

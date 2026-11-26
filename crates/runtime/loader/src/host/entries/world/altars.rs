@@ -65,8 +65,7 @@ entries! {
     fn base_limit(_loader as Caller, out as HeadedOut<api_frame::BaseLimitInfo>) -> Status {
         let now = crate::world::bases::base_limit();
         let (vanilla, most) = (Limits::VANILLA, crate::world::bases::most());
-        out.put(api_frame::BaseLimitInfo {
-            header: api_frame::Header::of::<api_frame::BaseLimitInfo>(),
+        out.put(enshwick_abi::headed!(api_frame::BaseLimitInfo {
             zones: now.zones,
             bases: now.bases,
             vanilla_zones: vanilla.zones,
@@ -74,7 +73,7 @@ entries! {
             vanilla_bases: vanilla.bases,
             max_zones: most.zones,
             max_bases: most.bases,
-        })
+        }))
     }
 
     fn request_base_limits(me as Mod, zones: u32, bases: u32) -> Status {

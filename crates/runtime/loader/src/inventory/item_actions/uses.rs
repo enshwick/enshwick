@@ -222,21 +222,19 @@ pub(crate) fn forget() {
 
 #[cfg(test)]
 mod tests {
-    use enshwick_core::abi::Header;
 
     use super::super::tests::LAYOUT;
     use super::*;
 
     fn drink(inventory: u32, slot: u32) -> ItemAction {
-        ItemAction {
-            header: Header::of::<ItemAction>(),
+        enshwick_abi::headed!(ItemAction {
             kind: ItemAction::CONSUMED,
-            character: enshwick_core::Entity(1),
+            character: enshwick_core::Entity::from_engine(1),
             item: enshwick_core::ItemId::new(7),
             count: 1,
-            inventory: enshwick_core::Entity(inventory),
+            inventory: enshwick_core::Entity::from_engine(inventory),
             slot,
-        }
+        })
     }
 
     #[test]
@@ -388,10 +386,10 @@ mod tests {
             watch_use(&uses, version, 0, 5, at);
         }
         assert_eq!(uses.watched.relock().len(), MAX_WATCHED_PER_PLAYER);
-        let other = ItemAction {
-            character: enshwick_core::Entity(2),
+        let other = enshwick_abi::headed!(ItemAction {
+            character: enshwick_core::Entity::from_engine(2),
             ..drink(101, 0)
-        };
+        });
         uses.watch(other, 1, 7, 5, Some(STILL), at);
         assert_eq!(
             uses.watched.relock().len(),

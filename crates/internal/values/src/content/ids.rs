@@ -571,6 +571,10 @@ impl Id {
 /// assert_eq!(torch.0, "Tool_Torch01_T0");
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a unit marker, which never gains a field"
+)]
 pub struct DebugName<'a>(pub &'a str);
 
 impl From<Id> for Guid {

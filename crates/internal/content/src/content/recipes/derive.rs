@@ -232,7 +232,7 @@ impl RecipeView<'_> {
     /// // Doubles what every decorative recipe makes, at the same cost.
     /// fn choose(recipe: &RecipeView<'_>) -> Option<Derived> {
     ///     (recipe.kind() == Some(RecipeKind::Decorative))
-    ///         .then_some(Derived { output: 2, cost: 1, workshop: None })
+    ///         .then_some(Derived::new(2, 1))
     /// }
     /// ```
     #[must_use]
@@ -248,6 +248,7 @@ impl RecipeView<'_> {
 ///
 /// See `Load::derive_recipes`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct Derived {
     /// The vanilla output count times this.
     pub output: u32,
@@ -256,6 +257,22 @@ pub struct Derived {
     /// The workshop the copy is made at, such as one from
     /// [`Load::add_workshop`](../../struct.Load.html#method.add_workshop); `None` keeps the vanilla recipe's.
     pub workshop: Option<WorkshopId>,
+}
+
+impl Derived {
+    /// A `Derived` of its parts; `workshop` starts as `None`.
+    ///
+    /// # Examples
+    ///
+    /// See [`Derived`].
+    #[must_use]
+    pub const fn new(output: u32, cost: u32) -> Self {
+        Self {
+            output,
+            cost,
+            workshop: None,
+        }
+    }
 }
 
 /// A derived recipe's GUID: the vanilla one marked with the mod's salt, so it
@@ -290,6 +307,8 @@ pub fn derived_guid(base: Guid, salt: u32) -> Guid {
 /// Builds in `out` the recipe registry with a derived copy after the others
 /// for each vanilla recipe `choose` picks.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// With a workshop `limit` other than [`usize::MAX`], copies stop
 /// [`RESERVED_FOR_SINGLE`] short of it. `Load::derive_recipes` serves it;
 /// `salt` marks the copies as in [`derived_guid`].
@@ -307,17 +326,14 @@ pub fn derived_guid(base: Guid, salt: u32) -> Guid {
 ///     let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
 ///     load.serve(registry, registry, move |base, out| {
 ///         let choose = |recipe: &RecipeView<'_>| {
-///             recipe.debug_name().starts_with("Block_").then_some(Derived {
-///                 output: 2,
-///                 cost: 1,
-///                 workshop: None,
-///             })
+///             recipe.debug_name().starts_with("Block_").then_some(Derived::new(2, 1))
 ///         };
 ///         derive_recipes_in(&layout, base, 0x5afe, workshop_limit(), &choose, out)
 ///     })
 /// }
 /// ```
 #[must_use]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
 pub fn derive_recipes_in(
     layout: &RecipeLayout,
     registry: &[u8],
@@ -460,8 +476,11 @@ impl RecipeEdit<'_> {
 /// The recipe registry with `modify` called on each recipe in turn; the
 /// second value is how many recipes it changed. The loader's recipe output
 /// rates serve it.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
 #[doc(hidden)]
 #[must_use]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
 pub fn modify_recipes_in(
     layout: &RecipeLayout,
     registry: &[u8],

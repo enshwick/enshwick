@@ -17,7 +17,7 @@ mod run;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use enshwick_core::abi::{Dependency, Header, Manifest, ManifestFlags, Side, Str};
+use enshwick_core::abi::{Dependency, Manifest, ManifestFlags, Side, Str};
 use enshwick_core::packs::{MANIFEST_FILE, PackFiles, PackManifest, PackSide};
 use rustc_hash::FxHashMap;
 
@@ -95,8 +95,7 @@ fn manifest_of(manifest: &PackManifest) -> &'static Manifest {
     let (authors, author_count) = keep_slice(authors);
     let exports: Vec<Str> = manifest.exports.iter().map(|name| keep(name)).collect();
     let (exports, export_count) = keep_slice(exports);
-    Box::leak(Box::new(Manifest {
-        header: Header::of::<Manifest>(),
+    Box::leak(Box::new(enshwick_abi::headed!(Manifest {
         id: keep(&manifest.id),
         version: keep(&manifest.version),
         side,
@@ -114,7 +113,7 @@ fn manifest_of(manifest: &PackManifest) -> &'static Manifest {
         points: Str::EMPTY,
         exports,
         export_count,
-    }))
+    })))
 }
 
 /// Every pack folder under `mods_dir` with a readable `pack.toml` whose id

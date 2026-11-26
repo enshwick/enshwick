@@ -12,11 +12,12 @@ use crate::abi::{Entity, Header, KnowledgeId};
 /// ```
 /// use enshwick::abi::{Header, QuestData};
 ///
-/// let done = QuestData { header: Header::of::<QuestData>(), entity: enshwick::Entity(2), quest: enshwick::knowledge::KnowledgeId::new(0x51) };
-/// assert_eq!(done.entity, enshwick::Entity(2));
+/// let done = enshwick::abi::headed!(QuestData { entity: enshwick::Entity::from_engine(2), quest: enshwick::knowledge::KnowledgeId::new(0x51) });
+/// assert_eq!(done.entity, enshwick::Entity::from_engine(2));
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, crate::Script)]
+#[non_exhaustive]
 pub struct QuestData {
     /// Size and version of this struct.
     pub header: Header,
@@ -35,16 +36,16 @@ impl_headed!(QuestData);
 /// ```
 /// use enshwick::abi::{Header, QuestStepData};
 ///
-/// let done = QuestStepData {
-///     header: Header::of::<QuestStepData>(),
-///     entity: enshwick::Entity(2),
+/// let done = enshwick::abi::headed!(QuestStepData {
+///     entity: enshwick::Entity::from_engine(2),
 ///     quest: enshwick::knowledge::KnowledgeId::new(0x51),
 ///     step: 1,
-/// };
+/// });
 /// assert_eq!(done.step, 1, "the quest's second step");
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, crate::Script)]
+#[non_exhaustive]
 pub struct QuestStepData {
     /// Size and version of this struct.
     pub header: Header,
@@ -66,19 +67,19 @@ impl_headed!(QuestStepData);
 /// ```
 /// use enshwick::abi::{Header, QuestProgressData};
 ///
-/// let counted = QuestProgressData {
-///     header: Header::of::<QuestProgressData>(),
-///     entity: enshwick::Entity(2),
+/// let counted = enshwick::abi::headed!(QuestProgressData {
+///     entity: enshwick::Entity::from_engine(2),
 ///     quest: enshwick::knowledge::KnowledgeId::new(0x51),
 ///     step: 0,
 ///     part: 0,
 ///     value: 3,
 ///     target: 5,
-/// };
+/// });
 /// assert!(counted.value < counted.target, "three of five");
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, crate::Script)]
+#[non_exhaustive]
 pub struct QuestProgressData {
     /// Size and version of this struct.
     pub header: Header,
@@ -111,21 +112,21 @@ impl_headed!(QuestProgressData);
 /// ```
 /// use enshwick::abi::{Header, QuestPayment};
 ///
-/// let mut paid = QuestPayment {
-///     header: Header::of::<QuestPayment>(),
-///     entity: enshwick::Entity(2),
+/// let mut paid = enshwick::abi::headed!(QuestPayment {
+///     entity: enshwick::Entity::from_engine(2),
 ///     quest: enshwick::knowledge::KnowledgeId::new(0x51),
 ///     count: 1,
 ///     limit: 3,
 ///     allowed: 1,
 ///     reserved: [0; 3],
 ///     experience: [0x77; QuestPayment::MAX],
-/// };
+/// });
 /// paid.count = 2;
 /// assert!(paid.count <= paid.limit, "the same experience paid twice");
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct QuestPayment {
     /// Size and version of this struct.
     pub header: Header,

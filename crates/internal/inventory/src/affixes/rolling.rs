@@ -8,7 +8,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::Entity;
 use crate::Off;
-use crate::abi::{AffixRoll, Header, Status};
+use crate::abi::{AffixRoll, Status};
 use crate::game_events::CraftRecipeEvent;
 use crate::inventory::{ItemInstance, Slot};
 use crate::locks::Relock;
@@ -24,7 +24,7 @@ fn fresh_seed(item: ItemInstance) -> u64 {
         .map_or(0, |d| d.as_nanos());
     #[expect(clippy::cast_possible_truncation, reason = "the low bits seed")]
     let now = now as u64;
-    now ^ (u64::from(item.pide.0) << 32 | u64::from(item.item.get()))
+    now ^ (u64::from(item.pide.get()) << 32 | u64::from(item.item.get()))
 }
 
 #[crate::script(rolling)]
@@ -56,8 +56,7 @@ impl Affixes {
         seed: Option<u64>,
         once: bool,
     ) -> Result<u32, RollError> {
-        let request = AffixRoll {
-            header: Header::of::<AffixRoll>(),
+        let request = enshwick_abi::headed!(AffixRoll {
             pide: item.pide,
             item: item.item,
             min: rules.min,
@@ -65,7 +64,7 @@ impl Affixes {
             max_rarity: rules.max_rarity.to_raw(),
             flags: if once { AffixRoll::ONCE } else { 0 },
             seed: seed.unwrap_or_else(|| fresh_seed(item)),
-        };
+        });
         let mut count = 0;
         match (self.host.api().affix_roll)(self.host.handle(), &raw const request, &raw mut count) {
             Status::OK => Ok(count),
@@ -221,7 +220,10 @@ impl LoadMethods for crate::BaseLoad {
                 let Some(container) = roll.entity else {
                     continue;
                 };
-                for item in instances(&inventories.read().slots(container)) {
+                let Ok(slots) = inventories.read().slots(container) else {
+                    continue;
+                };
+                for item in instances(&slots) {
                     try_roll(affixes, item, rule.chance, rule.rules);
                 }
             }
@@ -243,8 +245,10 @@ impl LoadMethods for crate::BaseLoad {
         let pending: Arc<Crafts> = Arc::default();
         let requests = Arc::clone(&pending);
         self.on::<CraftRecipeEvent>(move |craft| {
-            let held: FxHashSet<ItemInstance> =
-                instances(&inventories.read().slots(craft.crafting_operator_id)).collect();
+            let Ok(slots) = inventories.read().slots(craft.crafting_operator_id) else {
+                return;
+            };
+            let held: FxHashSet<ItemInstance> = instances(&slots).collect();
             requests
                 .relock()
                 .entry(craft.crafting_operator_id)
@@ -265,9 +269,10 @@ impl LoadMethods for crate::BaseLoad {
                     .collect()
             };
             for (player, before) in due {
-                for item in
-                    instances(&inventories.read().slots(player)).filter(|i| !before.contains(i))
-                {
+                let Ok(slots) = inventories.read().slots(player) else {
+                    continue;
+                };
+                for item in instances(&slots).filter(|i| !before.contains(i)) {
                     try_roll(affixes, item, rule.chance, rule.rules);
                 }
             }

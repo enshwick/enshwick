@@ -5,7 +5,7 @@
 mod tests {
     use std::sync::OnceLock;
 
-    use enshwick::abi::{Header, KnowledgeInfo, PlayerInfo, Status};
+    use enshwick::abi::{KnowledgeInfo, PlayerInfo, Status};
     use enshwick::content::journal::{NewQuest, QuestReward, QuestStep};
     use enshwick::content::knowledge::{GameQuery, KnowledgeQuery, KnowledgeTest, NewKnowledge};
     use enshwick::content::{Guid, Id};
@@ -18,8 +18,8 @@ mod tests {
     const TRAIL: Id = Id::new("you.road:trail");
     const MET: Id = Id::new("you.road:met");
     const TORCH: Guid = Guid::parse("c0ffee00-0000-4000-8000-0000000a7c01");
-    const PLAYER: Entity = Entity(4096);
-    const ABSENT: Entity = Entity(9999);
+    const PLAYER: Entity = Entity::from_engine(4096);
+    const ABSENT: Entity = Entity::from_engine(9999);
 
     static QUESTS: OnceLock<Quests> = OnceLock::new();
     static AGAIN: OnceLock<Quests> = OnceLock::new();
@@ -45,9 +45,8 @@ mod tests {
                 KnowledgeType::Counter,
             ))?;
             let is = KnowledgeQuery::is_set(given, Scope::Player);
-            load.add_quest(NewQuest {
-                rewards: vec![QuestReward::Item(TORCH)],
-                ..NewQuest::new(
+            load.add_quest({
+                let mut value = NewQuest::new(
                     TRAIL,
                     tag("trail.name"),
                     vec![
@@ -59,7 +58,9 @@ mod tests {
                         ),
                         QuestStep::new(tag("2"), tag("2.text"), is, is.not().unwrap()),
                     ],
-                )
+                );
+                value.rewards = vec![QuestReward::Item(TORCH)];
+                value
             })?;
             let met = KnowledgeQuery::game(GameQuery::new(77));
             let answered = KnowledgeQuery::game(GameQuery::new(78));
@@ -90,15 +91,14 @@ mod tests {
         let loader = FakeHost::new()
             .progression()
             .world()
-            .player(PlayerInfo {
-                header: Header::of::<PlayerInfo>(),
+            .player(enshwick::abi::headed!(PlayerInfo {
                 slot: 0,
                 entity: PLAYER,
                 key: PlayerKey::new(7),
                 permissions: 0,
                 name_len: 0,
                 name: [0; PlayerInfo::NAME_MAX],
-            })
+            }))
             .component(
                 PLAYER,
                 fnv1a32(PROGRESSION.as_bytes()),
@@ -113,15 +113,14 @@ mod tests {
     }
 
     fn known(id: KnowledgeId, kind: u8, value: u32) -> (Option<Entity>, KnowledgeInfo) {
-        let info = KnowledgeInfo {
-            header: Header::of::<KnowledgeInfo>(),
+        let info = enshwick::abi::headed!(KnowledgeInfo {
             id,
             kind,
             scope: KnowledgeInfo::PLAYER,
             reserved: 0,
             value,
             flags: 0,
-        };
+        });
         (Some(PLAYER), info)
     }
 

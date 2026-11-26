@@ -4,6 +4,7 @@ use enshwick_core::abi::Str;
 mod chat_lines;
 mod dialog_answers;
 mod item_acts;
+mod joins;
 
 /// The frame's step while no command opens or closes a screen.
 fn next(command: &Command, seen: &Seen, progress: Option<Progress>, now: u64) -> Next {
@@ -208,12 +209,14 @@ fn a_recipe_waits_for_the_browser_and_is_observed_once_it_is_highlighted() {
 fn a_look_or_move_past_its_bounds_and_on_another_screen_is_refused() {
     let loader = crate::start::tests::bare_loader();
     let kind = |spec: &Spec| kind(&loader, spec);
-    let spec = |kind, look, direction, hold_ms| Spec {
-        kind,
-        look,
-        direction,
-        hold_ms,
-        ..Spec::EMPTY
+    let spec = |kind, look, direction, hold_ms| {
+        enshwick_abi::headed!(Spec {
+            kind,
+            look,
+            direction,
+            hold_ms,
+            ..Spec::EMPTY
+        })
     };
     assert_eq!(
         kind(&spec(Spec::LOOK, [Spec::MAX_LOOK, -0.5], [0.0; 2], 0)),
@@ -226,10 +229,10 @@ fn a_look_or_move_past_its_bounds_and_on_another_screen_is_refused() {
         spec(Spec::MOVE, [0.0; 2], [0.0, 1.0], 0),
         spec(Spec::MOVE, [0.0; 2], [1.0, 1.0], 100),
         spec(Spec::MOVE, [0.0; 2], [0.0, 0.0], 100),
-        Spec {
+        enshwick_abi::headed!(Spec {
             kind: Spec::HIGHLIGHT_RECIPE,
             ..Spec::EMPTY
-        },
+        }),
     ] {
         assert_eq!(kind(&refused), Err(CommandError::BadArgs), "{refused:?}");
     }
@@ -242,11 +245,13 @@ fn a_look_or_move_past_its_bounds_and_on_another_screen_is_refused() {
 #[test]
 fn a_press_needs_a_game_action_a_bounded_hold_and_the_build_s_bit() {
     let loader = crate::start::tests::bare_loader();
-    let press = |name: &str, hold_ms| Spec {
-        kind: Spec::PRESS,
-        target: Str::new(name),
-        hold_ms,
-        ..Spec::EMPTY
+    let press = |name: &str, hold_ms| {
+        enshwick_abi::headed!(Spec {
+            kind: Spec::PRESS,
+            target: Str::new(name),
+            hold_ms,
+            ..Spec::EMPTY
+        })
     };
     for (spec, why) in [
         (press("Jump", 0), "no hold"),
@@ -624,12 +629,14 @@ fn a_control_held_before_the_first_fresh_read_is_not_a_press() {
 #[test]
 fn a_window_command_needs_a_window_an_item_and_a_pick_s_option() {
     let loader = crate::start::tests::bare_loader();
-    let spec = |kind, window: &'static str, item: &'static str, text: &'static str| Spec {
-        kind,
-        target: Str::new(window),
-        item: Str::new(item),
-        text: Str::new(text),
-        ..Spec::EMPTY
+    let spec = |kind, window: &'static str, item: &'static str, text: &'static str| {
+        enshwick_abi::headed!(Spec {
+            kind,
+            target: Str::new(window),
+            item: Str::new(item),
+            text: Str::new(text),
+            ..Spec::EMPTY
+        })
     };
     assert_eq!(
         kind(
@@ -666,10 +673,10 @@ fn a_window_command_needs_a_window_an_item_and_a_pick_s_option() {
         assert_eq!(read, Err(CommandError::BadArgs), "{why}");
     }
     let long = "x".repeat(Spec::MAX_TEXT + 1);
-    let past = Spec {
+    let past = enshwick_abi::headed!(Spec {
         text: Str::new(&long),
         ..spec(Spec::WINDOW_TEXT, "you.admin:panel", "say/0", "")
-    };
+    });
     assert_eq!(
         kind(&loader, &past),
         Err(CommandError::BadArgs),
@@ -886,54 +893,14 @@ fn a_server_queues_nothing() {
 }
 
 #[test]
-fn a_panic_in_a_join_or_leave_turns_off_only_the_commands() {
-    play_frame(|| panic!("a test"), false, || false, |_| false);
-    assert!(FUSE.is_off(), "the commands, not the interface frame");
-}
-
-#[test]
-fn a_join_and_a_leave_report_a_phase_from_the_queue_on() {
-    assert_eq!(Kind::Join.queued_phase(), Status::PHASE_QUEUED);
-    assert_eq!(Kind::Leave.queued_phase(), Status::PHASE_IN_WORLD);
-    assert_eq!(Kind::Open(9).queued_phase(), 0);
-}
-
-#[test]
-fn the_stage_tells_once_when_play_starts_and_once_when_it_ends() {
-    let _menu = play::note_stage(2, 1);
-    assert_eq!(play::note_stage(0, 2), None, "a menu after a menu");
-    assert_eq!(play::note_stage(4, 3), Some(true), "play starts loading");
-    assert_eq!(play::note_stage(7, 4), None, "loading into the world");
-    assert_eq!(play::note_stage(7, 5), None, "still in the world");
-    assert_eq!(play::note_stage(2, 6), Some(false), "back at a menu");
-    assert_eq!(play::note_stage(2, 7), None, "the menu again");
-}
-
-#[test]
-fn a_leave_starts_only_in_play_and_only_one_at_a_time() {
-    play::note_stage(2, 10);
-    assert_eq!(
-        play::can_leave(10),
-        Err(play::StartError::NotNow),
-        "the menu"
-    );
-    play::note_stage(7, 20);
-    assert_eq!(play::can_leave(20), Ok(()));
-    assert_eq!(play::leave(5, 20), Ok(()));
-    assert_eq!(
-        play::can_leave(20),
-        Err(play::StartError::NotNow),
-        "a leave runs"
-    );
-}
-
-#[test]
 fn a_waypoint_or_ping_needs_a_finite_position_and_clear_needs_none() {
     let loader = crate::start::tests::bare_loader();
-    let spec = |kind, position| Spec {
-        kind,
-        position,
-        ..Spec::EMPTY
+    let spec = |kind, position| {
+        enshwick_abi::headed!(Spec {
+            kind,
+            position,
+            ..Spec::EMPTY
+        })
     };
     let at = [100.0, 20.0, -50.0];
     assert_eq!(
@@ -958,11 +925,11 @@ fn a_waypoint_or_ping_needs_a_finite_position_and_clear_needs_none() {
 
 #[test]
 fn a_position_outside_the_read_map_frame_is_refused_and_any_passes_without_one() {
-    let frame = enshwick_core::abi::MapFrameInfo {
+    let frame = enshwick_abi::headed!(enshwick_core::abi::MapFrameInfo {
         origin: [0.0, 0.0],
         size: [10240.0, 10240.0],
         ..enshwick_core::abi::MapFrameInfo::EMPTY
-    };
+    });
     assert!(inside_frame(Some(frame), [5000.0, 80.0, 5000.0]));
     assert!(!inside_frame(Some(frame), [-1.0, 80.0, 5000.0]));
     assert!(!inside_frame(Some(frame), [5000.0, 80.0, 10241.0]));

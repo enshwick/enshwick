@@ -58,7 +58,9 @@ impl Load<'_> {
     /// use enshwick::knowledge::{RuleChange, RuleId};
     ///
     /// fn init(load: &mut enshwick::Load<'_>, rule: RuleId, later: KnowledgeQuery) -> Result<(), enshwick::Off> {
-    ///     load.change_knowledge_rule(rule, RuleChange { when: Some(later), ..RuleChange::default() })
+    ///     let mut rule_change = RuleChange::default();
+    ///     rule_change.when = Some(later);
+    ///     load.change_knowledge_rule(rule, rule_change)
     /// }
     /// ```
     #[script]

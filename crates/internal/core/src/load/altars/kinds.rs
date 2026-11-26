@@ -3,7 +3,6 @@
 use crate::altars::NewFlameAltar;
 use crate::content::props::PropId;
 use crate::{Load, Off};
-#[cfg(feature = "unstable")]
 use enshwick_world::__internal;
 use enshwick_world::__load::*;
 
@@ -30,11 +29,9 @@ impl Load<'_> {
     /// use enshwick::content::items::NewItem;
     ///
     /// fn init(load: &mut enshwick::Load<'_>, altar: Guid) -> Result<(), enshwick::Off> {
-    ///     let wide = load.add_flame_altar(NewFlameAltar {
-    ///         item: NewItem::new(id!("wide-altar"), altar),
-    ///         zones: vec![KindZone { grow: 20, height: 80 }],
-    ///         recipe_cost: Some(2),
-    ///     })?;
+    ///     let mut flame_altar = NewFlameAltar::new(NewItem::new(id!("wide-altar"), altar), vec![KindZone::new(20, 80)]);
+    ///     flame_altar.recipe_cost = Some(2);
+    ///     let wide = load.add_flame_altar(flame_altar)?;
     ///     enshwick::info!("wide altars are {}", wide.template.guid());
     ///     Ok(())
     /// }
@@ -50,8 +47,6 @@ impl Load<'_> {
     /// `max_level` of 0 refuses even the claim. The Flame's own upgrades,
     /// upgrade recipes added by mods and other kinds keep the game's limit.
     ///
-    /// Unstable: needs the `unstable` feature and may change in any release.
-    ///
     /// # Errors
     ///
     /// As [`Load::on_craft`], and [`Off`] when the vanilla recipe registry
@@ -65,15 +60,10 @@ impl Load<'_> {
     /// use enshwick::content::items::NewItem;
     ///
     /// fn init(load: &mut enshwick::Load<'_>, altar: Guid) -> Result<(), enshwick::Off> {
-    ///     let small = load.add_flame_altar(NewFlameAltar {
-    ///         item: NewItem::new(id!("small-altar"), altar),
-    ///         zones: Vec::new(),
-    ///         recipe_cost: None,
-    ///     })?;
+    ///     let small = load.add_flame_altar(NewFlameAltar::new(NewItem::new(id!("small-altar"), altar), Vec::new()))?;
     ///     load.limit_altar_level(small, 2)
     /// }
     /// ```
-    #[cfg(feature = "unstable")]
     #[script]
     pub fn limit_altar_level(&mut self, kind: PropId, max_level: u8) -> Result<(), Off> {
         let refused = __internal::altar_upgrades_from(self.host(), max_level)?;

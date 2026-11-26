@@ -162,32 +162,31 @@ macro_rules! container_entry {
             /// The container values this entry gives, without takes.
             fn values(&self) -> SoundChange {
                 let seconds = |s: Option<f32>| s.map(|s| Duration::try_from_secs_f32(s).unwrap_or(Duration::MAX));
-                SoundChange {
-                    volume: self.volume,
-                    volume_randomness: self.volume_randomness,
-                    pitch: self.pitch,
-                    pitch_randomness: self.pitch_randomness,
-                    min_distance: self.min_distance,
-                    max_distance: self.max_distance,
-                    looped: self.looped,
-                    priority: self.priority,
-                    scene: self.scene.map(SceneEntry::scene),
-                    has_position: self.has_position,
-                    sleep: seconds(self.sleep),
-                    sleep_randomness: seconds(self.sleep_randomness),
-                    avoid_repeating_last: self.avoid_repeating_last,
-                    loop_same_take: self.loop_same_take,
-                    max_count: self.max_count,
-                    stealing_mode: self.stealing_mode.map(StealingModeEntry::mode),
-                    random_position: self.random_position.map(|r| RandomPosition {
+                let mut change = SoundChange::default();
+                change.volume = self.volume;
+                change.volume_randomness = self.volume_randomness;
+                change.pitch = self.pitch;
+                change.pitch_randomness = self.pitch_randomness;
+                change.min_distance = self.min_distance;
+                change.max_distance = self.max_distance;
+                change.looped = self.looped;
+                change.priority = self.priority;
+                change.scene = self.scene.map(SceneEntry::scene);
+                change.has_position = self.has_position;
+                change.sleep = seconds(self.sleep);
+                change.sleep_randomness = seconds(self.sleep_randomness);
+                change.avoid_repeating_last = self.avoid_repeating_last;
+                change.loop_same_take = self.loop_same_take;
+                change.max_count = self.max_count;
+                change.stealing_mode = self.stealing_mode.map(StealingModeEntry::mode);
+                change.random_position = self.random_position.map(|r| RandomPosition {
                         left_right: r.left_right.unwrap_or(0.0),
                         front_back: r.front_back.unwrap_or(0.0),
-                    }),
-                    mute_on_main: self.mute_on_main,
-                    gamepad_speaker: self.gamepad_speaker,
-                    gamepad_vibration: self.gamepad_vibration,
-                    takes: None,
-                }
+                });
+                change.mute_on_main = self.mute_on_main;
+                change.gamepad_speaker = self.gamepad_speaker;
+                change.gamepad_vibration = self.gamepad_vibration;
+                change
             }
         }
     };
@@ -376,24 +375,28 @@ impl PackSound {
     /// The sound to add with [`Load::add_sound`](../struct.Load.html#method.add_sound) under `id`.
     pub(super) fn new_sound(&self, id: crate::content::Id) -> crate::sound::NewSound {
         use crate::sound::{NewSound, NewTake, Trim};
-        NewSound {
-            id,
-            takes: self
-                .takes
-                .iter()
-                .map(|(file, chance)| NewTake {
-                    chance: *chance,
-                    ..NewTake::new(file.clone())
-                })
-                .collect(),
-            channels: channels(self.channels),
-            gain_db: self.gain_db,
-            trim: Trim {
-                from: self.trim.0,
-                to: self.trim.1,
-            },
-            container: self.container.clone(),
-        }
+        let first = self
+            .takes
+            .first()
+            .map_or_else(String::new, |(file, _)| file.clone());
+        let mut sound = NewSound::new(id, first);
+        sound.takes = self
+            .takes
+            .iter()
+            .map(|(file, chance)| {
+                let mut take = NewTake::new(file.clone());
+                take.chance = *chance;
+                take
+            })
+            .collect();
+        sound.channels = channels(self.channels);
+        sound.gain_db = self.gain_db;
+        sound.trim = Trim {
+            from: self.trim.0,
+            to: self.trim.1,
+        };
+        sound.container = self.container.clone();
+        sound
     }
 }
 
@@ -449,22 +452,16 @@ impl PackVoiceover {
     pub(super) fn new_voiceover(&self, id: crate::content::Id) -> crate::sound::NewVoiceover {
         use crate::sound::{NewVoiceover, VoiceLine};
         let e = &self.entry;
-        NewVoiceover {
-            fallback: e.fallback.clone(),
-            channels: channels(e.channels),
-            gain_db: e.gain_db.unwrap_or(0.0),
-            container: SoundChange {
-                has_position: e.has_position,
-                ..SoundChange::default()
-            },
-            ..NewVoiceover::new(
-                id,
-                e.lines
-                    .iter()
-                    .map(|l| VoiceLine::new(l.language.clone(), l.file.clone()))
-                    .collect(),
-            )
-        }
+        let lines = e
+            .lines
+            .iter()
+            .map(|l| VoiceLine::new(l.language.clone(), l.file.clone()));
+        let mut line = NewVoiceover::new(id, lines.collect());
+        line.fallback.clone_from(&e.fallback);
+        line.channels = channels(e.channels);
+        line.gain_db = e.gain_db.unwrap_or(0.0);
+        line.container.has_position = e.has_position;
+        line
     }
 }
 
@@ -473,20 +470,19 @@ impl PackMusic {
     /// The music to add under `id`.
     pub(super) fn new_music(&self, id: crate::content::Id) -> crate::sound::NewMusic {
         let e = &self.entry;
-        crate::sound::NewMusic {
-            channels: channels(e.channels),
-            gain_db: e.gain_db.unwrap_or(0.0),
-            environment: e.environment.clone(),
-            in_fog: e.in_fog,
-            indoors: e.indoors,
-            in_battle: e.in_battle,
-            start_time: self.start,
-            end_time: self.end,
-            volume: e.volume,
-            sleep: self.sleep,
-            sleep_randomness: self.sleep_randomness,
-            ..crate::sound::NewMusic::new(id, e.files.clone())
-        }
+        let mut music = crate::sound::NewMusic::new(id, e.files.clone());
+        music.channels = channels(e.channels);
+        music.gain_db = e.gain_db.unwrap_or(0.0);
+        music.environment.clone_from(&e.environment);
+        music.in_fog = e.in_fog;
+        music.indoors = e.indoors;
+        music.in_battle = e.in_battle;
+        music.start_time = self.start;
+        music.end_time = self.end;
+        music.volume = e.volume;
+        music.sleep = self.sleep;
+        music.sleep_randomness = self.sleep_randomness;
+        music
     }
 }
 
@@ -670,10 +666,9 @@ fn checked(
             .iter()
             .filter_map(|take| {
                 let guid = sound_reference(reader, text, at, &take.sound, ".sound")?;
-                Some(Take {
-                    chance: take.chance.unwrap_or(1.0),
-                    ..Take::new(SoundId::from_guid(guid))
-                })
+                let mut resolved = Take::new(SoundId::from_guid(guid));
+                resolved.chance = take.chance.unwrap_or(1.0);
+                Some(resolved)
             })
             .collect();
         values.takes = Some(match entry {

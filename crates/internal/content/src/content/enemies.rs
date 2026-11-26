@@ -17,12 +17,11 @@
 //! const WOLF: Guid = Guid::parse("0d75b9a9-7e48-4f3a-bf2a-19bf6021f531");
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-//!     load.add_enemy(NewEnemy {
-//!         level: Some(30),
-//!         health: Some(2.0),
-//!         faction: Some(FactionType::Vukah),
-//!         ..NewEnemy::new(id!("pack-leader"), WOLF)
-//!     })?;
+//!     let mut enemy = NewEnemy::new(id!("pack-leader"), WOLF);
+//!     enemy.level = Some(30);
+//!     enemy.health = Some(2.0);
+//!     enemy.faction = Some(FactionType::Vukah);
+//!     load.add_enemy(enemy)?;
 //!     Ok(())
 //! }
 //! ```
@@ -120,6 +119,7 @@ impl ArsenalId {
 ///
 /// See [`Load::add_enemy`](../../struct.Load.html#method.add_enemy).
 #[derive(Clone, Debug, crate::Script)]
+#[non_exhaustive]
 pub struct NewEnemy {
     /// The new enemy's content id, its template's.
     pub id: Id,
@@ -220,14 +220,15 @@ impl NewEnemy {
 /// use enshwick::content::enemies::{ArsenalChange, AttackChange};
 ///
 /// let bite = Guid::parse("6f6144ed-5d06-463b-bba0-3a8eb157cb1a");
-/// let change = ArsenalChange {
-///     attacks: Some(vec![bite]),
-///     tune: vec![AttackChange { threat: Some(20.0), ..AttackChange::new(bite) }],
-///     ..ArsenalChange::default()
-/// };
+/// let mut change = ArsenalChange::default();
+/// change.attacks = Some(vec![bite]);
+/// let mut attack_change = AttackChange::new(bite);
+/// attack_change.threat = Some(20.0);
+/// change.tune = vec![attack_change];
 /// assert!(change.behaviors.is_none());
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct ArsenalChange {
     /// The attacks, by GUID, each from any vanilla arsenal, in place of the
     /// arsenal's; `None` keeps them.
@@ -246,6 +247,7 @@ pub struct ArsenalChange {
 ///
 /// See [`ArsenalChange`].
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct AttackChange {
     /// The attack, by GUID.
     pub attack: Guid,
@@ -284,6 +286,7 @@ impl AttackChange {
 ///
 /// See [`Load::add_arsenal`](../../struct.Load.html#method.add_arsenal).
 #[derive(Clone, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct NewArsenal {
     /// The new arsenal's content id.
     pub id: Id,
@@ -292,6 +295,18 @@ pub struct NewArsenal {
     /// What the copy changes.
     #[script(default)]
     pub change: ArsenalChange,
+}
+
+impl NewArsenal {
+    /// A `NewArsenal` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`NewArsenal`].
+    #[must_use]
+    pub const fn new(id: Id, like: Guid, change: ArsenalChange) -> Self {
+        Self { id, like, change }
+    }
 }
 
 /// The GUID a value holds in `field`, when it holds one.

@@ -5,8 +5,8 @@ mod tests {
     use std::sync::OnceLock;
     use std::sync::atomic::{AtomicU8, Ordering};
 
-    use enshwick::abi::{BuildCheck, CraftCheck, Header, PlayerInfo, Status};
-    use enshwick::vetoes::BuildVerdict;
+    use enshwick::abi::{BuildCheck, CraftCheck, PlayerInfo, Status};
+    use enshwick::vetoes::Verdict;
     use enshwick::world::World;
     use enshwick::{Entity, Load, Mod, Off, PlayerKey};
 
@@ -32,7 +32,7 @@ mod tests {
             load.on_craft(|craft| craft.crafting_station_id.is_some() || craft.recipe_amount < 10)?;
             load.on_build(|placement| {
                 if placement.position[1] < 0.0 {
-                    BuildVerdict::refuse_because("picky.below_sea")
+                    Verdict::refuse_because("picky.below_sea")
                 } else {
                     (placement.item != enshwick::ItemId::new(13)).into()
                 }
@@ -56,24 +56,26 @@ mod tests {
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        let craft = |crafting_station_id, recipe_amount| CraftCheck {
-            header: Header::of::<CraftCheck>(),
-            crafting_operator_id: Entity(2),
-            crafting_station_id,
-            recipe_id: enshwick::RecipeId::new(5),
-            recipe_amount,
-            reserved: 0,
+        let craft = |crafting_station_id, recipe_amount| {
+            enshwick::abi::headed!(CraftCheck {
+                crafting_operator_id: Entity::from_engine(2),
+                crafting_station_id,
+                recipe_id: enshwick::RecipeId::new(5),
+                recipe_amount,
+                reserved: 0,
+            })
         };
-        assert!(loader.craft(&craft(Entity(0), 3)));
-        assert!(!loader.craft(&craft(Entity(0), 12)));
-        assert!(loader.craft(&craft(Entity(40), 12)));
-        let build = |item, y: i32| BuildCheck {
-            header: Header::of::<BuildCheck>(),
-            character: Entity(2),
-            item,
-            position: [0.0, f64::from(y), 0.0],
-            reason: core::ptr::null_mut(),
-            account: PlayerKey::default(),
+        assert!(loader.craft(&craft(Entity::from_engine(0), 3)));
+        assert!(!loader.craft(&craft(Entity::from_engine(0), 12)));
+        assert!(loader.craft(&craft(Entity::from_engine(40), 12)));
+        let build = |item, y: i32| {
+            enshwick::abi::headed!(BuildCheck {
+                character: Entity::from_engine(2),
+                item,
+                position: [0.0, f64::from(y), 0.0],
+                reason: core::ptr::null_mut(),
+                account: PlayerKey::default(),
+            })
         };
         assert_eq!(loader.build(&build(enshwick::ItemId::new(7), 5)), Ok(()));
         assert_eq!(
@@ -87,20 +89,19 @@ mod tests {
     }
 
     fn wall(character: u32) -> BuildCheck {
-        BuildCheck {
-            header: Header::of::<BuildCheck>(),
-            character: Entity(character),
+        enshwick::abi::headed!(BuildCheck {
+            character: Entity::from_engine(character),
             item: enshwick::ItemId::new(7),
             position: [0.0; 3],
             reason: core::ptr::null_mut(),
             account: PlayerKey::default(),
-        }
+        })
     }
 
     #[test]
     fn a_build_filter_judges_a_respawned_builder_by_account_at_once() {
-        let ann = PlayerInfo::with_name(Entity(2), BANNED, 0, "Ann");
-        let bob = PlayerInfo::with_name(Entity(3), PlayerKey::new(8), 0, "Bob");
+        let ann = PlayerInfo::with_name(Entity::from_engine(2), BANNED, 0, "Ann");
+        let bob = PlayerInfo::with_name(Entity::from_engine(3), PlayerKey::new(8), 0, "Bob");
         let loader = enshwick::test::FakeHost::new()
             .player(ann)
             .player(bob)
@@ -111,14 +112,14 @@ mod tests {
         assert_eq!(status, Status::OK);
         assert_eq!(loader.build(&wall(2)), Err(None));
         assert_eq!(loader.build(&wall(3)), Ok(()));
-        assert!(loader.respawn(BANNED, Entity(5)));
+        assert!(loader.respawn(BANNED, Entity::from_engine(5)));
         assert_eq!(loader.build(&wall(5)), Err(None));
         assert_eq!(loader.build(&wall(9)), Ok(()));
     }
 
     #[test]
     fn a_client_s_own_prediction_gives_build_filters_no_account() {
-        let ann = PlayerInfo::with_name(Entity(2), BANNED, 0, "Ann");
+        let ann = PlayerInfo::with_name(Entity::from_engine(2), BANNED, 0, "Ann");
         let loader = enshwick::test::FakeHost::new()
             .side(enshwick::abi::Side::CLIENT)
             .player(ann)
@@ -132,7 +133,7 @@ mod tests {
 
     #[test]
     fn a_hosting_client_s_own_prediction_gives_build_filters_the_host_s_account() {
-        let guest = PlayerInfo::with_name(Entity(3), PlayerKey::new(8), 0, "Bob");
+        let guest = PlayerInfo::with_name(Entity::from_engine(3), PlayerKey::new(8), 0, "Bob");
         let loader = enshwick::test::FakeHost::new()
             .side(enshwick::abi::Side::CLIENT)
             .hosting(true)
@@ -153,7 +154,7 @@ mod tests {
 
     #[test]
     fn a_build_filter_runs_off_the_game_thread_where_world_reads_find_nothing() {
-        let ann = PlayerInfo::with_name(Entity(2), BANNED, 0, "Ann");
+        let ann = PlayerInfo::with_name(Entity::from_engine(2), BANNED, 0, "Ann");
         let loader = enshwick::test::FakeHost::new()
             .world()
             .player(ann)
@@ -164,7 +165,7 @@ mod tests {
         assert_eq!(status, Status::OK);
         let world = WORLD.get().expect("init kept the world");
         assert!(
-            world.player(Entity(2)).is_some(),
+            world.player(Entity::from_engine(2)).is_some(),
             "found on the game thread"
         );
         assert_eq!(

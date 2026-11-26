@@ -13,11 +13,12 @@ use super::Header;
 /// ```
 /// use enshwick::abi::{Header, LoopWaitData};
 ///
-/// let wait = LoopWaitData { header: Header::of::<LoopWaitData>(), ms: 0, reserved: 0, left_ns: 400_000 };
+/// let wait = enshwick::abi::headed!(LoopWaitData { ms: 0, reserved: 0, left_ns: 400_000 });
 /// assert!(wait.ms == 0 && wait.left_ns > 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct LoopWaitData {
     /// Size and version of this struct.
     pub header: Header,
@@ -70,6 +71,10 @@ pub type ServerWaitFn = unsafe extern "system" fn(wait_ns: *mut u64, user: *mut 
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct LoopWaitSites(pub u32);
 
 impl LoopWaitSites {

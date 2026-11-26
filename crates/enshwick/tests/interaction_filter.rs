@@ -29,12 +29,12 @@ mod tests {
     );
 
     fn call(kind: u32, item: ItemId, known: u8, player: Entity) -> Interaction {
-        Interaction {
+        enshwick::abi::headed!(Interaction {
             item,
             known,
             position: [1.0, 2.0, 3.0],
-            ..Interaction::new(kind, player, Entity(4096))
-        }
+            ..Interaction::new(kind, player, Entity::from_engine(4096))
+        })
     }
 
     #[test]
@@ -44,7 +44,7 @@ mod tests {
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.faults());
-        let player = Entity(2);
+        let player = Entity::from_engine(2);
 
         assert!(!loader.interaction(&call(Interaction::OPEN, LOCKED_CHEST, 1, player)));
         assert!(!loader.interaction(&call(Interaction::MOVE, LOCKED_CHEST, 1, player)));
@@ -55,7 +55,12 @@ mod tests {
             "an item the platform could not read is no item"
         );
         assert!(
-            loader.interaction(&call(Interaction::OPEN, LOCKED_CHEST, 1, Entity(0))),
+            loader.interaction(&call(
+                Interaction::OPEN,
+                LOCKED_CHEST,
+                1,
+                Entity::from_engine(0)
+            )),
             "an interaction without a character is allowed unasked"
         );
     }

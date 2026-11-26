@@ -18,7 +18,9 @@
 //!
 //! fn init(load: &mut enshwick::Load<'_>, elder: Guid) -> Result<(), enshwick::Off> {
 //!     // Elder wolves now and then where the game spawns wolves.
-//!     load.add_spawn_entry(SpawnEntry { weight: 0.25, ..SpawnEntry::new(SpawnerPick::Listing(WOLF), elder) })
+//!     let mut spawn_entry = SpawnEntry::new(SpawnerPick::Listing(WOLF), elder);
+//!     spawn_entry.weight = 0.25;
+//!     load.add_spawn_entry(spawn_entry)
 //! }
 //! ```
 
@@ -65,6 +67,7 @@ pub enum SpawnerPick {
 /// assert!((entry.weight - 1.0).abs() < f32::EPSILON && entry.group.is_none());
 /// ```
 #[derive(Clone, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct SpawnEntry {
     /// The spawners that get the entry.
     pub spawner: SpawnerPick,
@@ -107,10 +110,12 @@ impl SpawnEntry {
 /// ```
 /// use enshwick::content::spawns::SpawnerChange;
 ///
-/// let crowded = SpawnerChange { max_entities_alive: Some(12), ..SpawnerChange::default() };
+/// let mut crowded = SpawnerChange::default();
+/// crowded.max_entities_alive = Some(12);
 /// assert!(crowded.max_spawn_amount.is_none());
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct SpawnerChange {
     /// The fewest it spawns at once.
     pub min_spawn_amount: Option<u8>,

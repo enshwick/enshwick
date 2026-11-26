@@ -1,9 +1,7 @@
 //! The fake's altars: their list, zones, limits and the base limit.
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{
-    AltarInfo, AltarLimit, AltarZone, BuildingZoneCheck, Extent, FILTER_YES, Header,
-};
+use enshwick_core::abi::{AltarInfo, AltarLimit, AltarZone, BuildingZoneCheck, Extent, FILTER_YES};
 
 use super::BaseCode;
 use crate::test::{FakeHost, Installed, table};
@@ -79,7 +77,7 @@ impl Installed {
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let mut altar = AltarInfo::EMPTY;
-    /// altar.entity = enshwick::Entity(4096);
+    /// altar.entity = enshwick::Entity::from_engine(4096);
     /// loader.set_altars(&[altar]);
     /// ```
     pub fn set_altars(&self, altars: &[AltarInfo]) {
@@ -114,19 +112,18 @@ impl Installed {
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert_eq!(loader.altar_zone(enshwick::Entity(4096), 2, 60), (0, 60));
+    /// assert_eq!(loader.altar_zone(enshwick::Entity::from_engine(4096), 2, 60), (0, 60));
     /// ```
     #[must_use]
     pub fn altar_zone(&self, altar: Entity, level: u8, height: i64) -> (i64, i64) {
         let filters = table::with(Vec::new(), |s| s.world.zone_sizing.filters.clone());
-        let mut zone = AltarZone {
-            header: Header::of::<AltarZone>(),
-            altar: Entity(altar.0),
+        let mut zone = enshwick_core::headed!(AltarZone {
+            altar: Entity::from_engine(altar.get()),
             level,
             reserved: [0; 3],
             grow: 0,
             height,
-        };
+        });
         for filter in filters {
             let before = zone;
             // SAFETY: a valid registration; `user` is the mod's pointer.
@@ -166,13 +163,12 @@ impl Installed {
     #[must_use]
     pub fn building_zone_check(&self, zones: &[Extent], object: Extent, margin: f64) -> bool {
         let filters = table::with(Vec::new(), |s| s.world.zone_filters.clone());
-        let call = BuildingZoneCheck {
-            header: Header::of::<BuildingZoneCheck>(),
+        let call = enshwick_core::headed!(BuildingZoneCheck {
             zones: zones.as_ptr(),
             zone_count: u32::try_from(zones.len()).unwrap_or(u32::MAX),
             object,
             margin,
-        };
+        });
         filters.iter().any(|filter| {
             // SAFETY: a valid call; `user` is the pointer the mod registered with.
             filter.run(|callback, user| unsafe { callback(&raw const call, user) == FILTER_YES })
@@ -192,13 +188,12 @@ impl Installed {
     #[must_use]
     pub fn altar_limit(&self, flame_level: u32, vanilla: u32) -> u32 {
         let filters = table::with(Vec::new(), |s| s.world.altar_limits.clone());
-        let mut limit = AltarLimit {
-            header: Header::of::<AltarLimit>(),
+        let mut limit = enshwick_core::headed!(AltarLimit {
             flame_level,
             vanilla,
             allowed: vanilla,
             reserved: 0,
-        };
+        });
         for filter in filters {
             // SAFETY: a valid limit; `user` is the mod's pointer.
             filter.run(|callback, user| unsafe { callback(&raw mut limit, user) });

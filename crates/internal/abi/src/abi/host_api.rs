@@ -76,6 +76,7 @@ use crate::content::Guid;
 /// The safe layer wraps this table; see [`enshwick::Load`](../struct.Load.html).
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
 pub struct HostApi {
     /// Size and version of this struct.
     pub header: Header,
@@ -635,7 +636,9 @@ pub struct HostApi {
     /// them by to `out`; the same bytes give the same hash. The loader
     /// keeps the bytes for the life of the process: bytes served before
     /// answer their hash without a second copy, and every other serve adds
-    /// to memory until the process ends. Any thread.
+    /// to memory until the process ends, up to 3072 contents or 512 MiB in
+    /// all; past that the call answers [`Status::REFUSED`] for the rest of
+    /// the process. Any thread.
     pub content_serve:
         extern "system" fn(me: ModHandle, data: *const u8, len: u32, out: *mut [u32; 4]) -> Status,
     /// Copies the game's own content `hash` from its archive into `out`, at
@@ -1562,7 +1565,7 @@ pub struct HostApi {
     /// up from it, one level a step, with its own events; experience
     /// filters do not see it. Skill points follow the level, as the game
     /// counts them from it. A mod asks for
-    /// the writes during `init` with [`PROGRESS_OPEN`](super::PROGRESS_OPEN) and `Entity(0)`;
+    /// the writes during `init` with [`PROGRESS_OPEN`](super::PROGRESS_OPEN) and entity 0;
     /// [`Status::TOO_LATE`] for that after `init`. [`Status::OK`] queues
     /// the write; the step applies writes in the order given, and
     /// [`Event::PROGRESS_WRITTEN`](super::Event::PROGRESS_WRITTEN) tells the
@@ -1642,7 +1645,8 @@ pub struct HostApi {
     /// which runs it as one transaction: all or nothing. `done` gets the
     /// result with `user` on the game thread after a later step, unless the
     /// mod is off by then. On an error status nothing is queued and `done` is
-    /// never called.
+    /// never called. [`Status::BUSY`] while 4096 requests wait already: the
+    /// same call may pass once the game has run some of them.
     pub inventory_submit: extern "system" fn(
         me: ModHandle,
         request: *const InventoryRequest,
@@ -2063,7 +2067,7 @@ pub struct HostApi {
     /// game's query database, which quest steps and recipes name by id)
     /// holds for the player whose character is `entity`, as the game reads
     /// it when it pays a quest (the player's own state), or for the world
-    /// when `entity` is `Entity(0)`, and 0 when it does not.
+    /// when `entity` is entity 0, and 0 when it does not.
     /// [`Status::UNAVAILABLE`] on a build without the game's query calls or
     /// while no world runs, [`Status::MISSING`] for a query the game does
     /// not know or has not evaluated yet; [`Status::REFUSED`] for a player not in the game;
@@ -2548,6 +2552,37 @@ pub struct HostApi {
     /// runs in the process.
     pub sound_steer_for:
         extern "system" fn(me: ModHandle, id: u64, steer: *const SoundSteer) -> Status,
+}
+
+/// Builds a host's [`HostApi`] in a `const` from every field but the header,
+/// which is this version's; a field left out fails the build in const
+/// evaluation, and one the table lacks fails it as a name.
+///
+/// The table is `#[non_exhaustive]`, since a minor appends functions to it,
+/// so the loader and the fake host, outside this crate, write it field by
+/// field.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! host_api {
+    ($($field:ident $(: $value:expr)?),* $(,)?) => {{
+        let mut api = ::core::mem::MaybeUninit::<$crate::abi::HostApi>::uninit();
+        let at = api.as_mut_ptr();
+        // SAFETY: `at` points at the table being built, aligned and writable.
+        unsafe { (&raw mut (*at).header).write($crate::abi::Header::of::<$crate::abi::HostApi>()) };
+        $(
+            // SAFETY: as for the header: a field of the table being built.
+            unsafe { (&raw mut (*at).$field).write($crate::host_api!(@value $field $(, $value)?)) };
+        )*
+        // SAFETY: the writes above set every field; const evaluation refuses
+        // a table with one left unset, as uninitialised bytes.
+        unsafe { api.assume_init() }
+    }};
+    (@value $field:ident, $value:expr) => {
+        $value
+    };
+    (@value $field:ident) => {
+        $field
+    };
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.

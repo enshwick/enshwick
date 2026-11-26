@@ -22,7 +22,9 @@ Everything the crate offers without a feature:
   `enshwick::WorldError`;
 - inventories, stats and affixes, apart from writing them onto single items;
 - content and data packs, apart from the parts that use `typed` items;
-- services, mod events, extension points, messages and the interface.
+- services and calls, mod events, extension points and the described forms
+  of the three that a script runtime uses;
+- messages, the server console and the interface.
 
 ## What `unstable` holds
 
@@ -39,13 +41,11 @@ change in any release, a patch included.
 | The game's item widgets in `ui`. `Frame::item_slot`, `Frame::hovered_slot`, `ui::SlotInput`, `Load::extend_item_tooltip`, `ui::TooltipLines`. | the slot widget, the hovered slot and the tooltip's sites are read from the client's code only, not yet seen in the game |
 | Stat rows on the Character screen. `stats::StatGroup`, `StatDef::group`, `StatDef::in_group`. | the screen's row builders and row layout are read from the client's code only, not yet seen in the game |
 | `map` and `Load::fog_of_war`. Also the map markers of `ui`. `Load::map`, `Load::on_waypoint`, `Load::on_ping`. `ui::Marker`, `ui::MarkerColor`, `ui::MAX_MARKERS`, `Ui::set_markers`, `Ui::clear_markers`, `Ui::map_marker_types`. | young; the map frame, the fog and how markers show are not yet seen in the client |
-| `actions` and `console`. Also `commands` and `controls`. `Load::actions`, `Load::control`. | young |
+| `actions`. Also `commands` and `controls`. `Load::actions`, `Load::control`. | young |
 | `items`. Its `Load::on_item` and `Load::on_item_action`. Also the `on` table of `items.toml`. | which input or event each item action raises is known from reflection only, not yet seen in the game |
 | `rewards` and `rewards.toml`. `Load::rewards`, `Load::add_reward`, `Load::on_reward`. | young; a reward's experience and a craft's pairing with its request are not yet seen in the game |
 | `Load::on_quest_reward`, with the typed feature. Also `quests::QuestPayment` and `quests::QuestPay`. | young; a changed payment is seen only on a server copy |
 | `script`. The `Script` derive and the `script` attribute. | the binding of Rust types to Luau, still growing with it |
-| Calls: the `call` attribute and `Load::serve_call`. `Load::caller`, `services::Call`, `services::Caller`, `services::CallError`. | young |
-| The described calls, events and points a script runtime uses. `services::DescribedCall`, `services::DescribedCaller`, `services::DescribedEvent`, `services::DescribedEmitter`, `points::DescribedPoint`, `points::DescribedOwnedPoint`, `points::DescribedVerdict`, `points::DescribedField`. `Load::serve_described_call`, `Load::described_caller`, `Load::on_described_mod_event`, `Load::define_described_event`, `Load::define_described_point`, `Load::extend_described_point`. | young |
 | `Effects::ping` | whether a client shows a ping the server raised is not yet seen |
 | `Effects::notify`, `Notify`, `NotifyAt`, `MAX_NOTIFIES_PER_STEP` | whether a client plays a notifier the server raised is not yet seen |
 | Buff types of a mod's own. `Load::add_buff`, `buffs::NewBuff`, `buffs::BuffLayout`, `buffs::BUFF_COLLECTION`, `buffs::BUFF_COLLECTION_RESOURCE`. | how a client shows a served buff type is read from its code only, not yet seen in the game |
@@ -54,12 +54,10 @@ change in any release, a patch included.
 | `Load::add_journal_page` and `content::journal::lore_category`. `Load::change_journal_page` and `Load::remove_journal_page`. | which categories the client draws a page under is read from its code only, not yet seen in the game |
 | `Knowledge::revoke` and `Load::on_knowledge_input`. `Knowledge::revoke_world`, `Knowledge::revoke_account`, `knowledge::Revoke`, `knowledge::Refusal`, `knowledge::KnowledgeRequest`. | how a vanilla client takes a revoke, and what it asks for, is not yet seen |
 | `Knowledge::set` and `Knowledge::set_world`. `knowledge::KnowledgeNotice`. | which notice the client shows for an unmarked value, and for a quiet set, is not yet seen in the game |
-| `Load::request_base_limits` and `altars::set_base_limit` | young |
-| `Load::limit_altar_level` | young |
 | `item_data` and `entity_data`. `Stats::set_item`. Rolling affixes onto items with `Affixes::roll`. Also `Load::add_loot_affixes` and `Load::add_craft_affixes`. `Load::item_data`, `Load::entity_data`, `affixes::AffixLoot`, `affixes::AffixCraft`. | after a restart, a value on an item outside a placed container or a player's inventory stays aside |
 | `rates`: every game rate. Also `Load::rate`. | how a lowered skill-point total and the loot counts play out is not yet seen in the client |
 | Changes of `Field::MaxStackSize` and `Field::Slots` from a mod; the same changes in data packs carry no promise either | how a player's game shows a chest above 72 slots, a raised stack and a grown backpack is not yet seen |
-| Item selections, which change only those two fields. `Load::change_items`, `content::changes::Items`, `content::changes::ItemTraits`, `content::changes::ItemsChange`, `Target::Items`, `Field::selectable`, `ValueError::NotSelectable`, `Pack::selections`. | they change only fields that are unstable |
+| Item selections, which change only those two fields. `Load::change_items`, `content::changes::Items`, `content::changes::ItemTraits`, `content::changes::ItemsChange`, `Target::Items`, `Field::selectable`, `SetFieldError::NotSelectable`, `Pack::selections`. | they change only fields that are unstable |
 | Damage filters: `Load::on_damage` and `Damage`. Also `DamageCause` and `events::PlayerDied`. `EntityDiedEvent::killer` and `EntityDiedEvent::killer_player`. `damage::causes_off`. | the order of the game's attributes and who it records as a killer are not yet seen |
 | `Load::add_recipe` and `Load::add_recipe_with`. Also `Load::derive_recipes`. | what crafting a new recipe leaves in a player's knowledge is not yet seen |
 | `input`. `Frame::open_screen` and `Load::on_screen_changed`. Also `Load::input`. | young; which control each bit stands for and which screen is open are not yet seen in the game |
@@ -73,6 +71,8 @@ change in any release, a patch included.
 | `Load::add_sound`, `Load::replace_sound`. `sound::NewSound`, `sound::NewTake`, `sound::AddedSound`, `sound::Channels`, `sound::Trim`, `sound::SAMPLE_RATE`, `sound::INLINE_FRAMES`, `sound::MAX_FILE_BYTES`, `sound::MAX_MOD_BYTES`. | whether a client plays a sound a mod added is not yet seen in the game |
 | Sounds a mod plays on clients. `sound::play`, `sound::stop_all`, `sound::play_for`, `sound::Place`, `sound::Play`, `sound::PlayFailure`, `sound::SoundHandle`, `sound::SoundState`, `sound::RemoteSound`, `sound::Audience`, `sound::Sounds`, `sound::MAX_FADE`, `sound::MAX_STARTS`, `sound::MAX_PLAYS`, `sound::MAX_RADIUS`. | the client's sound start and scenes are read from its code only, not yet seen in the game |
 | `Load::add_voiceover`, `Load::change_voiceover`, `Load::add_music`. `sound::NewVoiceover`, `sound::VoiceLine`, `sound::VoiceoverId`, `sound::NewMusic`, `sound::MUSIC_VOLUME`, `sound::DAY`. | the voice language slots and the music rows are read from the client's code and archive, not yet seen in the game |
+| The engine layouts of `content` and the helpers that build game data with them. `items::ItemLayout`, `items::clone_item`, `items::list_item`, `recipes::RecipeLayout`, `recipes::add_recipe_to`, `recipes::change_recipes_in`, `recipes::recipe_workshops`, `recipes::derive_recipes_in`, `workshops::WorkshopLayout`, `workshops::clone_station`, `workshops::list_workshop`, `menu::MenuLayout`, `menu::list_recipes`, `menu::move_recipes`, `menu::list_workshop`, `loot_tables::LootLayout`, `loot_tables::FillTableLayout`, `loot_tables::template_table`, `loot_tables::change_random_loot`, `loot_tables::fill_items`, `loot_tables::change_fill_table`, `containers::ContainerLayout`, `containers::container_slots`, `containers::resize_container`, `icons::ImageLayout`, `icons::clone_image`. | they hold the offsets of the game's data, which move with a game build |
+| `World::component` | a pointer into the game's memory, whose layout moves with a game build |
 
 Turn the feature on in the mod's `Cargo.toml`:
 
@@ -90,9 +90,9 @@ feature; the call itself does not.
 
 A Luau mod has no features to turn on. The definitions in `enshwick.d.luau` mark
 each unstable part "Unstable": the mirror of every Rust item that needs the
-feature. Two parts with no Rust twin are unstable too: `enshwick.caller`
-and `enshwick.on_client_game_type`. They may change in any release, as their
-Rust counterparts do.
+feature. One part with no Rust twin is unstable too:
+`enshwick.on_client_game_type`. It may change in any release, as its Rust
+counterpart does.
 
 ## The ABI
 

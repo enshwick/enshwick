@@ -249,9 +249,9 @@ pub(crate) fn resolve(
         |record| match record.anchor {
             Anchor::Placed(placed) => index.find(&placed),
             Anchor::Held { root, link, slot } => match index.find(&root) {
-                Some(Found::One(root)) => held(Entity(root), link, slot)
+                Some(Found::One(root)) => held(Entity::from_engine(root), link, slot)
                     .filter(|&(_, item)| item.0 == record.check)
-                    .map(|(pide, _)| Found::One(pide.0)),
+                    .map(|(pide, _)| Found::One(pide.get())),
                 other => other,
             },
             Anchor::Session(_) | Anchor::Carried { .. } => None,
@@ -358,8 +358,10 @@ fn settle(
             _ => find(&record),
         };
         let count = match target {
-            Some(Found::One(entity)) if !taken(record.kind, Entity(entity)) => {
-                outcome.found.push((record.kind, Entity(entity), record));
+            Some(Found::One(entity)) if !taken(record.kind, Entity::from_engine(entity)) => {
+                outcome
+                    .found
+                    .push((record.kind, Entity::from_engine(entity), record));
                 continue;
             }
             Some(Found::One(_)) => &mut outcome.replaced,
@@ -483,7 +485,7 @@ mod tests {
         let found: Vec<(u32, u8)> = outcome
             .found
             .iter()
-            .map(|(_, entity, record)| (entity.0, record.value[0]))
+            .map(|(_, entity, record)| (entity.get(), record.value[0]))
             .collect();
         assert_eq!(
             found,
@@ -528,9 +530,9 @@ mod tests {
     fn an_item_is_found_by_its_owner_link_and_slot_only_while_it_holds_its_item() {
         let mut index = Index::default();
         index.add(chest(1), 1046);
-        let held = |root: Entity, link, slot| match (root.0, link, slot) {
-            (1046, 0, 3) => Some((Entity(1047), ItemId(77))),
-            (1046, 0, 4) => Some((Entity(1048), ItemId(78))),
+        let held = |root: Entity, link, slot| match (root.get(), link, slot) {
+            (1046, 0, 3) => Some((Entity::from_engine(1047), ItemId(77))),
+            (1046, 0, 4) => Some((Entity::from_engine(1048), ItemId(78))),
             _ => None,
         };
         let item = |slot, check| {
@@ -552,7 +554,7 @@ mod tests {
             |_, _| false,
         );
         assert_eq!(outcome.found.len(), 1);
-        assert_eq!(outcome.found[0].1, Entity(1047));
+        assert_eq!(outcome.found[0].1, Entity::from_engine(1047));
         assert_eq!(outcome.left.len(), 2, "another item, an empty slot");
     }
 
@@ -615,7 +617,7 @@ mod tests {
             vec![pending(4, Anchor::Placed(chest(1)), 1, 1)],
             &index,
             |_, _, _| None,
-            |kind, entity| (kind, entity) == (KindIndex(4), Entity(1027)),
+            |kind, entity| (kind, entity) == (KindIndex(4), Entity::from_engine(1027)),
         );
         assert!(outcome.found.is_empty());
         assert_eq!((outcome.left.len(), outcome.replaced), (1, 1));
@@ -674,9 +676,9 @@ mod tests {
             carried(ANN_SECOND, 0, 1, 77, 4),
         ];
         let held = |link, slot| match (link, slot) {
-            (0, 1) => Some((Entity(2001), ItemId(77))),
+            (0, 1) => Some((Entity::from_engine(2001), ItemId(77))),
             // Played elsewhere: another item lies in the slot now.
-            (0, 2) => Some((Entity(2002), ItemId(90))),
+            (0, 2) => Some((Entity::from_engine(2002), ItemId(90))),
             _ => None,
         };
         let mut records = records;
@@ -684,7 +686,7 @@ mod tests {
         let found: Vec<(u32, u8)> = outcome
             .found
             .iter()
-            .map(|(_, e, r)| (e.0, r.value[0]))
+            .map(|(_, e, r)| (e.get(), r.value[0]))
             .collect();
         assert_eq!(found, [(2001, 1)]);
         assert_eq!(outcome.waiting, 2, "the changed slot and the empty one");
@@ -703,7 +705,7 @@ mod tests {
         let outcome = resolve_carried(
             &mut records,
             ANN,
-            |_, _| Some((Entity(2001), ItemId(77))),
+            |_, _| Some((Entity::from_engine(2001), ItemId(77))),
             |_, _| true,
         );
         assert!(outcome.found.is_empty());
@@ -717,7 +719,7 @@ mod tests {
         let outcome = resolve_carried(
             &mut records,
             ANN,
-            |_, _| Some((Entity(2001), ItemId(77))),
+            |_, _| Some((Entity::from_engine(2001), ItemId(77))),
             |_, _| false,
         );
         assert!(outcome.found.is_empty());

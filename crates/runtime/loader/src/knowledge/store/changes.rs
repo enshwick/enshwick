@@ -27,7 +27,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{Event, Header, KnowledgeData, KnowledgeInfo};
+use enshwick_core::abi::{Event, KnowledgeData, KnowledgeInfo};
 
 use crate::engine::loader::Loader;
 use crate::engine::memory::write;
@@ -150,7 +150,7 @@ pub(crate) fn character_loaded(loader: &Loader, entity: Entity) -> bool {
     let Ok((game, _)) = store(layout) else {
         return false;
     };
-    (entity.0 as usize)
+    (entity.get() as usize)
         .checked_sub(1)
         .is_some_and(|slot| loaded(parts, game, slot))
 }
@@ -197,7 +197,7 @@ impl Held {
         } else {
             0
         };
-        let (info, mark) = super::marked(loader, Entity(entity), id)?;
+        let (info, mark) = super::marked(loader, Entity::from_engine(entity), id)?;
         Ok(Self {
             layout,
             parts,
@@ -237,15 +237,15 @@ impl Held {
         crate::log!(
             DEBUG,
             "knowledge: id {id:#x} of {entity} written {new} marked {mark:#04x}, reads {:?}",
-            super::marked(loader, Entity(entity), id).map(|(info, mark)| (info.value, mark))
+            super::marked(loader, Entity::from_engine(entity), id)
+                .map(|(info, mark)| (info.value, mark))
         );
         if new != self.current {
-            STATE.raised.push(KnowledgeData {
-                header: Header::of::<KnowledgeData>(),
-                entity: Entity(entity),
+            STATE.raised.push(enshwick_abi::headed!(KnowledgeData {
+                entity: Entity::from_engine(entity),
                 id: enshwick_core::abi::KnowledgeId::new(id),
                 value: new,
-            });
+            }));
         }
         Ok(())
     }
@@ -350,7 +350,7 @@ fn write_list(
 ) -> Result<(), KnowledgeError> {
     let records = super::records(layout, state);
     if entity != 0 {
-        let record = super::record(layout, state, Entity(entity))?;
+        let record = super::record(layout, state, Entity::from_engine(entity))?;
         let slot = entity as usize - 1;
         if !loaded(parts, game, slot) {
             return Err(KnowledgeError::NotLoaded);
@@ -546,7 +546,7 @@ fn apply(loader: &Loader, entity: Entity, change: &Waiting) -> Result<(), Knowle
     if change.revoke {
         revoke(
             loader,
-            entity.0,
+            entity.get(),
             change.id,
             u32::from(change.kind),
             change.value,
@@ -554,7 +554,7 @@ fn apply(loader: &Loader, entity: Entity, change: &Waiting) -> Result<(), Knowle
     } else {
         super::grant(
             loader,
-            entity.0,
+            entity.get(),
             change.id,
             u32::from(change.kind),
             change.value,
@@ -742,16 +742,15 @@ mod tests {
     #[test]
     fn a_value_the_loader_writes_reaches_the_quest_events_after_the_step() {
         use crate::knowledge::quest_events::{follow_for_test, forget, held_for_test};
-        follow_for_test(Entity(2), 7);
-        STATE.raised.push(KnowledgeData {
-            header: Header::of::<KnowledgeData>(),
-            entity: Entity(2),
+        follow_for_test(Entity::from_engine(2), 7);
+        STATE.raised.push(enshwick_abi::headed!(KnowledgeData {
+            entity: Entity::from_engine(2),
             id: enshwick_core::abi::KnowledgeId::new(7),
             value: 5,
-        });
+        }));
         after_step(&crate::start::tests::bare_loader(), 1);
         assert_eq!(
-            held_for_test(Entity(2), 7),
+            held_for_test(Entity::from_engine(2), 7),
             Some(5),
             "a revoke or reset seen, so a replay raises again"
         );
@@ -791,12 +790,11 @@ mod tests {
             waiting: vec![change()],
         };
         STATE.waiting.store(true, Ordering::Release);
-        STATE.raised.push(KnowledgeData {
-            header: Header::of::<KnowledgeData>(),
-            entity: Entity(1),
+        STATE.raised.push(enshwick_abi::headed!(KnowledgeData {
+            entity: Entity::from_engine(1),
             id: enshwick_core::abi::KnowledgeId::new(7),
             value: 0,
-        });
+        }));
     }
 
     /// Held by every test that fills [`STATE`], which is the process's own.

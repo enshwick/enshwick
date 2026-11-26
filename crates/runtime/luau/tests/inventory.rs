@@ -74,8 +74,8 @@ mod tests {
             .constant("durability.max", 2)
             .constant("fuel.max", 2)
             .type_size("item_stack", 12)
-            .component(enshwick::Entity(CHEST), SETUP, &setup)
-            .component(enshwick::Entity(41), INVENTORY, &stacks)
+            .component(enshwick::Entity::from_engine(CHEST), SETUP, &setup)
+            .component(enshwick::Entity::from_engine(41), INVENTORY, &stacks)
     }
 
     fn run(main: &str) -> Installed {
@@ -125,7 +125,7 @@ mod tests {
         let op = requests[0].ops[0];
         assert_eq!(
             (op.kind, op.target),
-            (InventoryOp::GIVE, enshwick::Entity(2))
+            (InventoryOp::GIVE, enshwick::Entity::from_engine(2))
         );
         let ran = InventoryOpResult {
             error: 0,

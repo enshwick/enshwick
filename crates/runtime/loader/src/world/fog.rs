@@ -21,7 +21,7 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use enshwick_core::abi::{FogInfo, Header, HookFlags, Side};
+use enshwick_core::abi::{FogInfo, HookFlags, Side};
 
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
@@ -617,8 +617,7 @@ fn read_opened(
     let window = mirror.uncovered();
     let shape = mirror.image.shape();
     let [width, height] = shape.size();
-    *info = FogInfo {
-        header: Header::of::<FogInfo>(),
+    *info = enshwick_abi::headed!(FogInfo {
         width,
         height,
         #[expect(
@@ -634,7 +633,7 @@ fn read_opened(
         reserved: 0,
         uncovered_min: window.min,
         uncovered_size: window.size,
-    };
+    });
     if size[0] == 0 || size[1] == 0 {
         return Ok(Ok(()));
     }

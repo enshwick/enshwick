@@ -19,10 +19,9 @@
 //! const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-//!     let crate_prop = load.add_prop(NewProp {
-//!         recipe_cost: Some(1),
-//!         ..NewProp::new(NewItem::new(id!("crate"), CHEST))
-//!     })?;
+//!     let mut prop = NewProp::new(NewItem::new(id!("crate"), CHEST));
+//!     prop.recipe_cost = Some(1);
+//!     let crate_prop = load.add_prop(prop)?;
 //!     assert_eq!(crate_prop.template.guid(), id!("crate").part("template").guid());
 //!     Ok(())
 //! }
@@ -65,15 +64,28 @@ const MARK: &str = "ecs::RequiredCraftingProp";
 /// use enshwick::content::Guid;
 /// use enshwick::content::props::CraftingPropSetup;
 ///
-/// let mortar = CraftingPropSetup { recipes: vec![Guid::parse("267ab50e-7727-4336-b0e3-bf38e567189f")] };
+/// let mortar = CraftingPropSetup::new(vec![Guid::parse("267ab50e-7727-4336-b0e3-bf38e567189f")]);
 /// assert_eq!(mortar.recipes.len(), 1);
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct CraftingPropSetup {
     /// The recipes, vanilla or added before [`Load::add_prop`](../../struct.Load.html#method.add_prop), that
     /// require the prop besides the props they require already.
     #[script(default)]
     pub recipes: Vec<Guid>,
+}
+
+impl CraftingPropSetup {
+    /// A `CraftingPropSetup` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`CraftingPropSetup`].
+    #[must_use]
+    pub const fn new(recipes: Vec<Guid>) -> Self {
+        Self { recipes }
+    }
 }
 
 /// A new prop type for [`Load::add_prop`](../../struct.Load.html#method.add_prop).
@@ -96,6 +108,7 @@ pub struct CraftingPropSetup {
 /// assert!(chest.template.is_empty() && chest.recipe_cost.is_none() && chest.crafting_prop.is_none());
 /// ```
 #[derive(Clone, Debug, crate::Script)]
+#[non_exhaustive]
 pub struct NewProp {
     /// The prop's item, a copy of a vanilla prop's item: what it looks like
     /// in the inventory and which template it copies.
@@ -135,6 +148,7 @@ impl NewProp {
 ///
 /// See [`Load::add_prop`](../../struct.Load.html#method.add_prop).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[non_exhaustive]
 pub struct PropId {
     /// The prop's item, which `world::Prop::item`
     /// reports for every placed one.

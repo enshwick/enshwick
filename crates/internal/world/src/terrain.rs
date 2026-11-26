@@ -35,7 +35,7 @@
 //! ```
 
 use crate::WorldError;
-use crate::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
+use crate::abi::{Status, TerrainEdit, TerrainMaterialInfo};
 use crate::{Host, ItemId, Off};
 #[cfg(feature = "unstable")]
 use crate::{
@@ -235,8 +235,7 @@ impl NewTerrainMaterial {
             self.can_be_flattened.is_some(),
             TerrainMaterialAdd::FLATTENS,
         );
-        TerrainMaterialAdd {
-            header: Header::of::<TerrainMaterialAdd>(),
+        enshwick_abi::headed!(TerrainMaterialAdd {
             guid,
             item: self.terrain_item.unwrap_or(Guid::NIL),
             health: self.health_points.unwrap_or(0),
@@ -250,7 +249,7 @@ impl NewTerrainMaterial {
                 0
             },
             reserved: [0; 3],
-        }
+        })
     }
 }
 
@@ -310,15 +309,14 @@ impl Terrain {
     #[must_use]
     #[script]
     pub fn materials(&self) -> Vec<TerrainTerraformingConfig> {
-        let blank = TerrainMaterialInfo {
-            header: Header::of::<TerrainMaterialInfo>(),
+        let blank = enshwick_abi::headed!(TerrainMaterialInfo {
             id: 0,
             flags: 0,
             hardness: 0,
             reserved: 0,
             item: ItemId::new(0),
             health: 0,
-        };
+        });
         let mut infos = vec![blank; 128];
         loop {
             let mut count = 0u32;
@@ -476,8 +474,7 @@ impl Terrain {
 
 /// The edit with nothing set but where and how far.
 fn request(position: [f64; 3], radius: f32, shape: Shape) -> TerrainEdit {
-    TerrainEdit {
-        header: Header::of::<TerrainEdit>(),
+    enshwick_abi::headed!(TerrainEdit {
         kind: 0,
         shape: shape.raw(),
         flags: 0,
@@ -486,7 +483,7 @@ fn request(position: [f64; 3], radius: f32, shape: Shape) -> TerrainEdit {
         radius,
         height: 0.0,
         protect: [0; 16],
-    }
+    })
 }
 
 /// The edit [`Terrain::add`] asks for.
@@ -497,12 +494,12 @@ pub(crate) fn add_edit(
     material: u8,
     shape: Shape,
 ) -> TerrainEdit {
-    TerrainEdit {
+    enshwick_abi::headed!(TerrainEdit {
         kind: TerrainEdit::ADD,
         material: u32::from(material),
         height,
         ..request(position, radius, shape)
-    }
+    })
 }
 
 /// The edit [`Terrain::dig`] asks for.
@@ -518,11 +515,11 @@ pub(crate) fn dig_edit(
             *byte |= 1 << (id % 8);
         }
     }
-    TerrainEdit {
+    enshwick_abi::headed!(TerrainEdit {
         kind: TerrainEdit::DIG,
         protect: bits,
         ..request(position, radius, shape)
-    }
+    })
 }
 
 /// The edit [`Terrain::flatten`] asks for.
@@ -532,11 +529,11 @@ pub(crate) fn flatten_edit(
     material: u8,
     shape: Shape,
 ) -> TerrainEdit {
-    TerrainEdit {
+    enshwick_abi::headed!(TerrainEdit {
         kind: TerrainEdit::FLATTEN,
         material: u32::from(material),
         ..request(position, radius, shape)
-    }
+    })
 }
 
 /// `Load`'s methods of this module on the base handle, which core's

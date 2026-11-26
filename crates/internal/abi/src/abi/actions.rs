@@ -13,9 +13,8 @@ use crate::abi::{Entity, Header, PlayerInfo, Status, Str};
 /// ```
 /// use enshwick::abi::{ActionCall, Header, PlayerInfo, Str};
 ///
-/// let player = PlayerInfo::with_name(enshwick::Entity(2), enshwick::PlayerKey::new(7), 0, "Ann");
-/// let call = ActionCall {
-///     header: Header::of::<ActionCall>(),
+/// let player = PlayerInfo::with_name(enshwick::Entity::from_engine(2), enshwick::PlayerKey::new(7), 0, "Ann");
+/// let call = enshwick::abi::headed!(ActionCall {
 ///     kind: ActionCall::RUN,
 ///     language: 0,
 ///     player: &raw const player,
@@ -26,11 +25,12 @@ use crate::abi::{Entity, Header, PlayerInfo, Status, Str};
 ///     word: Str::EMPTY,
 ///     via: 0,
 ///     reason: 0,
-/// };
+/// });
 /// assert_eq!(call.kind, ActionCall::RUN);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct ActionCall {
     /// Size and version of this struct.
     pub header: Header,
@@ -91,11 +91,12 @@ impl_headed!(ActionCall);
 /// ```
 /// use enshwick::abi::{ActionReply, Header, Str};
 ///
-/// let reply = ActionReply { header: Header::of::<ActionReply>(), done: 1, text: Str::new("2 online") };
+/// let reply = enshwick::abi::headed!(ActionReply { done: 1, text: Str::new("2 online") });
 /// assert_eq!(reply.done, 1);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct ActionReply {
     /// Size and version of this struct; zero until the writer fills it.
     pub header: Header,
@@ -129,16 +130,16 @@ pub const WINDOW_UPDATE: u32 = 2;
 /// ```
 /// use enshwick::abi::{CommandInfo, Header, Str};
 ///
-/// let tools = CommandInfo {
-///     header: Header::of::<CommandInfo>(),
+/// let tools = enshwick::abi::headed!(CommandInfo {
 ///     name: Str::new("admin-tools"),
 ///     alias: Str::new("adm"),
 ///     mod_id: Str::new("you.admin-tools"),
-/// };
+/// });
 /// assert_eq!(tools.header.size, Header::of::<CommandInfo>().size);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct CommandInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -162,16 +163,16 @@ impl_headed!(CommandInfo);
 /// ```
 /// use enshwick::abi::{ActionTarget, Header};
 ///
-/// let chest = ActionTarget {
-///     header: Header::of::<ActionTarget>(),
+/// let chest = enshwick::abi::headed!(ActionTarget {
 ///     flags: ActionTarget::POSITION,
-///     entity: enshwick::Entity(0),
+///     entity: enshwick::Entity::from_engine(0),
 ///     position: [10.0, 2.0, -4.5],
-/// };
+/// });
 /// assert_eq!(chest.flags & ActionTarget::ENTITY, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct ActionTarget {
     /// Size and version of this struct.
     pub header: Header,
@@ -196,7 +197,7 @@ impl ActionTarget {
     pub const NONE: Self = Self {
         header: Header::of::<Self>(),
         flags: 0,
-        entity: Entity(0),
+        entity: Entity::from_engine(0),
         position: [0.0; 3],
     };
 
@@ -209,9 +210,9 @@ impl ActionTarget {
     /// ```
     /// use enshwick::abi::ActionTarget;
     ///
-    /// let unknown = ActionTarget { flags: ActionTarget::ENTITY | 8, ..ActionTarget::NONE };
+    /// let unknown = enshwick::abi::headed!(ActionTarget { flags: ActionTarget::ENTITY | 8, ..ActionTarget::NONE });
     /// assert!(!unknown.is_valid());
-    /// let entity = ActionTarget { flags: ActionTarget::ENTITY, position: [f64::NAN; 3], ..ActionTarget::NONE };
+    /// let entity = enshwick::abi::headed!(ActionTarget { flags: ActionTarget::ENTITY, position: [f64::NAN; 3], ..ActionTarget::NONE });
     /// assert!(entity.is_valid(), "an unset position is not read");
     /// ```
     #[must_use]
@@ -239,7 +240,7 @@ impl ActionTarget {
     /// ```
     /// use enshwick::abi::{ActionTarget, Status};
     ///
-    /// let mut short = ActionTarget { flags: ActionTarget::ENTITY, ..ActionTarget::NONE };
+    /// let mut short = enshwick::abi::headed!(ActionTarget { flags: ActionTarget::ENTITY, ..ActionTarget::NONE });
     /// short.header.size = 8;
     /// // SAFETY: `short` is a whole local `ActionTarget`.
     /// assert_eq!(unsafe { ActionTarget::read(&raw const short) }, Err(Status::BAD_ARGS));
@@ -355,16 +356,16 @@ pub type StatusFn = unsafe extern "system" fn(user: *mut c_void, out: *mut Str);
 /// ```
 /// use enshwick::abi::{Header, RenameCall, Str};
 ///
-/// let call = RenameCall {
-///     header: Header::of::<RenameCall>(),
-///     entity: enshwick::Entity(4096),
+/// let call = enshwick::abi::headed!(RenameCall {
+///     entity: enshwick::Entity::from_engine(4096),
 ///     player: core::ptr::null(),
 ///     text: Str::new("Tools"),
-/// };
+/// });
 /// assert!(call.player.is_null());
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct RenameCall {
     /// Size and version of this struct.
     pub header: Header,

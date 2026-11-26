@@ -48,17 +48,16 @@ const SOUND_COUNT: &str = "soundCount";
 /// use enshwick::content::id;
 /// use enshwick::sound::{Channels, NewMusic};
 ///
-/// let night = NewMusic {
-///     environment: Some("Grassland".into()),
-///     in_battle: Some(false),
-///     start_time: Some(std::time::Duration::from_hours(22)),
-///     end_time: Some(std::time::Duration::from_hours(6)),
-///     channels: Channels::Stereo,
-///     ..NewMusic::new(id!("night"), vec!["music/night1.ogg".into(), "music/night2.ogg".into()])
-/// };
+/// let mut night = NewMusic::new(id!("night"), vec!["music/night1.ogg".into(), "music/night2.ogg".into()]);
+/// night.environment = Some("Grassland".into());
+/// night.in_battle = Some(false);
+/// night.start_time = Some(std::time::Duration::from_hours(22));
+/// night.end_time = Some(std::time::Duration::from_hours(6));
+/// night.channels = Channels::Stereo;
 /// assert_eq!(night.files.len(), 2);
 /// ```
 #[derive(Clone, Debug, crate::Script)]
+#[non_exhaustive]
 pub struct NewMusic {
     /// The music's content id; its recordings are `<id>.sound` on.
     pub id: Id,

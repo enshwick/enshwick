@@ -19,6 +19,10 @@ use crate::{BaseLoad, Off};
 ///
 /// See [`NewPhenomenon`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct PhenomenonId(pub Guid);
 
 /// Values a mod sets on a weather phenomenon; each `None` keeps the value
@@ -250,7 +254,7 @@ impl NewPhenomenon {
     ///
     /// See [`NewPhenomenon`].
     #[must_use]
-    pub const fn in_layer(mut self, layer: Guid) -> Self {
+    pub const fn layer(mut self, layer: Guid) -> Self {
         self.layer = Some(layer);
         self
     }
@@ -630,10 +634,7 @@ mod tests {
     fn a_copy_goes_to_a_named_layer_and_a_taken_id_or_an_unknown_original_or_layer_is_refused() {
         let mut system = system();
         let new = |like| NewPhenomenon::new(Id::new("you.test:mist"), guid(like));
-        assert_eq!(
-            add(&mut system, guid(50), &new(1).in_layer(guid(20))),
-            Ok(())
-        );
+        assert_eq!(add(&mut system, guid(50), &new(1).layer(guid(20))), Ok(()));
         assert_eq!(ranges(&system), [(0, 2), (2, 2)]);
         assert_eq!(system.phenomenons[3].guid, guid(50));
         let before = system.clone();
@@ -646,7 +647,7 @@ mod tests {
             Err(PhenomenonError::Unknown)
         );
         assert_eq!(
-            add(&mut system, guid(51), &new(1).in_layer(guid(30))),
+            add(&mut system, guid(51), &new(1).layer(guid(30))),
             Err(PhenomenonError::Layer)
         );
         assert_eq!(

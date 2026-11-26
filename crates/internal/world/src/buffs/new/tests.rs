@@ -343,8 +343,7 @@ fn two_types_of_one_id_in_one_build_serve_the_first() {
 #[test]
 fn a_request_reads_as_the_edit_it_names() {
     let name = Guid::parse("b7c1d2e3-4f50-4a61-8b72-c3d4e5f60718");
-    let mut request = BuffTypeAdd {
-        header: Header::of::<BuffTypeAdd>(),
+    let mut request = enshwick_abi::headed!(BuffTypeAdd {
         guid: Guid([3; 16]),
         name,
         description: Guid([9; 16]),
@@ -358,7 +357,7 @@ fn a_request_reads_as_the_edit_it_names() {
             | BuffTypeAdd::SET_HIDE_IN_UI,
         slot: 4,
         flags: BuffTypeAdd::HIDE_IN_UI | BuffTypeAdd::PLAIN,
-    };
+    });
     let read = Edit::of(&request).expect("a request it takes");
     assert_eq!(
         read,
@@ -391,7 +390,7 @@ fn a_new_buff_asks_for_what_it_sets_and_nothing_else() {
         .name(NAME)
         .default_life_time(Duration::from_secs(2))
         .slot(BuffSlotType::Buff)
-        .saved(false)
+        .is_saved(false)
         .plain();
     let request = lucky.request().unwrap();
     assert_eq!(

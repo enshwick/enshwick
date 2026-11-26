@@ -21,9 +21,7 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use enshwick_core::abi::{
-    Header, HookFlags, KnowledgeInfo, KnowledgeInput, KnowledgeInputFilterFn,
-};
+use enshwick_core::abi::{HookFlags, KnowledgeInfo, KnowledgeInput, KnowledgeInputFilterFn};
 
 use crate::engine::filters::Filters;
 use crate::engine::fuse::Fuse;
@@ -263,7 +261,7 @@ fn note(call: &KnowledgeInput) {
             call.kind,
             call.value,
             call.scope,
-            call.character.0,
+            call.character.get(),
             call.refusal
         );
     } else if line == LOGGED {
@@ -323,9 +321,8 @@ crate::engine::mid::mid_handler! {
         });
         let definition = define(layout, site, id);
         let refusal = refusal(definition, kind, value);
-        let mut call = KnowledgeInput {
-            header: Header::of::<KnowledgeInput>(),
-            character: enshwick_core::Entity(player),
+        let mut call = enshwick_abi::headed!(KnowledgeInput {
+            character: enshwick_core::Entity::from_engine(player),
             id: enshwick_core::abi::KnowledgeId::new(id),
             kind,
             scope: definition.map_or(KnowledgeInput::NO_SCOPE, |d| d.scope),
@@ -334,7 +331,7 @@ crate::engine::mid::mid_handler! {
             refusal,
             allowed: u8::from(refusal == KnowledgeInput::ALLOWED),
             reserved_tail: [0; 3],
-        };
+        });
         if !decide(&mut call) {
             registers.rax &= !0xff;
             note(&call);
@@ -463,9 +460,8 @@ mod tests {
 
     #[test]
     fn a_hosted_game_s_end_forgets_the_refusals_and_logged_lines() {
-        let call = KnowledgeInput {
-            header: Header::of::<KnowledgeInput>(),
-            character: enshwick_core::Entity(1),
+        let call = enshwick_abi::headed!(KnowledgeInput {
+            character: enshwick_core::Entity::from_engine(1),
             id: enshwick_core::abi::KnowledgeId::new(2),
             kind: KnowledgeInfo::COUNTER,
             scope: KnowledgeInfo::PLAYER,
@@ -474,7 +470,7 @@ mod tests {
             refusal: KnowledgeInput::COUNTER,
             allowed: 0,
             reserved_tail: [0; 3],
-        };
+        });
         note(&call);
         let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
         crate::engine::parts::Part::forget_in(crate::knowledge::PARTS, "knowledge", loader);
@@ -488,9 +484,8 @@ mod tests {
 
     #[test]
     fn without_filters_the_guards_verdict_stands() {
-        let mut call = KnowledgeInput {
-            header: Header::of::<KnowledgeInput>(),
-            character: enshwick_core::Entity(1),
+        let mut call = enshwick_abi::headed!(KnowledgeInput {
+            character: enshwick_core::Entity::from_engine(1),
             id: enshwick_core::abi::KnowledgeId::new(2),
             kind: KnowledgeInfo::BOOL,
             scope: KnowledgeInfo::PLAYER,
@@ -499,7 +494,7 @@ mod tests {
             refusal: KnowledgeInput::QUEST,
             allowed: 0,
             reserved_tail: [0; 3],
-        };
+        });
         assert!(!decide(&mut call));
         call.allowed = 1;
         assert!(decide(&mut call));

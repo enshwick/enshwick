@@ -48,11 +48,10 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let root = tree.iter().find(|node| node.kind == SkillNodeType::Root);
     let stamina = tree.iter().find(|node| node.kind == SkillNodeType::Attribute);
     if let (Some(root), Some(stamina)) = (root, stamina) {
-        load.add_skill_node(NewSkillNode {
-            links_from: vec![root.id],
-            cost: Some(1),
-            ..NewSkillNode::new(id!("endurance"), stamina.id, root.x + 120.0, root.y, id!("endurance.name").guid(), id!("endurance.text").guid())
-        })?;
+        let mut skill_node = NewSkillNode::new(id!("endurance"), stamina.id, root.x + 120.0, root.y, id!("endurance.name").guid(), id!("endurance.text").guid());
+        skill_node.links_from = vec![root.id];
+        skill_node.cost = Some(1);
+        load.add_skill_node(skill_node)?;
     }
     Ok(())
 }

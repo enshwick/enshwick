@@ -39,7 +39,7 @@ pub use phenomena::{NewPhenomenon, PhenomenonChange, PhenomenonId};
 
 use crate::Host;
 use crate::WorldError;
-use crate::abi::{Header, Status, WeatherFront, WeatherSample};
+use crate::abi::{Status, WeatherFront, WeatherSample};
 use crate::content::Guid;
 
 /// What the weather is at a place, as the game names it.
@@ -216,13 +216,12 @@ impl Weather {
     #[must_use]
     #[script]
     pub fn at(&self, position: [f64; 3]) -> Option<WeatherAt> {
-        let mut out = WeatherSample {
-            header: Header::of::<WeatherSample>(),
+        let mut out = enshwick_abi::headed!(WeatherSample {
             clear: 0.0,
             rain: 0.0,
             snow: 0.0,
             blizzard: 0.0,
-        };
+        });
         let status =
             (self.host.api().weather_at)(self.host.handle(), &raw const position, &raw mut out);
         (status == Status::OK).then_some(WeatherAt {
@@ -242,8 +241,7 @@ impl Weather {
     #[must_use]
     #[script]
     pub fn fronts(&self) -> Vec<Front> {
-        let blank = WeatherFront {
-            header: Header::of::<WeatherFront>(),
+        let blank = enshwick_abi::headed!(WeatherFront {
             layer: 0,
             effect: 0,
             position: [0.0; 3],
@@ -251,7 +249,7 @@ impl Weather {
             reserved: 0,
             remaining_ns: 0,
             phenomenon: Guid::NIL,
-        };
+        });
         let mut fronts = vec![blank; 16];
         loop {
             let mut count = 0u32;

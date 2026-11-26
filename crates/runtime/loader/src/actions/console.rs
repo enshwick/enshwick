@@ -85,7 +85,7 @@ impl State {
             .iter()
             .filter(|data| data.kind == BuildingData::PLACED)
             .map(|data| answers::Placed {
-                entity: data.entity.0,
+                entity: data.entity.get(),
                 item: data.item.get(),
                 template: data.template.0,
                 position: data.position,
@@ -281,10 +281,10 @@ mod tests {
     fn a_hosted_game_s_end_forgets_the_lines_waiting_and_the_pieces_placed() {
         let state = State::new();
         state.pending.push("enshwick mods".to_owned());
-        let piece = BuildingData {
+        let piece = enshwick_abi::headed!(BuildingData {
             kind: BuildingData::PLACED,
             ..bytemuck::Zeroable::zeroed()
-        };
+        });
         state.remember(&[piece]);
         assert_eq!(state.placed.relock().len(), 1);
         state.forget();
@@ -361,19 +361,28 @@ mod tests {
 
     #[test]
     fn only_the_latest_placed_pieces_are_kept_newest_first() {
-        let piece = |entity, kind| BuildingData {
-            header: enshwick_core::abi::Header::of::<BuildingData>(),
-            entity,
-            character: enshwick_core::Entity(7),
-            item: enshwick_core::ItemId::new(1),
-            kind,
-            replay: 0,
-            template: enshwick_core::content::Guid::NIL,
-            position: [0.0; 3],
+        let piece = |entity, kind| {
+            enshwick_abi::headed!(BuildingData {
+                entity,
+                character: enshwick_core::Entity::from_engine(7),
+                item: enshwick_core::ItemId::new(1),
+                kind,
+                replay: 0,
+                template: enshwick_core::content::Guid::NIL,
+                position: [0.0; 3],
+            })
         };
         let built: Vec<BuildingData> = (0..40)
-            .map(|entity| piece(enshwick_core::Entity(entity), BuildingData::PLACED))
-            .chain([piece(enshwick_core::Entity(99), BuildingData::TORN_DOWN)])
+            .map(|entity| {
+                piece(
+                    enshwick_core::Entity::from_engine(entity),
+                    BuildingData::PLACED,
+                )
+            })
+            .chain([piece(
+                enshwick_core::Entity::from_engine(99),
+                BuildingData::TORN_DOWN,
+            )])
             .collect();
         remember(&built);
         let newest: Vec<u32> = newest(usize::MAX).iter().map(|p| p.entity).collect();

@@ -24,16 +24,14 @@ mod tests {
 
     impl Mod for Staffs {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            load.add_item(NewItem {
-                icon: Some(Icon {
-                    id: ICON_ID,
-                    like: VANILLA,
-                    pixels: Pixels::Tint(Tint {
-                        colour: [0, 0, 255],
-                        amount: 100,
-                    }),
-                }),
-                ..NewItem::new(STAFF_ID, VANILLA)
+            load.add_item({
+                let mut value = NewItem::new(STAFF_ID, VANILLA);
+                value.icon = Some(Icon::new(
+                    ICON_ID,
+                    VANILLA,
+                    Pixels::Tint(Tint::new([0, 0, 255], 100)),
+                ));
+                value
             })?;
             Ok(Self)
         }

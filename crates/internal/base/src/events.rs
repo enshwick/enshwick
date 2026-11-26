@@ -111,6 +111,7 @@ macro_rules! without_data {
         ///
         /// See [`Load::on`](../struct.Load.html#method.on).
         #[derive(Debug, Clone, Copy)]
+        #[expect(clippy::exhaustive_structs, reason = "an event's unit marker, which never gains a field")]
         pub struct $name;
 
         impl sealed::Sealed for $name {}
@@ -183,6 +184,7 @@ macro_rules! with_data {
         /// See [`Load::on`](../struct.Load.html#method.on).
         $(#[cfg($cfg)])?
         #[derive(Debug, Clone, Copy)]
+        #[expect(clippy::exhaustive_structs, reason = "an event's unit marker, which never gains a field")]
         pub struct $name;
 
         $(#[cfg($cfg)])?
@@ -395,21 +397,22 @@ pub(crate) const SCRIPT_EVENTS: [&[crate::script::EventKind]; 2] = [SCRIPT_PLAIN
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::abi::Header;
 
     #[test]
     fn data_is_read_only_when_it_has_every_field_of_its_minor() {
-        let player = PlayerData {
-            header: Header::of::<PlayerData>(),
+        let player = enshwick_abi::headed!(PlayerData {
             slot: 2,
-            entity: crate::Entity(9),
+            entity: crate::Entity::from_engine(9),
             key: crate::PlayerKey::new(1),
-        };
+        });
         let raw = (&raw const player).cast::<c_void>();
         // SAFETY: `player` is a whole `PlayerData` on this stack frame,
         // readable for the size its header states.
         let joined = unsafe { PlayerJoined::data(raw) };
-        assert_eq!(joined.map(|p| p.entity), Some(crate::Entity(9)));
+        assert_eq!(
+            joined.map(|p| p.entity),
+            Some(crate::Entity::from_engine(9))
+        );
         // SAFETY: `data` accepts a null pointer and reads nothing.
         assert!(unsafe { PlayerLeft::data(core::ptr::null()) }.is_none());
         let mut short = player;
@@ -424,16 +427,15 @@ mod tests {
     #[test]
     #[cfg(feature = "unstable")]
     fn a_death_from_minor_60_reads_without_its_killer_entity() {
-        let mut death = PlayerDeathData {
-            header: Header::of::<PlayerDeathData>(),
-            entity: crate::Entity(3),
+        let mut death = enshwick_abi::headed!(PlayerDeathData {
+            entity: crate::Entity::from_engine(3),
             cause: crate::abi::DamageCheck::IMPACT,
             key: crate::PlayerKey::new(7),
             position: [0.0; 3],
             cause_guid: crate::content::Guid([1; 16]),
-            killer_entity: crate::Entity(9),
+            killer_entity: crate::Entity::from_engine(9),
             reserved_tail: 0,
-        };
+        });
         death.header.size =
             u32::try_from(core::mem::offset_of!(PlayerDeathData, killer_entity)).unwrap();
         // SAFETY: `death` is a whole `PlayerDeathData` on this stack frame,
@@ -441,7 +443,7 @@ mod tests {
         let read = unsafe { PlayerDied::data((&raw const death).cast()) }.unwrap();
         assert_eq!(
             (read.entity, read.killer_entity),
-            (crate::Entity(3), crate::Entity(0))
+            (crate::Entity::from_engine(3), crate::Entity::from_engine(0))
         );
     }
 
@@ -453,12 +455,11 @@ mod tests {
             appended: u64,
         }
         let mut newer = Newer {
-            player: PlayerData {
-                header: Header::of::<PlayerData>(),
+            player: enshwick_abi::headed!(PlayerData {
                 slot: 2,
-                entity: crate::Entity(9),
+                entity: crate::Entity::from_engine(9),
                 key: crate::PlayerKey::new(1),
-            },
+            }),
             appended: 5,
         };
         newer.player.header.size = u32::try_from(size_of::<Newer>()).unwrap();
@@ -468,7 +469,7 @@ mod tests {
         let joined = unsafe { PlayerJoined::data((&raw const newer).cast()) }.unwrap();
         assert_eq!(
             (joined.entity, joined.key),
-            (crate::Entity(9), crate::PlayerKey::new(1))
+            (crate::Entity::from_engine(9), crate::PlayerKey::new(1))
         );
         assert_eq!(newer.appended, 5);
     }

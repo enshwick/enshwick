@@ -1,7 +1,7 @@
 //! Host functions for the running game: components, templates, hosting, the
 //! server's world, features, the status report and game events.
 
-use enshwick_core::abi::{EventTypeInfo, Header, Side, Status, Str};
+use enshwick_core::abi::{EventTypeInfo, Side, Status, Str};
 use enshwick_core::{Entity, abi as api_frame};
 
 use crate::engine::world::Whose;
@@ -31,12 +31,11 @@ entries! {
     fn event_types(loader as Caller, [out, entry_size, capacity, count] as SizedListOut<EventTypeInfo>) -> Status {
         let types: Vec<EventTypeInfo> = crate::engine::catalogue::event_types(&loader.reflection)
             .filter_map(|ty| {
-                Some(EventTypeInfo {
-                    header: Header::of::<EventTypeInfo>(),
+                Some(enshwick_abi::headed!(EventTypeInfo {
                     name: Str::new(ty.name()),
                     hash: crate::engine::world::type_hash(ty.va())?,
                     size: ty.size(),
-                })
+                }))
             })
             .collect();
         out.put(&types)

@@ -39,10 +39,10 @@ fn a_transaction_past_the_caps_is_refused_at_commit() {
         Err(TransactionError::BadCount),
         "320 bricks"
     );
-    let dry = TerrainEdit {
+    let dry = enshwick_abi::headed!(TerrainEdit {
         flags: TerrainEdit::DRY_RUN,
         ..terrain(20.0)
-    };
+    });
     assert_eq!(
         ledger.commit(ME, None, vec![Change::Terrain(dry)]),
         Err(TransactionError::BadEdit)

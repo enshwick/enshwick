@@ -7,7 +7,7 @@ mod tests {
     use std::sync::OnceLock;
     use std::time::Duration;
 
-    use enshwick::abi::{BuildingData, Header, KnowledgeInfo, PlayerInfo, Status};
+    use enshwick::abi::{BuildingData, KnowledgeInfo, PlayerInfo, Status};
     use enshwick::content::journal::{KillTarget, NewQuest, Objective, QuestStep};
     use enshwick::content::knowledge::{GAME_KNOWLEDGE, KnowledgeQuery};
     use enshwick::content::{EngineFacts, Guid, Id};
@@ -25,7 +25,7 @@ mod tests {
     const HUNTED: Id = Id::new("you.beacon:hunted");
     const SIGNAL: Id = Id::new("you.beacon:lit");
     const WALL: ItemId = ItemId::new(0x0000_0a11);
-    const PLAYER: Entity = Entity(4096);
+    const PLAYER: Entity = Entity::from_engine(4096);
 
     static QUESTS: OnceLock<Quests> = OnceLock::new();
     static BROKEN_REFUSED: OnceLock<bool> = OnceLock::new();
@@ -46,15 +46,17 @@ mod tests {
                 BEACONS,
                 tag("name"),
                 vec![
-                    QuestStep {
-                        objectives: vec![Objective::Custom {
+                    {
+                        let mut value = QuestStep::owned(tag("1"), tag("1.text"));
+                        value.objectives = vec![Objective::Custom {
                             signal: SIGNAL,
                             count: 3,
-                        }],
-                        ..QuestStep::owned(tag("1"), tag("1.text"))
+                        }];
+                        value
                     },
-                    QuestStep {
-                        objectives: vec![
+                    {
+                        let mut value = QuestStep::owned(tag("2"), tag("2.text"));
+                        value.objectives = vec![
                             Objective::Build {
                                 item: WALL,
                                 count: 2,
@@ -63,17 +65,18 @@ mod tests {
                                 signal: SIGNAL,
                                 count: 1,
                             },
-                        ],
-                        ..QuestStep::owned(tag("2"), tag("2.text"))
+                        ];
+                        value
                     },
                 ],
             ))?;
-            let custom = |count| QuestStep {
-                objectives: vec![Objective::Custom {
+            let custom = |count| {
+                let mut value = QuestStep::owned(tag("b"), tag("b.text"));
+                value.objectives = vec![Objective::Custom {
                     signal: SIGNAL,
                     count,
-                }],
-                ..QuestStep::owned(tag("b"), tag("b.text"))
+                }];
+                value
             };
             let broken = load.add_quest(NewQuest::new(
                 BROKEN,
@@ -84,12 +87,13 @@ mod tests {
             load.add_quest(NewQuest::new(
                 HUNTED,
                 tag("hunted"),
-                vec![QuestStep {
-                    objectives: vec![Objective::Kill {
+                vec![{
+                    let mut value = QuestStep::owned(tag("h"), tag("h.text"));
+                    value.objectives = vec![Objective::Kill {
                         target: KillTarget::Faction(FactionType::Vukah),
                         count: 1,
-                    }],
-                    ..QuestStep::owned(tag("h"), tag("h.text"))
+                    }];
+                    value
                 }],
             ))?;
             let _ = QUESTS.set(load.quests());
@@ -106,15 +110,14 @@ mod tests {
     );
 
     fn info(id: KnowledgeId, kind: u8, value: u32) -> (Option<Entity>, KnowledgeInfo) {
-        let info = KnowledgeInfo {
-            header: Header::of::<KnowledgeInfo>(),
+        let info = enshwick::abi::headed!(KnowledgeInfo {
             id,
             kind,
             scope: KnowledgeInfo::PLAYER,
             reserved: 0,
             value,
             flags: 0,
-        };
+        });
         (Some(PLAYER), info)
     }
 
@@ -124,15 +127,14 @@ mod tests {
         let loader = FakeHost::new()
             .progression()
             .world()
-            .player(PlayerInfo {
-                header: Header::of::<PlayerInfo>(),
+            .player(enshwick::abi::headed!(PlayerInfo {
                 slot: 0,
                 entity: PLAYER,
                 key: PlayerKey::new(7),
                 permissions: 0,
                 name_len: 0,
                 name: [0; PlayerInfo::NAME_MAX],
-            })
+            }))
             .install();
         // SAFETY: the three functions are the exports of this file's `declare_mod!(Beacon)`.
         let status =
@@ -165,16 +167,15 @@ mod tests {
     }
 
     fn placed(item: ItemId) -> BuildingData {
-        BuildingData {
-            header: Header::of::<BuildingData>(),
-            entity: Entity(77),
+        enshwick::abi::headed!(BuildingData {
+            entity: Entity::from_engine(77),
             character: PLAYER,
             item,
             kind: BuildingData::PLACED,
             replay: 0,
             template: Guid([0; 16]),
             position: Default::default(),
-        }
+        })
     }
 
     #[test]
@@ -208,11 +209,11 @@ mod tests {
     #[test]
     fn a_signal_counts_only_while_its_step_is_open_and_never_past_its_count() {
         let (loader, quests) = start(&[]);
-        quests.signal(Holder::Player(PLAYER), SIGNAL, 1);
+        quests.signal(Holder::player(PLAYER), SIGNAL, 1);
         assert!(loader.grants().is_empty(), "not started");
         drop(loader);
         let (loader, quests) = start(&[("started", 1), ("step-0.obj-0", 1)]);
-        quests.signal(Holder::Player(PLAYER), SIGNAL, 5);
+        quests.signal(Holder::player(PLAYER), SIGNAL, 5);
         assert_eq!(
             loader.grants(),
             [added(owned("step-0.obj-0"), 2)],
@@ -236,10 +237,10 @@ mod tests {
         ]);
         assert_eq!(loader.raise::<BuildingPlaced>(&placed(ItemId::new(9))), 1);
         assert!(loader.grants().is_empty(), "another item");
-        let _replayed = loader.raise::<BuildingPlaced>(&BuildingData {
+        let _replayed = loader.raise::<BuildingPlaced>(&enshwick::abi::headed!(BuildingData {
             replay: 1,
             ..placed(WALL)
-        });
+        }));
         assert!(loader.grants().is_empty(), "an undo replay counts nothing");
         assert_eq!(loader.raise::<BuildingPlaced>(&placed(WALL)), 1);
         assert_eq!(
@@ -260,7 +261,7 @@ mod tests {
     fn two_counters_raised_in_one_world_step_set_the_step_s_bool_on_the_next_tick() {
         let (loader, quests) = start(&[("started", 1), ("step-0.obj-0", 3), ("step-1.obj-0", 1)]);
         assert_eq!(loader.raise::<BuildingPlaced>(&placed(WALL)), 1);
-        quests.signal(Holder::Player(PLAYER), SIGNAL, 1);
+        quests.signal(Holder::player(PLAYER), SIGNAL, 1);
         assert_eq!(
             loader.grants(),
             [

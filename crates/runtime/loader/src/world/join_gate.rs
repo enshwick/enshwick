@@ -12,7 +12,7 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use enshwick_core::PlayerKey;
-use enshwick_core::abi::{Header, HookFlags, JoinCall, JoinRuleFn};
+use enshwick_core::abi::{HookFlags, JoinCall, JoinRuleFn};
 
 use super::join_message::{self, JoinLayout, JoinOffsets};
 use crate::engine::filters::Filters;
@@ -252,10 +252,9 @@ fn refuser<'a>(
     steam: bool,
 ) -> Option<(&'a Registered<JoinRuleFn>, Option<PlayerKey>)> {
     join.keys(entries, steam).find_map(|player| {
-        let call = JoinCall {
-            header: Header::of::<JoinCall>(),
+        let call = enshwick_abi::headed!(JoinCall {
             account: player.unwrap_or(PlayerKey::new(0)),
-        };
+        });
         // SAFETY: the rule is the mod's registered `JoinRuleFn` in its DLL,
         // which stays loaded for the process, called with a `JoinCall` that
         // outlives the call and the mod's own `user` word; by the callback
