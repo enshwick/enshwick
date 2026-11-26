@@ -40,7 +40,10 @@ one:
   `<file> skipped: built for ABI major 1, and Enshwick 2.0.0 runs ABI 2.0: rebuild it for Enshwick 2.0.0`.
   A loader of an older major logs that the mod is newer and asks to update
   Enshwick. The alphas before Enshwick 1.0 used the majors 5 to 12. A
-  loader of ABI 1 asks to rebuild a mod built for one of them.
+  loader of ABI 1 asks to rebuild a mod built for one of them. No stable
+  major takes one of those numbers, so the major after 4 is 13. An alpha's
+  loader reads major 1 as older and asks to rebuild a mod built for ABI 1,
+  but that mod needs a newer Enshwick.
 - The manifest's header holds the minor. A loader older than that minor
   logs `<file> skipped: built for ABI 1.2, newer than ABI 1.1 of Enshwick 1.1.0: update Enshwick`.
 - Structs that cross the boundary on their own start with a

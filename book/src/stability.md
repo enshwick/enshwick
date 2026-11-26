@@ -109,10 +109,14 @@ against it. A release that only adds game
 builds keeps the layout and the mods.
 
 The ABI is stable from ABI 1.0, the ABI of Enshwick 1.0. A mod built for
-ABI 1 loads on every loader of ABI 1, until a new major, ABI 2. The loader's
-table and its structs grow only by appending, and each append is the next
-minor. A slot keeps its signature and its meaning, unstable calls included:
-a call whose meaning changes gets a new slot. The alphas used the ABI majors
+ABI 1 loads on every loader of ABI 1 at its minor or a newer one, until
+ABI 2. The loader's table and its structs grow only by
+appending, and each append is the next minor. A slot keeps its signature
+and its meaning, unstable calls included: a call whose meaning changes gets
+a new slot. The alphas used the ABI majors
 5 to 12, and a loader of ABI 1 asks to rebuild a mod built for one of them.
+No stable major takes one of those numbers, so the major after ABI 4 is
+ABI 13. An alpha's loader reads major 1 as older and asks to rebuild a mod
+built for ABI 1, but that mod needs a newer Enshwick.
 [ABI test coverage](abi-coverage.md) lists how each entry of the table is
 tested.

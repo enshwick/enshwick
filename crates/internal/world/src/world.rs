@@ -406,7 +406,7 @@ impl World {
         self.change_item_meter(pide, |now| change(now).unwrap_or(now))
     }
 
-    /// Changes `entity`'s shroud time to what `change` returns for the time
+    /// Changes `entity`'s fog resistance to what `change` returns for it
     /// now, as `World::change_fog_resistance` does; nil keeps it.
     ///
     /// # Errors

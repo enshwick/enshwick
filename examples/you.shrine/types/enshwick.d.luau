@@ -4789,7 +4789,7 @@ declare enshwick: {
 		add_experience: (entity: number, amount: number) -> (),
 		--- Changes an item's meter on its entity `pide` to what `change` returns for the value now, as `World.change_item_meter` does; nil keeps it.
 		change_item_meter: (pide: number, change: (arg1: number) -> number?) -> Meter,
-		--- Changes `entity`'s shroud time to what `change` returns for the time now, as `World.change_fog_resistance` does; nil keeps it.
+		--- Changes `entity`'s fog resistance to what `change` returns for it now, as `World.change_fog_resistance` does; nil keeps it.
 		change_fog_resistance: (entity: number, change: (arg1: number) -> number?) -> Meter,
 		--- The value of `field` in `entity`'s component, as `World.get` reads it; a 64-bit one as decimal text.
 		get: (entity: number, field: Field) -> any?,

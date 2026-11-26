@@ -122,9 +122,8 @@ fn loader_refused(
 ///   header states, with no other writer during the call.
 /// - `call`'s strings are null or point at their `len` bytes, alive and
 ///   unchanged for the call.
-/// - `call`'s `reply`, where its header covers it, is null or writable for
-///   one [`ActionReply`], which the loader reads before it asks again on
-///   this thread.
+/// - `call`'s `reply` is null or writable for one [`ActionReply`], which
+///   the loader reads before it asks again on this thread.
 /// - `user` is the `Box<Arc<Registry>>` that
 ///   `Load::actions` handed over, which the loader
 ///   keeps for the process.
