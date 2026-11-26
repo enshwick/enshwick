@@ -62,15 +62,15 @@ mod tests {
         );
         assert_eq!(
             loader.check_settings("settings", "first = 5\nlast = 4\n"),
-            Err(enshwick::test::SettingsRefused {
-                reason: "first is more than last".to_owned()
-            })
+            Err(enshwick::test::SettingsRefused::new(
+                "first is more than last".to_owned()
+            ))
         );
         assert_eq!(
             loader.check_settings("settings", "first = 2\nlast = 20\n"),
-            Err(enshwick::test::SettingsRefused {
-                reason: "config.last.max\tmax=19".to_owned()
-            })
+            Err(enshwick::test::SettingsRefused::new(
+                "config.last.max\tmax=19".to_owned()
+            ))
         );
         assert!(
             loader

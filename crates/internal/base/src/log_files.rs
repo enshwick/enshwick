@@ -104,6 +104,7 @@ pub fn write_line(
 
 /// A line [`write_line`] wrote, read back.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Line<'a> {
     /// The milliseconds into the day, UTC.
     pub millis: u32,

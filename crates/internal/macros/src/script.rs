@@ -505,7 +505,7 @@ fn parameter(
         }
     };
     let local = format_ident!("arg{index}");
-    let ty = &*typed.ty;
+    let ty = into_target(&typed.ty).unwrap_or(&typed.ty);
     if let Some((inputs, output)) = closure_bound(ty).or_else(|| generic_closure(ty, generics)) {
         return closure(&param, &local, &inputs, &output, krate);
     }
@@ -533,6 +533,26 @@ fn parameter(
         describe: quote!(#script::Param::new(#param, <#owned as #script::Typed>::TY)),
         read: quote!(let #local: #owned = #krate::__private::taken(&mut args, #param)?;),
         pass,
+    })
+}
+
+/// The `T` of an `impl Into<T>` parameter, which a script passes as `T`.
+fn into_target(ty: &Type) -> Option<&Type> {
+    let Type::ImplTrait(imp) = ty else {
+        return None;
+    };
+    imp.bounds.iter().find_map(|bound| {
+        let TypeParamBound::Trait(t) = bound else {
+            return None;
+        };
+        let last = t.path.segments.last().filter(|last| last.ident == "Into")?;
+        let PathArguments::AngleBracketed(args) = &last.arguments else {
+            return None;
+        };
+        match args.args.first()? {
+            GenericArgument::Type(target) => Some(target),
+            _ => None,
+        }
     })
 }
 
@@ -689,7 +709,7 @@ fn answer(
                 quote! {
                     match #call {
                         ::core::result::Result::Ok(value) => ::core::result::Result::Ok(#script::IntoScript::into_value(value)),
-                        ::core::result::Result::Err(error) => ::core::result::Result::Err(#script::Error::new(::std::string::ToString::to_string(&error))),
+                        ::core::result::Result::Err(error) => ::core::result::Result::Err(#script::Error::failed(&error)),
                     }
                 },
             ),

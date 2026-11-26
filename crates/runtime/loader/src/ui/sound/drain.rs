@@ -197,7 +197,7 @@ impl Drain {
         self.live
             .iter()
             .map(|live| live.follows)
-            .chain(self.waiting.iter().map(|waiting| waiting.play.entity.0))
+            .chain(self.waiting.iter().map(|waiting| waiting.play.entity.get()))
     }
 
     /// Runs `op` of the mod at `owner`.
@@ -217,12 +217,12 @@ impl Drain {
         };
         match op {
             Op::Start(slot, play) if play.place == SoundPlay::ON => {
-                match followed.seen(play.entity.0) {
+                match followed.seen(play.entity.get()) {
                     Seen::At(at) => self.start(owner, sounds, slot, play, Some(at), mixer),
                     Seen::Gone => {
                         sounds.settle(slot, SoundInfo::FAILED, SoundInfo::NO_ENTITY);
                     }
-                    Seen::Unread if !Followed::fits(play.entity.0, self.followed()) => {
+                    Seen::Unread if !Followed::fits(play.entity.get(), self.followed()) => {
                         sounds.settle(slot, SoundInfo::FAILED, SoundInfo::FOLLOW_FULL);
                     }
                     Seen::Unread => self.waiting.push(Waiting {
@@ -307,7 +307,7 @@ impl Drain {
             game,
             place: play.place,
             follows: if play.place == SoundPlay::ON {
-                play.entity.0
+                play.entity.get()
             } else {
                 0
             },
@@ -387,7 +387,7 @@ impl Drain {
             let Some(Some(sounds)) = frame.mods.get(waits.owner) else {
                 continue;
             };
-            match (followed.seen(waits.play.entity.0), mixer.as_deref_mut()) {
+            match (followed.seen(waits.play.entity.get()), mixer.as_deref_mut()) {
                 (Seen::At(at), Some(mixer)) => {
                     self.start(waits.owner, sounds, waits.slot, waits.play, Some(at), mixer);
                 }

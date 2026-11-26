@@ -7,7 +7,7 @@
 mod tests {
     use std::sync::{Mutex, OnceLock};
 
-    use enshwick::abi::{ContainerPut, Header, Interaction, InventoryRequest, PlayerInfo, Status};
+    use enshwick::abi::{ContainerPut, Interaction, InventoryRequest, PlayerInfo, Status};
     use enshwick::interactions::{InventoryActionType, Kind, Transfer};
     use enshwick::inventory::{Batch, Inventories, Op, SlotRef};
     use enshwick::test::FakeHost;
@@ -51,15 +51,14 @@ mod tests {
     );
 
     fn player() -> PlayerInfo {
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick::abi::headed!(PlayerInfo {
             slot: 1,
-            entity: Entity(PLAYER),
+            entity: Entity::from_engine(PLAYER),
             key: enshwick::PlayerKey::new(7),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        }
+        })
     }
 
     fn start() -> enshwick::test::Installed {
@@ -76,20 +75,19 @@ mod tests {
     }
 
     fn put(container_item: ItemId, item: ItemId) -> ContainerPut {
-        ContainerPut {
-            header: Header::of::<ContainerPut>(),
-            container: Entity(CHEST),
+        enshwick::abi::headed!(ContainerPut {
+            container: Entity::from_engine(CHEST),
             container_item,
             item,
             count: 20,
-            slot: SlotRef::new(Entity(CHEST + 1), 3).0,
-        }
+            slot: SlotRef::new(Entity::from_engine(CHEST + 1), 3).0,
+        })
     }
 
     /// A move by the player from `from` to `to`, with the slots, action and
     /// transfer mask the loader reads.
     fn moving(from: u32, to: u32, slots: [u64; 2], action: u8, transfer: u8) -> Interaction {
-        Interaction {
+        enshwick::abi::headed!(Interaction {
             moved: if slots[0] == 0 {
                 ItemId::new(0)
             } else {
@@ -97,15 +95,19 @@ mod tests {
             },
             stack: if slots[0] == 0 { 0 } else { 20 },
             amount: 0,
-            from: Entity(from),
-            to: Entity(to),
+            from: Entity::from_engine(from),
+            to: Entity::from_engine(to),
             action,
             transfer,
             moving: 1,
             from_slot: slots[0],
             to_slot: slots[1],
-            ..Interaction::new(Interaction::MOVE, Entity(PLAYER), Entity(CHEST))
-        }
+            ..Interaction::new(
+                Interaction::MOVE,
+                Entity::from_engine(PLAYER),
+                Entity::from_engine(CHEST),
+            )
+        })
     }
 
     #[test]
@@ -213,8 +215,8 @@ mod tests {
     #[test]
     fn a_filter_sees_the_kind_of_every_move_and_refuses_take_all() {
         let loader = start();
-        let slot = SlotRef::new(Entity(PLAYER + 1), 0).0;
-        let target = SlotRef::new(Entity(CHEST + 1), 5).0;
+        let slot = SlotRef::new(Entity::from_engine(PLAYER + 1), 0).0;
+        let target = SlotRef::new(Entity::from_engine(CHEST + 1), 5).0;
         let kinds = kinds(slot, target);
         for (call, transfer, allowed) in kinds {
             assert_eq!(loader.interaction(&call), allowed, "{transfer:?}");
@@ -229,14 +231,21 @@ mod tests {
         assert_eq!((seen.item, seen.stack), (Some(IRON_ORE), 20));
         assert_eq!(
             (seen.from, seen.to),
-            (Some(Entity(PLAYER)), Some(Entity(CHEST)))
+            (
+                Some(Entity::from_engine(PLAYER)),
+                Some(Entity::from_engine(CHEST))
+            )
         );
         assert_eq!(
             (seen.from_slot, seen.to_slot),
             (Some(SlotRef(slot)), Some(SlotRef(target)))
         );
 
-        let unread = Interaction::new(Interaction::MOVE, Entity(PLAYER), Entity(CHEST));
+        let unread = Interaction::new(
+            Interaction::MOVE,
+            Entity::from_engine(PLAYER),
+            Entity::from_engine(CHEST),
+        );
         assert!(loader.interaction(&unread));
         assert_eq!(
             MOVES.lock().unwrap().pop().unwrap().moved,
@@ -250,7 +259,7 @@ mod tests {
         let loader = start();
         let inventories = INVENTORIES.get().unwrap();
         let give = Op::Give {
-            to: Entity(PLAYER),
+            to: Entity::from_engine(PLAYER),
             item: IRON_ORE,
             count: 5,
             fill: None,
@@ -275,25 +284,28 @@ mod tests {
     fn a_pickup_message_shows_for_a_player_and_holds_the_game_s_most() {
         let loader = start();
         let inventories = INVENTORIES.get().unwrap();
-        assert_eq!(inventories.show_pickup(Entity(PLAYER), IRON_ORE, 3), Ok(()));
         assert_eq!(
-            inventories.show_pickup(Entity(PLAYER), WOOD, 70_000),
+            inventories.show_pickup(Entity::from_engine(PLAYER), IRON_ORE, 3),
             Ok(())
         );
         assert_eq!(
-            inventories.show_pickup(Entity(CHEST), IRON_ORE, 3),
+            inventories.show_pickup(Entity::from_engine(PLAYER), WOOD, 70_000),
+            Ok(())
+        );
+        assert_eq!(
+            inventories.show_pickup(Entity::from_engine(CHEST), IRON_ORE, 3),
             Err(WorldError::Refused),
             "a chest is no player"
         );
         assert_eq!(
-            inventories.show_pickup(Entity(PLAYER), IRON_ORE, 0),
+            inventories.show_pickup(Entity::from_engine(PLAYER), IRON_ORE, 0),
             Err(WorldError::Refused)
         );
         assert_eq!(
             loader.pickups_shown(),
             [
-                (Entity(PLAYER), IRON_ORE, 3),
-                (Entity(PLAYER), WOOD, 65_535)
+                (Entity::from_engine(PLAYER), IRON_ORE, 3),
+                (Entity::from_engine(PLAYER), WOOD, 65_535)
             ]
         );
     }
@@ -305,7 +317,7 @@ mod tests {
             INVENTORIES
                 .get()
                 .unwrap()
-                .show_pickup(Entity(PLAYER), IRON_ORE, 3)
+                .show_pickup(Entity::from_engine(PLAYER), IRON_ORE, 3)
         })
         .join()
         .unwrap();

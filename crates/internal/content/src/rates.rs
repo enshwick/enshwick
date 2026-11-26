@@ -322,6 +322,10 @@ impl crate::script::Object for RateHandle {
 /// The free functions of [`rates`](self) as a script's namespace `rates`.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a unit marker, which never gains a field"
+)]
 pub struct RateFns;
 
 impl crate::script::Bound for RateFns {

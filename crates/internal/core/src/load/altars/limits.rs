@@ -38,8 +38,6 @@ impl Load<'_> {
     /// world lowers the bases below the request with
     /// [`set_base_limit`](crate::altars::set_base_limit).
     ///
-    /// Unstable: needs the `unstable` feature and may change in any release.
-    ///
     /// # Errors
     ///
     /// [`Off`] after init, or for a value past the most the loader takes
@@ -56,7 +54,6 @@ impl Load<'_> {
     ///     Ok(())
     /// }
     /// ```
-    #[cfg(feature = "unstable")]
     #[script]
     pub fn request_base_limits(&mut self, zones: u32, bases: u32) -> Result<bool, Off>;
 }

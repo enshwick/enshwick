@@ -397,10 +397,10 @@ mod tests {
         crate::base::wire::sound(&crate::base::wire::SoundMessage {
             owner: enshwick_gamedata::reflect::fnv1a32(owner.as_bytes()),
             id: 1,
-            op: crate::base::wire::SoundOp::Play(SoundPlay {
+            op: crate::base::wire::SoundOp::Play(enshwick_abi::headed!(SoundPlay {
                 container: enshwick_core::content::Guid(container),
                 ..SoundPlay::EMPTY
-            }),
+            })),
         })
     }
 

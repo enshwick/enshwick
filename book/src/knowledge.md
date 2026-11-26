@@ -165,7 +165,8 @@ A player's knowledge lives in the character's save on the player's machine.
 The server holds it only while the player is in the game, once that save has
 loaded. `grant_account(account, id, grant)` and
 `revoke_account(account, id, revoke)` take an account instead of a
-character. The account is its [`Player::key`](world.md). When the account's
+character. The account is its [`Player::key`](world.md). A `Player`, or the
+character of a connected player, names it as well. When the account's
 character is in the game, the change applies now. Otherwise it waits with the
 world, in `<stem>-mod-data/enshwick/knowledge.toml`. It applies once the
 account's next character has loaded in that world, whichever character it

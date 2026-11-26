@@ -10,9 +10,7 @@ use std::time::Instant;
 use core::ops::ControlFlow;
 use enshwick_base::peer::{Admitted, CHAT_LINE_RATE, Rated};
 
-use enshwick_core::abi::{
-    ChatFilterFn, ChatLine, ChatRewrite, Entity, Event, Header, PlayerKey, Str,
-};
+use enshwick_core::abi::{ChatFilterFn, ChatLine, ChatRewrite, Entity, Event, PlayerKey, Str};
 
 use crate::base::wire::Drops;
 use crate::engine::filters::Filters;
@@ -119,20 +117,18 @@ pub(crate) fn filter(player: u64, loca: [u32; 2], text: String, max_text: usize)
     let mut text = text;
     let mut buffer = vec![0u8; max_text];
     let dropped = FILTERS.ask(|callback| {
-        let line = ChatLine {
-            header: Header::of::<ChatLine>(),
+        let line = enshwick_abi::headed!(ChatLine {
             account: PlayerKey::new(player),
             entity,
             kind: ChatLine::PLAYER,
             loca,
             text: Str::new(&text),
-        };
-        let mut rewrite = ChatRewrite {
-            header: Header::of::<ChatRewrite>(),
+        });
+        let mut rewrite = enshwick_abi::headed!(ChatRewrite {
             buffer: buffer.as_mut_ptr(),
             capacity: u32::try_from(buffer.len()).unwrap_or(u32::MAX),
             len: 0,
-        };
+        });
         // SAFETY: the filter's mod runs, so its DLL that holds the callback
         // stays loaded; it gets the user pointer its mod registered; `line`,
         // the text it views and `rewrite` with its `capacity` writable bytes
@@ -166,7 +162,7 @@ fn character(player: u64) -> Entity {
     crate::engine::loader::loader()
         .and_then(|loader| crate::engine::world::players(loader).ok())
         .and_then(|players| players.into_iter().find(|p| p.key.0 == player))
-        .map_or(Entity(0), |p| p.entity)
+        .map_or(Entity::from_engine(0), |p| p.entity)
 }
 
 /// Keeps a line that reached the chat for the end of the step, when a mod
@@ -216,15 +212,14 @@ pub(crate) fn raise(loader: &Loader) {
         let entity = players
             .iter()
             .find(|p| p.key.0 == said.player)
-            .map_or(Entity(0), |p| p.entity);
-        let line = ChatLine {
-            header: Header::of::<ChatLine>(),
+            .map_or(Entity::from_engine(0), |p| p.entity);
+        let line = enshwick_abi::headed!(ChatLine {
             account: PlayerKey::new(said.player),
             entity,
             kind: said.kind,
             loca: said.loca,
             text: Str::new(&said.text),
-        };
+        });
         loader.emit(Event::CHAT_SAID, None, (&raw const line).cast());
     }
 }

@@ -1,6 +1,6 @@
 //! The engine's pacing places, as the loader would run the mod's handlers.
 
-use enshwick_core::abi::{Header, LoopWaitData};
+use enshwick_core::abi::LoopWaitData;
 
 use crate::test::Installed;
 use crate::test::table;
@@ -21,12 +21,11 @@ impl Installed {
     /// ```
     pub fn loop_wait(&self, ms: u32, left_ns: i64) {
         let handlers = table::with(Vec::new(), |s| s.base.pacing.loop_waits.clone());
-        let wait = LoopWaitData {
-            header: Header::of::<LoopWaitData>(),
+        let wait = enshwick_core::headed!(LoopWaitData {
             ms,
             reserved: 0,
             left_ns,
-        };
+        });
         for handler in handlers {
             // SAFETY: a valid registration; `user` is the mod's pointer.
             handler.run(|callback, user| unsafe { callback(&raw const wait, user) });

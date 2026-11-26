@@ -4,7 +4,7 @@
 //! windows, and the fake as the loader does: each player's waypoint at the
 //! last look, and the rule for one outside the map's frame.
 
-use crate::abi::{Header, MapFrameInfo, Metres, PlayerInfo, WaypointData};
+use crate::abi::{MapFrameInfo, Metres, PlayerInfo, WaypointData};
 use crate::{Entity, PlayerKey};
 
 /// How often the waypoints are looked at, in milliseconds: a person sets
@@ -54,14 +54,13 @@ pub fn position(enabled: u8, fixed: [i64; 3]) -> Option<Metres> {
 /// The data of player `key`'s waypoint `now`, on character `entity`.
 #[must_use]
 pub fn data(key: PlayerKey, entity: Entity, now: Option<Metres>) -> WaypointData {
-    WaypointData {
-        header: Header::of::<WaypointData>(),
+    enshwick_abi::headed!(WaypointData {
         key,
         entity,
         position: now.unwrap_or_default(),
         set: u32::from(now.is_some()),
         reserved_tail: 0,
-    }
+    })
 }
 
 /// Each online player's waypoint at the last look.
@@ -172,23 +171,23 @@ impl Waypoints {
 mod tests {
     use super::*;
 
-    const ANN: Entity = Entity(40);
+    const ANN: Entity = Entity::from_engine(40);
 
     fn ann() -> PlayerInfo {
-        PlayerInfo {
+        enshwick_abi::headed!(PlayerInfo {
             key: PlayerKey::new(7),
             entity: ANN,
             ..bytemuck::Zeroable::zeroed()
-        }
+        })
     }
 
     fn frame() -> MapFrameInfo {
-        MapFrameInfo {
+        enshwick_abi::headed!(MapFrameInfo {
             origin: [0.0, 0.0],
             size: [1000.0, 1000.0],
             metres_per_cell: 8.0,
             ..MapFrameInfo::EMPTY
-        }
+        })
     }
 
     /// The positions `waypoints` hands on as Ann's waypoint reads `now`.

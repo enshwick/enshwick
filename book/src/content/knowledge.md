@@ -33,10 +33,9 @@ use enshwick::content::knowledge::NewKnowledge;
 use enshwick::knowledge::{Grant, KnowledgeType, Scope};
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let shrine = load.add_knowledge(NewKnowledge {
-        skill_points: 1,
-        ..NewKnowledge::new(id!("found-the-shrine"), Scope::Player, KnowledgeType::Bool)
-    })?;
+    let mut knowledge_2 = NewKnowledge::new(id!("found-the-shrine"), Scope::Player, KnowledgeType::Bool);
+    knowledge_2.skill_points = 1;
+    let shrine = load.add_knowledge(knowledge_2)?;
     let knowledge = load.knowledge();
     load.on::<enshwick::events::PlayerJoined>(move |joined| {
         let _ = knowledge.grant(joined.entity, shrine, Grant::Set);
@@ -75,10 +74,9 @@ use enshwick::knowledge::{KnowledgeType, Scope};
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let found = load.add_experience(NewExperience::new(id!("shrine-xp"), ExperienceSourceType::Exploration, 250))?;
-    load.add_knowledge(NewKnowledge {
-        experience: Some(found),
-        ..NewKnowledge::new(id!("found-the-shrine"), Scope::Player, KnowledgeType::Bool)
-    })?;
+    let mut knowledge_2 = NewKnowledge::new(id!("found-the-shrine"), Scope::Player, KnowledgeType::Bool);
+    knowledge_2.experience = Some(found);
+    load.add_knowledge(knowledge_2)?;
     Ok(())
 }
 ```
@@ -141,10 +139,9 @@ use enshwick::knowledge::Scope;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let grassland = load.game_query("ItemSetCompleted_Grassland")?;
-    let unfinished = load.add_query(NewQuery {
-        invert: true,
-        ..NewQuery::new(id!("grassland-unfinished"), Scope::Player, QueryForm::All, vec![KnowledgeQuery::game(grassland)])
-    })?;
+    let mut query = NewQuery::new(id!("grassland-unfinished"), Scope::Player, QueryForm::All, vec![KnowledgeQuery::game(grassland)]);
+    query.invert = true;
+    let unfinished = load.add_query(query)?;
     let _shown_when = KnowledgeQuery::game(unfinished);
     Ok(())
 }
@@ -172,12 +169,7 @@ use enshwick::content::knowledge::KnowledgeQuery;
 use enshwick::knowledge::{Grant, KnowledgeId, NewRule, RuleGrant, Scope};
 
 fn init(load: &mut enshwick::Load<'_>, both: KnowledgeQuery, crowned: KnowledgeId) -> Result<(), enshwick::Off> {
-    load.add_knowledge_rule(NewRule {
-        id: id!("crown-on-both"),
-        scope: Scope::Player,
-        when: both,
-        grant: vec![RuleGrant { id: crowned, grant: Grant::Set }],
-    })
+    load.add_knowledge_rule(NewRule::new(id!("crown-on-both"), Scope::Player, both, vec![RuleGrant::new(crowned, Grant::Set)]))
 }
 ```
 

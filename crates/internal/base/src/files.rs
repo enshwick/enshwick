@@ -273,6 +273,10 @@ fn keep_backup_with(
 /// reads only its own folder.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a unit marker, which never gains a field"
+)]
 pub struct FilesFns;
 
 impl crate::script::Bound for FilesFns {

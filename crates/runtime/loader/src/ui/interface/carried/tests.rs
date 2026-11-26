@@ -4,9 +4,10 @@ use super::super::recorder::{Answer, Drew, Recorder};
 use super::*;
 
 fn view(title: &str) -> View {
-    View {
-        title: title.into(),
-        ..View::default()
+    {
+        let mut value = View::default();
+        value.title = title.into();
+        value
     }
 }
 
@@ -34,9 +35,10 @@ fn back_ends_the_typing_then_leaves_the_form_then_closes_the_window() {
         action: "ban".into(),
         given: Vec::new(),
     });
-    let text = ArgView {
-        kind: ArgView::TEXT,
-        ..ArgView::default()
+    let text = {
+        let mut value = ArgView::default();
+        value.kind = ArgView::TEXT;
+        value
     };
     drawn.field("ban", 0, &text).text.start_typing();
     assert_eq!(drawn.back(), Click::Nothing, "the typing ends first");
@@ -73,34 +75,34 @@ fn opening_or_leaving_a_form_starts_its_scroll_area_at_the_top() {
 
 #[test]
 fn a_press_runs_or_opens_a_form_for_the_values_its_action_still_takes() {
-    let ban = Entry {
-        id: "ban".into(),
-        args: vec![
-            ArgView {
-                kind: ArgView::PLAYER,
-                ..ArgView::default()
+    let ban = {
+        let mut value = Entry::default();
+        value.id = "ban".into();
+        value.args = vec![
+            {
+                let mut value = ArgView::default();
+                value.kind = ArgView::PLAYER;
+                value
             },
-            ArgView {
-                kind: ArgView::TEXT,
-                max: 64.0,
-                ..ArgView::default()
+            {
+                let mut value = ArgView::default();
+                value.kind = ArgView::TEXT;
+                value.max = 64.0;
+                value
             },
-        ],
-        ..Entry::default()
+        ];
+        value
     };
-    let view = View {
-        entries: vec![ban],
-        ..View::default()
+    let view = {
+        let mut value = View::default();
+        value.entries = vec![ban];
+        value
     };
     let ann = Value::Player {
         key: PlayerKey::new(7),
         name: String::new(),
     };
-    let button = |args: Vec<Value>| ButtonView {
-        label: "Ban".into(),
-        action: "ban".into(),
-        args,
-    };
+    let button = |args: Vec<Value>| ButtonView::new("Ban".into(), "ban".into(), args);
     assert_eq!(
         press(&view, &button(vec![ann.clone()])),
         Click::Form(Form {
@@ -117,17 +119,19 @@ fn a_press_runs_or_opens_a_form_for_the_values_its_action_still_takes() {
 }
 
 fn say() -> Entry {
-    Entry {
-        id: "say".into(),
-        label: "Announce".into(),
-        offered: true,
-        args: vec![ArgView {
-            kind: ArgView::TEXT,
-            label: "Message".into(),
-            max: 64.0,
-            ..ArgView::default()
-        }],
-        ..Entry::default()
+    {
+        let mut value = Entry::default();
+        value.id = "say".into();
+        value.label = "Announce".into();
+        value.offered = true;
+        value.args = vec![{
+            let mut value = ArgView::default();
+            value.kind = ArgView::TEXT;
+            value.label = "Message".into();
+            value.max = 64.0;
+            value
+        }];
+        value
     }
 }
 
@@ -144,9 +148,10 @@ fn a_window_stepping_aside_for_the_map_keeps_its_form_and_fields() {
         given: Vec::new(),
     };
     drawn.form = Some(form.clone());
-    let reason = ArgView {
-        kind: ArgView::TEXT,
-        ..ArgView::default()
+    let reason = {
+        let mut value = ArgView::default();
+        value.kind = ArgView::TEXT;
+        value
     };
     drawn.field("kick", 0, &reason);
     drawn.step_aside();
@@ -188,9 +193,10 @@ fn an_action_runs_with_the_values_its_fields_hold() {
         action(&paint, &say(), &mut drawn()),
         Click::Run("say".into(), vec![Value::Text("Restart soon".into())])
     );
-    let refused = Entry {
-        offered: false,
-        ..say()
+    let refused = {
+        let mut value = say();
+        value.offered = false;
+        value
     };
     assert_eq!(
         action(&paint, &refused, &mut drawn()),
@@ -201,11 +207,12 @@ fn an_action_runs_with_the_values_its_fields_hold() {
 
 #[test]
 fn an_action_without_fields_is_one_button_under_its_label() {
-    let wave = Entry {
-        id: "wave".into(),
-        label: "Wave".into(),
-        offered: true,
-        ..Entry::default()
+    let wave = {
+        let mut value = Entry::default();
+        value.id = "wave".into();
+        value.label = "Wave".into();
+        value.offered = true;
+        value
     };
     let paint = Recorder::default().answer("Wave", Answer::Press);
     assert_eq!(
@@ -223,13 +230,14 @@ fn an_action_without_fields_is_one_button_under_its_label() {
 
 #[test]
 fn a_list_s_switch_runs_its_action_on_that_player_and_reads_only_when_not_offered() {
-    let list = Entry {
-        id: "allowed".into(),
-        label: "Allowed".into(),
-        per_player: true,
-        offered: true,
-        players: vec![(PlayerKey::new(7), "Ann".into(), false)],
-        ..Entry::default()
+    let list = {
+        let mut value = Entry::default();
+        value.id = "allowed".into();
+        value.label = "Allowed".into();
+        value.per_player = true;
+        value.offered = true;
+        value.players = vec![(PlayerKey::new(7), "Ann".into(), false)];
+        value
     };
     let paint = Recorder::default().answer("Ann", Answer::Flip(true));
     let ann = Value::Player {
@@ -240,9 +248,10 @@ fn a_list_s_switch_runs_its_action_on_that_player_and_reads_only_when_not_offere
         action(&paint, &list, &mut drawn()),
         Click::Run("allowed".into(), vec![ann, Value::Toggle(true)])
     );
-    let shut = Entry {
-        offered: false,
-        ..list
+    let shut = {
+        let mut value = list;
+        value.offered = false;
+        value
     };
     assert_eq!(action(&paint, &shut, &mut drawn()), Click::Nothing);
 }
@@ -253,25 +262,29 @@ fn a_form_runs_with_the_button_s_values_and_the_rest_or_cancels() {
         key: PlayerKey::new(7),
         name: String::new(),
     };
-    let ban = Entry {
-        id: "ban".into(),
-        offered: true,
-        args: vec![
-            ArgView {
-                kind: ArgView::PLAYER,
-                ..ArgView::default()
+    let ban = {
+        let mut value = Entry::default();
+        value.id = "ban".into();
+        value.offered = true;
+        value.args = vec![
+            {
+                let mut value = ArgView::default();
+                value.kind = ArgView::PLAYER;
+                value
             },
-            ArgView {
-                kind: ArgView::TEXT,
-                max: 64.0,
-                ..ArgView::default()
+            {
+                let mut value = ArgView::default();
+                value.kind = ArgView::TEXT;
+                value.max = 64.0;
+                value
             },
-        ],
-        ..Entry::default()
+        ];
+        value
     };
-    let view = View {
-        entries: vec![ban],
-        ..View::default()
+    let view = {
+        let mut value = View::default();
+        value.entries = vec![ban];
+        value
     };
     let form = Form {
         label: "Ban".into(),
@@ -310,10 +323,11 @@ fn a_form_runs_with_the_button_s_values_and_the_rest_or_cancels() {
 
 #[test]
 fn a_form_a_run_or_a_cancel_starts_the_action_s_fields_afresh() {
-    let arg = ArgView {
-        kind: ArgView::TEXT,
-        max: 64.0,
-        ..ArgView::default()
+    let arg = {
+        let mut value = ArgView::default();
+        value.kind = ArgView::TEXT;
+        value.max = 64.0;
+        value
     };
     let form = Form {
         label: "Ban".into(),
@@ -356,9 +370,10 @@ fn a_form_a_run_or_a_cancel_starts_the_action_s_fields_afresh() {
 
 #[test]
 fn each_action_s_argument_keeps_a_field_of_its_own() {
-    let arg = ArgView {
-        kind: ArgView::CHOICE,
-        ..ArgView::default()
+    let arg = {
+        let mut value = ArgView::default();
+        value.kind = ArgView::CHOICE;
+        value
     };
     let mut drawn = Drawn::new(("you.admin".into(), "panel".into()));
     drawn.field("ban", 1, &arg).pick = 3;
@@ -369,9 +384,10 @@ fn each_action_s_argument_keeps_a_field_of_its_own() {
 }
 
 fn map_view() -> View {
-    View {
-        items: vec![ItemView::Map(MapView::default())],
-        ..View::default()
+    {
+        let mut value = View::default();
+        value.items = vec![ItemView::Map(MapView::default())];
+        value
     }
 }
 
@@ -397,9 +413,10 @@ fn the_map_key_passes_only_under_a_window_with_a_map_and_no_typing() {
     let mut drawn = drawn();
     assert!(drawn.passes_map(&map_view()));
     assert!(!drawn.passes_map(&view("Kick")), "no map in the window");
-    let text = ArgView {
-        kind: ArgView::TEXT,
-        ..ArgView::default()
+    let text = {
+        let mut value = ArgView::default();
+        value.kind = ArgView::TEXT;
+        value
     };
     drawn.field("say", 0, &text).text.start_typing();
     assert!(!drawn.passes_map(&map_view()), "M is typed into the field");
@@ -538,40 +555,43 @@ fn the_server_s_close_takes_only_its_own_window() {
 fn ban_and_say() -> View {
     let row = |key: u64, name: &str| ItemView::Row {
         text: name.into(),
-        buttons: vec![ButtonView {
-            label: "Ban".into(),
-            action: "ban".into(),
-            args: vec![Value::Player {
+        buttons: vec![ButtonView::new(
+            "Ban".into(),
+            "ban".into(),
+            vec![Value::Player {
                 key: PlayerKey::new(key),
                 name: String::new(),
             }],
-        }],
+        )],
     };
-    let reason = ArgView {
-        kind: ArgView::TEXT,
-        label: "Reason".into(),
-        max: 64.0,
-        ..ArgView::default()
+    let reason = {
+        let mut value = ArgView::default();
+        value.kind = ArgView::TEXT;
+        value.label = "Reason".into();
+        value.max = 64.0;
+        value
     };
-    let player = ArgView {
-        kind: ArgView::PLAYER,
-        label: "Player".into(),
-        ..ArgView::default()
+    let player = {
+        let mut value = ArgView::default();
+        value.kind = ArgView::PLAYER;
+        value.label = "Player".into();
+        value
     };
-    View {
-        title: "Check".into(),
-        items: vec![row(7, "Ann"), row(8, "Bob"), ItemView::Action("say".into())],
-        entries: vec![
-            Entry {
-                id: "ban".into(),
-                label: "Ban".into(),
-                offered: true,
-                args: vec![player, reason],
-                ..Entry::default()
+    View::new(
+        "Check".into(),
+        vec![row(7, "Ann"), row(8, "Bob"), ItemView::Action("say".into())],
+        vec![
+            {
+                let mut value = Entry::default();
+                value.id = "ban".into();
+                value.label = "Ban".into();
+                value.offered = true;
+                value.args = vec![player, reason];
+                value
             },
             say(),
         ],
-    }
+    )
 }
 
 fn ask(item: &str, act: Act, text: &str) -> Ask {
@@ -671,11 +691,12 @@ fn a_command_on_an_item_the_window_lacks_or_draws_off_says_so() {
 
 #[test]
 fn a_commanded_pick_takes_the_option_by_the_name_the_window_shows() {
-    let kind = ArgView {
-        kind: ArgView::CHOICE,
-        label: "Kind".into(),
-        choices: vec!["Basic".into(), "Pro".into()],
-        ..ArgView::default()
+    let kind = {
+        let mut value = ArgView::default();
+        value.kind = ArgView::CHOICE;
+        value.label = "Kind".into();
+        value.choices = vec!["Basic".into(), "Pro".into()];
+        value
     };
     let mut view = ban_and_say();
     view.entries[1].args = vec![kind];
@@ -693,19 +714,20 @@ fn a_commanded_pick_takes_the_option_by_the_name_the_window_shows() {
 
 #[test]
 fn a_commanded_switch_flips_that_player_s_switch() {
-    let list = Entry {
-        id: "allowed".into(),
-        label: "Allowed".into(),
-        per_player: true,
-        offered: true,
-        players: vec![(PlayerKey::new(7), "Ann".into(), false)],
-        ..Entry::default()
+    let list = {
+        let mut value = Entry::default();
+        value.id = "allowed".into();
+        value.label = "Allowed".into();
+        value.per_player = true;
+        value.offered = true;
+        value.players = vec![(PlayerKey::new(7), "Ann".into(), false)];
+        value
     };
-    let view = View {
-        title: "List".into(),
-        items: vec![ItemView::Action("allowed".into())],
-        entries: vec![list],
-    };
+    let view = View::new(
+        "List".into(),
+        vec![ItemView::Action("allowed".into())],
+        vec![list],
+    );
     let mut drawn = drawn();
     assert_eq!(drawn.take(&view, &ask("allowed@7", Act::Press, "")), None);
     let ann = Value::Player {

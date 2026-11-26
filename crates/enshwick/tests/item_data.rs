@@ -8,7 +8,7 @@ mod tests {
     use enshwick::Entity;
     use enshwick::abi::Status;
     use enshwick::inventory::ItemInstance;
-    use enshwick::item_data::{ItemData, SetError};
+    use enshwick::item_data::{ItemData, SetItemDataError};
     use enshwick::{Load, Mod, Off};
 
     #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -47,7 +47,7 @@ mod tests {
         assert_eq!(status, Status::OK);
         let (bonus, shared) = (BONUS.get().unwrap(), SHARED.get().unwrap());
         let ring = ItemInstance {
-            pide: Entity(900),
+            pide: Entity::from_engine(900),
             item: enshwick::ItemId::new(0x5e01),
         };
         assert_eq!(bonus.get(ring), None);
@@ -70,7 +70,7 @@ mod tests {
             fire: 0,
             by: "x".repeat(600),
         };
-        assert_eq!(bonus.set(ring, &long), Err(SetError::TooLarge(603)));
+        assert_eq!(bonus.set(ring, &long), Err(SetItemDataError::TooLarge(603)));
         bonus.remove(ring).unwrap();
         assert_eq!(bonus.get(ring), None);
         assert_eq!(loader.item_data().len(), 1);

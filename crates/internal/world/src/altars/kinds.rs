@@ -2,17 +2,12 @@
 //! altars take zones and a maximum level of their own.
 
 use crate::Off;
-#[cfg(feature = "unstable")]
 use crate::RecipeId;
 use crate::content::items::NewItem;
 use crate::content::props::{NewProp, PropId};
-#[cfg(feature = "unstable")]
 use crate::content::workshops::FLAME_ALTAR;
-#[cfg(feature = "unstable")]
 use crate::content::{recipes::RECIPE_REGISTRY, types};
-#[cfg(feature = "unstable")]
 use crate::resources::Value;
-#[cfg(feature = "unstable")]
 use enshwick_content::__internal::PROP_RECIPES as RECIPES;
 
 use super::template_of;
@@ -21,15 +16,10 @@ use enshwick_content::__load::*;
 
 /// The game's names of the recipe fields the level limit reads
 /// (`RecipeInfo`).
-#[cfg(feature = "unstable")]
 const RECIPE_ID: &str = "recipeId";
-#[cfg(feature = "unstable")]
 const WORKSHOP_ID: &str = "workshopId";
-#[cfg(feature = "unstable")]
 const LEVEL: &str = "level";
-#[cfg(feature = "unstable")]
 const IS_UPGRADE: &str = "isUpgrade";
-#[cfg(feature = "unstable")]
 const ID_VALUE: &str = "value";
 
 /// A Flame Altar kind's zone at one level, as an altar zone filter sets it:
@@ -39,11 +29,24 @@ const ID_VALUE: &str = "value";
 ///
 /// See [`Load::add_flame_altar`](../struct.Load.html#method.add_flame_altar).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct KindZone {
     /// Cells added to the vanilla zone on every horizontal side, at least 0.
     pub grow: i32,
     /// The zone's height in cells.
     pub height: i32,
+}
+
+impl KindZone {
+    /// A `KindZone` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`KindZone`].
+    #[must_use]
+    pub const fn new(grow: i32, height: i32) -> Self {
+        Self { grow, height }
+    }
 }
 
 /// A new Flame Altar kind for [`Load::add_flame_altar`](../struct.Load.html#method.add_flame_altar): a prop copied from
@@ -53,6 +56,7 @@ pub struct KindZone {
 ///
 /// See [`Load::add_flame_altar`](../struct.Load.html#method.add_flame_altar).
 #[derive(Clone, Debug, crate::Script)]
+#[non_exhaustive]
 pub struct NewFlameAltar {
     /// The altar's item, a copy of a vanilla altar's item; its other ids
     /// derive from it as a prop's do.
@@ -66,6 +70,22 @@ pub struct NewFlameAltar {
     pub recipe_cost: Option<u32>,
 }
 
+impl NewFlameAltar {
+    /// A `NewFlameAltar` of its parts; `recipe_cost` starts as `None`.
+    ///
+    /// # Examples
+    ///
+    /// See [`NewFlameAltar`].
+    #[must_use]
+    pub const fn new(item: NewItem, zones: Vec<KindZone>) -> Self {
+        Self {
+            item,
+            zones,
+            recipe_cost: None,
+        }
+    }
+}
+
 /// The ids of the altar upgrade recipes in `registry` that raise an altar
 /// from `max` or above: the upgrades of the [`FLAME_ALTAR`] workshop. An
 /// upgrade recipe's level is the one it upgrades from (server 26430253);
@@ -77,7 +97,6 @@ pub struct NewFlameAltar {
 /// [`Off`] when the registry holds no upgrade recipe of the altar's
 /// workshop at level 0, the claim: its fields do not read as this build
 /// lays them out.
-#[cfg(feature = "unstable")]
 fn upgrades_from(registry: &Value, max: u8) -> Result<Vec<RecipeId>, Off> {
     let unread = || {
         Off::new(
@@ -125,7 +144,6 @@ pub trait LoadMethods {
 /// # Errors
 ///
 /// [`Off`] when the registry does not read or holds no altar claim recipe.
-#[cfg(feature = "unstable")]
 pub(crate) fn upgrades_in_registry(host: crate::Host, max: u8) -> Result<Vec<RecipeId>, Off> {
     let registry = types::RECIPE_REGISTRY_RESOURCE.key(RECIPE_REGISTRY)?;
     upgrades_from(&host.game_value(registry)?, max)
@@ -133,10 +151,9 @@ pub(crate) fn upgrades_in_registry(host: crate::Host, max: u8) -> Result<Vec<Rec
 
 impl LoadMethods for crate::BaseLoad {
     fn add_flame_altar(&mut self, new: NewFlameAltar) -> Result<PropId, Off> {
-        let prop = self.add_prop(NewProp {
-            recipe_cost: new.recipe_cost,
-            ..NewProp::new(new.item)
-        })?;
+        let mut prop = NewProp::new(new.item);
+        prop.recipe_cost = new.recipe_cost;
+        let prop = self.add_prop(prop)?;
         if let Some(&last) = new.zones.last() {
             let (host, kind, zones) = (self.host(), prop.template.guid(), new.zones);
             self.on_altar_zone(move |zone| {

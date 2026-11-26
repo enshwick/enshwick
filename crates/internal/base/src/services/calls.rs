@@ -13,15 +13,13 @@ use core::ffi::c_void;
 use core::marker::PhantomData;
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use crate::abi::{CallSpec, Header, Layout, LayoutField, Status, Str};
+use crate::abi::{CallSpec, Layout, LayoutField, Status, Str};
 use crate::load::{hand_over, ok};
 use crate::points::DescribedField;
 use crate::{BaseLoad, Host, Off};
 
 /// A call: the input struct one mod hands another, which answers with
 /// [`Call::Output`].
-///
-/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Safety
 ///
@@ -66,18 +64,16 @@ pub unsafe trait Call: Copy + 'static {
 
 /// Why a call answered nothing.
 ///
-/// Unstable: needs the `unstable` feature and may change in any release.
-///
 /// # Examples
 ///
 /// ```
-/// use enshwick::services::CallError;
+/// use enshwick::services::CallServiceError;
 ///
-/// assert_eq!(CallError::Unmatched.to_string(), "no running mod serves the call as declared here");
+/// assert_eq!(CallServiceError::Unmatched.to_string(), "no running mod serves the call as declared here");
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, thiserror::Error)]
 #[non_exhaustive]
-pub enum CallError {
+pub enum CallServiceError {
     /// No running mod serves it as declared here, or not every mod is
     /// initialised yet; the log says why once every mod is.
     #[error("no running mod serves the call as declared here")]
@@ -91,7 +87,7 @@ pub enum CallError {
     Failed,
 }
 
-impl crate::load::StatusError for CallError {
+impl crate::load::StatusError for CallServiceError {
     fn of(status: Status) -> Self {
         match status {
             Status::MISSING | Status::UNAVAILABLE => Self::Unmatched,
@@ -103,19 +99,16 @@ impl crate::load::StatusError for CallError {
 
 /// The ABI spec of `C`, borrowing its static layouts.
 fn spec<C: Call>() -> CallSpec {
-    CallSpec {
-        header: Header::of::<CallSpec>(),
+    enshwick_abi::headed!(CallSpec {
         name: Str::new(C::NAME),
         major: C::MAJOR,
         input: crate::services::layout(C::LAYOUT, size_of::<C>()),
         output: crate::services::layout(C::OUTPUT, size_of::<C::Output>()),
-    }
+    })
 }
 
 /// Another mod's call `C`, from [`Load::caller`](../struct.Load.html#method.caller): runs the server's handler
 /// on this thread.
-///
-/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Examples
 ///
@@ -155,13 +148,13 @@ impl<C: Call> Caller<C> {
     ///
     /// # Errors
     ///
-    /// [`CallError`] when no running mod serves the call as declared here,
+    /// [`CallServiceError`] when no running mod serves the call as declared here,
     /// the server is off, or its handler failed.
     ///
     /// # Examples
     ///
     /// See [`Caller`].
-    pub fn call(&self, input: &C) -> Result<C::Output, CallError> {
+    pub fn call(&self, input: &C) -> Result<C::Output, CallServiceError> {
         let mut answer = core::mem::MaybeUninit::<C::Output>::uninit();
         let status = (self.host.api().call)(
             self.host.handle(),
@@ -169,7 +162,7 @@ impl<C: Call> Caller<C> {
             core::ptr::from_ref(input).cast(),
             answer.as_mut_ptr().cast(),
         );
-        crate::load::outcome::<CallError>(status)?;
+        crate::load::outcome::<CallServiceError>(status)?;
         // SAFETY: an OK status means the server's handler wrote an answer of
         // the matched type, the same as `C::Output` field by field and in
         // size.
@@ -178,8 +171,6 @@ impl<C: Call> Caller<C> {
 }
 
 /// A call described at run time, such as by the schema a script carries.
-///
-/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Examples
 ///
@@ -253,20 +244,17 @@ impl DescribedCall {
             count: u32::try_from(fields.len()).unwrap_or(u32::MAX),
             size,
         };
-        let spec = CallSpec {
-            header: Header::of::<CallSpec>(),
+        let spec = enshwick_abi::headed!(CallSpec {
             name: Str::new(&self.name),
             major: self.major,
             input: layout(&input, self.input_size),
             output: layout(&output, self.output_size),
-        };
+        });
         with(&spec)
     }
 }
 
 /// Another mod's described call, from [`Load::described_caller`](../struct.Load.html#method.described_caller).
-///
-/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Examples
 ///
@@ -302,15 +290,15 @@ impl DescribedCaller {
     ///
     /// # Errors
     ///
-    /// [`CallError::Failed`] when `input` or `output` is not the size the
+    /// [`CallServiceError::Failed`] when `input` or `output` is not the size the
     /// description gives, else as [`Caller::call`].
     ///
     /// # Examples
     ///
     /// See [`DescribedCaller`].
-    pub fn call(&self, input: &[u8], output: &mut [u8]) -> Result<(), CallError> {
+    pub fn call(&self, input: &[u8], output: &mut [u8]) -> Result<(), CallServiceError> {
         if input.len() != self.input_size || output.len() != self.output_size {
-            return Err(CallError::Failed);
+            return Err(CallServiceError::Failed);
         }
         // An empty slice may dangle; the loader takes a pointer to one byte.
         let mut none = 0u8;

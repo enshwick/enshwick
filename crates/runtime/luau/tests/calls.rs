@@ -91,7 +91,7 @@ mod tests {
         loader.serve_call(|fee: &Fee| {
             let days = u64::from(fee.days) * 100;
             let place = u64::from(fee.row) * 10 + u64::from(fee.place);
-            u64::from(fee.character.0) * 1000 + days + place + u64::from(fee.own)
+            u64::from(fee.character.get()) * 1000 + days + place + u64::from(fee.own)
         });
         saved(&loader);
         assert!(logged(&loader, "fee 5424 nil"), "{:?}", loader.logs());

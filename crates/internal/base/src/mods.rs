@@ -115,6 +115,10 @@ pub const LOADER_FILES: [&str; 2] = [STUB_FILE, LOADER_FILE];
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, crate::Script)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct ModIndex(pub u32);
 
 impl ModIndex {
@@ -149,6 +153,7 @@ impl core::fmt::Display for ModIndex {
 /// }
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct ModEntry {
     /// The mod id; `enshwick` for the loader.
     pub id: String,
@@ -188,7 +193,8 @@ impl Default for ModEntry {
     /// ```
     /// use enshwick::mods::ModEntry;
     ///
-    /// let post = ModEntry { id: "you.trading-post".into(), ..ModEntry::default() };
+    /// let mut post = ModEntry::default();
+    /// post.id = "you.trading-post".into();
     /// assert_eq!(post.label(), "you.trading-post");
     /// ```
     fn default() -> Self {
@@ -499,12 +505,10 @@ unsafe fn entry(info: &ModInfo) -> Option<ModEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::abi::Header;
 
     #[test]
     fn entries_read_back() {
-        let info = ModInfo {
-            header: Header::of::<ModInfo>(),
+        let info = enshwick_abi::headed!(ModInfo {
             id: Str::new("you.trading-post"),
             version: Str::new("0.1.0"),
             side: Side::BOTH,
@@ -517,7 +521,7 @@ mod tests {
             author_count: u32::try_from(AUTHORS.len()).unwrap(),
             license: Str::new("MIT"),
             homepage: Str::EMPTY,
-        };
+        });
         // SAFETY: every `Str` in `info` and `AUTHORS` points at a static
         // string, alive and unchanged for the process.
         let entry = unsafe { entry(&info) }.unwrap();

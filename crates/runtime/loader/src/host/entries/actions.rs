@@ -136,11 +136,11 @@ entries! {
     fn game_binding(loader as Caller, action as Text, out as HeadedOut<api_frame::GameBinding>) -> Status {
         on_client(loader)?;
         let [first, second] = crate::actions::game_bindings::binding(action)?;
-        out.put(api_frame::GameBinding {
+        out.put(enshwick_abi::headed!(api_frame::GameBinding {
             first,
             second,
             ..api_frame::GameBinding::EMPTY
-        })
+        }))
     }
 
     fn game_rebind(me as Mod, action as Text, key: u32) -> Status {

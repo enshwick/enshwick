@@ -55,6 +55,7 @@ pub mod stations {
 /// assert_ne!(workbench.item, workbench.template);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct Station {
     /// The station item.
     pub item: Guid,
@@ -134,6 +135,7 @@ impl WorkshopId {
 /// assert!(!bench.named && bench.recipe_cost.is_none());
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct NewWorkshop {
     /// The vanilla station cloned: what the new one looks like and does.
     pub like: Station,
@@ -270,10 +272,14 @@ const DESCRIPTION: &str = "description";
 /// Where the fields a workshop edit touches sit on the running build,
 /// resolved by the loader.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// See [`list_workshop`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
+#[non_exhaustive]
 pub struct WorkshopLayout {
     /// A template's components.
     pub components: usize,
@@ -405,6 +411,8 @@ pub(crate) fn put(bytes: &mut [u8], at: usize, data: &[u8]) -> bool {
 /// `like`, placing the new template; `None` when the vanilla item does not
 /// place `new.like.template`.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// ```
@@ -423,6 +431,7 @@ pub(crate) fn put(bytes: &mut [u8], at: usize, data: &[u8]) -> bool {
 /// }
 /// ```
 #[must_use]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
 pub fn clone_station(
     items: &ItemLayout,
     layout: &WorkshopLayout,
@@ -445,6 +454,8 @@ pub fn clone_station(
 /// others: a copy of the vanilla station's entry with the new workshop, item
 /// and name.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// ```
@@ -463,6 +474,7 @@ pub fn clone_station(
 /// }
 /// ```
 #[must_use]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
 pub fn list_workshop(
     layout: &WorkshopLayout,
     registry: &[u8],

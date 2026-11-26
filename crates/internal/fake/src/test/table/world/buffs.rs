@@ -3,7 +3,7 @@
 use crate::test::table::base::args;
 use crate::test::table::entries;
 use crate::test::table::{get_headed, list, with};
-use enshwick_core::abi::{ActiveBuff, BuffRequest, BuffTypeAdd, BuffTypeInfo, Header, Status};
+use enshwick_core::abi::{ActiveBuff, BuffRequest, BuffTypeAdd, BuffTypeInfo, Status};
 use enshwick_core::buffs::BuffTypeId;
 
 entries! {
@@ -193,6 +193,9 @@ entries! {
         me as Caller,
         [out: *mut BuffTypeInfo, entry_size: u32, capacity: u32, count: *mut u32] as args::SizedListOut,
     ) -> Status {
+        if !crate::test::table::on_game_thread() {
+            return Status::WRONG_THREAD;
+        }
         let types = with(Vec::new(), |s| s.world.buff_types.clone());
         list(&types, out, entry_size, capacity, count)
     }
@@ -202,8 +205,11 @@ entries! {
         entity: enshwick_core::Entity,
         [out: *mut ActiveBuff, entry_size: u32, capacity: u32, count: *mut u32] as args::SizedListOut,
     ) -> Status {
+        if !crate::test::table::on_game_thread() {
+            return Status::WRONG_THREAD;
+        }
         match with(None::<Vec<ActiveBuff>>, |s| {
-            s.world.buffs.get(&entity.0).cloned()
+            s.world.buffs.get(&entity.get()).cloned()
         }) {
             Some(on) => list(&on, out, entry_size, capacity, count),
             None => Status::MISSING,
@@ -224,7 +230,7 @@ entries! {
             else {
                 return Status::BAD_ARGS;
             };
-            let Some(on) = s.world.buffs.get_mut(&request.entity.0) else {
+            let Some(on) = s.world.buffs.get_mut(&request.entity.get()) else {
                 return Status::MISSING;
             };
             let duration = if request.duration_ns == 0 {
@@ -236,15 +242,14 @@ entries! {
                 buff.duration_ns = duration;
                 buff.remaining_ns = duration;
             } else {
-                on.push(ActiveBuff {
-                    header: Header::of::<ActiveBuff>(),
+                on.push(enshwick_core::headed!(ActiveBuff {
                     id: request.id,
-                    entity: enshwick_core::Entity(0x8000 + u32::try_from(on.len()).unwrap_or(0)),
+                    entity: enshwick_core::Entity::from_engine(0x8000 + u32::try_from(on.len()).unwrap_or(0)),
                     slot: u32::from(ty.slot),
                     level: request.level,
                     duration_ns: duration,
                     remaining_ns: duration,
-                });
+                }));
             }
             Status::OK
         })
@@ -260,7 +265,7 @@ entries! {
             return Status::BAD_ARGS;
         }
         with(Status::MISSING, |s| {
-            let Some(on) = s.world.buffs.get_mut(&entity.0) else {
+            let Some(on) = s.world.buffs.get_mut(&entity.get()) else {
                 return Status::MISSING;
             };
             let before = on.len();

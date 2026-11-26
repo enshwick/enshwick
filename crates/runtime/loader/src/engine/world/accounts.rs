@@ -42,7 +42,7 @@ impl Accounts {
         let mut words = [0; WORDS];
         let mut len = 0;
         for ((entity, key), pair) in pairs.into_iter().zip(words[1..].as_chunks_mut::<2>().0) {
-            *pair = [u64::from(entity.0), key.0];
+            *pair = [u64::from(entity.get()), key.0];
             len += 1;
         }
         words[0] = len;
@@ -52,7 +52,7 @@ impl Accounts {
     /// The account of the character `entity` in the copy; `None` for a
     /// character it does not hold, or while a write stays open.
     fn of(&self, entity: Entity) -> Option<PlayerKey> {
-        if entity.0 == 0 {
+        if entity.get() == 0 {
             return None;
         }
         let words = self.copy.load()?;
@@ -62,7 +62,7 @@ impl Accounts {
             .0
             .iter()
             .take(len)
-            .find(|&&[character, _]| character == u64::from(entity.0))
+            .find(|&&[character, _]| character == u64::from(entity.get()))
             .map(|&[_, key]| PlayerKey(key))
             .filter(|&key| key != PlayerKey::default())
     }
@@ -133,7 +133,7 @@ fn in_game(
 ) -> impl Iterator<Item = (usize, Entity)> {
     slots
         .filter(|&(_, _, state, _)| state == SLOT_IN_GAME)
-        .map(|(_, slot, _, entity)| (slot, Entity(entity)))
+        .map(|(_, slot, _, entity)| (slot, Entity::from_engine(entity)))
 }
 
 /// Forgets every account, as the server's world ends; a hosted game's end
@@ -148,10 +148,10 @@ pub(super) fn clear() {
 #[doc(hidden)]
 pub fn bench_accounts() -> (impl FnMut() -> Option<PlayerKey>, impl FnMut()) {
     let most = u32::try_from(MAX_PLAYERS).unwrap_or(u32::MAX);
-    let full = move || (1..=most).map(|n| (Entity(n), PlayerKey(u64::from(n))));
+    let full = move || (1..=most).map(|n| (Entity::from_engine(n), PlayerKey(u64::from(n))));
     let read = Accounts::new();
     read.write(full());
-    let last = Entity(most);
+    let last = Entity::from_engine(most);
     let written = Accounts::new();
     (move || read.of(last), move || written.write(full()))
 }
@@ -161,16 +161,16 @@ mod tests {
     use super::*;
 
     fn pair(entity: u32, key: u64) -> (Entity, PlayerKey) {
-        (Entity(entity), PlayerKey(key))
+        (Entity::from_engine(entity), PlayerKey(key))
     }
 
     #[test]
     fn a_character_in_the_copy_names_its_account_and_any_other_none() {
         let accounts = Accounts::new();
         accounts.write([pair(7, 0x5eed), pair(9, 0xbeef)]);
-        assert_eq!(accounts.of(Entity(9)), Some(PlayerKey(0xbeef)));
-        assert_eq!(accounts.of(Entity(8)), None);
-        assert_eq!(accounts.of(Entity(0)), None);
+        assert_eq!(accounts.of(Entity::from_engine(9)), Some(PlayerKey(0xbeef)));
+        assert_eq!(accounts.of(Entity::from_engine(8)), None);
+        assert_eq!(accounts.of(Entity::from_engine(0)), None);
     }
 
     #[test]
@@ -178,8 +178,11 @@ mod tests {
         let accounts = Accounts::new();
         accounts.write([pair(7, 0x5eed), pair(9, 0xbeef)]);
         accounts.write([pair(11, 0x5eed)]);
-        assert_eq!(accounts.of(Entity(7)), None);
-        assert_eq!(accounts.of(Entity(11)), Some(PlayerKey(0x5eed)));
+        assert_eq!(accounts.of(Entity::from_engine(7)), None);
+        assert_eq!(
+            accounts.of(Entity::from_engine(11)),
+            Some(PlayerKey(0x5eed))
+        );
     }
 
     #[test]
@@ -187,7 +190,7 @@ mod tests {
         let accounts = Accounts::new();
         accounts.write([pair(7, 0x5eed)]);
         accounts.copy.begin_write();
-        assert_eq!(accounts.of(Entity(7)), None);
+        assert_eq!(accounts.of(Entity::from_engine(7)), None);
     }
 
     #[test]
@@ -195,7 +198,7 @@ mod tests {
         let slots = [(0, 0x100, SLOT_IN_GAME, 7), (1, 0x200, SLOT_IN_GAME ^ 1, 9)];
         assert_eq!(
             in_game(slots.into_iter()).collect::<Vec<_>>(),
-            [(0x100, Entity(7))]
+            [(0x100, Entity::from_engine(7))]
         );
     }
 
@@ -203,7 +206,7 @@ mod tests {
     fn a_slot_without_an_account_names_none() {
         let accounts = Accounts::new();
         accounts.write([pair(7, 0)]);
-        assert_eq!(accounts.of(Entity(7)), None);
+        assert_eq!(accounts.of(Entity::from_engine(7)), None);
     }
 
     #[test]
@@ -213,7 +216,10 @@ mod tests {
             .map(|entity| pair(entity, u64::from(entity)));
         accounts.write(many);
         let last = u32::try_from(MAX_PLAYERS).unwrap_or(u32::MAX);
-        assert_eq!(accounts.of(Entity(last)), Some(PlayerKey(u64::from(last))));
-        assert_eq!(accounts.of(Entity(last + 1)), None);
+        assert_eq!(
+            accounts.of(Entity::from_engine(last)),
+            Some(PlayerKey(u64::from(last)))
+        );
+        assert_eq!(accounts.of(Entity::from_engine(last + 1)), None);
     }
 }

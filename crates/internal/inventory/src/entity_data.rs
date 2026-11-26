@@ -11,7 +11,7 @@
 //! goes aside in the world's file and is never given to another entity.
 //! Only an entity the save keeps in place carries a value: a player's
 //! character does not, so [`EntityData::set`] refuses it with
-//! [`SetError::NotKept`]. Once the entity is gone or holds another
+//! [`SetItemDataError::NotKept`]. Once the entity is gone or holds another
 //! template, the value reads as missing on the server's game thread, and the
 //! server drops it when the world saves. Values live in
 //! `<stem>-mod-data/enshwick/` beside the world's save, never in it, beside
@@ -36,7 +36,7 @@
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     let owners = load.entity_data::<Owner>("owner", Replication::Server)?;
-//!     let chest = Entity(4_200);
+//!     let chest = Entity::from_engine(4_200);
 //!     if owners.get(chest).is_none() {
 //!         let _set = owners.set(chest, &Owner { player: 7 });
 //!     }
@@ -47,7 +47,7 @@
 use core::marker::PhantomData;
 
 use crate::abi::{EntityDataFlags, Status, Str};
-pub use crate::item_data::{MAX_VALUE, SetError};
+pub use crate::item_data::{MAX_VALUE, SetItemDataError};
 use crate::resources::Value as Data;
 use crate::{Entity, ItemId};
 use crate::{Host, Off};
@@ -133,18 +133,19 @@ where
     ///
     /// # Errors
     ///
-    /// [`SetError`] when the value does not encode or is too long, off the
+    /// [`SetItemDataError`] when the value does not encode or is too long, off the
     /// server or its game thread, before the world has loaded, for an
     /// entity that does not exist, or for one no load finds again
-    /// ([`SetError::NotKept`]).
+    /// ([`SetItemDataError::NotKept`]).
     ///
     /// # Examples
     ///
     /// See the [module](self).
-    pub fn set(&self, entity: Entity, value: &T) -> Result<(), SetError> {
-        let bytes = postcard::to_allocvec(value).map_err(|e| SetError::Encode(e.to_string()))?;
+    pub fn set(&self, entity: Entity, value: &T) -> Result<(), SetItemDataError> {
+        let bytes =
+            postcard::to_allocvec(value).map_err(|e| SetItemDataError::Encode(e.to_string()))?;
         if bytes.is_empty() || bytes.len() > MAX_VALUE {
-            return Err(SetError::TooLarge(bytes.len()));
+            return Err(SetItemDataError::TooLarge(bytes.len()));
         }
         self.write(entity, &bytes)
     }
@@ -164,11 +165,11 @@ where
     ///     let _removed = owners.remove(chest);
     /// }
     /// ```
-    pub fn remove(&self, entity: Entity) -> Result<(), SetError> {
+    pub fn remove(&self, entity: Entity) -> Result<(), SetItemDataError> {
         self.write(entity, &[])
     }
 
-    fn write(&self, entity: Entity, bytes: &[u8]) -> Result<(), SetError> {
+    fn write(&self, entity: Entity, bytes: &[u8]) -> Result<(), SetItemDataError> {
         let status = (self.host.api().set_item_data)(
             self.host.handle(),
             self.kind,
@@ -180,8 +181,8 @@ where
         // Entity data runs on the server's game thread and names an entity,
         // which item data does not.
         match status {
-            Status::WRONG_THREAD => Err(SetError::NotServer),
-            Status::BAD_ARGS => Err(SetError::NoEntity),
+            Status::WRONG_THREAD => Err(SetItemDataError::NotServer),
+            Status::BAD_ARGS => Err(SetItemDataError::NoEntity),
             status => enshwick_base::load::outcome(status),
         }
     }
@@ -275,7 +276,7 @@ impl EntityData<Data> {
     ///
     /// As [`EntityData::set`].
     #[script(name = "set")]
-    pub(crate) fn set_script(&self, entity: Entity, value: &Data) -> Result<(), SetError> {
+    pub(crate) fn set_script(&self, entity: Entity, value: &Data) -> Result<(), SetItemDataError> {
         self.set(entity, value)
     }
 
@@ -285,7 +286,7 @@ impl EntityData<Data> {
     ///
     /// As [`EntityData::set`].
     #[script(name = "remove")]
-    pub(crate) fn remove_script(&self, entity: Entity) -> Result<(), SetError> {
+    pub(crate) fn remove_script(&self, entity: Entity) -> Result<(), SetItemDataError> {
         self.remove(entity)
     }
 }

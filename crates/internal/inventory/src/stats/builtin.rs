@@ -114,7 +114,7 @@ impl Def {
 
 /// Every built-in kind with its definition, in the order the platform
 /// defines them.
-pub const ALL: [(Id, Def); 21] = [
+pub const ALL: &[(Id, Def)] = &[
     (HEALTH_MAX, POINTS),
     (STAMINA_MAX, POINTS),
     (MANA_MAX, POINTS),

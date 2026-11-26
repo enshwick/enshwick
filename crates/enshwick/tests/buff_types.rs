@@ -8,7 +8,7 @@ mod tests {
     use core::time::Duration;
     use std::sync::Mutex;
 
-    use enshwick::abi::{BuffTypeAdd, Header, HostApi, ModHandle, Side, Status, Str};
+    use enshwick::abi::{BuffTypeAdd, HostApi, ModHandle, Side, Status, Str};
     use enshwick::buffs::{
         BUFF_COLLECTION, BUFF_COLLECTION_RESOURCE, BuffLayout, BuffSlotType, BuffTypeId, NewBuff,
     };
@@ -38,14 +38,7 @@ mod tests {
 
     impl Mod for Lucky {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let icon = Icon {
-                id: ICON,
-                like: FOOD_ICON,
-                pixels: Pixels::Tint(Tint {
-                    colour: [60, 200, 90],
-                    amount: 70,
-                }),
-            };
+            let icon = Icon::new(ICON, FOOD_ICON, Pixels::Tint(Tint::new([60, 200, 90], 70)));
             let lucky = NewBuff::new(LUCKY, FOOD)
                 .name(LUCKY_NAME.guid())
                 .icon(icon)
@@ -148,8 +141,7 @@ mod tests {
 
     /// A type an earlier mod adds through the table, as the loader takes it.
     fn earlier_type(id: Id, like: BuffTypeId) -> BuffTypeAdd {
-        BuffTypeAdd {
-            header: Header::of::<BuffTypeAdd>(),
+        enshwick::abi::headed!(BuffTypeAdd {
             guid: id.guid(),
             name: Guid::NIL,
             description: Guid::NIL,
@@ -159,7 +151,7 @@ mod tests {
             changes: 0,
             slot: 0,
             flags: 0,
-        }
+        })
     }
 
     #[test]

@@ -260,7 +260,7 @@ mod tests {
 
     #[test]
     fn an_item_reads_its_kind_and_flags_from_the_loader_s_entry() {
-        let raw = Raw {
+        let raw = enshwick_abi::headed!(Raw {
             kind: Raw::FIELD,
             field: Raw::TEXT,
             flags: Raw::SHOWN | Raw::OFF,
@@ -269,7 +269,7 @@ mod tests {
             label: Str::new("Message"),
             line: Str::new("Announce"),
             ..Raw::EMPTY
-        };
+        });
         let item = ClientWindowItem::from_raw(&raw);
         assert_eq!(item.kind, WindowItemKind::TextField);
         assert_eq!((item.shown, item.on, item.off), (true, false, true));

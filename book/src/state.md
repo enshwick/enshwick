@@ -130,7 +130,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
   Arrays come from the file whole. A map whose `Default` holds entries gets
   each one back while the file lacks it, so keep such defaults empty.
 
-Errors come back as a `StoreError` naming the file and the reason. It
+Errors come back as a `StoreFileError` naming the file and the reason. It
 converts into `Off`. So in `init`, `?` turns the mod off with that text.
 Outside `init`, log it instead. `Hold` and `WorldStore::flush` return the
 same error.

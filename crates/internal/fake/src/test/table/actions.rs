@@ -365,11 +365,11 @@ entries! {
             match s.actions.bindings.binding(&action) {
                 Ok([first, second]) => super::put_headed(
                     out,
-                    GameBinding {
+                    enshwick_core::headed!(GameBinding {
                         first,
                         second,
                         ..GameBinding::EMPTY
-                    },
+                    }),
                 ),
                 Err(status) => status,
             }

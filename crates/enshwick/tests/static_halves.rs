@@ -14,7 +14,7 @@ mod tests {
 
     const FUEL_SETUP: u32 = 0x139a_fbec;
     const FUEL: u32 = 0x0418_2abb;
-    const WELL: Entity = Entity(4096);
+    const WELL: Entity = Entity::from_engine(4096);
 
     struct Resolved {
         world: World,
@@ -58,8 +58,8 @@ mod tests {
             .type_hash("keen::ecs::Fuel", FUEL)
             .type_size("keen::ecs::FuelSetup", 0x28)
             .type_size("keen::ecs::Fuel", 16)
-            .component(Entity(WELL.0), FUEL_SETUP, &setup)
-            .component(Entity(WELL.0), FUEL, &[0; 16])
+            .component(Entity::from_engine(WELL.get()), FUEL_SETUP, &setup)
+            .component(Entity::from_engine(WELL.get()), FUEL, &[0; 16])
             .static_half(FUEL_SETUP)
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Wells)`.

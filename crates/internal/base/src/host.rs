@@ -301,8 +301,7 @@ impl Host {
     /// ```
     #[must_use]
     pub fn build(&self) -> BuildInfo {
-        let mut out = BuildInfo {
-            header: Header::of::<BuildInfo>(),
+        let mut out = enshwick_abi::headed!(BuildInfo {
             side: Side(0),
             base: 0,
             fingerprint: Fingerprint {
@@ -310,7 +309,7 @@ impl Host {
                 age: 0,
             },
             complete: 1,
-        };
+        });
         // A refused call leaves the defaults: no side, no base.
         let _ = (self.api.build)(self.me, &raw mut out);
         out

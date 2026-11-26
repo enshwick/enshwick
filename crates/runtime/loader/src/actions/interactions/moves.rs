@@ -118,8 +118,8 @@ impl Moved {
         call.moved = enshwick_core::ItemId::new(self.item);
         call.stack = self.stack;
         call.amount = self.amount;
-        call.from = enshwick_core::Entity(self.from);
-        call.to = enshwick_core::Entity(self.to);
+        call.from = enshwick_core::Entity::from_engine(self.from);
+        call.to = enshwick_core::Entity::from_engine(self.to);
         call.action = self.action;
         call.transfer = self.transfer;
         call.moving = 1;

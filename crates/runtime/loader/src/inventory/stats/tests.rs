@@ -249,9 +249,8 @@ fn shown_values_a_full_link_had_no_room_for_go_again_at_the_next_step() {
         ..Watched::default()
     };
     world.watched.insert(7, watched);
-    let change = StatChange {
-        header: Header::of::<StatChange>(),
-        entity: Entity(7),
+    let change = enshwick_abi::headed!(StatChange {
+        entity: Entity::from_engine(7),
         stat: StatRef {
             index: 0,
             key: key_of("enshwick:luck").0,
@@ -259,7 +258,7 @@ fn shown_values_a_full_link_had_no_room_for_go_again_at_the_next_step() {
         old: 0.0,
         new: 0.5,
         reserved: 0,
-    };
+    });
     let mut tries = 0;
     own::send_due(&sealed, &mut world, &[change], |_| {
         tries += 1;

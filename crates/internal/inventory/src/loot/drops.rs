@@ -20,6 +20,10 @@ use crate::raw::{read_at, read_ptr_at, write_at, write_bytes_at};
 use crate::{BaseLoad, Next, Off};
 use crate::{Entity, ItemId};
 
+mod roll;
+
+pub use roll::{Roll, Source};
+
 /// What a container is, for [`Source::kinds`].
 ///
 /// # Examples
@@ -91,138 +95,6 @@ pub struct LootContainerId(u32);
 
 enshwick_abi::id_conversions!(LootContainerId(u32));
 
-/// One roll of a container's loot, as the filters see it.
-///
-/// # Examples
-///
-/// See [`Source`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
-pub struct Roll {
-    /// What the container is.
-    pub kind: Kinds,
-    /// The container; `None` for a single-item roll.
-    pub entity: Option<Entity>,
-    /// The world node a chest is placed at; `None` for a corpse.
-    pub node: Option<LootContainerId>,
-    /// The loot labels of the enemy or chest type; `None` without them.
-    pub labels: Option<LootContainerId>,
-    /// Whether the corpse is a boss's.
-    pub boss: bool,
-    /// Whether the chest needs a key or a lockpick to open.
-    pub locked: bool,
-}
-
-/// Where a [`Drop`] may come from.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::Entity;
-/// use enshwick::loot::{LootContainerId, Source, Kinds, Roll};
-///
-/// let boss = Roll { kind: Kinds::CORPSES, entity: Some(Entity(7)), node: None, labels: Some(LootContainerId::new(9)), boss: true, locked: false };
-/// assert!(Source::bosses().matches(&boss));
-/// assert!(!Source::locked_chests().matches(&boss));
-/// assert!(Source::kinds(Kinds::CORPSES).with_labels(&[LootContainerId::new(9)]).matches(&boss));
-/// assert!(!Source::kinds(Kinds::CONTAINERS).with_nodes(&[LootContainerId::new(3)]).matches(&boss));
-/// ```
-#[derive(Clone, Debug, Default, PartialEq, Eq, crate::Script)]
-#[script(name = "LootSource")]
-pub struct Source {
-    /// The kinds of container.
-    pub kinds: Kinds,
-    /// Only bosses' corpses.
-    #[script(default)]
-    pub bosses_only: bool,
-    /// Only chests that need a key or a lockpick.
-    #[script(default)]
-    pub locked_only: bool,
-    /// Only these loot label ids ([`Roll::labels`]); empty for any.
-    #[script(default)]
-    pub labels: Vec<LootContainerId>,
-    /// Only these world nodes ([`Roll::node`]); empty for any.
-    #[script(default)]
-    pub nodes: Vec<LootContainerId>,
-}
-
-impl Source {
-    /// Every container of `kinds`.
-    ///
-    /// # Examples
-    ///
-    /// See [`Source`].
-    #[must_use]
-    pub const fn kinds(kinds: Kinds) -> Self {
-        Self {
-            kinds,
-            bosses_only: false,
-            locked_only: false,
-            labels: Vec::new(),
-            nodes: Vec::new(),
-        }
-    }
-
-    /// Every boss's corpse.
-    ///
-    /// # Examples
-    ///
-    /// See [`Source`].
-    #[must_use]
-    pub const fn bosses() -> Self {
-        let mut source = Self::kinds(Kinds::CORPSES);
-        source.bosses_only = true;
-        source
-    }
-
-    /// Every chest that needs a key or a lockpick.
-    ///
-    /// # Examples
-    ///
-    /// See [`Source`].
-    #[must_use]
-    pub const fn locked_chests() -> Self {
-        let mut source = Self::kinds(Kinds::CHESTS);
-        source.locked_only = true;
-        source
-    }
-
-    /// The same, limited to the loot label ids `labels`.
-    ///
-    /// # Examples
-    ///
-    /// See [`Source`].
-    #[must_use]
-    pub fn with_labels(mut self, labels: &[LootContainerId]) -> Self {
-        self.labels.extend_from_slice(labels);
-        self
-    }
-
-    /// The same, limited to the world nodes `nodes`.
-    ///
-    /// # Examples
-    ///
-    /// See [`Source`].
-    #[must_use]
-    pub fn with_nodes(mut self, nodes: &[LootContainerId]) -> Self {
-        self.nodes.extend_from_slice(nodes);
-        self
-    }
-
-    /// Whether `roll` comes from here.
-    ///
-    /// # Examples
-    ///
-    /// See [`Source`].
-    #[must_use]
-    pub fn matches(&self, roll: &Roll) -> bool {
-        self.kinds.contains(roll.kind)
-            && (!self.bosses_only || roll.boss)
-            && (!self.locked_only || roll.locked)
-            && (self.labels.is_empty() || roll.labels.is_some_and(|l| self.labels.contains(&l)))
-            && (self.nodes.is_empty() || roll.node.is_some_and(|n| self.nodes.contains(&n)))
-    }
-}
-
 /// A mod item in random loot, for [`Load::add_loot`](../struct.Load.html#method.add_loot).
 ///
 /// # Examples
@@ -240,6 +112,7 @@ impl Source {
 /// assert_eq!(one_of.items.len(), 2);
 /// ```
 #[derive(Clone, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct Drop {
     /// The items' game ids, [`ItemId::from_guid`](crate::ItemId::from_guid) of their
     /// GUIDs; a drop that hits gives one of them, each as likely.
@@ -264,10 +137,11 @@ pub struct Drop {
 /// ```
 /// use enshwick::loot::MeterRoll;
 ///
-/// let charges = MeterRoll { min: 1, max: 5, of: 5 };
+/// let charges = MeterRoll::new(1, 5, 5);
 /// assert!(charges.min <= charges.max && charges.max <= charges.of);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[non_exhaustive]
 pub struct MeterRoll {
     /// The fewest.
     pub min: u16,
@@ -276,6 +150,18 @@ pub struct MeterRoll {
     /// The meter's maximum, as its [`FuelSetup`](crate::content::items::FuelSetup)
     /// says.
     pub of: u16,
+}
+
+impl MeterRoll {
+    /// A `MeterRoll` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`MeterRoll`].
+    #[must_use]
+    pub const fn new(min: u16, max: u16, of: u16) -> Self {
+        Self { min, max, of }
+    }
 }
 
 impl Drop {
@@ -326,7 +212,7 @@ impl Drop {
     /// use enshwick::loot::{Drop, MeterRoll, Source};
     ///
     /// let drop = Drop::new(enshwick::ItemId::new(0x5e01), 0.1, Source::bosses()).meter(1, 5, 5);
-    /// assert_eq!(drop.meter, Some(MeterRoll { min: 1, max: 5, of: 5 }));
+    /// assert_eq!(drop.meter, Some(MeterRoll::new(1, 5, 5)));
     /// ```
     #[must_use]
     pub const fn meter(mut self, min: u16, max: u16, of: u16) -> Self {
@@ -567,7 +453,7 @@ impl Engine {
         // SAFETY: the caller guarantees the roll's live transaction, which
         // keeps the u32 entity it fills at the build table's
         // `loot.txn_entity`.
-        let entity = Entity(unsafe { read_at(txn, self.txn_entity) });
+        let entity = Entity::from_engine(unsafe { read_at(txn, self.txn_entity) });
         // SAFETY: the caller guarantees the roll's live request, which keeps
         // its u32 node id at the build table's `loot.request_node`.
         let node: u32 = unsafe { read_at(request, self.request_node) };
@@ -676,7 +562,7 @@ unsafe fn add_drops(res: *mut u8, txn: *mut u8, request: *const u8) {
             (engine.give)(
                 &raw mut added,
                 txn,
-                container.0,
+                container.get(),
                 0,
                 item,
                 i32::from(count),

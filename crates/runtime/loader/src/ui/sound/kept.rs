@@ -193,20 +193,20 @@ impl ModSounds {
     /// Where the sound `id` stands: ended for an id of an older sound or of
     /// none.
     pub(crate) fn info(&self, id: u64) -> SoundInfo {
-        let ended = SoundInfo {
+        let ended = enshwick_abi::headed!(SoundInfo {
             state: SoundInfo::ENDED,
             ..SoundInfo::EMPTY
-        };
+        });
         let Some(slot) = Slot::of(id) else {
             return ended;
         };
         let (generation, state, reason) = unpack(self.slots[slot.index].load(Ordering::Acquire));
         if generation == slot.generation {
-            SoundInfo {
+            enshwick_abi::headed!(SoundInfo {
                 state,
                 reason,
                 ..SoundInfo::EMPTY
-            }
+            })
         } else {
             ended
         }

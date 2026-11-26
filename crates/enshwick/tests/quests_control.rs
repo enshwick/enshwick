@@ -6,7 +6,7 @@
 mod tests {
     use std::sync::OnceLock;
 
-    use enshwick::abi::{Header, KnowledgeInfo, PlayerInfo, Status};
+    use enshwick::abi::{KnowledgeInfo, PlayerInfo, Status};
     use enshwick::content::journal::{NewQuest, QuestStep};
     use enshwick::content::knowledge::{KnowledgeQuery, KnowledgeTest, NewKnowledge};
     use enshwick::content::{Guid, Id};
@@ -18,7 +18,7 @@ mod tests {
 
     const HUNT: Id = Id::new("you.hunt:hunt");
     const WATCH: Id = Id::new("you.hunt:watch");
-    const PLAYER: Entity = Entity(4096);
+    const PLAYER: Entity = Entity::from_engine(4096);
 
     static QUESTS: OnceLock<Quests> = OnceLock::new();
     static WOOD: OnceLock<KnowledgeId> = OnceLock::new();
@@ -49,20 +49,22 @@ mod tests {
                 tag("hunt.name"),
                 vec![
                     QuestStep::owned(tag("1"), tag("1.text")),
-                    QuestStep {
-                        done_when: Some(KnowledgeQuery::at_least(wood, Scope::Player, 3)),
-                        ..QuestStep::owned(tag("2"), tag("2.text"))
+                    {
+                        let mut value = QuestStep::owned(tag("2"), tag("2.text"));
+                        value.done_when = Some(KnowledgeQuery::at_least(wood, Scope::Player, 3));
+                        value
                     },
                     QuestStep::owned(tag("3"), tag("3.text")),
                 ],
             ))?;
-            load.add_quest(NewQuest {
-                kind: QuestType::WorldQuest,
-                ..NewQuest::new(
+            load.add_quest({
+                let mut value = NewQuest::new(
                     WATCH,
                     tag("watch.name"),
                     vec![QuestStep::owned(tag("w"), tag("w.text"))],
-                )
+                );
+                value.kind = QuestType::WorldQuest;
+                value
             })?;
             let _ = WOOD.set(wood);
             let _ = QUESTS.set(load.quests());
@@ -79,15 +81,14 @@ mod tests {
     );
 
     fn info(id: KnowledgeId, kind: u8, scope: u8, value: u32) -> KnowledgeInfo {
-        KnowledgeInfo {
-            header: Header::of::<KnowledgeInfo>(),
+        enshwick::abi::headed!(KnowledgeInfo {
             id,
             kind,
             scope,
             reserved: 0,
             value,
             flags: 0,
-        }
+        })
     }
 
     fn mine(id: KnowledgeId, kind: u8, value: u32) -> (Option<Entity>, KnowledgeInfo) {
@@ -107,15 +108,14 @@ mod tests {
         let loader = FakeHost::new()
             .progression()
             .world()
-            .player(PlayerInfo {
-                header: Header::of::<PlayerInfo>(),
+            .player(enshwick::abi::headed!(PlayerInfo {
                 slot: 0,
                 entity: PLAYER,
                 key: PlayerKey::new(7),
                 permissions: 0,
                 name_len: 0,
                 name: [0; PlayerInfo::NAME_MAX],
-            })
+            }))
             .install();
         // SAFETY: the three functions are the exports of this file's `declare_mod!(Hunt)`.
         let status =
@@ -183,11 +183,11 @@ mod tests {
     fn start_grants_the_first_step_s_bool_once() {
         let (loader, quests) = start(&[]);
         let hunt = KnowledgeId::from_guid(HUNT.guid());
-        quests.start(Holder::Player(PLAYER), hunt).unwrap();
+        quests.start(Holder::player(PLAYER), hunt).unwrap();
         assert_eq!(loader.grants(), [bool(owned(HUNT, "started"))]);
         drop(loader);
         let (loader, quests) = start(&[(owned(HUNT, "started"), 1)]);
-        quests.start(Holder::Player(PLAYER), hunt).unwrap();
+        quests.start(Holder::player(PLAYER), hunt).unwrap();
         assert!(loader.grants().is_empty(), "started already");
     }
 
@@ -195,8 +195,8 @@ mod tests {
     fn advance_finishes_the_step_the_player_stands_at_and_grants_a_shared_entry_once() {
         let (loader, quests) = start(&[(owned(HUNT, "started"), 1), (wood(), 1)]);
         let hunt = KnowledgeId::from_guid(HUNT.guid());
-        assert_eq!(quests.step(Holder::Player(PLAYER), hunt), Some(0));
-        assert_eq!(quests.advance(Holder::Player(PLAYER), hunt), Ok(1));
+        assert_eq!(quests.step(Holder::player(PLAYER), hunt), Some(0));
+        assert_eq!(quests.advance(Holder::player(PLAYER), hunt), Ok(1));
         assert_eq!(
             loader.grants(),
             [bool(owned(HUNT, "step-0.done"))],
@@ -208,7 +208,7 @@ mod tests {
             (owned(HUNT, "step-0.done"), 1),
             (wood(), 1),
         ]);
-        assert_eq!(quests.advance(Holder::Player(PLAYER), hunt), Ok(2));
+        assert_eq!(quests.advance(Holder::player(PLAYER), hunt), Ok(2));
         assert_eq!(
             loader.grants(),
             [(Some(PLAYER), wood(), u32::from(KnowledgeInfo::COUNTER), 2)],
@@ -220,7 +220,7 @@ mod tests {
     fn complete_grants_every_step_left_and_a_finished_quest_stays() {
         let (loader, quests) = start(&[]);
         let hunt = KnowledgeId::from_guid(HUNT.guid());
-        quests.complete(Holder::Player(PLAYER), hunt).unwrap();
+        quests.complete(Holder::player(PLAYER), hunt).unwrap();
         assert_eq!(
             loader.grants(),
             [
@@ -237,9 +237,9 @@ mod tests {
             (wood(), 3),
             (owned(HUNT, "step-2.done"), 1),
         ]);
-        assert_eq!(quests.step(Holder::Player(PLAYER), hunt), Some(3));
-        assert_eq!(quests.advance(Holder::Player(PLAYER), hunt), Ok(3));
-        quests.complete(Holder::Player(PLAYER), hunt).unwrap();
+        assert_eq!(quests.step(Holder::player(PLAYER), hunt), Some(3));
+        assert_eq!(quests.advance(Holder::player(PLAYER), hunt), Ok(3));
+        quests.complete(Holder::player(PLAYER), hunt).unwrap();
         assert!(loader.grants().is_empty());
     }
 
@@ -267,14 +267,14 @@ mod tests {
     fn a_vanilla_quest_starts_on_its_bool_and_its_game_query_step_is_refused() {
         let (loader, quests) = start(&[]);
         let vanilla = KnowledgeId::new(VANILLA_QUEST);
-        quests.start(Holder::Player(PLAYER), vanilla).unwrap();
+        quests.start(Holder::player(PLAYER), vanilla).unwrap();
         assert_eq!(
             loader.grants(),
             [bool(KnowledgeId::new(VANILLA_PLAYER_KNOWLEDGE))]
         );
         drop(loader);
         let (_loader, quests) = start(&[(KnowledgeId::new(VANILLA_PLAYER_KNOWLEDGE), 1)]);
-        let refused = quests.complete(Holder::Player(PLAYER), vanilla);
+        let refused = quests.complete(Holder::player(PLAYER), vanilla);
         assert!(
             matches!(
                 refused,
@@ -283,11 +283,11 @@ mod tests {
             "{refused:?}"
         );
         assert_eq!(
-            quests.start(Holder::Player(PLAYER), KnowledgeId::new(1)),
+            quests.start(Holder::player(PLAYER), KnowledgeId::new(1)),
             Err(MoveQuestError::NoQuest(KnowledgeId::new(1)))
         );
         assert_eq!(
-            quests.step(Holder::Player(PLAYER), KnowledgeId::new(1)),
+            quests.step(Holder::player(PLAYER), KnowledgeId::new(1)),
             None
         );
     }
@@ -310,7 +310,7 @@ mod tests {
             ],
             &[],
         );
-        quests.reset(Holder::Player(PLAYER), hunt).unwrap();
+        quests.reset(Holder::player(PLAYER), hunt).unwrap();
         let mut revokes = loader.revokes();
         revokes.sort_unstable_by_key(|(_, id, ..)| id.get());
         let mut expected = vec![

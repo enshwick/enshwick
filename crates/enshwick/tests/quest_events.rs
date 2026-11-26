@@ -5,16 +5,14 @@
 mod tests {
     use std::sync::Mutex;
 
-    use enshwick::abi::{
-        Header, QuestData, QuestPayment, QuestProgressData, QuestStepData, Status,
-    };
+    use enshwick::abi::{QuestData, QuestPayment, QuestProgressData, QuestStepData, Status};
     use enshwick::events::{QuestProgressed, QuestStarted, QuestStepDone};
     use enshwick::knowledge::KnowledgeId;
     use enshwick::quests::QuestPay;
     use enshwick::test::FakeHost;
     use enshwick::{Entity, Load, Mod, Off};
 
-    const PLAYER: Entity = Entity(2);
+    const PLAYER: Entity = Entity::from_engine(2);
     const DOUBLED: KnowledgeId = KnowledgeId::new(0x51);
     const REFUSED: KnowledgeId = KnowledgeId::new(0x52);
     const ALLOWED_AGAIN: KnowledgeId = KnowledgeId::new(0x54);
@@ -76,8 +74,7 @@ mod tests {
     fn payment(quest: KnowledgeId, experience: &[u32]) -> QuestPayment {
         let mut values = [0; QuestPayment::MAX];
         values[..experience.len()].copy_from_slice(experience);
-        QuestPayment {
-            header: Header::of::<QuestPayment>(),
+        enshwick::abi::headed!(QuestPayment {
             entity: PLAYER,
             quest,
             count: u32::try_from(experience.len()).unwrap(),
@@ -85,33 +82,30 @@ mod tests {
             allowed: 1,
             reserved: [0; 3],
             experience: values,
-        }
+        })
     }
 
     #[test]
     fn a_mod_hears_a_quest_start_a_step_done_and_a_part_counted() {
         let loader = start();
         let quest = KnowledgeId::new(0x51);
-        let started = QuestData {
-            header: Header::of::<QuestData>(),
+        let started = enshwick::abi::headed!(QuestData {
             entity: PLAYER,
             quest,
-        };
-        let done = QuestStepData {
-            header: Header::of::<QuestStepData>(),
+        });
+        let done = enshwick::abi::headed!(QuestStepData {
             entity: PLAYER,
             quest,
             step: 1,
-        };
-        let counted = QuestProgressData {
-            header: Header::of::<QuestProgressData>(),
-            entity: Entity(0),
+        });
+        let counted = enshwick::abi::headed!(QuestProgressData {
+            entity: Entity::from_engine(0),
             quest,
             step: 0,
             part: 1,
             value: 3,
             target: 5,
-        };
+        });
         assert_eq!(loader.raise::<QuestStarted>(&started), 1);
         assert_eq!(loader.raise::<QuestStepDone>(&done), 1);
         assert_eq!(loader.raise::<QuestProgressed>(&counted), 1);

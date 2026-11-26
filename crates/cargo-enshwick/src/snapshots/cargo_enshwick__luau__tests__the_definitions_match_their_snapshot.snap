@@ -1210,7 +1210,7 @@ export type Hold = {
 }
 
 --- Whose progress in a quest a call reads or moves: the world's, which every player shares, or one player's. The name is enshwick's, not the game's.
-export type Holder = "World" | { Player: number }
+export type Holder = "World" | { Player: any }
 
 --- The HUD of one frame: what it draws shows this frame only, during its callback.
 export type Hud = {
@@ -2434,13 +2434,10 @@ export type ObjectiveReach = {
 --- How a modifier acts on a stat. Modifiers apply in this order: every `Add` to the default, then every `Multiply`, then the greatest `Max` as a floor; an `Override` replaces the result, the last one in source order winning. The kind's range applies last.
 export type Op = "Add" | "Multiply" | "Max" | "Override"
 
---- Why an operation failed.
-export type OpError = "NotRun" | "InvalidState" | "OutOfMemory" | "Other"
-
 --- The result of one operation.
 export type OpResult = {
 	--- Why it failed; none when it ran without an error.
-	error: OpError?,
+	error: RunOpError?,
 	--- How much of the count the operation could not do.
 	remaining: number,
 }
@@ -3180,6 +3177,9 @@ export type RuleInfo = {
 	on_event: boolean,
 }
 
+--- Why an operation failed.
+export type RunOpError = "NotRun" | "InvalidState" | "OutOfMemory" | "Other"
+
 --- The save of the world the server runs, from `World.save_info`.
 export type SaveInfo = {
 	--- The world's GUID.
@@ -3296,7 +3296,7 @@ export type Settings = {
 	flame_level_fog_removal: number,
 }
 
---- The settings in force and the preset the world started from, as `GameSettings.read` gives them to a script.
+--- The settings in force and the preset the world started from, as `GameSettings.read` gives them.
 export type SettingsRead = {
 	--- The settings.
 	settings: Settings,
@@ -4243,7 +4243,7 @@ declare enshwick: {
 	refuse: {},
 	--- Calls `handler` with the data of another mod's event, as `cargo enshwick deps <alias> --luau` describes it or a description of the script's own (fields with `name` and `read`, laid out as Rust lays them out). Subscribe at the top level of main.luau.
 	on_mod_event: (event: { name: string }, handler: (data: any) -> ()) -> (),
-	--- The function that runs another mod's call, as `cargo enshwick deps <alias> --luau` describes it: it takes the input and returns the answer, or nil and why not (`unmatched` also before the start is over, `off` or `failed`). Ask at the top level of main.luau. Unstable: may change in any release.
+	--- The function that runs another mod's call, as `cargo enshwick deps <alias> --luau` describes it: it takes the input and returns the answer, or nil and why not (`unmatched` also before the start is over, `off` or `failed`). Ask at the top level of main.luau.
 	caller: (call: { name: string }) -> (input: any) -> (any, string?),
 	--- Defines a mod event of this mod for others to hear, at the top level of main.luau, by its local name (`greeted` for `<mod id>:greeted`); `send` hands every subscriber the data.
 	define_event: (event: { name: string }) -> { send: (data: any) -> () },
@@ -4567,58 +4567,58 @@ declare enshwick: {
 		--- Adds a prop type, on the server and the client alike: its item a copy of the vanilla prop's, placing `<id>.template`, a copy of the template the vanilla item places with `NewProp.template` applied; with a cost, a copy of the vanilla prop's recipe that builds it; and with `NewProp.crafting_prop`, a crafting prop the given recipes require. When the mod is removed, the loader serves the vanilla template under the copy's GUID, so placed props load as the vanilla one.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_prop: (new: NewProp) -> PropId,
-		--- Adds an enemy: a copy of the vanilla enemy template `NewEnemy.like` as `Load.add_template` makes it, with its level, health, damage, faction, arsenal and boss mark set where `NewEnemy` gives them, on the server and the client alike. Spawn it by its template, as spawners and `effects.spawn` do.
+		--- Adds an enemy: a copy of the vanilla enemy template `NewEnemy.like` as `Load.add_template` makes it, with its level, health, damage, faction, arsenal and boss mark set where `NewEnemy` gives them, on the server and the client alike. Spawn it by its template, as spawners and `effects.spawn` do. Unstable: needs the `typed` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_enemy: (new: NewEnemy) -> string,
-		--- Adds an arsenal, listed beside the vanilla ones: a copy of the vanilla arsenal `NewArsenal.like` under the mod's content id, with its change applied. An enemy uses it through `NewEnemy.arsenal`.
+		--- Adds an arsenal, listed beside the vanilla ones: a copy of the vanilla arsenal `NewArsenal.like` under the mod's content id, with its change applied. An enemy uses it through `NewEnemy.arsenal`. Unstable: needs the `typed` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_arsenal: (new: NewArsenal) -> string,
-		--- Changes the vanilla arsenal `arsenal` in memory, on the server and the client alike; mods that change one arsenal change it in load order, each on the one before's result.
+		--- Changes the vanilla arsenal `arsenal` in memory, on the server and the client alike; mods that change one arsenal change it in load order, each on the one before's result. Unstable: needs the `typed` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		change_arsenal: (arsenal: string, change: ArsenalChange) -> (),
-		--- Adds `entry` to the random spawners it picks, after their own entries, on the server; mods that change one spawner change it in load order. The spawner picks it by its weight against the others'.
+		--- Adds `entry` to the random spawners it picks, after their own entries, on the server; mods that change one spawner change it in load order. The spawner picks it by its weight against the others'. Unstable: needs the `typed` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_spawn_entry: (entry: SpawnEntry) -> (),
-		--- Changes the counts and timeouts of the random spawners `spawner` picks, on the server; mods that change one spawner change it in load order.
+		--- Changes the counts and timeouts of the random spawners `spawner` picks, on the server; mods that change one spawner change it in load order. Unstable: needs the `typed` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		change_spawner: (spawner: SpawnerPick, change: SpawnerChange) -> (),
-		--- Adds a knowledge entry beside the game's own, on the server and the client alike, and returns its knowledge id. The game grants, sends and saves it like a vanilla entry; a player's entry gives its skill points and experience when granted. A save keeps the values of the mod's entries while the mod runs; a save made without the mod drops them, so they read 0 when the mod comes back (server 399, read on a server copy).
+		--- Adds a knowledge entry beside the game's own, on the server and the client alike, and returns its knowledge id. The game grants, sends and saves it like a vanilla entry; a player's entry gives its skill points and experience when granted. A save keeps the values of the mod's entries while the mod runs; a save made without the mod drops them, so they read 0 when the mod comes back (server 399, read on a server copy). Unstable: needs the `typed` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_knowledge: (new: NewKnowledge) -> number,
-		--- Adds an experience value beside the game's own and returns it, for a knowledge entry's `NewKnowledge.experience` or a quest's experience reward. The game counts the experience under its source, as it does a vanilla value's; `experience_values` lists those. Adding the same id again replaces its source and gain. One patch of the balancing table serves all of a mod's values; it adds none when another mod's value there has the id of one of them.
+		--- Adds an experience value beside the game's own and returns it, for a knowledge entry's `NewKnowledge.experience` or a quest's experience reward. The game counts the experience under its source, as it does a vanilla value's; `experience_values` lists those. Adding the same id again replaces its source and gain. One patch of the balancing table serves all of a mod's values; it adds none when another mod's value there has the id of one of them. Unstable: needs the `typed` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_experience: (new: NewExperience) -> number,
-		--- Adds a query to the game's query database beside its own named queries, on the server and the client alike, and returns its id for `KnowledgeQuery.game`: its parts joined by its form, inverted when it asks, evaluated by the game as it evaluates its own. A quest step, a lore entry or an item set that asks it reads the game's answer. A part may name a game query, the game's or one a mod added before it. One patch of the database serves all of a mod's queries; a query whose id another mod's holds, or whose part names a query the database lacks when the game first reads it, is logged and left out.
+		--- Adds a query to the game's query database beside its own named queries, on the server and the client alike, and returns its id for `KnowledgeQuery.game`: its parts joined by its form, inverted when it asks, evaluated by the game as it evaluates its own. A quest step, a lore entry or an item set that asks it reads the game's answer. A part may name a game query, the game's or one a mod added before it. One patch of the database serves all of a mod's queries; a query whose id another mod's holds, or whose part names a query the database lacks when the game first reads it, is logged and left out. Unstable: needs the `typed` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_query: (new: NewQuery) -> number,
-		--- The game's named query `name`, as its database names it, for a mod to ask where the game asks it: `ItemSetCompleted_Grassland` is the query of a full Grassland collection (server 26430253).
+		--- The game's named query `name`, as its database names it, for a mod to ask where the game asks it: `ItemSetCompleted_Grassland` is the query of a full Grassland collection (server 26430253). Unstable: needs the `typed` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		game_query: (name: string) -> number,
-		--- Adds a quest to the journal beside the game's, on the server and the client alike, and returns its quest id: a player's bool the game sets when it pays the quest, as for its own. Each step shows while its `shown_when` holds and is done once its `done_when` holds; a query left nil gets knowledge of the loader's, which `Quests` moves on, and each objective of a step a counter the loader raises on its events. When the last step is done the game gives the experience of the rewards and raises `QuestCompleted`; it draws an item reward and never gives it, so the mod gives its items in a handler of that event (`give_what_fits`). A mod moves the quest on with `Quests` or by granting the knowledge its steps ask for.
+		--- Adds a quest to the journal beside the game's, on the server and the client alike, and returns its quest id: a player's bool the game sets when it pays the quest, as for its own. Each step shows while its `shown_when` holds and is done once its `done_when` holds; a query left nil gets knowledge of the loader's, which `Quests` moves on, and each objective of a step a counter the loader raises on its events. When the last step is done the game gives the experience of the rewards and raises `QuestCompleted`; it draws an item reward and never gives it, so the mod gives its items in a handler of that event (`give_what_fits`). A mod moves the quest on with `Quests` or by granting the knowledge its steps ask for. Unstable: needs the `typed` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_quest: (new: NewQuest) -> number,
-		--- Adds a lore page to the journal, on the server and the client alike: its entries show once their knowledge holds, on the card of its category on the journal's world information screen. The card counts the page from the start and lists it once one entry shows.
+		--- Adds a lore page to the journal, on the server and the client alike: its entries show once their knowledge holds, on the card of its category on the journal's world information screen. The card counts the page from the start and lists it once one entry shows. Unstable: needs the `typed` and `unstable` features and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_journal_page: (new: NewJournalPage) -> (),
-		--- Changes the vanilla quest `quest` in memory, on the server and the client alike: its rewards, whether it unlocks for every player, and its steps' knowledge. Mods that change one quest change it in load order, each on the one before's result; `Knowledge.quests` lists the quest ids. The game gives an added reward's experience and only draws an added item, which the mod gives on `QuestCompleted`, as for its own quest (see `QuestReward`). `Knowledge.quests`: crate.knowledge.Knowledge.quests
+		--- Changes the vanilla quest `quest` in memory, on the server and the client alike: its rewards, whether it unlocks for every player, and its steps' knowledge. Mods that change one quest change it in load order, each on the one before's result; `Knowledge.quests` lists the quest ids. The game gives an added reward's experience and only draws an added item, which the mod gives on `QuestCompleted`, as for its own quest (see `QuestReward`). Unstable: needs the `typed` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		change_quest: (quest: number, change: QuestChange) -> (),
-		--- Removes the vanilla quest `quest` from the journal in memory, on the server and the client alike, with its steps; its knowledge stays, so a save that holds its progress still opens. Mods change and remove a quest in load order. A removal is logged and left out when the journal first builds while anything a mod earlier in load order put in the journal asks for the quest's or one of its steps' id: a step of its own quest, a step it inserted into a vanilla quest or a query it put in a vanilla step, an entry of a lore page, or an item set. It asks by the id itself or through a game query that reads it, such as one of `Load.add_query`, with the queries it names in turn; while the game's queries do not read, every game query counts. The game's own queries never hold a quest, even in a step another mod changed.
+		--- Removes the vanilla quest `quest` from the journal in memory, on the server and the client alike, with its steps; its knowledge stays, so a save that holds its progress still opens. Mods change and remove a quest in load order. A removal is logged and left out when the journal first builds while anything a mod earlier in load order put in the journal asks for the quest's or one of its steps' id: a step of its own quest, a step it inserted into a vanilla quest or a query it put in a vanilla step, an entry of a lore page, or an item set. It asks by the id itself or through a game query that reads it, such as one of `Load.add_query`, with the queries it names in turn; while the game's queries do not read, every game query counts. The game's own queries never hold a quest, even in a step another mod changed. Unstable: needs the `typed` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		remove_quest: (quest: number) -> (),
-		--- Changes the vanilla lore page `page` in memory, on the server and the client alike: its category, title, priority, tutorial mark, document and entries. Mods that change one page change it in load order.
+		--- Changes the vanilla lore page `page` in memory, on the server and the client alike: its category, title, priority, tutorial mark, document and entries. Mods that change one page change it in load order. Unstable: needs the `typed` and `unstable` features and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		change_journal_page: (page: number, change: PageChange) -> (),
-		--- Removes the vanilla lore page `page` from the journal in memory, on the server and the client alike, with its entries.
+		--- Removes the vanilla lore page `page` from the journal in memory, on the server and the client alike, with its entries. Unstable: needs the `typed` and `unstable` features and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		remove_journal_page: (page: number) -> (),
-		--- Adds an item set to the journal's collections beside the game's, on the server and the client alike, and returns its set id. Each entry is done once its `done_when` holds, by default once a player first picks its item up, as the game's own entries are. The set shows once `shown_when` holds, by default once one entry is done, and is complete once every entry is: the loader adds those two queries to the game's query database (see `Load.add_query`), as the game's own sets ask theirs. The game's server walks the pay rows, at most 50 a run: for a player without the set's bool, a bool of the loader's, whose completion query holds, it gives the set's experience and sets the bool, so a set pays once (server 26430253, read in the code). The set's recipes are what the collection screen lists; whether the game grants them is not read yet, so a mod that wants them granted grants them itself.
+		--- Adds an item set to the journal's collections beside the game's, on the server and the client alike, and returns its set id. Each entry is done once its `done_when` holds, by default once a player first picks its item up, as the game's own entries are. The set shows once `shown_when` holds, by default once one entry is done, and is complete once every entry is: the loader adds those two queries to the game's query database (see `Load.add_query`), as the game's own sets ask theirs. The game's server walks the pay rows, at most 50 a run: for a player without the set's bool, a bool of the loader's, whose completion query holds, it gives the set's experience and sets the bool, so a set pays once (server 26430253, read in the code). The set's recipes are what the collection screen lists; whether the game grants them is not read yet, so a mod that wants them granted grants them itself. Unstable: needs the `typed` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_item_set: (new: NewItemSet) -> number,
-		--- Changes the vanilla item set `set` in memory, on the server and the client alike: its title, experience, recipes, entries and queries, and its pay row with them. Mods that change one set change it in load order; `Quests.item_sets` lists the sets.
+		--- Changes the vanilla item set `set` in memory, on the server and the client alike: its title, experience, recipes, entries and queries, and its pay row with them. Mods that change one set change it in load order; `Quests.item_sets` lists the sets. Unstable: needs the `typed` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		change_item_set: (set: number, change: ItemSetChange) -> (),
-		--- Removes the vanilla item set `set` from the journal in memory, on the server and the client alike, with its entries and its pay row; the knowledge its entries ask stays.
+		--- Removes the vanilla item set `set` from the journal in memory, on the server and the client alike, with its entries and its pay row; the knowledge its entries ask stays. Unstable: needs the `typed` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		remove_item_set: (set: number) -> (),
 		--- Adds a knowledge rule to the game's own trigger list: while `when` holds, the game's server grants the rule's knowledge, with no mod code running then. A player's rule runs for each player, a world's for the world, every 32 steps of the world; a grant the knowledge holds already is skipped (server 26430253, read in the code). The list is the server's alone, so the rule needs the mod on the server only. The game grants only an entry its knowledge holds, the game's or a mod's.
@@ -4633,13 +4633,13 @@ declare enshwick: {
 		--- Turns the vanilla rule `rule` off in memory: it keeps its place with a query the game skips, so the places of the rules after it stay.
 		--- Only while the mod starts, at the top level of main.luau.
 		remove_knowledge_rule: (rule: RuleId) -> (),
-		--- The vanilla nodes of the skill tree, to link a mod's nodes from and place them beside.
+		--- The vanilla nodes of the skill tree, to link a mod's nodes from and place them beside. Unstable: needs the `typed` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		skill_nodes: () -> {SkillNode},
-		--- Adds a node to the skill tree, on the server and the client alike: a copy of the vanilla node `NewSkillNode.like`, its effect and icons among it, at its own place, linked from the nodes it names. A player unlocks it with skill points as the game's own nodes; the tree screen draws it from the data. A player's save keeps a fixed count of unlocked nodes (256 on server 399, beside the game's 243), and the game's own tree takes most of them: every mod's nodes share the rest, in load order. Each node shows as the mod's feature `skill node <id>` in the status summary and on the Mods screen, with the reason when it is refused.
+		--- Adds a node to the skill tree, on the server and the client alike: a copy of the vanilla node `NewSkillNode.like`, its effect and icons among it, at its own place, linked from the nodes it names. A player unlocks it with skill points as the game's own nodes; the tree screen draws it from the data. A player's save keeps a fixed count of unlocked nodes (256 on server 399, beside the game's 243), and the game's own tree takes most of them: every mod's nodes share the rest, in load order. Each node shows as the mod's feature `skill node <id>` in the status summary and on the Mods screen, with the reason when it is refused. Unstable: needs the `typed` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_skill_node: (new: NewSkillNode) -> number,
-		--- Adds a perk, listed beside the vanilla ones: a copy of the vanilla perk `NewPerk.like` under the mod's content id, with its own name and description, on the server and the client alike.
+		--- Adds a perk, listed beside the vanilla ones: a copy of the vanilla perk `NewPerk.like` under the mod's content id, with its own name and description, on the server and the client alike. Unstable: needs the `typed` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_perk: (new: NewPerk) -> string,
 		--- Takes the vanilla item `item` out of play while the mod runs: no recipe makes it, no crafting or build menu lists it, and no loot table or starting inventory gives it. The item stays registered, so the stacks players hold keep it and a world opens as vanilla without the mod; a mod that wants held copies gone takes them out with the inventory API. Mods' changes of loot chain in load order: a later mod that gives the item a count gives it back.
@@ -4693,22 +4693,22 @@ declare enshwick: {
 		player_by_key: (key: string) -> Player?,
 		--- The connected players named `name`, ignoring case; names are untrusted and may repeat, so a command that wants one player refuses more than one.
 		players_named: (name: string) -> {Player},
-		--- Gives `entity` the name `text`, as a player's rename does: the game shows it on hover, sends it to every client and saves it with the world. The game keeps 255 bytes; an empty text removes the name. On the game thread only; `false` elsewhere or when the entity is gone.
-		set_label: (entity: number, text: string) -> boolean,
+		--- Gives `entity` the name `text`, as a player's rename does: the game shows it on hover, sends it to every client and saves it with the world. The game keeps 255 bytes; an empty text removes the name.
+		set_label: (entity: number, text: string) -> (),
 		--- Sends `text` to every player's chat, after the next step; callable from any thread. Each line becomes a message of its own.
 		broadcast: (text: string) -> (),
 		--- The language the player of account `key` reads the game in, as their game named it when they joined, for a mod's own texts in a notice or line to that player outside an action's request. In a game hosted from a client, the host's own player reads the game's language. The fallback for a player whose game runs no Enshwick, for a key no connected player holds and on a client that joined a server. Any thread.
 		language_of: (key: string) -> string,
-		--- Sends `text` to `player`'s chat alone, after the next step; callable from any thread. The console and a remote caller have no account, so a line for them goes to no player, with a log line: answer them in the action's outcome.
-		tell: (player: Player, text: string) -> (),
-		--- Shows `text` on `player`'s screen, as the game shows its own "can't do that" messages, or tells it in chat when the player's client lacks Enshwick to show it; says which. The game shows 255 bytes; keep it to a line. On the game thread; elsewhere it goes to chat. A notice for the console or a remote caller goes to no player, as with `tell`, and answers `Notice.Nobody`.
-		notify: (player: Player, text: string) -> Notice,
+		--- Sends `text` to `player`'s chat alone, after the next step; callable from any thread for a player named by account. A player named by character alone is found on the game thread only. The console and a remote caller have no account, so a line for them goes to no player, with a log line: answer them in the action's outcome. So does a line for a character no connected player has, or one named off the game thread.
+		tell: (player: any, text: string) -> (),
+		--- Shows `text` on `player`'s screen, as the game shows its own "can't do that" messages, or tells it in chat when the player's client lacks Enshwick to show it; says which. The game shows 255 bytes; keep it to a line. On the game thread; elsewhere it goes to chat, and to no player when the player is named by character alone. A notice for the console or a remote caller goes to no player, as with `tell`, and answers `Notice.Nobody`.
+		notify: (player: any, text: string) -> Notice,
 		--- Sends a notice to every connected player, as `notify` does to one.
 		notify_all: (text: string) -> (),
 		--- Where `player` respawns: the spawn point their character holds, its kind and where it stands; nil while the point is not in the world, where the game falls back to the world's start, or the player has left. The game moves it when the character stands in another spawn point, and `PlayerSpawnInfoChangeEvent` tells when. Unstable: needs the `unstable` feature and may change in any release.
-		respawn_point: (player: Player) -> RespawnPoint?,
+		respawn_point: (player: any) -> RespawnPoint?,
 		--- Makes `spawn_point` where `player` respawns, as the game does when their character stands in it, and raises the game's `PlayerSpawnInfoChangeEvent` with the point's base, else its scene; a point that names neither raises none, as in the game. While the character stands in another spawn point, the game sets that one back at its next step. A query by the spawn points' component lists them. On the server's game thread between steps. Unstable: needs the `unstable` feature and may change in any release.
-		set_respawn_point: (player: Player, spawn_point: number) -> (),
+		set_respawn_point: (player: any, spawn_point: number) -> (),
 		--- Every connected player with a character in the world.
 		players: () -> {Player},
 		--- `entity`'s position in metres.
@@ -4731,19 +4731,19 @@ declare enshwick: {
 		set_muted: (key: string, muted: boolean) -> (),
 		--- Whether the account `key` is muted in chat. Any thread.
 		muted: (key: string) -> boolean,
-		--- Whether the server lets `player` edit the box between the corners `a` and `b` in metres; a mod that edits the world for a player asks first. The permissions are the game's terrain tool rule: `CanEditWorld` always, `CanEditBase` where the box overlaps a building zone. Enshwick adds two tests the game's building cursor runs for items: both corners inside the world's building area, and no strict no-build zone the world places. An item's other rules, such as one that needs a zone, are not part of it.
-		can_build: (player: Player, a: vector, b: vector) -> (),
+		--- Checks that the server lets `player` edit the box between the corners `a` and `b` in metres, and answers why not when it does not; a mod that edits the world for a player asks first. The permissions are the game's terrain tool rule: `CanEditWorld` always, `CanEditBase` where the box overlaps a building zone. Enshwick adds two tests the game's building cursor runs for items: both corners inside the world's building area, and no strict no-build zone the world places. An item's other rules, such as one that needs a zone, are not part of it.
+		can_build: (player: any, a: vector, b: vector) -> (),
 		--- Whether a save keeps changes in the box between corners `a` and `b`, in metres. The game saves a world only inside its bases, the flame altars' build zones: a prop placed or terrain changed anywhere else is gone after a restart, a player's as well as a mod's. The box must lie wholly inside one base's zone, half a metre in from its edges.
 		persists: (a: vector, b: vector) -> boolean,
 		--- Takes the permissions in `deny` from the player in game with account `key` and gives those in `grant`, on top of their user group's, so the game's own server checks follow: a taken `CanEditWorld` stops digging, bombs, building and breaking anywhere, `CanEditBase` inside bases, `CanAccessInventories` opening chests in bases. Each call replaces the mod's own change; both lists empty ends it, also for a player no longer in game. A permission any mod takes is gone even when another gives it. The change holds from the server's next step until the mod ends it or turns off, the player leaves or the world ends; `Player.permissions` and the loader's own admin checks then read the bits in force. The player's client still acts by its group's bits: it may show an edit the server then refuses, and it never starts an edit that only a granted bit allows.
 		change_permissions: (key: string, deny: {PlayerPermissions}, grant: {PlayerPermissions}) -> (),
-		--- Every entity with a component of type `ty` and a place in the world, such as every bed or every chest; with `World.transform_type`, every placed entity. The engine walks every such archetype, so call it now and then, not every step. On the game thread only; empty elsewhere.
+		--- Every entity with a component of type `ty` and a place in the world, such as every bed or every chest; with `World.transform_type`, every placed entity. The engine walks every such archetype, so call it now and then, not every step.
 		entities: (ty: number) -> {Placed},
-		--- The entities with a component of type `ty` within `radius` metres of `point`, nearest first; with `World.transform_type`, every placed entity there. On the game thread only; empty elsewhere.
+		--- The entities with a component of type `ty` within `radius` metres of `point`, nearest first; with `World.transform_type`, every placed entity there.
 		near: (point: vector, radius: number, ty: number) -> {Placed},
 		--- The component type every placed entity has, `CurrentTransform`.
 		transform_type: () -> number,
-		--- The world's containers of a kind in `kinds`, with their places: by default what players build, such as storage chests; see `ContainerKinds` for the rest. Each kind is told apart by a component the game gives it. Call it now and then, as `World.entities`. On the game thread only; empty elsewhere and on a build that lacks any of those components.
+		--- The world's containers of a kind in `kinds`, with their places: by default what players build, such as storage chests; see `ContainerKinds` for the rest. Each kind is told apart by a component the game gives it. Call it now and then, as `World.entities`.
 		containers: (kinds: {string}) -> {Placed},
 		--- Asks the server to destroy `entity` after the systems of the next step, as the game removes things itself: no loot and no death.
 		destroy: (entity: number) -> (),
@@ -4811,23 +4811,23 @@ declare enshwick: {
 		stop: () -> (),
 		--- Keeps an entity of the mod's out of the world's saves, or puts it back in them. With `saved` false the game's own `DoNotSave` component leaves it out: it is gone after the server restarts, while the world goes on. Only entities a mod spawned (`Effects.spawn`) or placed (a transaction's props) since the world loaded are allowed, from the step after their spawn, so no mod drops the game's own data from a save; once the world loads again, they count as the game's. The change shows from the next step and counts from the next save that starts after it. For a new entity, `Spawn.do_not_save` keeps it out from its first step. On the server's game thread only.
 		set_saved: (entity: number, saved: boolean) -> (),
-		--- Runs `rule` for each account that joins the server, before its player enters the world; returning `false` refuses it, and its player reads the game's own "the host denies you access", as for an account on the server's ban list, which stays as it was. The first rule that refuses decides, in load order. It runs on the thread the server reads joins on, so it answers at once from what the mod holds. A rule that panics turns its mod off and lets the account in. A client runs it while it hosts a game.
+		--- Runs `rule` for each account that joins the server, before its player enters the world; `false` or a string refuses it, nil or `true` lets it in, and any other value refuses. A refused player reads the game's own "the host denies you access". The first rule that refuses decides, in load order. It runs on the thread the server reads joins on, so it answers at once from what the mod holds. A client runs it while it hosts a game.
 		--- Only while the mod starts, at the top level of main.luau.
-		on_join: (rule: (arg1: Join) -> boolean?) -> (),
-		--- Runs `filter` before the server applies a player's rename of any entity, on its game thread; returning `false` refuses the rename. The game itself checks no permission for renames. A client runs it while it hosts a game.
+		on_join: (rule: (arg1: Join) -> any) -> (),
+		--- Runs `filter` before the server applies a player's rename of any entity, on its game thread; `false` or a string refuses the rename, nil or `true` allows it, and any other value refuses. The game itself checks no permission for renames. A client runs it while it hosts a game.
 		--- Only while the mod starts, at the top level of main.luau.
-		on_rename: (filter: (arg1: Rename) -> boolean?) -> (),
+		on_rename: (filter: (arg1: Rename) -> any) -> (),
 		--- The component type `name` for writes, as `WritableType.resolve` resolves it.
 		--- Only while the mod starts, at the top level of main.luau.
 		writable_type: (name: string) -> WritableType,
 	},
 	--- Buffs: their types, and the buffs entities have, applied and removed.
 	buffs: {
-		--- Every buff and debuff type of the running game; empty off the game thread or while no world runs.
+		--- Every buff and debuff type of the running game.
 		types: () -> {BuffType},
 		--- The buffs `entity` has.
 		of: (entity: number) -> {Buff},
-		--- Whether `entity` has a buff of type `id`; `false` when it holds no buffs or off the game thread.
+		--- Whether `entity` has a buff of type `id`; `false` for an entity that holds no buffs.
 		has: (entity: number, id: number) -> boolean,
 		--- Gives `entity` a buff of type `id`, at once, as the game restores a character's saved buffs; one it has already is renewed to the duration asked and keeps its level. The game checks no faction or death: the mod decides who gets it.
 		apply: (entity: number, id: number, how: Apply) -> (),
@@ -4839,14 +4839,14 @@ declare enshwick: {
 	},
 	--- The server's game settings: read them, change them for now, or keep a change.
 	game_settings: {
+		--- The settings in force and the preset they came from.
+		read: () -> SettingsRead,
 		--- Lets `change` edit the settings in force and applies them as the game's admin command does: systems see them from the next step and every client gets them; the preset becomes `GameSettingsPreset.Custom`. Returns the settings now in force.
 		change: (change: (arg1: Settings) -> Settings?) -> Settings,
 		--- Changes the settings as `change` does and keeps the fields whose value it changed with the running world: the loader applies them again each time the world loads, by the end of its first step, over what the configuration says. Fields it leaves as they were are not kept. Several mods' kept fields add up; the last value kept for a field wins.
 		keep: (change: (arg1: Settings) -> Settings?) -> Settings,
 		--- Forgets every field kept for the running world, by any mod, and puts back the values the world loaded with.
 		forget_kept: () -> (),
-		--- The settings in force and the world's preset, as `GameSettings.read` reads them.
-		read: () -> SettingsRead?,
 	},
 	--- The weather of the server's world: what it is where, its fronts, and setting it.
 	weather: {
@@ -4874,12 +4874,12 @@ declare enshwick: {
 		markers_in: (a: vector, b: vector) -> {MapMarker},
 		--- The frame of the map of the scene the server runs: where the map starts, how far it reaches and the size of its cells, in metres. The loader reads it from the game's data once per scene, apart from the game thread, as it reads the markers.
 		frame: () -> MapFrame,
-		--- Uncovers the fog of war of `player` in the circle of `radius` metres around world x and z `at`, as exploring there does: all of the circle, with the fog thinning out from its edge to twice the radius. The server holds no fog: the loader sends the circle to the loader on the player's client, which hands it to the game's own reveal within a frame, and the character's save keeps it, in every world the character enters. On a client that hosts, the hosting player's own fog uncovers on that client, with no message. A client without Enshwick is not reached, and the mod decides what to tell whoever asked. Returns once the circle is sent; any thread, on a dedicated server or a client that hosts.
-		uncover: (player: string, at: {number}, radius: number) -> (),
+		--- Uncovers the fog of war of `player` in the circle of `radius` metres around `at` on the footprint, its height ignored, as exploring there does: all of the circle, with the fog thinning out from its edge to twice the radius. The server holds no fog: the loader sends the circle to the loader on the player's client, which hands it to the game's own reveal within a frame, and the character's save keeps it, in every world the character enters. On a client that hosts, the hosting player's own fog uncovers on that client, with no message. A client without Enshwick is not reached, and the mod decides what to tell whoever asked. Returns once the circle is sent; any thread, on a dedicated server or a client that hosts.
+		uncover: (player: any, at: vector, radius: number) -> (),
 		--- Uncovers the whole map of `player`, as `uncover` does for one circle: the circle around the map's `frame` that holds all of it. On the server's game thread, as `frame` is.
-		uncover_all: (player: string) -> (),
+		uncover_all: (player: any) -> (),
 		--- Where `player` has set the waypoint all players see, in metres; nil while it is off or for an entity without one. The server keeps it only while the player plays.
-		waypoint: (player: number) -> vector?,
+		waypoint: (player: any) -> vector?,
 		--- What the map shows now as a `MapSnapshot`: every player with position and waypoint, the Flame Altars of `altars` with their bases, every marker and the map's frame. Without `altars` the snapshot has none; without a frame its `frame` is nil; on a game build without waypoints no player has one. The loader reads every marker, so take one now and then, not every step.
 		snapshot: (altars: Altars?) -> MapSnapshot,
 		--- Calls `handler` on the server's game thread when a player sets, moves or clears the waypoint all players see. The loader compares the waypoints every tenth of a second, after the step, so a change shows within that; a player's waypoint when they join counts as no change. A waypoint outside the map is not handed on, and the loader's log says so once. On a client it hears only a game that client hosts. On a game build without waypoints the loader turns them off, with the reason on the Mods screen, and none is heard.
@@ -4891,13 +4891,7 @@ declare enshwick: {
 		--- Calls `handler` on the server's game thread for each ping a player makes on the map or in the world, and each one a mod raises with `Effects.ping`. A sender is heard at most once a tenth of a second, and a ping outside the map is not handed on.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_ping: (handler: (arg1: MapPinged) -> ()) -> (),
-		--- The fog's size, scale and version.
-		state: () -> FogState,
-		--- Copies the box of `size` pixels at `min`.
-		read: (min: {number}, size: {number}) -> FogImage,
-		--- The coverage where `position` is, in metres; nil outside the fog.
-		coverage: (position: vector) -> number?,
-		--- The world's map on the server: its markers, its frame, waypoints and snapshots.
+		--- Asks the loader to copy the client's fog of war for the mod from now on, and returns it; a dedicated server has none.
 		--- Only while the mod starts, at the top level of main.luau.
 		fog_of_war: () -> FogOfWar,
 	},
@@ -4929,7 +4923,7 @@ declare enshwick: {
 		set_base_limit: (bases: number) -> (),
 		--- How the game groups altars into bases, as `grouping` reads it.
 		grouping: () -> Grouping?,
-		--- Flame Altars: their list, their bases, zones and limits.
+		--- Asks the loader to follow the Flame Altars, for `list` and the `AltarsChanged` event.
 		--- Only while the mod starts, at the top level of main.luau.
 		altars: () -> Altars,
 		--- Runs `filter` for every altar of the server's world when the loader sizes the altar zones: after altars change, and after `ZoneSizes.changed`. Filters of several mods run in load order, each on the size the last one left; the mod follows the altars too. On the server's game thread.
@@ -4944,13 +4938,13 @@ declare enshwick: {
 		--- Lets the game group every listed altar zone into its bases, up to 32 altars a Flame level in 16 bases, refusing an altar that would start a 17th base; `false` when the platform does not recognise this build's code, and the game keeps its own. The loader's hooks go in together: when one cannot be armed, none does and the game keeps 16, which `base_limit` tells from `Mod.ready` on.
 		--- Only while the mod starts, at the top level of main.luau.
 		raise_base_limit: () -> boolean,
-		--- As `Load.raise_base_limit`, up to `zones` altars a Flame level in up to `bases` bases; values below the game's own count as the game's, and the largest request of every mod holds. Bases past 16 need more of the game's code; where the loader cannot arm all of it, the game keeps 16 bases with the zones raised, which `base_limit` tells. A world lowers the bases below the request with `set_base_limit`. Unstable: needs the `unstable` feature and may change in any release.
+		--- As `Load.raise_base_limit`, up to `zones` altars a Flame level in up to `bases` bases; values below the game's own count as the game's, and the largest request of every mod holds. Bases past 16 need more of the game's code; where the loader cannot arm all of it, the game keeps 16 bases with the zones raised, which `base_limit` tells. A world lowers the bases below the request with `set_base_limit`.
 		--- Only while the mod starts, at the top level of main.luau.
 		request_base_limits: (zones: number, bases: number) -> boolean,
 		--- Adds a kind of Flame Altar, on the server and the client alike: a prop copied from the vanilla altar whose item is `item.like`, as `Load.add_prop` adds one, whose altars take the kind's zones through an altar zone filter of this mod, chained with other mods' filters in load order (see `Load.on_altar_zone`). `Altar.template` tells the kind's altars apart.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_flame_altar: (new: NewFlameAltar) -> PropId,
-		--- Keeps the altars of the kind `kind` at `max_level` or below, under the game's own limit: a craft filter of this mod (see `Load.on_craft`) refuses, on the server, the vanilla altar upgrade recipes from `max_level` up crafted at an altar of the kind, so the altar keeps its level and the player their items. A `max_level` of 0 refuses even the claim. The Flame's own upgrades, upgrade recipes added by mods and other kinds keep the game's limit. Unstable: needs the `unstable` feature and may change in any release.
+		--- Keeps the altars of the kind `kind` at `max_level` or below, under the game's own limit: a craft filter of this mod (see `Load.on_craft`) refuses, on the server, the vanilla altar upgrade recipes from `max_level` up crafted at an altar of the kind, so the altar keeps its level and the player their items. A `max_level` of 0 refuses even the claim. The Flame's own upgrades, upgrade recipes added by mods and other kinds keep the game's limit.
 		--- Only while the mod starts, at the top level of main.luau.
 		limit_altar_level: (kind: PropId, max_level: number) -> (),
 	},
@@ -4986,11 +4980,11 @@ declare enshwick: {
 		item_info: (item: number) -> ItemInfo?,
 		--- Shows `character`'s player the game's pickup message for `count` of `item`, with nothing entering the inventory: a reward that is no item, or a give made elsewhere. The server raises the game's pickup event, which every reader of it hears, the item filters but; a count above 65535 shows 65535, the game's most. On the server's game thread between steps (a game event or a `Scheduler` task). Unstable: needs the `unstable` feature and may change in any release.
 		show_pickup: (character: number, item: number, count: number) -> (),
-		--- Submits `batch` from any thread. `done` runs on the game thread after a later step with the outcome, which the returned `Ticket` also holds. A batch that breaks a limit is refused without reaching the game. If the mod is turned off first, `done` never runs.
+		--- Submits `batch` from any thread. `done` runs on the game thread after a later step with the outcome; in Rust the returned `Ticket` holds it as well, and Luau returns nothing. A batch that breaks a limit is refused without reaching the game. If the mod is turned off first, `done` never runs.
 		submit: (batch: Batch, done: (arg1: Outcome) -> ()) -> (),
-		--- Every slot of the inventory `root`, as a reader reads it on the server's game thread; empty elsewhere.
+		--- Every slot of the inventory `root`, as a reader reads it.
 		slots: (root: number) -> {Slot},
-		--- How many items `item` the inventory `root` holds, as a reader reads it on the server's game thread; 0 elsewhere.
+		--- How many items `item` the inventory `root` holds, as a reader reads it.
 		count: (root: number, item: number) -> number,
 		--- Gives `count` new items `item` to the inventory `to`, all or nothing, with the game's pickup message.
 		give: (to: number, item: number, count: number, done: (arg1: Outcome) -> ()) -> (),
@@ -5017,9 +5011,9 @@ declare enshwick: {
 		--- Adds a container type, on the server and the client alike: a prop as `Load.add_prop` adds it, whose template holds `NewContainer.slots` slots. A placed container keeps the slots it was placed with; the loader serves the vanilla template when the mod is removed, as for any prop. Unstable: needs the `unstable` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		add_container: (new: NewContainer) -> PropId,
-		--- Runs `rule` before a stack enters a slot of a container placed from `item`, the mod's own or a vanilla one; returning `false` keeps the stack out as a slot that does not take it does: it stays where it was, or goes to another slot when the game picks the slots. The mods' rules for the item are asked in load order until one keeps the stack out; the rules after it are not called for that stack. It answers for whatever moves the stack: a player's move, a swap, Take All, Deposit All or Stacks, Refill Stacks and an area deposit, one call per stack. Gives through `Inventories` and the game's own loot are not asked. It runs on the thread of the system that moves the items, in the server's world and in a client's own prediction: keep it quick and never block. Unstable: needs the `unstable` feature and may change in any release.
+		--- Runs `rule` before a stack enters a slot of a container placed from `item`, the mod's own or a vanilla one; `false` or a string keeps the stack out as a slot that does not take it does, nil or `true` lets it in, and any other value keeps it out. The mods' rules for the item are asked in load order until one keeps the stack out. It answers for whatever moves the stack, one call per stack, but not for gives through `Inventories` or the game's own loot. It runs on the thread of the system that moves the items, on both sides: keep it quick and never block. Unstable: needs the `unstable` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
-		container_rule: (item: number, rule: (arg1: ContainerPut) -> boolean?) -> (),
+		container_rule: (item: number, rule: (arg1: ContainerPut) -> any) -> (),
 	},
 	--- Damage filters, and the damage causes they do not get.
 	damage: {
@@ -5158,7 +5152,7 @@ declare enshwick: {
 		description_key: (id: string) -> string?,
 		--- The value `def` gives with `modifiers`, each an op and its value, as `aggregate` gives it.
 		aggregate: (def: StatDef, modifiers: {ScriptModifier}) -> number,
-		--- Stats of entities and items: values, modifiers, sources and definitions.
+		--- The stat values and modifiers.
 		--- Only while the mod starts, at the top level of main.luau.
 		stats: () -> Stats,
 		--- Defines the mod's stat kind `id`, named with `id!`. Its text is `<name>.name` in the mod's texts (`name_key`). Call it during `init`, on both sides.
@@ -5188,9 +5182,9 @@ declare enshwick: {
 		on_reward: (filter: (arg1: RewardGrant) -> boolean?) -> (),
 	},
 	progress: {
-		--- Answers the game's checks of `skill`: `true` unlocks it for that check, `false` locks it, nil keeps the game's answer. It runs on both sides, on the checking thread, and only for `skill`.
+		--- Answers the game's checks of `skill`: `true` unlocks it for that check, `false` or a string locks it, nil keeps the game's answer, and any other value locks. It runs on both sides, on the checking thread, and only for `skill`.
 		--- Only while the mod starts, at the top level of main.luau.
-		on_skill: (skill: Skill, handler: (arg1: SkillCheck) -> boolean?) -> (),
+		on_skill: (skill: Skill, handler: (arg1: SkillCheck) -> any) -> (),
 		--- Runs `filter` on each comfort a provider registers, as `Load.on_comfort` does: the comfort it answers registers; nil keeps the comfort as it was.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_comfort: (filter: (arg1: Comfort) -> number?) -> (),
@@ -5216,10 +5210,10 @@ declare enshwick: {
 		set: (player: number, id: number, value: number, notice: KnowledgeNotice) -> (),
 		--- Sets knowledge `id` of the world's to exactly `value`, as `Knowledge.set` does. Unstable: needs the `unstable` feature and may change in any release.
 		set_world: (id: number, value: number, notice: KnowledgeNotice) -> (),
-		--- Grants knowledge `id` of a player's to the account whose `Player.key` is `account`, as `Knowledge.grant` does: now when its character is in the game, else once its next character has loaded in this world. The loader keeps waiting changes with the world, so they outlast restarts.
-		grant_account: (account: string, id: number, grant: Grant) -> (),
-		--- Takes knowledge `id` of a player's back from the account whose `Player.key` is `account`, as `Knowledge.revoke` does, now or once its next character has loaded in this world, as `Knowledge.grant_account` waits. Unstable: needs the `unstable` feature and may change in any release.
-		revoke_account: (account: string, id: number, revoke: Revoke) -> (),
+		--- Grants knowledge `id` of a player's to the account of `player`, as `Knowledge.grant` does: now when its character is in the game, else once its next character has loaded in this world. The loader keeps waiting changes with the world, so they outlast restarts; a player named by the account alone may be offline.
+		grant_account: (player: any, id: number, grant: Grant) -> (),
+		--- Takes knowledge `id` of a player's back from the account of `player`, as `Knowledge.revoke` does, now or once its next character has loaded in this world, as `Knowledge.grant_account` waits. Unstable: needs the `unstable` feature and may change in any release.
+		revoke_account: (player: any, id: number, revoke: Revoke) -> (),
 		--- Every quest id of the running game; empty off the game thread or while no world runs.
 		quests: () -> {number},
 		--- Whether the player whose character is `player` completed quest `quest`: its bool is set for them.
@@ -5258,7 +5252,7 @@ declare enshwick: {
 		signal: (holder: Holder, signal: string, amount: number) -> (),
 		--- Every item set of the journal, the game's and mods', by category; empty until the journal reads, such as during init.
 		item_sets: () -> {ItemSetInfo},
-		--- Runs `filter` before the game pays a player for a quest, on the thread of the game's quest reward system, in load order after the filters of the mods before: it sees the quest's experience values as they left them, and keeps them, pays others or refuses, which pays nothing and still completes the quest. A payment the game puts off comes again, and the filter sees it again.
+		--- Runs `filter` before the game pays a player for a quest, on the thread of the game's quest reward system, in load order after the filters of the mods before: it sees the quest's experience values as they left them, and keeps them, pays others or refuses, which pays nothing and still completes the quest. A payment the game puts off comes again, and the filter sees it again. Unstable: needs the `typed` feature and may change in any release.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_quest_reward: (filter: (arg1: QuestPayment) -> any) -> (),
 	},
@@ -5321,15 +5315,15 @@ declare enshwick: {
 		list: () -> {CommandSet},
 	},
 	vetoes: {
-		--- Runs `filter` on each player's craft request in the server's world, before the crafting system reads it; returning `false` refuses it, and nothing is made or taken. It runs on the game thread, where `World` reads work, in the dedicated server or a hosting client.
+		--- Runs `filter` on each player's craft request in the server's world, as `Load.on_craft` does. The filter returns `false` to refuse, nil or `true` to allow; any other value refuses. It runs on the game thread, where `World` reads work.
 		--- Only while the mod starts, at the top level of main.luau.
-		on_craft: (filter: (arg1: CraftRecipeEvent) -> boolean?) -> (),
+		on_craft: (filter: (arg1: CraftRecipeEvent) -> any) -> (),
 		--- Runs `filter` after the game's cursor check allows a placement, as `Load.on_build` does. The filter returns nil or `true` to allow, `false` to refuse as the game refuses a placement without building permission, or a string to refuse and tell the builder why: a key of the mod's texts or plain words; any other value refuses. It runs on both sides, on every frame a player aims to build: the server's answer decides, so `filter` gives the same answer on both sides and stays quick.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_build: (filter: (arg1: Placement) -> any) -> (),
 	},
 	chat: {
-		--- Runs `filter` on every line a player types, inside the game's chat post on the server's game thread, after the chat mute and in load order with other mods' filters; it keeps, drops or rewrites the line. A panic turns this filter off alone, and lines pass it. On a client it runs while it hosts a game.
+		--- Runs `filter` on every line a player types, inside the game's chat post on the server's game thread, after the chat mute and in load order with other mods' filters: `false` drops the line, a string rewrites it, and nil or `true` keeps it. A script error lets the line pass. On a client it runs while it hosts a game.
 		--- Only while the mod starts, at the top level of main.luau.
 		on_chat: (filter: (arg1: ChatLine) -> any) -> (),
 		--- Calls `handler` for every line that reached the server's chat, on the game thread after the step: a player's line as the filters left it, an emote or a notice. A player's lines reach it at most eight a second; lines a mod sends never do. A panic in `handler` turns the mod off.

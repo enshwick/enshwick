@@ -618,10 +618,7 @@ pub(super) fn items(
                     let amount = icon.amount.unwrap_or(50).min(100);
                     Some(PackIcon::Tint {
                         like,
-                        tint: Tint {
-                            colour: *colour,
-                            amount,
-                        },
+                        tint: Tint::new(*colour, amount),
                     })
                 }
                 (None, Some(png)) => match files.get(png) {

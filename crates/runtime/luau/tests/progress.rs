@@ -4,19 +4,18 @@
 #[cfg(test)]
 mod tests {
     use enshwick::Entity;
-    use enshwick::abi::{Comfort, Header};
+    use enshwick::abi::Comfort;
     use enshwick::progress::Experience;
     use enshwick::test::FakeHost;
 
     use crate::harness::{logged, run};
 
     fn comfort(category: u32, value: i32) -> Comfort {
-        Comfort {
-            header: Header::of::<Comfort>(),
+        enshwick::abi::headed!(Comfort {
             category,
             value,
             position: [0.0; 3],
-        }
+        })
     }
 
     #[test]
@@ -49,7 +48,7 @@ mod tests {
             ",
         );
         let mut rows = [Experience {
-            entity: Entity(1),
+            entity: Entity::from_engine(1),
             level: 1,
             progress: 0,
             need: 100,

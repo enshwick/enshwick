@@ -38,13 +38,13 @@ impl TooltipLines<'_> {
     /// See [`Load::extend_item_tooltip`](../struct.Load.html#method.extend_item_tooltip).
     pub fn push<'a>(&mut self, label: impl Into<Label<'a>>) -> bool {
         let label = label.into();
-        let mut widget = UiWidget {
+        let mut widget = enshwick_abi::headed!(UiWidget {
             kind: UiWidget::LABEL,
             flags: label.flags,
             style: label.style.to_raw(),
             text: Str::new(label.text),
             ..UiWidget::EMPTY
-        };
+        });
         (self.host.api().ui_widget)(self.host.handle(), self.token, &raw mut widget).is_ok()
     }
 }

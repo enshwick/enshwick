@@ -432,13 +432,12 @@ fn hud_page(paint: &Painter<'_>, demo: &mut Demo) {
     if let Some(on) = paint.toggle(words("demo.marker.show").as_bytes(), demo.marker, false) {
         demo.marker = on;
         let label = words("demo.marker.label");
-        let marker = enshwick_core::abi::UiMarker {
-            header: enshwick_core::abi::Header::of::<enshwick_core::abi::UiMarker>(),
+        let marker = enshwick_abi::headed!(enshwick_core::abi::UiMarker {
             position: enshwick_core::ecs::metres(position),
             label: enshwick_core::abi::Str::new(&label),
             color: enshwick_core::abi::UiMarker::GREEN,
             marker_type: 0,
-        };
+        });
         let fast_travel = crate::engine::loader::loader()
             .and_then(|loader| crate::world::scene::marker_types(loader).ok())
             .and_then(|types| {
@@ -450,14 +449,16 @@ fn hud_page(paint: &Painter<'_>, demo: &mut Demo) {
         let mut markers = Vec::new();
         if on {
             markers.push(marker);
-            markers.extend(fast_travel.map(|marker_type| enshwick_core::abi::UiMarker {
-                position: [
-                    marker.position[0] + 20.0,
-                    marker.position[1],
-                    marker.position[2],
-                ],
-                marker_type,
-                ..marker
+            markers.extend(fast_travel.map(|marker_type| {
+                enshwick_abi::headed!(enshwick_core::abi::UiMarker {
+                    position: [
+                        marker.position[0] + 20.0,
+                        marker.position[1],
+                        marker.position[2],
+                    ],
+                    marker_type,
+                    ..marker
+                })
             }));
         }
         let _set = super::map::set(ModIndex::LOADER, &markers);

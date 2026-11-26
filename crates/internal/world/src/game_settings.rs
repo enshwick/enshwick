@@ -464,9 +464,19 @@ pub struct GameSettings {
 }
 
 /// The settings in force and the preset the world started from, as
-/// `GameSettings::read` gives them to a script.
-#[doc(hidden)]
+/// [`GameSettings::read`] gives them.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::game_settings::SettingsRead;
+///
+/// fn durability(read: &SettingsRead) -> bool {
+///     read.settings.enable_durability
+/// }
+/// ```
 #[derive(Clone, Copy, Debug, crate::Script)]
+#[non_exhaustive]
 pub struct SettingsRead {
     /// The settings.
     pub settings: Settings,
@@ -474,32 +484,31 @@ pub struct SettingsRead {
     pub preset: GameSettingsPreset,
 }
 
-#[crate::script(reads)]
-impl GameSettings {
-    /// The settings in force and the world's preset, as
-    /// [`GameSettings::read`] reads them.
-    #[script(name = "read")]
-    pub(crate) fn read_script(&self) -> Option<SettingsRead> {
-        GameSettings::read(self).map(|(settings, preset)| SettingsRead { settings, preset })
-    }
-}
-
 #[crate::script(settings)]
 impl GameSettings {
-    /// The settings in force and the preset they came from; `None` off the
-    /// game thread or while no world runs.
+    /// The settings in force and the preset they came from.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::WrongThread`] off the game thread and
+    /// [`WorldError::Unavailable`] while no world runs.
     ///
     /// # Examples
     ///
     /// ```
-    /// fn durability(settings: &enshwick::game_settings::GameSettings) -> Option<bool> {
-    ///     settings.read().map(|(now, _preset)| now.enable_durability)
+    /// use enshwick::WorldError;
+    ///
+    /// fn durability(settings: &enshwick::game_settings::GameSettings) -> Result<bool, WorldError> {
+    ///     Ok(settings.read()?.settings.enable_durability)
     /// }
     /// ```
-    #[must_use]
-    pub fn read(&self) -> Option<(Settings, GameSettingsPreset)> {
-        let (bytes, preset) = self.raw().ok()?;
-        Some((self.offsets.decode(&bytes, &self.enums), preset))
+    #[script]
+    pub fn read(&self) -> Result<SettingsRead, WorldError> {
+        let (bytes, preset) = self.raw()?;
+        Ok(SettingsRead {
+            settings: self.offsets.decode(&bytes, &self.enums),
+            preset,
+        })
     }
 
     /// Lets `change` edit the settings in force and applies them as the
@@ -643,8 +652,7 @@ impl crate::script::Bound for GameSettings {
     const NAME: &'static str = "game_settings";
     const DOC: &'static str =
         "The server's game settings: read them, change them for now, or keep a change.";
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
-        &[Self::SCRIPT_SETTINGS, Self::SCRIPT_READS];
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_SETTINGS];
 
     fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
         load.base_mut().game_settings()

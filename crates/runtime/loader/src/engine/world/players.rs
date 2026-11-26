@@ -50,8 +50,12 @@ fn in_game(
     // SAFETY: `reader` returned the live server on its game thread, which
     // alone writes it; the table places its slots.
     Ok(unsafe { occupied(layout.player_slots(), server) }
-        .filter(move |&(_, _, state, found)| state == SLOT_IN_GAME && wanted(Entity(found)))
-        .map(move |(index, slot, _, found)| player_at(layout, slot, index, Entity(found), infos)))
+        .filter(move |&(_, _, state, found)| {
+            state == SLOT_IN_GAME && wanted(Entity::from_engine(found))
+        })
+        .map(move |(index, slot, _, found)| {
+            player_at(layout, slot, index, Entity::from_engine(found), infos)
+        }))
 }
 
 /// The character entity of each player in game, as [`players`] lists them,
@@ -168,7 +172,8 @@ pub(super) unsafe fn guids(
         // SAFETY: `slot` is one of the caller's player slots, which holds the
         // GUID's bytes at `at`, inside the slot.
         let guid: [u8; size_of::<CharacterId>()] = unsafe { read(slot, at) };
-        (guid != [0; size_of::<CharacterId>()]).then_some((Entity(entity), CharacterId(guid)))
+        (guid != [0; size_of::<CharacterId>()])
+            .then_some((Entity::from_engine(entity), CharacterId(guid)))
     })
 }
 

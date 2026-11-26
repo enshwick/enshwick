@@ -38,11 +38,7 @@ mod tests {
     impl Mod for Kinds {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.derive_recipes("you.kinds", |recipe| {
-                recipe.kind().map(|kind| Derived {
-                    output: copies(kind),
-                    cost: 1,
-                    workshop: None,
-                })
+                recipe.kind().map(|kind| Derived::new(copies(kind), 1))
             })?;
             load.change_recipes(
                 &RecipesChange::new(

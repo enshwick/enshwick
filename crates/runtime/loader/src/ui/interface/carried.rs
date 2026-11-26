@@ -107,15 +107,17 @@ pub(crate) fn listed<R>(put: impl FnOnce(&[ClientWindowItem]) -> R) -> R {
         *lent = listing;
         let raw: Vec<ClientWindowItem> = lent
             .iter()
-            .map(|(window, id, item)| ClientWindowItem {
-                kind: item.kind,
-                field: item.field,
-                flags: item.flags,
-                window: Str::new(window),
-                item: Str::new(id),
-                label: Str::new(&item.label),
-                line: Str::new(&item.line),
-                ..ClientWindowItem::EMPTY
+            .map(|(window, id, item)| {
+                enshwick_abi::headed!(ClientWindowItem {
+                    kind: item.kind,
+                    field: item.field,
+                    flags: item.flags,
+                    window: Str::new(window),
+                    item: Str::new(id),
+                    label: Str::new(&item.label),
+                    line: Str::new(&item.line),
+                    ..ClientWindowItem::EMPTY
+                })
             })
             .collect();
         put(&raw)

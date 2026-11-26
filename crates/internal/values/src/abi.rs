@@ -34,6 +34,10 @@
     serde::Deserialize,
 )]
 #[shape(api = "guid")]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct Guid(pub [u8; 16]);
 
 /// A game resource's key: its GUID, its type hash and part.
@@ -49,6 +53,10 @@ pub struct Guid(pub [u8; 16]);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a value of fixed parts, which never gains one"
+)]
 pub struct ResourceKey {
     /// The resource's GUID.
     pub guid: Guid,

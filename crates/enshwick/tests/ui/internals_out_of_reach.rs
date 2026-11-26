@@ -70,7 +70,7 @@ fn reach_vetoes(load: &mut enshwick::Load<'_>) {
     use enshwick::vetoes::LoadMethods as _;
     use enshwick::vetoes::script::LoadMethods as _;
     let base = load.base_mut();
-    let _ = base.build_filter(|_| enshwick::vetoes::BuildVerdict::Allow);
+    let _ = base.build_filter(|_| enshwick::vetoes::Verdict::Pass);
 }
 
 fn reach_ui(load: &mut enshwick::Load<'_>, guid: Guid) {
@@ -98,8 +98,8 @@ fn reach(host: Host, scheduler: Scheduler, ty: ComponentType) {
     host.scope(|| ());
     let _ = Scheduler::get(ModHandle(1));
     scheduler.run_due(0);
-    let _ = ty.read(host, Entity(2));
-    let _ = CraftRecipeEvent::new(Entity(2), None, RecipeId::new(1), 1);
+    let _ = ty.read(host, Entity::from_engine(2));
+    let _ = CraftRecipeEvent::new(Entity::from_engine(2), None, RecipeId::new(1), 1);
     enshwick::__private::as_loader(|| ());
     enshwick::__private::refresh_levels();
     let _ = enshwick::__private::install_host;

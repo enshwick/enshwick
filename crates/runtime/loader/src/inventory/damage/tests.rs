@@ -288,7 +288,7 @@ fn skips_the_death(rflags: u64) -> bool {
     rflags & (CARRY | ZERO) == 0
 }
 
-const ROW: Entity = Entity(7);
+const ROW: Entity = Entity::from_engine(7);
 
 #[test]
 fn a_fall_a_filter_makes_lethal_records_the_death() {
@@ -319,17 +319,29 @@ fn a_lethal_fall_a_filter_spares_records_no_death() {
 #[test]
 fn a_fall_the_filters_leave_alone_or_that_takes_nothing_clears_the_note() {
     let _lethal = fall_kept(ROW, 30, 10, |damage| damage * 3);
-    assert_eq!(fall_kept(Entity(8), 30, 40, |_| unreachable!()), 40);
+    assert_eq!(
+        fall_kept(Entity::from_engine(8), 30, 40, |_| unreachable!()),
+        40
+    );
     assert_eq!(WRITTEN.take(), None, "took nothing");
     let _lethal = fall_kept(ROW, 30, 10, |damage| damage * 3);
-    assert_eq!(fall_kept(Entity(8), 30, 10, |damage| damage), 10);
+    assert_eq!(
+        fall_kept(Entity::from_engine(8), 30, 10, |damage| damage),
+        10
+    );
     assert_eq!(WRITTEN.take(), None, "left alone");
 }
 
 #[test]
 fn a_note_of_another_row_or_none_leaves_the_game_s_decision() {
-    assert_eq!(decided(Some((Entity(8), 30)), ROW, LETHAL), LETHAL);
-    assert_eq!(decided(Some((Entity(8), 0)), ROW, ABOVE), ABOVE);
+    assert_eq!(
+        decided(Some((Entity::from_engine(8), 30)), ROW, LETHAL),
+        LETHAL
+    );
+    assert_eq!(
+        decided(Some((Entity::from_engine(8), 0)), ROW, ABOVE),
+        ABOVE
+    );
     assert_eq!(decided(None, ROW, LETHAL), LETHAL);
 }
 

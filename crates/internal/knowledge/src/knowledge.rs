@@ -63,9 +63,10 @@ use crate::WorldError;
 pub use crate::abi::KnowledgeId;
 #[cfg(feature = "unstable")]
 use crate::abi::KnowledgeInput;
-use crate::abi::{Header, KnowledgeChange, KnowledgeInfo, Status};
+use crate::abi::{KnowledgeChange, KnowledgeInfo, Status};
 use crate::{Entity, Host, PlayerKey};
-use enshwick_world::__internal::world_status;
+use enshwick_world::__internal::{player_key, world_status};
+use enshwick_world::world::PlayerRef;
 
 #[cfg(feature = "typed")]
 pub(crate) mod rules;
@@ -272,15 +273,14 @@ impl crate::script::Bound for Knowledge {
 #[crate::script(known)]
 impl Knowledge {
     fn read(&self, entity: Entity, id: KnowledgeId) -> Option<Known> {
-        let mut info = KnowledgeInfo {
-            header: Header::of::<KnowledgeInfo>(),
+        let mut info = enshwick_abi::headed!(KnowledgeInfo {
             id: KnowledgeId::default(),
             kind: 0,
             scope: 0,
             reserved: 0,
             value: 0,
             flags: 0,
-        };
+        });
         let status = (self.host.api().knowledge)(self.host.handle(), entity, id, &raw mut info);
         (status == Status::OK).then(|| Known::from_info(&info))
     }
@@ -362,7 +362,7 @@ impl Knowledge {
     /// ```
     #[script]
     pub fn grant_world(&self, id: KnowledgeId, grant: Grant) -> Result<(), WorldError> {
-        self.grant(Entity(0), id, grant)
+        self.grant(Entity::from_engine(0), id, grant)
     }
 
     /// Takes knowledge `id` back from the player whose character is
@@ -433,7 +433,7 @@ impl Knowledge {
     #[cfg(feature = "unstable")]
     #[script]
     pub fn revoke_world(&self, id: KnowledgeId, revoke: Revoke) -> Result<(), WorldError> {
-        self.revoke(Entity(0), id, revoke)
+        self.revoke(Entity::from_engine(0), id, revoke)
     }
 
     /// Sets knowledge `id` of the player whose character is `player` (or of
@@ -513,20 +513,21 @@ impl Knowledge {
         value: u32,
         notice: KnowledgeNotice,
     ) -> Result<(), WorldError> {
-        self.set(Entity(0), id, value, notice)
+        self.set(Entity::from_engine(0), id, value, notice)
     }
 
-    /// Grants knowledge `id` of a player's to the account whose
-    /// `Player::key` is `account`, as
+    /// Grants knowledge `id` of a player's to the account of `player`, as
     /// [`Knowledge::grant`] does: now when its character is in the game,
     /// else once its next character has loaded in this world. The loader
-    /// keeps waiting changes with the world, so they outlast restarts.
+    /// keeps waiting changes with the world, so they outlast restarts; a
+    /// player named by the account alone may be offline.
     ///
     /// # Errors
     ///
     /// [`WorldError::Refused`] for an id the game does not know, an id of
     /// the world's or a grant that does not fit the id's kind, and as for
     /// [`Knowledge::grant`] when the character is in the game;
+    /// [`WorldError::Gone`] for a character no connected player has;
     /// [`WorldError::WrongThread`] off the game thread;
     /// [`WorldError::Unavailable`] while no world runs.
     ///
@@ -542,16 +543,22 @@ impl Knowledge {
     #[script]
     pub fn grant_account(
         &self,
-        account: PlayerKey,
+        player: impl Into<PlayerRef>,
         id: KnowledgeId,
         grant: Grant,
     ) -> Result<(), WorldError> {
         let (kind, value) = grant.raw();
-        self.change(account, Entity(0), id, kind, value, KnowledgeChange::GRANT)
+        self.change(
+            player_key(self.host, player.into())?,
+            Entity::from_engine(0),
+            id,
+            kind,
+            value,
+            KnowledgeChange::GRANT,
+        )
     }
 
-    /// Takes knowledge `id` of a player's back from the account whose
-    /// `Player::key` is `account`, as
+    /// Takes knowledge `id` of a player's back from the account of `player`, as
     /// [`Knowledge::revoke`] does, now or once its next character has
     /// loaded in this world, as [`Knowledge::grant_account`] waits.
     ///
@@ -574,12 +581,19 @@ impl Knowledge {
     #[script]
     pub fn revoke_account(
         &self,
-        account: PlayerKey,
+        player: impl Into<PlayerRef>,
         id: KnowledgeId,
         revoke: Revoke,
     ) -> Result<(), WorldError> {
         let (kind, value) = revoke.raw();
-        self.change(account, Entity(0), id, kind, value, KnowledgeChange::REVOKE)
+        self.change(
+            player_key(self.host, player.into())?,
+            Entity::from_engine(0),
+            id,
+            kind,
+            value,
+            KnowledgeChange::REVOKE,
+        )
     }
 
     fn change(
@@ -591,8 +605,7 @@ impl Knowledge {
         value: u32,
         op: u8,
     ) -> Result<(), WorldError> {
-        let change = KnowledgeChange {
-            header: Header::of::<KnowledgeChange>(),
+        let change = enshwick_abi::headed!(KnowledgeChange {
             account,
             entity,
             id,
@@ -600,7 +613,7 @@ impl Knowledge {
             kind,
             op,
             reserved: 0,
-        };
+        });
         world_status((self.host.api().change_knowledge)(
             self.host.handle(),
             &raw const change,

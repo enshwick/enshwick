@@ -26,7 +26,7 @@ use std::time::{Duration, Instant};
 
 use enshwick_core::__private::rules::inventory_checks as checks;
 use enshwick_core::abi::{
-    Header, HookFlags, InventoryOp, InventoryOpResult, InventoryRequest, InventoryResult,
+    HookFlags, InventoryOp, InventoryOpResult, InventoryRequest, InventoryResult,
     InventoryResultFn, ItemTypeInfo, Registers, Side,
 };
 use run::run;
@@ -760,7 +760,7 @@ pub(crate) fn submit(
     let queued = STATE.queue.push(Request {
         owner,
         flags: request.flags,
-        actor: request.actor.0,
+        actor: request.actor.get(),
         ops,
         done,
         user: user.expose_provenance(),
@@ -803,8 +803,7 @@ pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemTypeInfo, Item
     let executor = executor(loader).ok_or(ItemInfoError::Unread)?;
     let access = crate::engine::world::access(&"item lookup").ok_or(ItemInfoError::NoWorld)?;
     let info = item_info_at(loader, &access, item)?.ok_or(ItemInfoError::NoItem)?;
-    Ok(ItemTypeInfo {
-        header: Header::of::<ItemTypeInfo>(),
+    Ok(enshwick_abi::headed!(ItemTypeInfo {
         id: enshwick_core::ItemId::new(item),
         // SAFETY: the lookup returned the item's non-null `ItemInfo` (checked
         // earlier), live while `access` is held, with `maxStackSize` at the reflected offset.
@@ -829,7 +828,7 @@ pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemTypeInfo, Item
                 unsafe { enshwick_core::raw::read_at(info, at) }
             },
         ),
-    })
+    }))
 }
 
 /// Answers the requests that waited too long and hands out the results; on
@@ -840,12 +839,11 @@ pub(crate) fn deliver(now: Instant) {
         if crate::engine::loader::is_off(result.owner) {
             continue;
         }
-        let data = InventoryResult {
-            header: Header::of::<InventoryResult>(),
+        let data = enshwick_abi::headed!(InventoryResult {
             outcome: result.outcome,
             op_count: u32::try_from(result.results.len()).unwrap_or(0),
             ops: result.results.as_ptr(),
-        };
+        });
         // SAFETY: the request's `InventoryResultFn` lives in the mod's DLL,
         // which stays loaded for the process, and takes the `user` word the
         // mod passed; `data` and its results outlive the call, and by the

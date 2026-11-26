@@ -30,7 +30,7 @@ fn index(loader: &Loader, pending: &[Pending]) -> Option<Index> {
     let places = crate::world::entities::with_component(loader, ty).ok()?;
     let mut unread = 0usize;
     for place in places {
-        let entity = place.entity.0;
+        let entity = place.entity.get();
         let Ok(template) = crate::engine::world::template(loader, place.entity) else {
             unread += 1;
             continue;

@@ -41,14 +41,14 @@ struct Owner {
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     // `<this mod>:bonus`; another mod opens it as "<this mod>:bonus".
     let bonus = load.item_data::<Bonus>("bonus")?;
-    let ring = ItemInstance { pide: Entity(900), item: enshwick::ItemId::new(0x5e01) };
+    let ring = ItemInstance { pide: Entity::from_engine(900), item: enshwick::ItemId::new(0x5e01) };
     if bonus.get(ring).is_none() {
         let _set = bonus.set(ring, &Bonus { fire: 12 });
     }
 
     // `<this mod>:owner`, kept on the server alone.
     let owners = load.entity_data::<Owner>("owner", Replication::Server)?;
-    let chest = Entity(4_200);
+    let chest = Entity::from_engine(4_200);
     if owners.get(chest).is_none() {
         let _set = owners.set(chest, &Owner { player: 7 });
     }
@@ -83,7 +83,7 @@ end
   or an item without an entity of its own.
 - **An entity the save keeps in place**: a placed prop, an altar, a
   container, a survivor. A player's character is not one, so entity data
-  refuses it with `SetError::NotKept`; keep player data by `PlayerKey`.
+  refuses it with `SetItemDataError::NotKept`; keep player data by `PlayerKey`.
 
 ## Kinds
 
@@ -124,7 +124,7 @@ Item data is set on the server, or on a client while it hosts, once the
 world has loaded. Entity data is set on the server's game thread, once the
 world has loaded.
 
-`set` and `remove` can fail. They return a `SetError` in these cases:
+`set` and `remove` can fail. They return a `SetItemDataError` in these cases:
 
 - the value does not encode or is too long;
 - the call came from the wrong place: a client alone for item data, or off

@@ -1,7 +1,6 @@
 //! The mod's actions as players and the console run them: console answers,
 //! other mods' commands, chat commands and the windows actions show.
 
-use enshwick_core::abi::Header;
 use enshwick_core::abi::PlayerInfo;
 use enshwick_core::abi::Str;
 
@@ -96,15 +95,14 @@ impl Installed {
     /// use enshwick::abi::{ActionCall, Header, PlayerInfo};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let player = PlayerInfo {
-    ///     header: Header::of::<PlayerInfo>(),
+    /// let player = enshwick::abi::headed!(PlayerInfo {
     ///     slot: 0,
-    ///     entity: enshwick::Entity(2),
+    ///     entity: enshwick::Entity::from_engine(2),
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
     ///     name: [0; 128],
-    /// };
+    /// });
     /// assert_eq!(loader.ask_actions(ActionCall::ALLOWED, &player, 0, "", ""), None);
     /// ```
     #[must_use]
@@ -161,15 +159,14 @@ impl Installed {
     /// use enshwick::abi::{Header, PlayerInfo};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let player = PlayerInfo {
-    ///     header: Header::of::<PlayerInfo>(),
+    /// let player = enshwick::abi::headed!(PlayerInfo {
     ///     slot: 0,
-    ///     entity: enshwick::Entity(2),
+    ///     entity: enshwick::Entity::from_engine(2),
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
     ///     name: [0; 128],
-    /// };
+    /// });
     /// assert_eq!(loader.type_in_chat(&player, 0, "/adm online"), None);
     /// ```
     #[cfg(feature = "unstable")]
@@ -223,15 +220,14 @@ impl Installed {
     /// use enshwick::abi::{Header, PlayerInfo};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let player = PlayerInfo {
-    ///     header: Header::of::<PlayerInfo>(),
+    /// let player = enshwick::abi::headed!(PlayerInfo {
     ///     slot: 0,
-    ///     entity: enshwick::Entity(2),
+    ///     entity: enshwick::Entity::from_engine(2),
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
     ///     name: [0; 128],
-    /// };
+    /// });
     /// assert!(loader.carried_windows(&player, 0).is_empty());
     /// ```
     #[cfg(feature = "unstable")]
@@ -335,15 +331,14 @@ impl Installed {
     /// use enshwick::abi::{Header, PlayerInfo};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let player = PlayerInfo {
-    ///     header: Header::of::<PlayerInfo>(),
+    /// let player = enshwick::abi::headed!(PlayerInfo {
     ///     slot: 0,
-    ///     entity: enshwick::Entity(2),
+    ///     entity: enshwick::Entity::from_engine(2),
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
     ///     name: [0; 128],
-    /// };
+    /// });
     /// loader.close_window(&player, "panel");
     /// assert!(loader.carried_windows(&player, 0).is_empty());
     /// ```
@@ -382,15 +377,14 @@ impl Installed {
     /// use enshwick::abi::{Header, PlayerInfo};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let player = PlayerInfo {
-    ///     header: Header::of::<PlayerInfo>(),
+    /// let player = enshwick::abi::headed!(PlayerInfo {
     ///     slot: 0,
-    ///     entity: enshwick::Entity(2),
+    ///     entity: enshwick::Entity::from_engine(2),
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
     ///     name: [0; 128],
-    /// };
+    /// });
     /// assert_eq!(loader.set_waypoint(&player, 0, [10.0, 0.0, 10.0]), None);
     /// ```
     #[cfg(feature = "unstable")]
@@ -499,15 +493,14 @@ impl Installed {
         let Some(actions) = table::with(None, |s| s.actions.callback) else {
             return;
         };
-        let who = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let who = enshwick_core::headed!(PlayerInfo {
             slot: u32::MAX,
-            entity: enshwick_core::Entity(0),
+            entity: enshwick_core::Entity::from_engine(0),
             key: player,
             permissions: 0,
             name_len: 0,
             name: [0; 128],
-        };
+        });
         let closed = enshwick_core::abi::ActionCall::WINDOW_CLOSED;
         let _heard = ask(
             actions,
@@ -532,15 +525,14 @@ impl Installed {
     /// use enshwick::actions::ActionTarget;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let player = PlayerInfo {
-    ///     header: Header::of::<PlayerInfo>(),
+    /// let player = enshwick::abi::headed!(PlayerInfo {
     ///     slot: 0,
-    ///     entity: enshwick::Entity(2),
+    ///     entity: enshwick::Entity::from_engine(2),
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
     ///     name: [0; 128],
-    /// };
+    /// });
     /// let chest = ActionTarget::at([1.0, 2.0, 3.0]);
     /// assert_eq!(loader.ask_action_at(&player, 0, "open", "", chest), None);
     /// ```
@@ -659,8 +651,7 @@ fn tell_refused(
 ) {
     let _heard = ask_call(
         actions,
-        enshwick_core::abi::ActionCall {
-            header: Header::of::<enshwick_core::abi::ActionCall>(),
+        enshwick_core::headed!(enshwick_core::abi::ActionCall {
             kind: enshwick_core::abi::ActionCall::REFUSED,
             language: 0,
             player: core::ptr::from_ref(player),
@@ -671,7 +662,7 @@ fn tell_refused(
             word: Str::EMPTY,
             via,
             reason,
-        },
+        }),
     );
 }
 
@@ -701,8 +692,7 @@ pub(crate) fn ask(
     extra: &str,
     target: enshwick_core::abi::ActionTarget,
 ) -> String {
-    let mut call = enshwick_core::abi::ActionCall {
-        header: Header::of::<enshwick_core::abi::ActionCall>(),
+    let mut call = enshwick_core::headed!(enshwick_core::abi::ActionCall {
         kind,
         language,
         player: core::ptr::from_ref(player),
@@ -718,7 +708,7 @@ pub(crate) fn ask(
         word: Str::EMPTY,
         via: 0,
         reason: 0,
-    };
+    });
     let typed = [
         enshwick_core::abi::ActionCall::CONSOLE,
         enshwick_core::abi::ActionCall::CHAT,

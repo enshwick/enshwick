@@ -365,7 +365,7 @@ fn a_regular_gets_more(loader: &enshwick::test::Installed) {
         item: 1,
         count: 1,
         player: 0x00ab_cdef_0123_4567,
-        character: Entity(10),
+        character: Entity::from_engine(10),
         deal: Deal::SELL,
     };
     assert_eq!(loader.ask_point(&price, 10), Decision::Changed(12));

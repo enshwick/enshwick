@@ -7,7 +7,7 @@ use core::ffi::c_void;
 use core::time::Duration;
 
 use enshwick_core::abi::{
-    ControlEvent, ControlFn, ControlSpec, Header, PlayerInfo, Status, Str, read_headed,
+    ControlEvent, ControlFn, ControlSpec, PlayerInfo, Status, Str, read_headed,
 };
 use enshwick_core::controls::{
     GameAction, Key, Tracker, chords, is_valid_name, phases, valid_phases,
@@ -187,14 +187,13 @@ fn advance(fake: &mut FakeControls, after: Duration) -> u64 {
 
 fn deliver(calls: &[Call], server: Option<&PlayerInfo>) -> usize {
     for call in calls {
-        let event = ControlEvent {
-            header: Header::of::<ControlEvent>(),
+        let event = enshwick_core::headed!(ControlEvent {
             name: Str::new(&call.name),
             kind: call.kind,
             server: u8::from(server.is_some()),
             reserved: [0; 3],
             player: server.map_or(core::ptr::null(), core::ptr::from_ref),
-        };
+        });
         // SAFETY: `event` lives for the call and `user` is the pointer the
         // mod declared `callback` with.
         call.handler
@@ -287,21 +286,20 @@ impl Installed {
     /// use enshwick::controls::GameAction;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let player = PlayerInfo {
-    ///     header: Header::of::<PlayerInfo>(),
+    /// let player = enshwick::abi::headed!(PlayerInfo {
     ///     slot: 0,
-    ///     entity: enshwick::Entity(2),
+    ///     entity: enshwick::Entity::from_engine(2),
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
     ///     name: [0; 128],
-    /// };
+    /// });
     /// let held = [GameAction::ContextualAction];
     /// assert_eq!(loader.game_actions(&player, &held, Duration::from_millis(50)), 0);
     /// ```
     #[must_use = "the count says whether a control fired"]
     pub fn game_actions(&self, player: &PlayerInfo, held: &[GameAction], after: Duration) -> usize {
-        let entity = player.entity.0;
+        let entity = player.entity.get();
         let calls = with(Vec::new(), |s| {
             if s.host.base.side == enshwick_core::abi::Side::CLIENT {
                 return Vec::new();
@@ -408,8 +406,7 @@ mod tests {
     }
 
     fn declared(key: u32, fires: u32) -> Status {
-        let spec = ControlSpec {
-            header: Header::of::<ControlSpec>(),
+        let spec = enshwick_abi::headed!(ControlSpec {
             name: Str::new("horn"),
             label: Str::new("Horn"),
             key,
@@ -418,7 +415,7 @@ mod tests {
             fires,
             hold_ms: 500,
             action: Str::EMPTY,
-        };
+        });
         control(
             ModHandle(1),
             &raw const spec,

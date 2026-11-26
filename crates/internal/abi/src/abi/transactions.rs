@@ -17,8 +17,7 @@ use crate::abi::{Entity, Header, ItemId, Status, Voxel};
 /// ```
 /// use enshwick::abi::{Header, TerrainEdit, TransactionOp};
 ///
-/// let dig = TerrainEdit {
-///     header: Header::of::<TerrainEdit>(),
+/// let dig = enshwick::abi::headed!(TerrainEdit {
 ///     kind: TerrainEdit::DIG,
 ///     shape: TerrainEdit::ROUND,
 ///     flags: 0,
@@ -27,12 +26,16 @@ use crate::abi::{Entity, Header, ItemId, Status, Voxel};
 ///     radius: 3.0,
 ///     height: 0.0,
 ///     protect: [0; 16],
-/// };
+/// });
 /// let op = TransactionOp { kind: TransactionOp::TERRAIN, reserved: 0, data: (&raw const dig).cast() };
 /// assert_eq!(op.kind, TransactionOp::TERRAIN);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct TransactionOp {
     /// One of the kinds below; the loader refuses a kind it does not know.
     pub kind: u32,
@@ -68,17 +71,17 @@ impl TransactionOp {
 /// ```
 /// use enshwick::abi::{Header, PropPlace};
 ///
-/// let chest = PropPlace {
-///     header: Header::of::<PropPlace>(),
+/// let chest = enshwick::abi::headed!(PropPlace {
 ///     item: enshwick::ItemId::new(0x1234),
 ///     reserved: 0,
 ///     position: [100.0, 40.0, 100.0],
 ///     orientation: [0.0, 0.0, 0.0, 1.0],
-/// };
+/// });
 /// assert_eq!(chest.item, enshwick::ItemId::new(0x1234));
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct PropPlace {
     /// Size and version of this struct.
     pub header: Header,
@@ -101,11 +104,12 @@ impl_headed!(PropPlace);
 /// ```
 /// use enshwick::abi::{Header, PropRemove};
 ///
-/// let gone = PropRemove { header: Header::of::<PropRemove>(), entity: enshwick::Entity(77), flags: 0 };
+/// let gone = enshwick::abi::headed!(PropRemove { entity: enshwick::Entity::from_engine(77), flags: 0 });
 /// assert_eq!(gone.flags & PropRemove::DISCARD_STATE, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct PropRemove {
     /// Size and version of this struct.
     pub header: Header,
@@ -132,17 +136,17 @@ impl PropRemove {
 /// use enshwick::abi::{Header, Voxel, VoxelWrite};
 ///
 /// let stone = [Voxel { kind: Voxel::BUILDING, material: 0x83, fill: 0, reserved: 0 }; 8];
-/// let write = VoxelWrite {
-///     header: Header::of::<VoxelWrite>(),
+/// let write = enshwick::abi::headed!(VoxelWrite {
 ///     min: [200, 80, 200],
 ///     size: [2, 2, 2],
 ///     voxels: stone.as_ptr(),
 ///     count: 8,
-/// };
+/// });
 /// assert_eq!(write.count, 8);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct VoxelWrite {
     /// Size and version of this struct.
     pub header: Header,
@@ -167,11 +171,12 @@ impl_headed!(VoxelWrite);
 /// ```
 /// use enshwick::abi::{Header, VoxelRegion};
 ///
-/// let region = VoxelRegion { header: Header::of::<VoxelRegion>(), min: [200, 80, 200], size: [8, 4, 8] };
+/// let region = enshwick::abi::headed!(VoxelRegion { min: [200, 80, 200], size: [8, 4, 8] });
 /// assert_eq!(region.size[1], 4);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct VoxelRegion {
     /// Size and version of this struct.
     pub header: Header,
@@ -191,17 +196,17 @@ impl_headed!(VoxelRegion);
 /// ```
 /// use enshwick::abi::{BlockPlace, Header};
 ///
-/// let block = BlockPlace {
-///     header: Header::of::<BlockPlace>(),
+/// let block = enshwick::abi::headed!(BlockPlace {
 ///     shape: enshwick::ItemId::new(0x1234),
 ///     material: enshwick::ItemId::new(0x5678),
 ///     position: [100.0, 40.0, 100.0],
 ///     rotation: [0.0, 0.0, 0.0, 1.0],
-/// };
+/// });
 /// assert_eq!(block.rotation[3], 1.0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct BlockPlace {
     /// Size and version of this struct.
     pub header: Header,
@@ -227,8 +232,7 @@ impl_headed!(BlockPlace);
 /// ```
 /// use enshwick::abi::{Header, Status, TransactionInfo};
 ///
-/// let info = TransactionInfo {
-///     header: Header::of::<TransactionInfo>(),
+/// let info = enshwick::abi::headed!(TransactionInfo {
 ///     state: TransactionInfo::APPLIED,
 ///     reason: Status::OK,
 ///     ops: 2,
@@ -238,11 +242,12 @@ impl_headed!(BlockPlace);
 ///     reserved: 0,
 ///     holds: 0,
 ///     created: 0,
-/// };
+/// });
 /// assert_eq!(info.applied, info.ops);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct TransactionInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -352,15 +357,15 @@ pub type TransactionSettledFn =
 ///
 /// ```
 /// use enshwick::abi::{Header, PropPlacementInfo};
-/// let info = PropPlacementInfo {
-///     header: Header::of::<PropPlacementInfo>(),
+/// let info = enshwick::abi::headed!(PropPlacementInfo {
 ///     template: enshwick::content::Guid::NIL,
 ///     min: [0.0; 3], max: [0.0; 3], flags: 0,
-/// };
+/// });
 /// assert_eq!(info.flags & PropPlacementInfo::HAS_LOCAL_BOX, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct PropPlacementInfo {
     /// Size and version of this struct.
     pub header: Header,

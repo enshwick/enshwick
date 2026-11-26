@@ -3,7 +3,7 @@ use super::*;
 fn roll(kind: Kinds) -> Roll {
     Roll {
         kind,
-        entity: Some(Entity(5)),
+        entity: Some(Entity::from_engine(5)),
         node: None,
         labels: None,
         boss: false,

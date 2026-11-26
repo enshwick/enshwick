@@ -5,7 +5,7 @@
 mod tests {
     use std::sync::OnceLock;
 
-    use enshwick::abi::{Header, PlayerInfo, Status, TeleportRequest};
+    use enshwick::abi::{PlayerInfo, Status, TeleportRequest};
     use enshwick::content::EngineFacts;
     use enshwick::effects::{Effects, Teleport};
     use enshwick::test::{FakeHost, facts};
@@ -31,15 +31,14 @@ mod tests {
     );
 
     fn player(entity: u32, key: u64) -> PlayerInfo {
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: Entity(entity),
+            entity: Entity::from_engine(entity),
             key: PlayerKey::new(key),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        }
+        })
     }
 
     /// A `CurrentTransform` standing at `[x, y, z]` metres.
@@ -57,9 +56,9 @@ mod tests {
         let loader = host
             .player(player(5, 7))
             .player(player(6, 8))
-            .template(Entity(5), enshwick::content::Guid([5; 16]))
-            .template(Entity(6), enshwick::content::Guid([6; 16]))
-            .component(Entity(6), transform, &standing([40, 12, -3]))
+            .template(Entity::from_engine(5), enshwick::content::Guid([5; 16]))
+            .template(Entity::from_engine(6), enshwick::content::Guid([6; 16]))
+            .component(Entity::from_engine(6), transform, &standing([40, 12, -3]))
             .install();
         // SAFETY: the three functions are the exports of this file's `declare_mod!`.
         let status =
@@ -91,10 +90,10 @@ mod tests {
 
         let teleports = loader.teleports();
         assert_eq!(teleports.len(), 2);
-        assert_eq!(teleports[0].entity, Entity(5));
+        assert_eq!(teleports[0].entity, Entity::from_engine(5));
         assert_eq!(teleports[0].flags, TeleportRequest::ORIENTED);
         assert_eq!(teleports[0].position, [1.0, 2.0, 3.0]);
-        assert_eq!(teleports[1].entity, Entity(5));
+        assert_eq!(teleports[1].entity, Entity::from_engine(5));
         assert_eq!(
             teleports[1].flags,
             TeleportRequest::BEST_SPAWN,

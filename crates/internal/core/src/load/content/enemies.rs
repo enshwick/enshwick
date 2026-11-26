@@ -15,6 +15,8 @@ impl Load<'_> {
     /// [`NewEnemy`] gives them, on the server and the client alike. Spawn it
     /// by its template, as spawners and `effects::spawn` do.
     ///
+    /// Unstable: needs the `typed` feature and may change in any release.
+    ///
     /// # Errors
     ///
     /// As [`Load::add_template`], and [`Off`] for level 0.
@@ -28,7 +30,10 @@ impl Load<'_> {
     /// const WOLF: Guid = Guid::parse("0d75b9a9-7e48-4f3a-bf2a-19bf6021f531");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let elder = load.add_enemy(NewEnemy { level: Some(20), damage: Some(1.5), ..NewEnemy::new(id!("elder-wolf"), WOLF) })?;
+    ///     let mut enemy = NewEnemy::new(id!("elder-wolf"), WOLF);
+    ///     enemy.level = Some(20);
+    ///     enemy.damage = Some(1.5);
+    ///     let elder = load.add_enemy(enemy)?;
     ///     assert_eq!(elder.guid(), id!("elder-wolf").guid());
     ///     Ok(())
     /// }
@@ -39,6 +44,8 @@ impl Load<'_> {
     /// Adds an arsenal, listed beside the vanilla ones: a copy of the
     /// vanilla arsenal [`NewArsenal::like`] under the mod's content id, with
     /// its change applied. An enemy uses it through [`NewEnemy::arsenal`].
+    ///
+    /// Unstable: needs the `typed` feature and may change in any release.
     ///
     /// # Errors
     ///
@@ -53,11 +60,9 @@ impl Load<'_> {
     /// use enshwick::content::enemies::{ArsenalChange, NewArsenal};
     ///
     /// fn init(load: &mut enshwick::Load<'_>, wolf_arsenal: Guid, bite: Guid) -> Result<(), enshwick::Off> {
-    ///     let biter = load.add_arsenal(NewArsenal {
-    ///         id: id!("biter"),
-    ///         like: wolf_arsenal,
-    ///         change: ArsenalChange { attacks: Some(vec![bite]), ..ArsenalChange::default() },
-    ///     })?;
+    ///     let mut arsenal_change = ArsenalChange::default();
+    ///     arsenal_change.attacks = Some(vec![bite]);
+    ///     let biter = load.add_arsenal(NewArsenal::new(id!("biter"), wolf_arsenal, arsenal_change))?;
     ///     enshwick::info!("biters use {}", biter.guid());
     ///     Ok(())
     /// }
@@ -68,6 +73,8 @@ impl Load<'_> {
     /// Changes the vanilla arsenal `arsenal` in memory, on the server and
     /// the client alike; mods that change one arsenal change it in load
     /// order, each on the one before's result.
+    ///
+    /// Unstable: needs the `typed` feature and may change in any release.
     ///
     /// # Errors
     ///
@@ -81,10 +88,11 @@ impl Load<'_> {
     /// use enshwick::content::enemies::{ArsenalChange, AttackChange};
     ///
     /// fn init(load: &mut enshwick::Load<'_>, wolf_arsenal: Guid, bite: Guid) -> Result<(), enshwick::Off> {
-    ///     load.change_arsenal(wolf_arsenal, ArsenalChange {
-    ///         tune: vec![AttackChange { selection_chance: Some(0.1), ..AttackChange::new(bite) }],
-    ///         ..ArsenalChange::default()
-    ///     })
+    ///     let mut arsenal_change = ArsenalChange::default();
+    ///     let mut attack_change = AttackChange::new(bite);
+    ///     attack_change.selection_chance = Some(0.1);
+    ///     arsenal_change.tune = vec![attack_change];
+    ///     load.change_arsenal(wolf_arsenal, arsenal_change)
     /// }
     /// ```
     #[script]

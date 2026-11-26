@@ -26,9 +26,10 @@ mod tests {
     static REFUSED: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
     fn crafting(item: Id, recipes: Vec<Guid>) -> NewProp {
-        NewProp {
-            crafting_prop: Some(CraftingPropSetup { recipes }),
-            ..NewProp::new(NewItem::new(item, CRAFTING_PROP_ITEM))
+        {
+            let mut value = NewProp::new(NewItem::new(item, CRAFTING_PROP_ITEM));
+            value.crafting_prop = Some(CraftingPropSetup::new(recipes));
+            value
         }
     }
 

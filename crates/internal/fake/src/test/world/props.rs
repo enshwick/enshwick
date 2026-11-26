@@ -42,7 +42,7 @@ impl FakeHost {
     /// use enshwick::ItemId;
     /// use enshwick::Entity;
     ///
-    /// let loader = enshwick::test::FakeHost::new().prop(Entity(40), ItemId::new(30), [50.0, 40.0, 50.0]).install();
+    /// let loader = enshwick::test::FakeHost::new().prop(Entity::from_engine(40), ItemId::new(30), [50.0, 40.0, 50.0]).install();
     /// assert_eq!(loader.props().len(), 1);
     /// ```
     #[must_use]
@@ -69,7 +69,7 @@ impl FakeHost {
     /// use enshwick::ItemId;
     /// use enshwick::Entity;
     ///
-    /// let _loader = enshwick::test::FakeHost::new().item_triggers(ItemId::new(30)).prop(Entity(40), ItemId::new(30), [50.0; 3]).install();
+    /// let _loader = enshwick::test::FakeHost::new().item_triggers(ItemId::new(30)).prop(Entity::from_engine(40), ItemId::new(30), [50.0; 3]).install();
     /// ```
     #[must_use]
     pub fn item_triggers(mut self, item: ItemId) -> Self {
@@ -156,8 +156,8 @@ impl Installed {
     /// use enshwick::ItemId;
     /// use enshwick::Entity;
     ///
-    /// let loader = enshwick::test::FakeHost::new().item_triggers(ItemId::new(30)).prop(Entity(40), ItemId::new(30), [50.0; 3]).install();
-    /// loader.change_trigger_settings(Entity(40));
+    /// let loader = enshwick::test::FakeHost::new().item_triggers(ItemId::new(30)).prop(Entity::from_engine(40), ItemId::new(30), [50.0; 3]).install();
+    /// loader.change_trigger_settings(Entity::from_engine(40));
     /// ```
     pub fn change_trigger_settings(&self, entity: Entity) {
         change_start(entity);
@@ -171,8 +171,8 @@ impl Installed {
     /// use enshwick::ItemId;
     /// use enshwick::Entity;
     ///
-    /// let loader = enshwick::test::FakeHost::new().item_grows(ItemId::new(30)).prop(Entity(40), ItemId::new(30), [50.0; 3]).install();
-    /// loader.grow_plant(Entity(40));
+    /// let loader = enshwick::test::FakeHost::new().item_grows(ItemId::new(30)).prop(Entity::from_engine(40), ItemId::new(30), [50.0; 3]).install();
+    /// loader.grow_plant(Entity::from_engine(40));
     /// ```
     pub fn grow_plant(&self, entity: Entity) {
         change_start(entity);
@@ -189,8 +189,8 @@ impl Installed {
     /// use enshwick::Entity;
     /// use enshwick::world::HeldState;
     ///
-    /// let loader = enshwick::test::FakeHost::new().prop(Entity(40), ItemId::new(30), [50.0; 3]).install();
-    /// loader.set_prop_state(Entity(40), &[HeldState::Inventory]);
+    /// let loader = enshwick::test::FakeHost::new().prop(Entity::from_engine(40), ItemId::new(30), [50.0; 3]).install();
+    /// loader.set_prop_state(Entity::from_engine(40), &[HeldState::Inventory]);
     /// ```
     #[cfg(feature = "unstable")]
     pub fn set_prop_state(&self, entity: Entity, kinds: &[HeldState]) {
@@ -303,11 +303,11 @@ fn start_bits(host: &FakeHost, prop: &FakeProp, unknown: bool) -> u32 {
 
 /// The next entity id the fake hands out.
 fn next_entity(host: &FakeHost) -> Entity {
-    Entity(
+    Entity::from_engine(
         host.world
             .props
             .iter()
-            .map(|prop| prop.entity.0 + 1)
+            .map(|prop| prop.entity.get() + 1)
             .max()
             .unwrap_or(FIRST_ENTITY)
             .max(FIRST_ENTITY),
@@ -419,7 +419,7 @@ pub(crate) fn undo(
         .retain(|prop| !transaction.created.contains(&prop.entity));
     host.base
         .components
-        .retain(|(entity, _), _| !transaction.created.iter().any(|c| c.0 == *entity));
+        .retain(|(entity, _), _| !transaction.created.iter().any(|c| c.get() == *entity));
     transaction.created.clear();
     for prop in transaction.removed.drain(..) {
         let entity = next_entity(host);

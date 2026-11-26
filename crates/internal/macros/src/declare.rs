@@ -688,8 +688,7 @@ fn manifest(metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
             "\"\nversion = \"", VERSION, "\"\n",
         );
         ::enshwick::__schema_entry!(HEAD);
-        static MANIFEST: #abi::Manifest = #abi::Manifest {
-            header: #abi::Header::of::<#abi::Manifest>(),
+        static MANIFEST: #abi::Manifest = #abi::Manifest::declared(#abi::ManifestParts {
             id: #abi::Str::new(#id),
             version: #abi::Str::new(VERSION),
             side: #abi::Side::#side,
@@ -706,10 +705,7 @@ fn manifest(metadata: &Metadata, cargo: Option<&str>) -> TokenStream {
             homepage: #abi::Str::new(::enshwick::__private::first_text(
                 &[::core::env!("CARGO_PKG_HOMEPAGE"), ::core::env!("CARGO_PKG_REPOSITORY")],
             )),
-            points: #abi::Str::EMPTY,
-            exports: ::core::ptr::null(),
-            export_count: 0,
-        };
+        });
         ::enshwick::__private::Manifested::new(&MANIFEST, #id, HEAD, &[#(#listed),*])
     }}
 }

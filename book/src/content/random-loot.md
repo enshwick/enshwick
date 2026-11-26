@@ -133,7 +133,9 @@ comes from a source, which a unit test can check without the game:
 use enshwick::Entity;
 use enshwick::loot::{Kinds, LootContainerId, Roll, Source};
 
-let boss = Roll { kind: Kinds::CORPSES, entity: Some(Entity(7)), node: None, labels: Some(LootContainerId::new(9)), boss: true, locked: false };
+let mut boss = Roll::new(Kinds::CORPSES, true, false);
+boss.entity = Some(Entity::from_engine(7));
+boss.labels = Some(LootContainerId::new(9));
 assert!(Source::bosses().matches(&boss));
 assert!(!Source::locked_chests().matches(&boss));
 assert!(Source::kinds(Kinds::CORPSES).with_labels(&[LootContainerId::new(9)]).matches(&boss));

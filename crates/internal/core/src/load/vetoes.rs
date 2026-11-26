@@ -1,18 +1,17 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
 use crate::game_events::CraftRecipeEvent;
-use crate::vetoes::{BuildVerdict, Placement};
+use crate::vetoes::{Placement, Verdict};
 use crate::{Load, Off};
 use enshwick_actions::__load::*;
 
 mod script;
 
 #[enshwick_macros::forward(base)]
-#[crate::script(vetoes)]
 impl Load<'_> {
     /// Runs `filter` on each player's craft request in the server's world,
-    /// before the crafting system reads it; returning `false` refuses it,
-    /// and nothing is made or taken. It runs on the game thread, where
+    /// before the crafting system reads it; a refusal (`false` or a
+    /// [`Verdict`] that refuses) refuses it, and nothing is made or taken. It runs on the game thread, where
     /// `World` reads work, in the dedicated server or
     /// a hosting client.
     ///
@@ -23,14 +22,14 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](crate::vetoes).
-    #[script]
-    pub fn on_craft<F>(&mut self, filter: F) -> Result<(), Off>
+    pub fn on_craft<F, V>(&mut self, filter: F) -> Result<(), Off>
     where
-        F: Fn(&CraftRecipeEvent) -> bool + Send + Sync + 'static;
+        F: Fn(&CraftRecipeEvent) -> V + Send + Sync + 'static,
+        V: Into<Verdict>;
 
     /// Runs `filter` after the game's cursor check allows a placement; a
     /// refusal refuses it as the game refuses a placement without building
-    /// permission, and [`BuildVerdict::RefuseBecause`] tells the builder why:
+    /// permission, and [`Verdict::RefuseBecause`] tells the builder why:
     /// a client running the mod shows the reason under the build cursor,
     /// and the server sends it as one notice, at most once a second per
     /// player and again only after that player's refusals stopped for a
@@ -51,5 +50,5 @@ impl Load<'_> {
     pub fn on_build<F, V>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&Placement) -> V + Send + Sync + 'static,
-        V: Into<BuildVerdict>;
+        V: Into<Verdict>;
 }

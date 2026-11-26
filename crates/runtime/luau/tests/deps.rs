@@ -47,10 +47,10 @@ mod tests {
     );
 
     fn loaded(id: &'static str) -> ModInfo {
-        ModInfo {
+        enshwick::abi::headed!(ModInfo {
             id: Str::new(id),
             ..ModInfo::EMPTY
-        }
+        })
     }
 
     fn run(main: &str, host: FakeHost) -> Installed {

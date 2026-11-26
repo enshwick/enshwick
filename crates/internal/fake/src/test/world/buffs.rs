@@ -128,14 +128,14 @@ impl Installed {
     /// use enshwick::abi::{BuffTypeInfo, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let ty = BuffTypeInfo { header: Header::of::<BuffTypeInfo>(), id: enshwick::buffs::BuffTypeId::new(7), slot: 1, flags: 0, name: 0, duration_ns: 60_000_000_000 };
-    /// loader.set_buffs(&[ty], &[enshwick::Entity(2)]);
-    /// assert_eq!(loader.buffs_of(enshwick::Entity(2)), Some(Vec::new()));
+    /// let ty = enshwick::abi::headed!(BuffTypeInfo { id: enshwick::buffs::BuffTypeId::new(7), slot: 1, flags: 0, name: 0, duration_ns: 60_000_000_000 });
+    /// loader.set_buffs(&[ty], &[enshwick::Entity::from_engine(2)]);
+    /// assert_eq!(loader.buffs_of(enshwick::Entity::from_engine(2)), Some(Vec::new()));
     /// ```
     pub fn set_buffs(&self, types: &[enshwick_core::abi::BuffTypeInfo], holders: &[Entity]) {
         table::with((), |s| {
             s.world.buff_types = types.to_vec();
-            s.world.buffs = holders.iter().map(|&e| (e.0, Vec::new())).collect();
+            s.world.buffs = holders.iter().map(|&e| (e.get(), Vec::new())).collect();
         });
     }
 
@@ -147,6 +147,6 @@ impl Installed {
     /// See [`Installed::set_buffs`].
     #[must_use]
     pub fn buffs_of(&self, entity: Entity) -> Option<Vec<enshwick_core::abi::ActiveBuff>> {
-        table::with(None, |s| s.world.buffs.get(&entity.0).cloned())
+        table::with(None, |s| s.world.buffs.get(&entity.get()).cloned())
     }
 }

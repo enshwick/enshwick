@@ -244,6 +244,7 @@ impl Input {
     clippy::struct_excessive_bools,
     reason = "independent cached sampler gates are not mutually exclusive states"
 )]
+#[non_exhaustive]
 pub struct LocalInputStatus {
     /// Some mod requested sampling; this getter never requests it.
     pub requested: bool,

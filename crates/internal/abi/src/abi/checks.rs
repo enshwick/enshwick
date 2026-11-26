@@ -27,16 +27,17 @@ pub const FILTER_REFUSE: u8 = 2;
 /// ```
 /// use enshwick::abi::Interaction;
 ///
-/// let call = Interaction {
+/// let call = enshwick::abi::headed!(Interaction {
 ///     item: enshwick::ItemId::new(0x5e01),
 ///     known: 1,
 ///     position: [1.0, 2.0, 3.0],
-///     ..Interaction::new(Interaction::OPEN, enshwick::Entity(4096), enshwick::Entity(5000))
-/// };
+///     ..Interaction::new(Interaction::OPEN, enshwick::Entity::from_engine(4096), enshwick::Entity::from_engine(5000))
+/// });
 /// assert_eq!(call.kind, Interaction::OPEN);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct Interaction {
     /// Size and version of this struct.
     pub header: Header,
@@ -111,8 +112,8 @@ impl Interaction {
             moved: ItemId::new(0),
             stack: 0,
             amount: 0,
-            from: Entity(0),
-            to: Entity(0),
+            from: Entity::from_engine(0),
+            to: Entity::from_engine(0),
             action: 0,
             transfer: 0,
             moving: 0,
@@ -186,18 +187,18 @@ pub type InteractionFilterFn =
 /// ```
 /// use enshwick::abi::{ContainerPut, Header};
 ///
-/// let put = ContainerPut {
-///     header: Header::of::<ContainerPut>(),
-///     container: enshwick::Entity(5000),
+/// let put = enshwick::abi::headed!(ContainerPut {
+///     container: enshwick::Entity::from_engine(5000),
 ///     container_item: enshwick::ItemId::new(0x5e01),
 ///     item: enshwick::ItemId::new(0x0e17),
 ///     count: 20,
 ///     slot: 5001 | 3 << 32,
-/// };
+/// });
 /// assert_eq!(put.count, 20);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct ContainerPut {
     /// Size and version of this struct.
     pub header: Header,
@@ -247,17 +248,17 @@ pub type ContainerRuleFn =
 /// ```
 /// use enshwick::abi::{Header, InteractionPrompt};
 ///
-/// let prompt = InteractionPrompt {
-///     header: Header::of::<InteractionPrompt>(),
+/// let prompt = enshwick::abi::headed!(InteractionPrompt {
 ///     item: enshwick::ItemId::new(0x5e01),
 ///     verb: 0xc22a_47e8,
 ///     text: 0,
 ///     flags: InteractionPrompt::REPLACE_ACTION,
-/// };
+/// });
 /// assert_eq!(prompt.flags, InteractionPrompt::REPLACE_ACTION);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct InteractionPrompt {
     /// Size and version of this struct.
     pub header: Header,
@@ -288,7 +289,7 @@ impl InteractionPrompt {
     /// ```
     /// use enshwick::abi::{Header, InteractionPrompt};
     ///
-    /// let mut prompt = InteractionPrompt { header: Header::of::<InteractionPrompt>(), item: enshwick::ItemId::new(0x5e01), verb: 0, text: 0, flags: 0 };
+    /// let mut prompt = enshwick::abi::headed!(InteractionPrompt { item: enshwick::ItemId::new(0x5e01), verb: 0, text: 0, flags: 0 });
     /// assert!(!prompt.is_valid(), "it changes nothing");
     /// prompt.flags = InteractionPrompt::REPLACE_ACTION;
     /// assert!(prompt.is_valid());
@@ -309,11 +310,12 @@ impl InteractionPrompt {
 /// ```
 /// use enshwick::abi::{Header, SkillCheck};
 ///
-/// let check = SkillCheck { header: Header::of::<SkillCheck>(), node: enshwick::abi::SkillNode::new(0x4475_e8dd), gate: SkillCheck::FLY_MODE, unlocked: 0, reserved: [0; 3] };
+/// let check = enshwick::abi::headed!(SkillCheck { node: enshwick::abi::SkillNode::new(0x4475_e8dd), gate: SkillCheck::FLY_MODE, unlocked: 0, reserved: [0; 3] });
 /// assert_eq!(check.gate, SkillCheck::FLY_MODE);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct SkillCheck {
     /// Size and version of this struct.
     pub header: Header,
@@ -365,11 +367,12 @@ pub type SkillCheckFn =
 /// ```
 /// use enshwick::abi::{Comfort, Header};
 ///
-/// let comfort = Comfort { header: Header::of::<Comfort>(), category: 3, value: 5, position: [0.0; 3] };
+/// let comfort = enshwick::abi::headed!(Comfort { category: 3, value: 5, position: [0.0; 3] });
 /// assert_eq!(comfort.value, 5);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct Comfort {
     /// Size and version of this struct.
     pub header: Header,
@@ -406,11 +409,15 @@ pub type ComfortFilterFn =
 /// ```
 /// use enshwick::abi::ExperienceRow;
 ///
-/// let row = ExperienceRow { entity: enshwick::Entity(4096), level: 3, progress: 10, need: 100, gained: 5 };
+/// let row = ExperienceRow { entity: enshwick::Entity::from_engine(4096), level: 3, progress: 10, need: 100, gained: 5 };
 /// assert_eq!(row.gained, 5);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct ExperienceRow {
     /// The character's entity.
     pub entity: Entity,
@@ -425,6 +432,13 @@ pub struct ExperienceRow {
     pub gained: u32,
 }
 
+// Entity 0, the ABI's "none", for a row the host fills.
+impl Default for ExperienceRow {
+    fn default() -> Self {
+        bytemuck::Zeroable::zeroed()
+    }
+}
+
 /// Every spawned character's experience before the server applies it, as
 /// [`HostApi::experience_filter`](super::HostApi::experience_filter) hands it on.
 ///
@@ -433,11 +447,12 @@ pub struct ExperienceRow {
 /// ```
 /// use enshwick::abi::{ExperiencePass, Header};
 ///
-/// let pass = ExperiencePass { header: Header::of::<ExperiencePass>(), rows: core::ptr::null_mut(), row_count: 0, level_cap: 25, need_for: None, token: core::ptr::null_mut() };
+/// let pass = enshwick::abi::headed!(ExperiencePass { rows: core::ptr::null_mut(), row_count: 0, level_cap: 25, need_for: None, token: core::ptr::null_mut() });
 /// assert_eq!(pass.level_cap, 25);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct ExperiencePass {
     /// Size and version of this struct.
     pub header: Header,
@@ -478,11 +493,12 @@ pub type ExperienceFilterFn =
 /// ```
 /// use enshwick::abi::{AltarLimit, Header};
 ///
-/// let limit = AltarLimit { header: Header::of::<AltarLimit>(), flame_level: 3, vanilla: 6, allowed: 6, reserved: 0 };
+/// let limit = enshwick::abi::headed!(AltarLimit { flame_level: 3, vanilla: 6, allowed: 6, reserved: 0 });
 /// assert_eq!(limit.allowed, limit.vanilla);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct AltarLimit {
     /// Size and version of this struct.
     pub header: Header,
@@ -507,8 +523,7 @@ impl_headed!(AltarLimit);
 /// ```
 /// use enshwick::abi::{BaseLimitInfo, Header};
 ///
-/// let limit = BaseLimitInfo {
-///     header: Header::of::<BaseLimitInfo>(),
+/// let limit = enshwick::abi::headed!(BaseLimitInfo {
 ///     zones: 16,
 ///     bases: 16,
 ///     vanilla_zones: 16,
@@ -516,11 +531,12 @@ impl_headed!(AltarLimit);
 ///     vanilla_bases: 16,
 ///     max_zones: 255,
 ///     max_bases: 16,
-/// };
+/// });
 /// assert_eq!(limit.zones, limit.vanilla_zones);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct BaseLimitInfo {
     /// Size and version of this struct.
     pub header: Header,

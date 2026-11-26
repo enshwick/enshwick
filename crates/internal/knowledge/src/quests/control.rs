@@ -3,7 +3,9 @@
 
 use crate::content::knowledge::{KnowledgeQuery, KnowledgeTest};
 use crate::knowledge::{Grant, KnowledgeId, KnowledgeType, Known, Revoke, Scope};
-use crate::{Entity, WorldError};
+use crate::{Entity, Host, WorldError};
+use enshwick_world::__internal::player_entity;
+use enshwick_world::world::PlayerRef;
 
 use super::{QuestInfo, Quests, StepInfo};
 
@@ -17,8 +19,8 @@ use super::{QuestInfo, Quests, StepInfo};
 /// ```
 /// use enshwick::quests::{Holder, Quests};
 ///
-/// fn begin(quests: &Quests, player: enshwick::Entity, quest: enshwick::knowledge::KnowledgeId) {
-///     let _started = quests.start(Holder::Player(player), quest);
+/// fn begin(quests: &Quests, player: &enshwick::world::Player, quest: enshwick::knowledge::KnowledgeId) {
+///     let _started = quests.start(Holder::player(player), quest);
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
@@ -26,17 +28,46 @@ use super::{QuestInfo, Quests, StepInfo};
 pub enum Holder {
     /// The world's knowledge.
     World,
-    /// The knowledge of the player whose character this is.
-    Player(Entity),
+    /// The knowledge of this player, who is connected: a call for a player
+    /// it cannot find fails as for a quest it cannot move.
+    Player(PlayerRef),
 }
 
 impl Holder {
+    /// The holder for one player's knowledge.
+    ///
+    /// # Examples
+    ///
+    /// See [`Holder`].
+    #[must_use]
+    pub fn player(player: impl Into<PlayerRef>) -> Self {
+        Self::Player(player.into())
+    }
+
+    /// The holder with its player's character found, which every
+    /// knowledge call takes.
+    pub(super) fn resolved(self, host: Host) -> Result<Self, WorldError> {
+        match self {
+            Self::World => Ok(self),
+            Self::Player(player) => Ok(Self::player(player_entity(host, player)?)),
+        }
+    }
+
+    /// The player's character once [`resolved`](Self::resolved); `None`
+    /// for the world.
+    pub(super) const fn character(self) -> Option<Entity> {
+        match self {
+            Self::World => None,
+            Self::Player(player) => player.entity(),
+        }
+    }
+
     /// The entity the knowledge calls take: the character, or none for the
     /// world.
     pub(super) const fn entity(self) -> Entity {
-        match self {
-            Self::World => Entity::NONE,
-            Self::Player(player) => player,
+        match self.character() {
+            Some(character) => character,
+            None => Entity::NONE,
         }
     }
 
@@ -213,7 +244,7 @@ impl Quests {
     pub(super) fn known(&self, holder: Holder, id: KnowledgeId) -> Result<Known, MoveQuestError> {
         let known = match holder {
             Holder::World => self.knowledge.world(id),
-            Holder::Player(player) => self.knowledge.get(player, id),
+            Holder::Player(_) => self.knowledge.get(holder.entity(), id),
         };
         known.ok_or(MoveQuestError::World(WorldError::Refused))
     }
@@ -222,7 +253,7 @@ impl Quests {
     fn at(&self, holder: Holder, quest: KnowledgeId) -> Result<u32, MoveQuestError> {
         let player = match holder {
             Holder::World => None,
-            Holder::Player(player) => Some(player),
+            Holder::Player(player) => player.entity(),
         };
         let state = self
             .state_of(player, quest)
@@ -244,13 +275,14 @@ impl Quests {
     ///
     /// fn last(quests: &Quests, player: enshwick::Entity, quest: enshwick::knowledge::KnowledgeId) -> bool {
     ///     let steps = quests.quest(quest).map_or(0, |info| info.steps.len());
-    ///     quests.step(Holder::Player(player), quest) == u32::try_from(steps).ok()
+    ///     quests.step(Holder::player(player), quest) == u32::try_from(steps).ok()
     /// }
     /// ```
     #[must_use]
     #[script]
     pub fn step(&self, holder: Holder, quest: KnowledgeId) -> Option<u32> {
-        self.at(holder, quest).ok()
+        self.at(holder.resolved(self.knowledge.host).ok()?, quest)
+            .ok()
     }
 
     /// Starts `quest` for `holder`: grants what its first step's
@@ -272,6 +304,7 @@ impl Quests {
     /// See [`Holder`].
     #[script]
     pub fn start(&self, holder: Holder, quest: KnowledgeId) -> Result<(), MoveQuestError> {
+        let holder = holder.resolved(self.knowledge.host)?;
         let info = self.info(quest)?;
         let first = info.steps.first().and_then(|step| step.shown_when);
         Moves::new(self, holder).hold(0, first)
@@ -296,13 +329,14 @@ impl Quests {
     /// use enshwick::quests::{Holder, Quests};
     ///
     /// fn skip(quests: &Quests, player: enshwick::Entity, quest: enshwick::knowledge::KnowledgeId) {
-    ///     if let Ok(step) = quests.advance(Holder::Player(player), quest) {
+    ///     if let Ok(step) = quests.advance(Holder::player(player), quest) {
     ///         enshwick::info!("now at step {step}");
     ///     }
     /// }
     /// ```
     #[script]
     pub fn advance(&self, holder: Holder, quest: KnowledgeId) -> Result<u32, MoveQuestError> {
+        let holder = holder.resolved(self.knowledge.host)?;
         let info = self.info(quest)?;
         let at = self.at(holder, quest)?;
         let Some(next) = at
@@ -337,6 +371,7 @@ impl Quests {
     /// See [`MoveQuestError`].
     #[script]
     pub fn complete(&self, holder: Holder, quest: KnowledgeId) -> Result<(), MoveQuestError> {
+        let holder = holder.resolved(self.knowledge.host)?;
         let info = self.info(quest)?;
         let steps = u32::try_from(info.steps.len()).unwrap_or(u32::MAX);
         let mut moves = Moves::new(self, holder);
@@ -365,11 +400,12 @@ impl Quests {
     /// use enshwick::quests::{Holder, Quests};
     ///
     /// fn again(quests: &Quests, player: enshwick::Entity, quest: enshwick::knowledge::KnowledgeId) {
-    ///     let _reset = quests.reset(Holder::Player(player), quest);
+    ///     let _reset = quests.reset(Holder::player(player), quest);
     /// }
     /// ```
     #[script]
     pub fn reset(&self, holder: Holder, quest: KnowledgeId) -> Result<(), MoveQuestError> {
+        let holder = holder.resolved(self.knowledge.host)?;
         let info = self.info(quest)?;
         let mut ids: Vec<KnowledgeId> = info
             .steps

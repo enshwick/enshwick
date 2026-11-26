@@ -1,7 +1,5 @@
 //! The mod's interface: what it draws, its markers, dialogs and the player's input.
 
-use enshwick_core::abi::Header;
-
 mod sound;
 
 use super::table;
@@ -58,15 +56,14 @@ fn reads() -> Reads {
 /// open, since the loader notes it from the slots the game's screens draw.
 fn in_game(token: u64, open: &str, reads: &Reads) -> enshwick_core::abi::UiFrame {
     let hovered = reads.hovered.filter(|_| !open.is_empty());
-    enshwick_core::abi::UiFrame {
-        header: Header::of::<enshwick_core::abi::UiFrame>(),
+    enshwick_core::headed!(enshwick_core::abi::UiFrame {
         token,
         screen: enshwick_core::abi::UiFrame::IN_GAME,
         reserved: 0,
         hud_screen: enshwick_core::abi::Str::new(open),
         prompt_title: enshwick_core::abi::Str::new(&reads.title),
         prompt_verb: reads.verb,
-        screen_host: enshwick_core::Entity(reads.host),
+        screen_host: enshwick_core::Entity::from_engine(reads.host),
         screen_host_template: reads
             .host_read
             .map_or(enshwick_core::content::Guid::NIL, |(t, _)| t),
@@ -76,9 +73,9 @@ fn in_game(token: u64, open: &str, reads: &Reads) -> enshwick_core::abi::UiFrame
         hovered_slot: hovered.map_or(0, |(slot, ..)| slot),
         hovered_item: hovered.map_or(enshwick_core::ItemId::new(0), |(_, item, ..)| item),
         hovered_count: hovered.map_or(0, |(_, _, count, _)| count),
-        hovered_pide: hovered.map_or(enshwick_core::Entity(0), |(.., pide)| pide),
+        hovered_pide: hovered.map_or(enshwick_core::Entity::from_engine(0), |(.., pide)| pide),
         reserved_hovered: 0,
-    }
+    })
 }
 
 /// The text the fake keys an item slot's inputs by, the slot showing
@@ -315,12 +312,12 @@ impl Installed {
     /// use enshwick::abi::Side;
     ///
     /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
-    /// loader.host_screen(Some(Entity(512)));
+    /// loader.host_screen(Some(Entity::from_engine(512)));
     /// assert!(loader.draw_frame().is_empty());
     /// ```
     pub fn host_screen(&self, host: Option<enshwick_core::Entity>) {
         table::with((), |s| {
-            let host = host.map_or(0, |e| e.0);
+            let host = host.map_or(0, enshwick_core::Entity::get);
             // As in game, a new host has no template until a step reads it.
             if s.ui.screen_host != host {
                 s.ui.screen_host_read = None;
@@ -342,7 +339,7 @@ impl Installed {
     /// use enshwick::content::Guid;
     ///
     /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
-    /// loader.host_screen(Some(Entity(512)));
+    /// loader.host_screen(Some(Entity::from_engine(512)));
     /// loader.read_screen_host(Guid::named("you.safes:safe"), [1.0, 2.0, 3.0]);
     /// assert!(loader.draw_frame().is_empty());
     /// ```
@@ -412,14 +409,14 @@ impl Installed {
     /// use enshwick::abi::{ClientSnapshot, Side, Str};
     ///
     /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
-    /// loader.set_client_snapshot(ClientSnapshot {
+    /// loader.set_client_snapshot(enshwick::abi::headed!(ClientSnapshot {
     ///     state: ClientSnapshot::FRESH,
     ///     available: ClientSnapshot::SCREENS,
     ///     session: 1,
     ///     age_ms: 16,
     ///     hud_screen: Str::new("Backpack"),
     ///     ..ClientSnapshot::EMPTY
-    /// });
+    /// }));
     /// ```
     #[expect(
         clippy::large_types_passed_by_value,
@@ -441,14 +438,14 @@ impl Installed {
     /// use enshwick::abi::{ClientWindowItem, Side, Str};
     ///
     /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
-    /// loader.set_client_windows(vec![ClientWindowItem {
+    /// loader.set_client_windows(vec![enshwick::abi::headed!(ClientWindowItem {
     ///     kind: ClientWindowItem::BUTTON,
     ///     flags: ClientWindowItem::SHOWN,
     ///     window: Str::new("you.admin:panel"),
     ///     item: Str::new("@close"),
     ///     label: Str::new("Close"),
     ///     ..ClientWindowItem::EMPTY
-    /// }]);
+    /// })]);
     /// ```
     pub fn set_client_windows(&self, items: Vec<enshwick_core::abi::ClientWindowItem>) {
         table::with((), |s| s.ui.client_windows = items);
@@ -464,13 +461,13 @@ impl Installed {
     /// use enshwick::abi::{ClientSlot, Side};
     ///
     /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
-    /// loader.set_client_slots(Some(vec![ClientSlot {
+    /// loader.set_client_slots(Some(vec![enshwick::abi::headed!(ClientSlot {
     ///     slot: 0x41,
     ///     item: 7,
     ///     count: 3,
     ///     category: 4,
     ///     ..ClientSlot::EMPTY
-    /// }]));
+    /// })]));
     /// ```
     pub fn set_client_slots(&self, slots: Option<Vec<enshwick_core::abi::ClientSlot>>) {
         table::with((), |s| s.ui.client_slots = slots);
@@ -594,8 +591,8 @@ impl Installed {
     /// use enshwick::inventory::SlotRef;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let slot = SlotRef::new(Entity(41), 3);
-    /// loader.hover_slot(Some((slot.0, enshwick::ItemId::new(0x5e01), 2, Entity(0))));
+    /// let slot = SlotRef::new(Entity::from_engine(41), 3);
+    /// loader.hover_slot(Some((slot.0, enshwick::ItemId::new(0x5e01), 2, Entity::from_engine(0))));
     /// assert!(loader.draw_frame().is_empty());
     /// ```
     pub fn hover_slot(
@@ -618,7 +615,7 @@ impl Installed {
     /// use enshwick::abi::Side;
     ///
     /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
-    /// let lines = loader.open_tooltip(enshwick::ItemId::new(0x5e01), enshwick::Entity(900));
+    /// let lines = loader.open_tooltip(enshwick::ItemId::new(0x5e01), enshwick::Entity::from_engine(900));
     /// assert!(lines.is_empty());
     /// ```
     #[must_use]
@@ -627,7 +624,7 @@ impl Installed {
         item: enshwick_core::ItemId,
         pide: enshwick_core::Entity,
     ) -> Vec<Drawn> {
-        if pide == enshwick_core::Entity(0) {
+        if pide == enshwick_core::Entity::from_engine(0) {
             return Vec::new();
         }
         let tooltips = table::with(Vec::new(), |s| s.ui.tooltips.clone());
@@ -637,12 +634,8 @@ impl Installed {
                 s.ui.tooltip = Some((token, Vec::new()));
                 s.ui.drawing = handler.owner();
             });
-            let opened = enshwick_core::abi::UiTooltipItem {
-                header: Header::of::<enshwick_core::abi::UiTooltipItem>(),
-                token,
-                item,
-                pide,
-            };
+            let opened =
+                enshwick_core::headed!(enshwick_core::abi::UiTooltipItem { token, item, pide });
             // SAFETY: a callback the mod registered with its own pointer.
             handler.run(|callback, user| unsafe { callback(&raw const opened, user) });
             let added = table::with(None, |s| {
@@ -807,6 +800,7 @@ pub enum Drawn {
 ///
 /// See [`Installed::markers`].
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct FakeMarker {
     /// Where, in metres.
     pub position: [f64; 3],
@@ -816,6 +810,23 @@ pub struct FakeMarker {
     pub color: u32,
     /// The registry key of its marker type; 0 for the loader's choice.
     pub marker_type: u32,
+}
+
+impl FakeMarker {
+    /// A `FakeMarker` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`FakeMarker`].
+    #[must_use]
+    pub const fn new(position: [f64; 3], label: String, color: u32, marker_type: u32) -> Self {
+        Self {
+            position,
+            label,
+            color,
+            marker_type,
+        }
+    }
 }
 
 /// What the player does to a widget, given with [`Installed::input`].
@@ -847,6 +858,7 @@ pub enum Input {
 ///
 /// See [`Installed::dialogs`].
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ShownDialog {
     /// The title.
     pub title: String,
@@ -868,7 +880,7 @@ impl FakeHost {
     /// ```
     /// use enshwick::abi::{MapMarkerTypeInfo, Side};
     ///
-    /// let altar = MapMarkerTypeInfo { marker_id: 0x0a0b_0c0d, ..MapMarkerTypeInfo::EMPTY };
+    /// let altar = enshwick::abi::headed!(MapMarkerTypeInfo { marker_id: 0x0a0b_0c0d, ..MapMarkerTypeInfo::EMPTY });
     /// let loader = enshwick::test::FakeHost::new()
     ///     .side(Side::CLIENT)
     ///     .map_marker_types(vec![altar])
@@ -893,7 +905,7 @@ impl FakeHost {
     /// ```
     /// use enshwick::abi::{FogInfo, Side};
     ///
-    /// let info = FogInfo { width: 2, height: 2, metres_per_pixel: 8.0, size_z: 16.0, ..FogInfo::EMPTY };
+    /// let info = enshwick::abi::headed!(FogInfo { width: 2, height: 2, metres_per_pixel: 8.0, size_z: 16.0, ..FogInfo::EMPTY });
     /// let loader = enshwick::test::FakeHost::new()
     ///     .side(Side::CLIENT)
     ///     .fog(info, vec![0, 255, 0, 0])
@@ -928,7 +940,7 @@ impl Installed {
     /// ```
     /// use enshwick::abi::{FogInfo, Side};
     ///
-    /// let info = FogInfo { width: 1, height: 1, ..FogInfo::EMPTY };
+    /// let info = enshwick::abi::headed!(FogInfo { width: 1, height: 1, ..FogInfo::EMPTY });
     /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
     /// loader.set_fog(info, vec![255]);
     /// ```

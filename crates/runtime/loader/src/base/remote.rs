@@ -273,7 +273,7 @@ const TARGET_BYTES: usize = 4 + 4 + 24;
 
 fn put_target(out: &mut Vec<u8>, target: &ActionTarget) {
     out.extend_from_slice(&target.flags.to_le_bytes());
-    out.extend_from_slice(&target.entity.0.to_le_bytes());
+    out.extend_from_slice(&target.entity.get().to_le_bytes());
     for coordinate in target.position {
         out.extend_from_slice(&coordinate.to_le_bytes());
     }
@@ -292,9 +292,9 @@ fn take_target(bytes: &[u8]) -> Option<ActionTarget> {
         f64::from_le_bytes(eight)
     };
     let flags = word(0);
-    let target = ActionTarget {
+    let target = enshwick_abi::headed!(ActionTarget {
         flags,
-        entity: enshwick_core::Entity(word(4)),
+        entity: enshwick_core::Entity::from_engine(word(4)),
         // Bytes the flags leave unset read as zero, so the message writes back the same.
         position: if flags & ActionTarget::POSITION == 0 {
             [0.0; 3]
@@ -302,7 +302,7 @@ fn take_target(bytes: &[u8]) -> Option<ActionTarget> {
             [number(8), number(16), number(24)]
         },
         ..ActionTarget::NONE
-    };
+    });
     (target.flags != 0 && target.is_valid()).then_some(target)
 }
 

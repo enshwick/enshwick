@@ -498,13 +498,13 @@ mod tests {
     }
 
     fn with_permissions(permissions: u32) -> Player {
-        Player {
-            entity: crate::Entity(2),
-            slot: 0,
-            key: PlayerKey::new(7),
+        Player::new(
+            crate::Entity::from_engine(2),
+            0,
+            PlayerKey::new(7),
             permissions,
-            name: "Ann".to_owned(),
-        }
+            "Ann".to_owned(),
+        )
     }
 
     #[test]

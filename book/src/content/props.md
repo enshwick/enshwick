@@ -59,15 +59,13 @@ use enshwick::content::items::NewItem;
 use enshwick::content::props::{CraftingPropSetup, NewProp};
 
 fn init(load: &mut enshwick::Load<'_>, chest: Guid, mortar: Guid, potion: Guid) -> Result<(), enshwick::Off> {
-    let crate_prop = load.add_prop(NewProp {
-        recipe_cost: Some(2),
-        ..NewProp::new(NewItem::new(id!("crate"), chest))
-    })?;
+    let mut prop = NewProp::new(NewItem::new(id!("crate"), chest));
+    prop.recipe_cost = Some(2);
+    let crate_prop = load.add_prop(prop)?;
     enshwick::info!("crates place {}", crate_prop.template.guid());
-    load.add_prop(NewProp {
-        crafting_prop: Some(CraftingPropSetup { recipes: vec![potion] }),
-        ..NewProp::new(NewItem::new(id!("alembic"), mortar))
-    })?;
+    let mut prop_2 = NewProp::new(NewItem::new(id!("alembic"), mortar));
+    prop_2.crafting_prop = Some(CraftingPropSetup::new(vec![potion]));
+    load.add_prop(prop_2)?;
     Ok(())
 }
 ```

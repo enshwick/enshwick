@@ -176,21 +176,23 @@ mod tests {
     use super::*;
 
     fn entry(id: &str, args: Vec<ArgView>) -> Entry {
-        Entry {
-            id: id.into(),
-            label: id.to_uppercase(),
-            offered: true,
-            args,
-            ..Entry::default()
+        {
+            let mut value = Entry::default();
+            value.id = id.into();
+            value.label = id.to_uppercase();
+            value.offered = true;
+            value.args = args;
+            value
         }
     }
 
     fn reason() -> ArgView {
-        ArgView {
-            kind: ArgView::TEXT,
-            label: "Reason".into(),
-            max: 64.0,
-            ..ArgView::default()
+        {
+            let mut value = ArgView::default();
+            value.kind = ArgView::TEXT;
+            value.label = "Reason".into();
+            value.max = 64.0;
+            value
         }
     }
 
@@ -199,39 +201,41 @@ mod tests {
     fn check() -> View {
         let ban = |key: u64, name: &str| ItemView::Row {
             text: name.into(),
-            buttons: vec![ButtonView {
-                label: "Ban".into(),
-                action: "ban".into(),
-                args: vec![Value::Player {
+            buttons: vec![ButtonView::new(
+                "Ban".into(),
+                "ban".into(),
+                vec![Value::Player {
                     key: PlayerKey::new(key),
                     name: String::new(),
                 }],
-            }],
+            )],
         };
-        let player = ArgView {
-            kind: ArgView::PLAYER,
-            label: "Player".into(),
-            ..ArgView::default()
+        let player = {
+            let mut value = ArgView::default();
+            value.kind = ArgView::PLAYER;
+            value.label = "Player".into();
+            value
         };
-        View {
-            title: "Windows check".into(),
-            items: vec![
+        View::new(
+            "Windows check".into(),
+            vec![
                 ItemView::Text("1 online".into()),
                 ban(7, "Ann"),
                 ban(8, "Bob"),
                 ItemView::Action("say".into()),
                 ItemView::Action("friends".into()),
             ],
-            entries: vec![
+            vec![
                 entry("ban", vec![player, reason()]),
                 entry("say", vec![reason()]),
-                Entry {
-                    per_player: true,
-                    players: vec![(PlayerKey::new(8), "Bob".into(), false)],
-                    ..entry("friends", Vec::new())
+                {
+                    let mut value = entry("friends", Vec::new());
+                    value.per_player = true;
+                    value.players = vec![(PlayerKey::new(8), "Bob".into(), false)];
+                    value
                 },
             ],
-        }
+        )
     }
 
     fn ids(listed: &[Listed]) -> Vec<String> {
@@ -268,11 +272,12 @@ mod tests {
 
     #[test]
     fn a_map_s_button_lists_off_on_a_build_that_cannot_open_the_map() {
-        let view = View {
-            items: vec![ItemView::Map(
+        let view = {
+            let mut value = View::default();
+            value.items = vec![ItemView::Map(
                 enshwick_core::actions::window::MapView::default(),
-            )],
-            ..View::default()
+            )];
+            value
         };
         let map = |opens| list(&view, None, opens)[0].flags & Raw::OFF;
         assert_eq!(map(true), 0);

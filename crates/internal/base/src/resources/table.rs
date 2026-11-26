@@ -81,7 +81,7 @@ fn entry(ty: &Type<'static>) -> TypeEntry {
             .collect(),
     );
     let (attributes, attribute_count) = attributes(ty.attributes());
-    TypeEntry {
+    enshwick_abi::headed!(TypeEntry {
         name: Str::new(ty.name()),
         impact_name: Str::new(ty.impact_name()),
         qualified_name: Str::new(ty.qualified_name()),
@@ -100,7 +100,7 @@ fn entry(ty: &Type<'static>) -> TypeEntry {
         constants,
         attributes,
         ..TypeEntry::EMPTY
-    }
+    })
 }
 
 /// Proof that the strings and arrays read through it are the loader's,

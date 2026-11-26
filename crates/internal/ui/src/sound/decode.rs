@@ -41,7 +41,8 @@ const VORBIS_ORDER: [&[usize]; 8] = [
 /// use enshwick::content::id;
 /// use enshwick::sound::{Channels, NewSound};
 ///
-/// let steps = NewSound { channels: Channels::Mono, ..NewSound::new(id!("steps"), "steps.ogg") };
+/// let mut steps = NewSound::new(id!("steps"), "steps.ogg");
+/// steps.channels = Channels::Mono;
 /// assert_eq!(steps.channels, Channels::Mono);
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
@@ -69,6 +70,10 @@ pub enum Channels {
 /// assert!(middle.to > Some(middle.from));
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "the part of a file a sound plays: where it starts and ends"
+)]
 pub struct Trim {
     /// Where it starts in the file.
     pub from: Duration,

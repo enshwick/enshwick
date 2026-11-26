@@ -5,6 +5,9 @@
 //! Mods depend on `enshwick`, which re-exports every module here at the
 //! same path; this crate's own paths carry no promise.
 #![cfg_attr(any(docsrs, enshwick_docs), feature(doc_cfg))]
+// The API grows after 1.0 without a major: a public struct or enum is
+// `#[non_exhaustive]`, or closed on purpose with an `#[expect]`.
+#![warn(clippy::exhaustive_enums, clippy::exhaustive_structs)]
 
 /// Fails when rustdoc builds this crate's examples one by one, which it does
 /// without a word when one of them does not merge.
@@ -50,7 +53,6 @@ pub use enshwick_base::{
 
 /// The base handle's helpers at the path the code here names them by.
 pub(crate) mod load {
-    #[cfg(feature = "unstable")]
     pub(crate) use enshwick_base::__off_from as off_from;
     pub(crate) use enshwick_base::load::hand_over;
     #[cfg(feature = "unstable")]
@@ -64,7 +66,6 @@ pub mod actions;
 pub mod chat;
 #[cfg(feature = "unstable")]
 pub mod commands;
-#[cfg(feature = "unstable")]
 pub mod console;
 #[cfg(feature = "unstable")]
 pub mod controls;

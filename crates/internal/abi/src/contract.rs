@@ -114,6 +114,10 @@ const _: fn(&HostApi) = every_field;
 
 /// What the caller is when it calls.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[expect(
+    clippy::exhaustive_enums,
+    reason = "hidden: only the loader and the fake host name it"
+)]
 pub enum Precondition {
     /// A handle neither host gave out.
     UnknownMod,
@@ -185,6 +189,10 @@ pub fn status_name(status: Status) -> Option<&'static str> {
 /// Who may call an entry, as each host's entry layer reads the calling
 /// handle before the entry's body runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[expect(
+    clippy::exhaustive_enums,
+    reason = "hidden: only the loader and the fake host name it"
+)]
 pub enum CallerKind {
     /// A loaded mod that is on.
     Mod,
@@ -215,6 +223,10 @@ impl CallerKind {
 
 /// One entry's line of the table.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "hidden: only the loader and the fake host name it"
+)]
 pub struct Row {
     /// The entry's field name.
     pub entry: String,
@@ -246,6 +258,10 @@ pub fn render(rows: &[Row]) -> String {
 /// Why a table does not read.
 #[derive(Debug, thiserror::Error)]
 #[error("line {line} of the contract table: {why}")]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "hidden: only the loader and the fake host name it"
+)]
 pub struct ReadTableError {
     /// The line, counted from 1 after any snapshot header.
     pub line: usize,

@@ -797,7 +797,7 @@ pub(crate) fn status(owner: ModIndex, id: u64) -> Option<Status> {
         .kept
         .iter()
         .find(|c| c.id == id && c.owner == owner)?;
-    Some(Status {
+    Some(enshwick_abi::headed!(Status {
         state: command.state,
         reason: command.reason,
         kind: command.kind.raw(),
@@ -805,7 +805,7 @@ pub(crate) fn status(owner: ModIndex, id: u64) -> Option<Status> {
         phase: command.phase,
         failure: command.failure,
         ..Status::EMPTY
-    })
+    }))
 }
 
 /// Runs the open commands in the interface frame with what it read of the

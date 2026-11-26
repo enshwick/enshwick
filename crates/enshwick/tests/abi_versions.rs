@@ -4,9 +4,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{
-        ABI_MAJOR, ABI_MINOR, Headed, Header, HostApi, PlayerInfo, SpawnRequest, Status,
-    };
+    use enshwick::abi::{ABI_MAJOR, ABI_MINOR, Headed, HostApi, PlayerInfo, SpawnRequest, Status};
     use enshwick::test::{FakeHost, Installed};
 
     struct Older;
@@ -65,15 +63,14 @@ mod tests {
     }
 
     fn spawn_request() -> SpawnRequest {
-        SpawnRequest {
-            header: Header::of::<SpawnRequest>(),
+        enshwick::abi::headed!(SpawnRequest {
             template: enshwick::content::Guid([0x3a; 16]),
             position: [1.0, 2.0, 3.0],
             orientation: [0.0, 0.0, 0.0, 1.0],
             level: 12,
             lifetime_ns: 0,
             flags: 0,
-        }
+        })
     }
 
     #[test]
@@ -87,7 +84,7 @@ mod tests {
             after: [0xAB; 16],
         };
         sent.request.header.size = u32::try_from(born).unwrap();
-        let mut entity = enshwick::Entity(0);
+        let mut entity = enshwick::Entity::from_engine(0);
         let status = (api.spawn)(loader.handle(), &raw const sent.request, &raw mut entity);
         assert_eq!(status, Status::OK);
         let spawned = loader.spawns();
@@ -100,14 +97,16 @@ mod tests {
 
     #[test]
     fn a_mod_s_list_entries_shorter_than_their_first_version_are_refused() {
-        let player = |slot: u32| PlayerInfo {
-            slot,
-            ..PlayerInfo::with_name(
-                enshwick::Entity(100 + slot),
-                enshwick::PlayerKey::new(u64::from(slot) + 1),
-                0,
-                "",
-            )
+        let player = |slot: u32| {
+            enshwick::abi::headed!(PlayerInfo {
+                slot,
+                ..PlayerInfo::with_name(
+                    enshwick::Entity::from_engine(100 + slot),
+                    enshwick::PlayerKey::new(u64::from(slot) + 1),
+                    0,
+                    "",
+                )
+            })
         };
         let loader = FakeHost::new()
             .player(player(0))

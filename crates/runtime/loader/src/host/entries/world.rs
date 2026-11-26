@@ -153,7 +153,7 @@ entries! {
         type_hash: u32,
         out as Out<*mut core::ffi::c_void>,
     ) -> Status {
-        let data = crate::world::writes::component_mut(me.loader, entity.0, type_hash)?;
+        let data = crate::world::writes::component_mut(me.loader, entity.get(), type_hash)?;
         crate::engine::conflicts::note_write(type_hash, me.index);
         out.put(data)
     }
@@ -197,6 +197,6 @@ entries! {
         request as Headed<enshwick_core::abi::SpawnRequest>,
         out as Out<Entity>,
     ) -> Status {
-        out.put(Entity(crate::world::spawns::spawn(loader, &request)?))
+        out.put(Entity::from_engine(crate::world::spawns::spawn(loader, &request)?))
     }
 }

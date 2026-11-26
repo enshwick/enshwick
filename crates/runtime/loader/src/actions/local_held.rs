@@ -405,7 +405,8 @@ unsafe fn read(ctx: *mut u64, layout: &Layout) {
         return;
     };
     // SAFETY: the caller's live context at the system's entry on its thread.
-    let Some(input) = (unsafe { layout.components.component(ctx, player.0, layout.input) }) else {
+    let Some(input) = (unsafe { layout.components.component(ctx, player.get(), layout.input) })
+    else {
         missed(Miss::NoInput);
         return;
     };
@@ -417,14 +418,21 @@ unsafe fn read(ctx: *mut u64, layout: &Layout) {
     // The builder's pass that wrote this mask left the presses' bits.
     let players = bits & !crate::actions::client_input::written();
     STATE.players.store(players, Ordering::Relaxed);
-    STATE.player.store(player.0, Ordering::Relaxed);
+    STATE.player.store(player.get(), Ordering::Relaxed);
     STATE.miss.store(0, Ordering::Relaxed);
     let at = now_ms();
     let _kept = player_state::FUSE.run(player_state::FEATURE, || {
         // SAFETY: the caller's live context at the system's entry on its
         // thread, and `input` the local player's live `ClientPlayerInput`.
         unsafe {
-            player_state::read(ctx, &layout.components, &layout.state, player.0, input, at);
+            player_state::read(
+                ctx,
+                &layout.components,
+                &layout.state,
+                player.get(),
+                input,
+                at,
+            );
         }
     });
     STATE.read_ms.store(at, Ordering::Release);
@@ -474,7 +482,7 @@ unsafe fn local_player(
         // SAFETY: the caller's live context on its thread, whose row counter
         // `query` set to this row.
         let row = unsafe { walk.entity(ctx) };
-        Some(Some((Entity(id), Entity(row))))
+        Some(Some((Entity::from_engine(id), Entity::from_engine(row))))
     });
     first_local(rows.flatten())
 }
@@ -501,7 +509,7 @@ unsafe fn row_kept<R>(walk: &Walk, ctx: *mut u64, read: impl FnOnce() -> R) -> R
 /// a row, is never the local player.
 fn first_local(rows: impl IntoIterator<Item = (Entity, Entity)>) -> Option<Entity> {
     rows.into_iter()
-        .find_map(|(id, row)| (row.0 != 0 && row == id).then_some(row))
+        .find_map(|(id, row)| (row.get() != 0 && row == id).then_some(row))
 }
 
 /// Reads the template and position of the open screen's host, `host`, in
@@ -516,7 +524,8 @@ unsafe fn read_host(ctx: *mut u64, at: &HostLayout, host: u32) {
     let world = unsafe { at.components.world(ctx) };
     // SAFETY: `world` is the running system's live entity world, read on
     // its thread during the system's entry, before it changes any entity.
-    let template = world.and_then(|world| unsafe { at.walk.template(world, Entity(host)) });
+    let template =
+        world.and_then(|world| unsafe { at.walk.template(world, Entity::from_engine(host)) });
     // SAFETY: the caller's live context, on its thread.
     let transform = unsafe { at.components.component(ctx, host, at.transform) };
     // SAFETY: `transform` is the host's live `CurrentTransform`, whose
@@ -724,7 +733,7 @@ pub(crate) fn slots_run() -> bool {
 /// The local player's entity at the last mask read; `None` before one.
 pub(crate) fn player() -> Option<Entity> {
     let player = STATE.player.load(Ordering::Relaxed);
-    (player != 0).then_some(Entity(player))
+    (player != 0).then_some(Entity::from_engine(player))
 }
 
 #[cold]
@@ -775,7 +784,7 @@ fn cached_status(
             flags |= flag;
         }
     }
-    Info {
+    enshwick_abi::headed!(Info {
         flags,
         age_ms: if read == 0 {
             Info::EMPTY.age_ms
@@ -783,7 +792,7 @@ fn cached_status(
             now.saturating_sub(read)
         },
         ..Info::EMPTY
-    }
+    })
 }
 
 #[cfg(test)]

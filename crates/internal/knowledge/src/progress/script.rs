@@ -128,7 +128,7 @@ mod tests {
 
     fn row(entity: u32, gained: u32) -> Experience {
         Experience {
-            entity: Entity(entity),
+            entity: Entity::from_engine(entity),
             level: 1,
             progress: 0,
             need: 100,
@@ -142,7 +142,11 @@ mod tests {
         write_back(&mut all, vec![row(3, 70), row(9, 90), row(1, 50)]);
         assert_eq!(
             all.map(|r| (r.entity, r.gained)),
-            [(Entity(1), 50), (Entity(2), 6), (Entity(3), 70)],
+            [
+                (Entity::from_engine(1), 50),
+                (Entity::from_engine(2), 6),
+                (Entity::from_engine(3), 70)
+            ],
             "character 2 keeps its row and character 9, not in the pass, is dropped"
         );
     }

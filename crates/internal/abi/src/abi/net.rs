@@ -13,19 +13,19 @@ use crate::abi::{Header, PlayerKey};
 /// use enshwick::abi::{Header, NetMessage};
 ///
 /// let bytes = [1u8, 2, 3];
-/// let message = NetMessage {
-///     header: Header::of::<NetMessage>(),
+/// let message = enshwick::abi::headed!(NetMessage {
 ///     channel: 0x1234,
 ///     reserved: 0,
 ///     peer: NetMessage::SERVER,
 ///     data: bytes.as_ptr(),
 ///     size: 3,
 ///     reserved_tail: 0,
-/// };
+/// });
 /// assert_eq!(message.peer, NetMessage::SERVER);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct NetMessage {
     /// Size and version of this struct.
     pub header: Header,

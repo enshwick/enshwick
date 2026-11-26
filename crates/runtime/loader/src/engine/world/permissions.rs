@@ -169,7 +169,7 @@ pub(super) fn apply(world: usize) {
         if !changes.iter().any(|c| c.key == key) {
             continue;
         }
-        let Some(entry) = entry(layout, infos, Entity(entity)) else {
+        let Some(entry) = entry(layout, infos, Entity::from_engine(entity)) else {
             continue;
         };
         // SAFETY: `entry` is `entity`'s own entry of the permission table
@@ -195,7 +195,7 @@ pub(super) fn entry(layout: &Layout, infos: usize, entity: Entity) -> Option<usi
     if infos == 0 {
         return None;
     }
-    let index = (entity.0 as usize).wrapping_sub(1);
+    let index = (entity.get() as usize).wrapping_sub(1);
     if index >= layout.permission_entries {
         return None;
     }
@@ -206,7 +206,7 @@ pub(super) fn entry(layout: &Layout, infos: usize, entity: Entity) -> Option<usi
     // below their count (`index >= permission_entries` returns first), and
     // each starts with its `u32` entity; read on the game thread.
     let owner: u32 = unsafe { read(entry, 0) };
-    (owner == entity.0).then_some(entry)
+    (owner == entity.get()).then_some(entry)
 }
 
 #[cfg(test)]

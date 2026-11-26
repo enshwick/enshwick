@@ -116,7 +116,7 @@ impl Installed {
     /// use enshwick::content::Guid;
     ///
     /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
-    /// let unknown = SoundPlay { container: Guid::named("you.bells:none"), ..SoundPlay::EMPTY };
+    /// let unknown = enshwick::abi::headed!(SoundPlay { container: Guid::named("you.bells:none"), ..SoundPlay::EMPTY });
     /// assert!(!loader.hear_sound(unknown));
     /// assert!(loader.sounds().is_empty());
     /// ```

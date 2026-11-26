@@ -202,7 +202,7 @@ impl World {
             FieldKind::F32 => read!(f32, |v| Data::Float(v.into())),
             FieldKind::F64 => read!(f64, Data::Float),
             FieldKind::Bool => read!(bool, Data::Bool),
-            FieldKind::Entity => read!(Entity, |e| Data::Uint(e.0.into())),
+            FieldKind::Entity => read!(Entity, |e| Data::Uint(e.get().into())),
         }
     }
 
@@ -254,7 +254,10 @@ impl World {
                     _ => None,
                 }
             ),
-            FieldKind::Entity => write!(Entity, int.and_then(|i| i.try_into().ok()).map(Entity)),
+            FieldKind::Entity => write!(
+                Entity,
+                int.and_then(|i| i.try_into().ok()).map(Entity::from_engine)
+            ),
         }
     }
 

@@ -94,13 +94,12 @@ mod tests {
         assert_eq!(status, Status::OK);
         // SAFETY: the fake's table lives for the process.
         let api = unsafe { &*loader.api() };
-        let empty = InteractionPrompt {
-            header: enshwick::abi::Header::of::<InteractionPrompt>(),
+        let empty = enshwick::abi::headed!(InteractionPrompt {
             item: ItemId::new(0),
             verb: 0,
             text: 0,
             flags: 0,
-        };
+        });
         assert_eq!(
             (api.interaction_prompt)(loader.handle(), &raw const empty),
             Status::TOO_LATE,

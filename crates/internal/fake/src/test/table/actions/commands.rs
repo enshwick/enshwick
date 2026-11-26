@@ -308,11 +308,10 @@ entries! {
         let (done, text) = reply.split_at_checked(1).unwrap_or(("0", ""));
         with(Status::MISSING, |s| {
             let kept = s.actions.run_out.insert(text.into());
-            let reply = ActionReply {
-                header: enshwick_core::abi::Header::of::<ActionReply>(),
+            let reply = enshwick_core::headed!(ActionReply {
                 done: u8::from(done == "1"),
                 text: Str::new(kept),
-            };
+            });
             put_headed(out, reply)
         })
     }
@@ -340,12 +339,11 @@ entries! {
                 .commands
                 .listed
                 .iter()
-                .map(|[name, alias, id]| CommandInfo {
-                    header: enshwick_core::abi::Header::of::<CommandInfo>(),
+                .map(|[name, alias, id]| enshwick_core::headed!(CommandInfo {
                     name: Str::new(name),
                     alias: Str::new(alias),
                     mod_id: Str::new(id),
-                })
+                }))
                 .collect::<Vec<_>>()
         });
         crate::test::table::base::io::list(&infos, out, entry_size, capacity, count)

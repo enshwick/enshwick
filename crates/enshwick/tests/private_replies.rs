@@ -5,7 +5,7 @@
 mod tests {
     use std::sync::OnceLock;
 
-    use enshwick::abi::{Header, Level, PlayerInfo, Status};
+    use enshwick::abi::{Level, PlayerInfo, Status};
     use enshwick::actions::{Action, Outcome};
     use enshwick::commands::{self, Caller};
     use enshwick::i18n::Texts;
@@ -44,15 +44,14 @@ mod tests {
     );
 
     fn ann() -> PlayerInfo {
-        let mut info = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let mut info = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: enshwick::Entity(3),
+            entity: enshwick::Entity::from_engine(3),
             key: PlayerKey::new(7),
             permissions: 0,
             name_len: 3,
             name: [0; PlayerInfo::NAME_MAX],
-        };
+        });
         info.name[..3].copy_from_slice(b"Ann");
         info
     }

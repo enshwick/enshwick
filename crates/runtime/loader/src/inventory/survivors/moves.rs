@@ -2,7 +2,7 @@ use std::cell::Cell;
 use std::sync::atomic::Ordering;
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{BedCheck, Header};
+use enshwick_core::abi::BedCheck;
 use enshwick_core::raw::{read_at, read_ptr_at};
 
 use enshwick_base::Relock;
@@ -202,22 +202,21 @@ pub(super) unsafe fn bed_kept(ctx: *const u8) -> bool {
     let ecs = unsafe { read_ptr_at::<u64>(ctx, 0) };
     // SAFETY: `ecs` is null or the behaviour's live query context, used on
     // its system's thread by the caller's contract.
-    let Some(bed_at) = (unsafe { position_of(engine, ecs, Entity(bed)) }) else {
+    let Some(bed_at) = (unsafe { position_of(engine, ecs, Entity::from_engine(bed)) }) else {
         return true;
     };
     // SAFETY: `ecs` is null or the behaviour's live query context, used on
     // its system's thread by the caller's contract.
     let entity = unsafe { engine.entity(ecs) };
-    let check = BedCheck {
-        header: Header::of::<BedCheck>(),
+    let check = enshwick_abi::headed!(BedCheck {
         npc_id: enshwick_core::abi::NpcId::new(survivor),
-        entity: Entity(entity),
-        bed_id: Entity(bed),
+        entity: Entity::from_engine(entity),
+        bed_id: Entity::from_engine(bed),
         // SAFETY: `saved` and `transform` are null or the survivor's live
         // components, which the behaviour context holds while it runs.
         home: unsafe { home(saved, transform) },
         bed_at,
-    };
+    });
     let refuser = crate::engine::filters::ask(
         bed_checks,
         crate::engine::profile::Feature::Survivors,

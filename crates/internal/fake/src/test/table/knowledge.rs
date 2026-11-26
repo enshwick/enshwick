@@ -128,7 +128,7 @@ fn definition(
 /// Whether a change of a character's knowledge names the world, which the
 /// loader refuses: such knowledge has no world value.
 fn names_the_world(scope: u8, entity: enshwick_core::Entity) -> bool {
-    scope == KnowledgeInfo::PLAYER && entity.0 == 0
+    scope == KnowledgeInfo::PLAYER && entity.get() == 0
 }
 
 /// Whether `value` names a flag the loader cannot set or clear: one past the
@@ -157,9 +157,12 @@ fn revoke(
         if flag_outside(kind, value, 0) {
             return Status::BAD_ARGS;
         }
-        s.knowledge
-            .revokes
-            .push((enshwick_core::Entity::from_raw(entity.0), id, kind, value));
+        s.knowledge.revokes.push((
+            enshwick_core::Entity::from_raw(entity.get()),
+            id,
+            kind,
+            value,
+        ));
         Status::OK
     })
 }
@@ -254,7 +257,7 @@ entries! {
         if holds.is_null() {
             return Status::BAD_ARGS;
         }
-        let holder = (entity != enshwick_core::Entity(0)).then_some(entity);
+        let holder = (entity != enshwick_core::Entity::NONE).then_some(entity);
         let answer = with(Err(Status::MISSING), |s| {
             // As the loader, which refuses a character with no player record.
             if holder.is_some()
@@ -302,7 +305,7 @@ entries! {
         match (change.account.get(), change.entity) {
             (0, entity) if revoking => revoke(entity, id, kind, value),
             (0, entity) => grant(entity, id, kind, value),
-            (_, enshwick_core::Entity(0)) => for_account(change.account, id, kind, value, revoking),
+            (_, enshwick_core::Entity::NONE) => for_account(change.account, id, kind, value, revoking),
             _ => Status::BAD_ARGS,
         }
     }
@@ -365,9 +368,12 @@ fn grant(
         if names_the_world(scope, entity) {
             return Status::REFUSED;
         }
-        s.knowledge
-            .grants
-            .push((enshwick_core::Entity::from_raw(entity.0), id, kind, value));
+        s.knowledge.grants.push((
+            enshwick_core::Entity::from_raw(entity.get()),
+            id,
+            kind,
+            value,
+        ));
         Status::OK
     })
 }

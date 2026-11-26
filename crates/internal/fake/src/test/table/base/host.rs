@@ -6,9 +6,7 @@ use crate::test::table::entries;
 use core::ffi::c_void;
 
 use crate::test::table::{Registered, found, list, text, with};
-use enshwick_core::abi::{
-    EventTypeInfo, GameEventFn, Header, ModHandle, Side, Status, StatusFn, Str,
-};
+use enshwick_core::abi::{EventTypeInfo, GameEventFn, ModHandle, Side, Status, StatusFn, Str};
 
 entries! {
     pub(crate) fn component(
@@ -17,14 +15,23 @@ entries! {
         type_hash: u32,
         out: *mut *const c_void as args::Out,
     ) -> Status {
-        let address = with(None, |s| {
-            s.host
+        if !crate::test::table::on_game_thread() {
+            return Status::WRONG_THREAD;
+        }
+        let address = with(Ok(None), |s| {
+            if s.host.world.no_world_reads {
+                return Err(Status::UNAVAILABLE);
+            }
+            Ok(s.host
                 .base
                 .components
-                .get(&(entity.0, type_hash))
-                .map(|c| c.0)
+                .get(&(entity.get(), type_hash))
+                .map(|c| c.0))
         });
-        found(address.map(core::ptr::with_exposed_provenance), out)
+        match address {
+            Ok(address) => found(address.map(core::ptr::with_exposed_provenance), out),
+            Err(status) => status,
+        }
     }
 
     pub(crate) fn hosting(me as Caller, out: *mut u8 as args::Out) -> Status {
@@ -125,12 +132,11 @@ entries! {
                 .base
                 .event_types
                 .iter()
-                .map(|&(name, hash, size)| EventTypeInfo {
-                    header: Header::of::<EventTypeInfo>(),
+                .map(|&(name, hash, size)| enshwick_core::headed!(EventTypeInfo {
                     name: Str::new(name),
                     hash,
                     size,
-                })
+                }))
                 .collect()
         });
         list(&found, out, entry_size, capacity, count)

@@ -19,7 +19,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use enshwick_core::abi::{BuildingData, Event, Header, HookFlags, PlayerData, Side, TickData};
+use enshwick_core::abi::{BuildingData, Event, HookFlags, PlayerData, Side, TickData};
 use enshwick_core::raw::read_at;
 
 use crate::engine::fuse::Fuse;
@@ -86,12 +86,12 @@ const MAX_SLOTS: usize = 32;
 
 /// The data of the every-step [`Event::TICKED`] for step `step` of `game`.
 fn tick_data(step: u64, time: StepTime, game: u64) -> TickData {
-    TickData {
+    enshwick_abi::headed!(TickData {
         elapsed_ns: time.elapsed,
         step_ns: time.average,
         game,
         ..TickData::new(step)
-    }
+    })
 }
 
 /// The server layout the links read, once linked.
@@ -353,8 +353,7 @@ fn link_building(loader: &'static Loader, stepped: bool, place: bool, pickup: bo
 /// - Called on a thread the game reads the slot on, with no writer
 ///   meanwhile.
 unsafe fn player(slot_index: usize, slot: *const u8, slots: &Slots) -> PlayerData {
-    PlayerData {
-        header: Header::of::<PlayerData>(),
+    enshwick_abi::headed!(PlayerData {
         slot: u32::try_from(slot_index).unwrap_or(u32::MAX),
         // SAFETY: the caller guarantees a live player slot; its u32 entity
         // sits at the build table's `server.player_slot_entity` offset.
@@ -362,7 +361,7 @@ unsafe fn player(slot_index: usize, slot: *const u8, slots: &Slots) -> PlayerDat
         // SAFETY: the caller guarantees a live player slot; its u64 account
         // key sits at the build table's `server.player_slot_key` offset.
         key: unsafe { read_at(slot, slots.key) },
-    }
+    })
 }
 
 crate::engine::chains::chain_detour! {
@@ -548,7 +547,7 @@ unsafe fn joins(loader: &'static Loader, offsets: &Offsets, server: *mut u8) {
             // game thread after its step, as the caller guarantees.
             let data = unsafe { player(index, slot, &slots) };
             if let Some((entity, key)) = STATE.joined_as.get(index) {
-                entity.store(data.entity.0, Ordering::Relaxed);
+                entity.store(data.entity.get(), Ordering::Relaxed);
                 key.store(data.key.get(), Ordering::Relaxed);
             }
             run_fused(
@@ -569,12 +568,11 @@ fn left_unseen(loader: &'static Loader, index: usize) {
     let Some((entity, key)) = STATE.joined_as.get(index) else {
         return;
     };
-    let data = PlayerData {
-        header: Header::of::<PlayerData>(),
+    let data = enshwick_abi::headed!(PlayerData {
         slot: u32::try_from(index).unwrap_or(u32::MAX),
-        entity: enshwick_core::Entity(entity.load(Ordering::Relaxed)),
+        entity: enshwick_core::Entity::from_engine(entity.load(Ordering::Relaxed)),
         key: enshwick_core::PlayerKey::new(key.load(Ordering::Relaxed)),
-    };
+    });
     left(loader, "a player's slot scan", &data);
 }
 
@@ -898,9 +896,8 @@ crate::engine::chains::chain_detour! {
             && !context.is_null()
             && let Some(offsets) = loaded().and_then(|(_, offsets)| offsets.building)
         {
-            STATE.building.push(BuildingData {
-                header: Header::of::<BuildingData>(),
-                entity: enshwick_core::Entity(entity),
+            STATE.building.push(enshwick_abi::headed!(BuildingData {
+                entity: enshwick_core::Entity::from_engine(entity),
                 // SAFETY: `context` is non-null by the check before it and is
                 // the hooked function's build context; its u32 acting player
                 // sits at the build table's `building.ctx_player` offset.
@@ -921,7 +918,7 @@ crate::engine::chains::chain_detour! {
                 // SAFETY: `position` is null or the hooked function's
                 // three-float position argument, live for the call.
                 position: unsafe { placed_at(position) },
-            });
+            }));
         }
         entity
     }
@@ -976,10 +973,9 @@ crate::engine::chains::chain_detour! {
         if done != 0
             && let Some((entity, mode, player, replay)) = before
         {
-            STATE.building.push(BuildingData {
-                header: Header::of::<BuildingData>(),
-                entity: enshwick_core::Entity(entity),
-                character: enshwick_core::Entity(player),
+            STATE.building.push(enshwick_abi::headed!(BuildingData {
+                entity: enshwick_core::Entity::from_engine(entity),
+                character: enshwick_core::Entity::from_engine(player),
                 item: enshwick_core::ItemId::new(0),
                 kind: if mode == 2 {
                     BuildingData::TORN_DOWN
@@ -989,7 +985,7 @@ crate::engine::chains::chain_detour! {
                 replay,
                 template: enshwick_core::content::Guid::NIL,
                 position: [0.0; 3],
-            });
+            }));
         }
         done
     }

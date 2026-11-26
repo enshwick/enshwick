@@ -158,7 +158,7 @@ mod tests {
             item,
             count: 1,
             player: PlayerKey::new(7),
-            character: Entity(10),
+            character: Entity::from_engine(10),
             deal: Deal::SELL,
         }
     }

@@ -32,7 +32,7 @@ mod tests {
     /// A fog of 4 × 3 pixels of 8 m, its pixel at (x, y) holding
     /// `10 * y + x`.
     fn small() -> (FogInfo, Vec<u8>) {
-        let info = FogInfo {
+        let info = enshwick::abi::headed!(FogInfo {
             width: 4,
             height: 3,
             metres_per_pixel: 8.0,
@@ -40,7 +40,7 @@ mod tests {
             version: 5,
             session: 1,
             ..FogInfo::EMPTY
-        };
+        });
         let pixels = (0..3u8)
             .flat_map(|y| (0..4u8).map(move |x| 10 * y + x))
             .collect();

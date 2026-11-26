@@ -8,7 +8,7 @@ mod tests {
     use std::time::Duration;
 
     use enshwick::abi::{
-        BuildCheck, CraftCheck, DamageCheck, Header, ItemAction, ModHandle, Registers, Side, Status,
+        BuildCheck, CraftCheck, DamageCheck, ItemAction, ModHandle, Registers, Side, Status,
     };
     use enshwick::chat::ChatVerdict;
     use enshwick::content::Guid;
@@ -127,16 +127,15 @@ mod tests {
     #[test]
     fn a_pack_s_damage_filter_runs_as_the_pack() {
         let loader = installed(FakeHost::new(), |load| load.on_damage(|_| note()));
-        let fall = DamageCheck {
-            header: Header::of::<DamageCheck>(),
+        let fall = enshwick::abi::headed!(DamageCheck {
             cause: DamageCheck::FALL_DAMAGE,
-            target: Entity(2),
-            source: Entity(0),
-            attacker: Entity(0),
+            target: Entity::from_engine(2),
+            source: Entity::from_engine(0),
+            attacker: Entity::from_engine(0),
             total: 10.0,
             amount_count: 0,
             amounts: core::ptr::null_mut(),
-        };
+        });
         let _after = loader.damage(fall, &mut []);
         ran_as_the_pack();
     }
@@ -149,14 +148,13 @@ mod tests {
                 true
             })
         });
-        let placed = loader.build(&BuildCheck {
-            header: Header::of::<BuildCheck>(),
-            character: Entity(2),
+        let placed = loader.build(&enshwick::abi::headed!(BuildCheck {
+            character: Entity::from_engine(2),
             item: ItemId::new(7),
             position: [0.0; 3],
             reason: core::ptr::null_mut(),
             account: PlayerKey::default(),
-        });
+        }));
         assert_eq!(placed, Ok(()));
         ran_as_the_pack();
     }
@@ -169,14 +167,13 @@ mod tests {
                 true
             })
         });
-        assert!(loader.craft(&CraftCheck {
-            header: Header::of::<CraftCheck>(),
-            crafting_operator_id: Entity(2),
-            crafting_station_id: Entity(0),
+        assert!(loader.craft(&enshwick::abi::headed!(CraftCheck {
+            crafting_operator_id: Entity::from_engine(2),
+            crafting_station_id: Entity::from_engine(0),
             recipe_id: enshwick::RecipeId::new(5),
             recipe_amount: 1,
             reserved: 0,
-        }));
+        })));
         ran_as_the_pack();
     }
 
@@ -188,15 +185,14 @@ mod tests {
                 true
             })
         });
-        assert!(loader.item_action(&ItemAction {
-            header: Header::of::<ItemAction>(),
+        assert!(loader.item_action(&enshwick::abi::headed!(ItemAction {
             kind: ItemAction::PICKUP,
-            character: Entity(1),
+            character: Entity::from_engine(1),
             item: ItemId::new(0x5e01),
             count: 1,
-            inventory: Entity(2),
+            inventory: Entity::from_engine(2),
             slot: 0,
-        }));
+        })));
         ran_as_the_pack();
     }
 

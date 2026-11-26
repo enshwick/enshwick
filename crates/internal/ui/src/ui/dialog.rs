@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{Header, Str, UiDialog};
+use crate::abi::{Str, UiDialog};
 
 pub use enshwick_base::ui::Response;
 
@@ -80,14 +80,13 @@ impl<'a> Dialog<'a> {
     }
 
     pub(super) fn to_raw(self, flags: u32) -> UiDialog {
-        UiDialog {
-            header: Header::of::<UiDialog>(),
+        enshwick_abi::headed!(UiDialog {
             title: Str::new(self.title),
             message: Str::new(self.message),
             detail: Str::new(self.detail),
             buttons: self.buttons,
             flags,
-        }
+        })
     }
 }
 

@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{ContainerPut, Header, Interaction, PlayerInfo};
+    use enshwick::abi::{ContainerPut, Interaction, PlayerInfo};
     use enshwick::events::WorldSaved;
     use enshwick::inventory::SlotRef;
     use enshwick::test::FakeHost;
@@ -18,26 +18,24 @@ mod tests {
         FakeHost::new()
             .world()
             .inventory_requests()
-            .player(PlayerInfo {
-                header: Header::of::<PlayerInfo>(),
+            .player(enshwick::abi::headed!(PlayerInfo {
                 slot: 1,
-                entity: Entity(PLAYER),
+                entity: Entity::from_engine(PLAYER),
                 key: enshwick::PlayerKey::new(7),
                 permissions: 0,
                 name_len: 0,
                 name: [0; PlayerInfo::NAME_MAX],
-            })
+            }))
     }
 
     fn put(item: u32) -> ContainerPut {
-        ContainerPut {
-            header: Header::of::<ContainerPut>(),
-            container: Entity(CHEST),
+        enshwick::abi::headed!(ContainerPut {
+            container: Entity::from_engine(CHEST),
             container_item: ItemId::new(0x5e01),
             item: ItemId::new(item),
             count: 4,
-            slot: SlotRef::new(Entity(CHEST + 1), 2).0,
-        }
+            slot: SlotRef::new(Entity::from_engine(CHEST + 1), 2).0,
+        })
     }
 
     #[test]
@@ -64,19 +62,23 @@ mod tests {
             end)
             "#,
         );
-        let take_all = Interaction {
-            from: Entity(CHEST),
-            to: Entity(PLAYER),
+        let take_all = enshwick::abi::headed!(Interaction {
+            from: Entity::from_engine(CHEST),
+            to: Entity::from_engine(PLAYER),
             action: Interaction::ACTION_ALL,
             transfer: Interaction::TRANSFER_MOVE_ALL_STACKS,
             moving: 1,
-            ..Interaction::new(Interaction::MOVE, Entity(PLAYER), Entity(CHEST))
-        };
-        let deposit_all = Interaction {
-            from: Entity(PLAYER),
-            to: Entity(CHEST),
+            ..Interaction::new(
+                Interaction::MOVE,
+                Entity::from_engine(PLAYER),
+                Entity::from_engine(CHEST),
+            )
+        });
+        let deposit_all = enshwick::abi::headed!(Interaction {
+            from: Entity::from_engine(PLAYER),
+            to: Entity::from_engine(CHEST),
             ..take_all
-        };
+        });
         assert!(!loader.interaction(&take_all));
         assert!(loader.interaction(&deposit_all));
     }
@@ -94,7 +96,7 @@ mod tests {
         assert!(logged(&loader, "shown true"), "{:?}", loader.logs());
         assert_eq!(
             loader.pickups_shown(),
-            [(Entity(PLAYER), ItemId::new(0x5e01), 3)]
+            [(Entity::from_engine(PLAYER), ItemId::new(0x5e01), 3)]
         );
     }
 }

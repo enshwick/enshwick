@@ -261,7 +261,7 @@ entries! {
     ) -> Status {
         let value = text(value);
         with(Status::MISSING, |s| {
-            s.world.labels.push((entity.0, value));
+            s.world.labels.push((entity.get(), value));
             Status::OK
         })
     }
@@ -345,11 +345,11 @@ entries! {
                 return Status::REFUSED;
             }
             if !s.host.world.placed.iter().any(|(_, p)| p.entity == entity)
-                && !s.host.content.templates.contains_key(&entity.0)
+                && !s.host.content.templates.contains_key(&entity.get())
             {
                 return Status::MISSING;
             }
-            s.world.destroyed.push(entity.0);
+            s.world.destroyed.push(entity.get());
             Status::OK
         })
     }
@@ -394,10 +394,10 @@ entries! {
                 .host
                 .base
                 .components
-                .get(&(entity.0, type_hash))
+                .get(&(entity.get(), type_hash))
                 .map(|c| c.0)
                 .ok_or(Status::MISSING)?;
-            s.world.writes.push((entity.0, type_hash));
+            s.world.writes.push((entity.get(), type_hash));
             Ok(address)
         });
         match address {
@@ -457,7 +457,7 @@ entries! {
         };
         with(Status::MISSING, |s| {
             if what == PROGRESS_OPEN {
-                if entity.0 != 0 {
+                if entity.get() != 0 {
                     return Status::BAD_ARGS;
                 }
                 if s.base.closed() {
@@ -492,7 +492,7 @@ entries! {
             let Some(writes) = s.world.progress_writes.as_mut() else {
                 return Status::REFUSED;
             };
-            if entity.0 == 0 || !in_game {
+            if entity.get() == 0 || !in_game {
                 return Status::REFUSED;
             }
             if !s.world.progress.push(me, (entity, what, value), s.base.ticks.step) {
@@ -772,7 +772,7 @@ entries! {
         item: enshwick_core::ItemId,
         out: *mut enshwick_core::abi::PropPlacementInfo as args::HeadedOut,
     ) -> Status {
-        use enshwick_core::abi::{Header, PropPlacementInfo};
+        use enshwick_core::abi::PropPlacementInfo;
         with(Status::UNAVAILABLE, |s| {
             if no_world(s) || !(s.host.base.serving()) {
                 return Status::UNAVAILABLE;
@@ -798,13 +798,12 @@ entries! {
             });
             super::put_headed(
                 out,
-                PropPlacementInfo {
-                    header: Header::of::<PropPlacementInfo>(),
+                enshwick_core::headed!(PropPlacementInfo {
                     template: info.placed_entity,
                     min,
                     max,
                     flags,
-                },
+                }),
             )
         })
     }

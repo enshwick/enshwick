@@ -4,7 +4,7 @@
 #[cfg(test)]
 mod tests {
     use enshwick::abi::SkillNode;
-    use enshwick::abi::{Header, SkillCheck, Status};
+    use enshwick::abi::{SkillCheck, Status};
     use enshwick::progress::{Skill, SkillGate};
     use enshwick::{Load, Mod, Off};
 
@@ -28,13 +28,12 @@ mod tests {
     );
 
     fn check(node: u32) -> SkillCheck {
-        SkillCheck {
-            header: Header::of::<SkillCheck>(),
+        enshwick::abi::headed!(SkillCheck {
             node: SkillNode::new(node),
             gate: SkillCheck::FLY_MODE,
             unlocked: 0,
             reserved: [0; 3],
-        }
+        })
     }
 
     #[test]

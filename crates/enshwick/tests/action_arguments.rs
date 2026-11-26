@@ -6,7 +6,7 @@
 mod tests {
     use std::sync::{Mutex, OnceLock};
 
-    use enshwick::abi::{ActionCall, Header, PlayerInfo, Status};
+    use enshwick::abi::{ActionCall, PlayerInfo, Status};
     use enshwick::actions::sheet::{ArgView, Entry};
     use enshwick::actions::{Action, Actions, Arg, Outcome, Value, Window, window};
     use enshwick::i18n::{Language, Texts};
@@ -159,15 +159,14 @@ mod tests {
     );
 
     fn player(entity: u32, key: u64, name: &str, permissions: u32) -> PlayerInfo {
-        let mut info = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let mut info = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: enshwick::Entity(entity),
+            entity: enshwick::Entity::from_engine(entity),
             key: PlayerKey::new(key),
             permissions,
             name_len: u32::try_from(name.len()).unwrap(),
             name: [0; PlayerInfo::NAME_MAX],
-        };
+        });
         info.name[..name.len()].copy_from_slice(name.as_bytes());
         info
     }

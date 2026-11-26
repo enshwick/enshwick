@@ -157,14 +157,13 @@ impl<F: FnPtr> Hook<F> {
     }
 
     pub(crate) fn spec(&'static self, target: u64) -> crate::abi::HookSpec {
-        crate::abi::HookSpec {
-            header: crate::abi::Header::of::<crate::abi::HookSpec>(),
+        enshwick_abi::headed!(crate::abi::HookSpec {
             target,
             detour: address(self.detour),
             next: &raw const self.next,
             priority: self.priority,
             flags: self.flags,
-        }
+        })
     }
 }
 

@@ -49,16 +49,19 @@ fn accessors(c: &mut Criterion) {
         .constant("item_info.placed_entity", 0x3c0)
         .item(enshwick::ItemId::new(7), 1, 0)
         .item_places(enshwick::ItemId::new(7), enshwick::content::Guid([7; 16]))
-        .component(Entity(4096), 2, &7u32.to_le_bytes())
-        .component(Entity(4096), 1, &[0; 64]);
+        .component(Entity::from_engine(4096), 2, &7u32.to_le_bytes())
+        .component(Entity::from_engine(4096), 1, &[0; 64]);
     for i in 0..PROPS {
         let entity = 10_000 + i;
         let at = [f64::from(i % 64), 0.0, f64::from(i / 64)].map(|axis| axis * 4.0);
         fake = fake
-            .placed(2, Entity(entity), at)
-            .template(Entity(entity), enshwick::content::Guid([7; 16]))
-            .component(Entity(entity), 2, &7u32.to_le_bytes())
-            .component(Entity(entity), 1, &[0; 40]);
+            .placed(2, Entity::from_engine(entity), at)
+            .template(
+                Entity::from_engine(entity),
+                enshwick::content::Guid([7; 16]),
+            )
+            .component(Entity::from_engine(entity), 2, &7u32.to_le_bytes())
+            .component(Entity::from_engine(entity), 1, &[0; 40]);
     }
     let loader = fake.install();
     // SAFETY: both functions are the exports of this file's `declare_mod!(Bench)`.
@@ -67,7 +70,7 @@ fn accessors(c: &mut Criterion) {
     let Some(&world) = WORLD.get() else {
         panic!("no world: {:?}", loader.logs());
     };
-    let entity = Entity(4096);
+    let entity = Entity::from_engine(4096);
     let mut group = c.benchmark_group("world");
     group.bench_function("used_item", |b| {
         b.iter(|| black_box(world).used_item(black_box(entity)));

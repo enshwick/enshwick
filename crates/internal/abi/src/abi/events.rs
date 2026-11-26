@@ -19,6 +19,10 @@ use crate::content::Guid;
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct Event(pub u32);
 
 impl Event {
@@ -187,18 +191,18 @@ impl Event {
 /// ```
 /// use enshwick::abi::{Header, WaypointData};
 ///
-/// let moved = WaypointData {
-///     header: Header::of::<WaypointData>(),
+/// let moved = enshwick::abi::headed!(WaypointData {
 ///     key: enshwick::PlayerKey::new(7),
-///     entity: enshwick::Entity(2),
+///     entity: enshwick::Entity::from_engine(2),
 ///     position: [12.5, 3.0, -7.25],
 ///     set: 1,
 ///     reserved_tail: 0,
-/// };
+/// });
 /// assert_eq!(moved.set, 1);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct WaypointData {
     /// Size and version of this struct.
     pub header: Header,
@@ -223,7 +227,7 @@ impl WaypointData {
     pub const EMPTY: Self = Self {
         header: Header::of::<Self>(),
         key: PlayerKey::new(0),
-        entity: Entity(0),
+        entity: Entity::from_engine(0),
         position: [0.0; 3],
         set: 0,
         reserved_tail: 0,
@@ -237,20 +241,20 @@ impl WaypointData {
 /// ```
 /// use enshwick::abi::{DamageCheck, Header, PlayerDeathData};
 ///
-/// let fell = PlayerDeathData {
-///     header: Header::of::<PlayerDeathData>(),
-///     entity: enshwick::Entity(2),
+/// let fell = enshwick::abi::headed!(PlayerDeathData {
+///     entity: enshwick::Entity::from_engine(2),
 ///     cause: DamageCheck::FALL_DAMAGE,
 ///     key: enshwick::PlayerKey::new(7),
 ///     position: [10.0, 50.0, -3.0],
 ///     cause_guid: enshwick::abi::Guid::NIL,
-///     killer_entity: enshwick::Entity(0),
+///     killer_entity: enshwick::Entity::from_engine(0),
 ///     reserved_tail: 0,
-/// };
+/// });
 /// assert_eq!(fell.cause, DamageCheck::FALL_DAMAGE);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable, crate::Script)]
+#[non_exhaustive]
 pub struct PlayerDeathData {
     /// Size and version of this struct.
     pub header: Header,
@@ -290,11 +294,12 @@ impl_headed!(PlayerDeathData);
 /// ```
 /// use enshwick::abi::{Header, KnowledgeData};
 ///
-/// let learnt = KnowledgeData { header: Header::of::<KnowledgeData>(), entity: enshwick::Entity(2), id: enshwick::knowledge::KnowledgeId::new(0x1d), value: 3 };
+/// let learnt = enshwick::abi::headed!(KnowledgeData { entity: enshwick::Entity::from_engine(2), id: enshwick::knowledge::KnowledgeId::new(0x1d), value: 3 });
 /// assert_eq!(learnt.value, 3);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, crate::Script)]
+#[non_exhaustive]
 pub struct KnowledgeData {
     /// Size and version of this struct.
     pub header: Header,
@@ -317,9 +322,8 @@ impl_headed!(KnowledgeData);
 /// ```
 /// use enshwick::abi::{Header, KnowledgeInfo, KnowledgeInput};
 ///
-/// let seen = KnowledgeInput {
-///     header: Header::of::<KnowledgeInput>(),
-///     character: enshwick::Entity(2),
+/// let seen = enshwick::abi::headed!(KnowledgeInput {
+///     character: enshwick::Entity::from_engine(2),
 ///     id: enshwick::knowledge::KnowledgeId::new(0x1d),
 ///     kind: KnowledgeInfo::FLAGS,
 ///     scope: KnowledgeInfo::PLAYER,
@@ -328,11 +332,12 @@ impl_headed!(KnowledgeData);
 ///     refusal: KnowledgeInput::ALLOWED,
 ///     allowed: 1,
 ///     reserved_tail: [0; 3],
-/// };
+/// });
 /// assert_eq!(seen.allowed, 1);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct KnowledgeInput {
     /// Size and version of this struct.
     pub header: Header,
@@ -409,11 +414,12 @@ pub type KnowledgeInputFilterFn =
 /// ```
 /// use enshwick::abi::{ChunkData, Header};
 ///
-/// let chunk = ChunkData { header: Header::of::<ChunkData>(), x: 1, z: 1, size: 256 };
+/// let chunk = enshwick::abi::headed!(ChunkData { x: 1, z: 1, size: 256 });
 /// assert_eq!(chunk.x * chunk.size, 256, "it starts 256 m east of the origin");
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, crate::Script)]
+#[non_exhaustive]
 pub struct ChunkData {
     /// Size and version of this struct.
     pub header: Header,
@@ -438,11 +444,12 @@ impl_headed!(ChunkData);
 /// ```
 /// use enshwick::abi::{Header, TerrainPageData};
 ///
-/// let page = TerrainPageData { header: Header::of::<TerrainPageData>(), x: 3, z: 1, size: 128 };
+/// let page = enshwick::abi::headed!(TerrainPageData { x: 3, z: 1, size: 128 });
 /// assert_eq!(page.x * page.size, 384, "it starts 384 m from the world's corner");
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, crate::Script)]
+#[non_exhaustive]
 pub struct TerrainPageData {
     /// Size and version of this struct.
     pub header: Header,
@@ -467,20 +474,20 @@ impl_headed!(TerrainPageData);
 /// ```
 /// use enshwick::abi::{BuildingData, Header};
 ///
-/// let placed = BuildingData {
-///     header: Header::of::<BuildingData>(),
-///     entity: enshwick::Entity(4096),
-///     character: enshwick::Entity(2),
+/// let placed = enshwick::abi::headed!(BuildingData {
+///     entity: enshwick::Entity::from_engine(4096),
+///     character: enshwick::Entity::from_engine(2),
 ///     item: enshwick::ItemId::new(1_302_084_846),
 ///     kind: BuildingData::PLACED,
 ///     replay: 0,
 ///     template: enshwick::abi::Guid::NIL,
 ///     position: [1.0, 2.0, 3.0],
-/// };
+/// });
 /// assert_eq!(placed.kind, BuildingData::PLACED);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable, crate::Script)]
+#[non_exhaustive]
 pub struct BuildingData {
     /// Size and version of this struct.
     pub header: Header,
@@ -529,7 +536,7 @@ impl BuildingData {
 /// use enshwick::abi::PlayerInfo;
 ///
 /// let player = PlayerInfo::with_name(
-///     enshwick::Entity(2),
+///     enshwick::Entity::from_engine(2),
 ///     enshwick::PlayerKey::new(7),
 ///     PlayerInfo::CAN_ACCESS_INVENTORIES,
 ///     "Ann",
@@ -538,6 +545,7 @@ impl BuildingData {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct PlayerInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -630,7 +638,7 @@ impl PlayerInfo {
     /// ```
     #[must_use]
     pub fn without_character(key: PlayerKey, permissions: u32, name: &str) -> Self {
-        Self::with_name(Entity(0), key, permissions, name)
+        Self::with_name(Entity::from_engine(0), key, permissions, name)
     }
 
     /// Whether the server lets the player kick and ban: its administrators.
@@ -690,6 +698,7 @@ impl PlayerInfo {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable, crate::Script)]
+#[non_exhaustive]
 pub struct TickData {
     /// Size and version of this struct.
     pub header: Header,
@@ -821,6 +830,10 @@ impl TickData {
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct TickHandle(pub u32);
 
 /// The data of the [`PlayerJoined`](../events/struct.PlayerJoined.html) and
@@ -831,11 +844,12 @@ pub struct TickHandle(pub u32);
 /// ```
 /// use enshwick::abi::{Header, PlayerData};
 ///
-/// let player = PlayerData { header: Header::of::<PlayerData>(), slot: 0, entity: enshwick::Entity(7), key: enshwick::PlayerKey::new(42) };
-/// assert_eq!(player.entity, enshwick::Entity(7));
+/// let player = enshwick::abi::headed!(PlayerData { slot: 0, entity: enshwick::Entity::from_engine(7), key: enshwick::PlayerKey::new(42) });
+/// assert_eq!(player.entity, enshwick::Entity::from_engine(7));
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable, crate::Script)]
+#[non_exhaustive]
 pub struct PlayerData {
     /// Size and version of this struct.
     pub header: Header,

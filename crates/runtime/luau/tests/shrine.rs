@@ -5,7 +5,7 @@
 mod tests {
     use std::sync::Mutex;
 
-    use enshwick::abi::{Header, ItemAction, PlayerInfo, Status, TickData};
+    use enshwick::abi::{ItemAction, PlayerInfo, Status, TickData};
     use enshwick::events::{SettingsReplaced, Ticked, WorldLoaded};
     use enshwick::packs::{Pack, PackFiles, PackManifest};
     use enshwick::progress::Experience;
@@ -62,21 +62,20 @@ mod tests {
     );
 
     fn action(kind: u32) -> ItemAction {
-        ItemAction {
-            header: Header::of::<ItemAction>(),
+        enshwick::abi::headed!(ItemAction {
             kind,
-            character: Entity(2),
+            character: Entity::from_engine(2),
             item: ItemId::named("you.shrine:tonic"),
             count: 1,
-            inventory: Entity(40),
+            inventory: Entity::from_engine(40),
             slot: 0,
-        }
+        })
     }
 
     fn gained(loader: &Installed) -> u32 {
         let _ran = loader.raise::<Ticked>(&TickData::new(1));
         let mut rows = [Experience {
-            entity: Entity(2),
+            entity: Entity::from_engine(2),
             level: 1,
             progress: 0,
             need: 10_000,
@@ -92,15 +91,14 @@ mod tests {
         let _gone = std::fs::remove_dir_all(&data);
         let mut name = [0u8; PlayerInfo::NAME_MAX];
         name[..3].copy_from_slice(b"Ann");
-        let ann = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let ann = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: Entity(2),
+            entity: Entity::from_engine(2),
             key: PlayerKey::new(7),
             permissions: 0,
             name_len: 3,
             name,
-        };
+        });
         let loader = FakeHost::new()
             .items()
             .recipes()

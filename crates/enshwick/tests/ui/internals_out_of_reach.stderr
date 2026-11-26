@@ -546,10 +546,17 @@ help: there is a method `control` with a similar name
 error[E0599]: no method named `build_filter` found for mutable reference `&mut enshwick_base::load::BaseLoad` in the current scope
   --> tests/ui/internals_out_of_reach.rs:73:18
    |
-73 |     let _ = base.build_filter(|_| enshwick::vetoes::BuildVerdict::Allow);
-   |                  ^^^^^^^^^^^^ method not found in `&mut enshwick_base::load::BaseLoad`
+73 |     let _ = base.build_filter(|_| enshwick::vetoes::Verdict::Pass);
+   |                  ^^^^^^^^^^^^
    |
    = help: items from traits can only be used if the trait is in scope
+help: there is a method `skill_filter` with a similar name, but with different arguments
+  --> $WORKSPACE/crates/internal/knowledge/src/progress.rs
+   |
+   | /     fn skill_filter<F>(&mut self, skill: Skill, handler: F) -> Result<(), Off>
+   | |     where
+   | |         F: Fn(&SkillCheck) -> Verdict + Send + Sync + 'static;
+   | |______________________________________________________________^
 help: trait `LoadMethods` which provides `build_filter` is implemented but not in scope; perhaps you want to import it
    |
  4 + use enshwick::vetoes::script::LoadMethods;
@@ -677,18 +684,22 @@ error[E0624]: method `run_due` is private
 error[E0624]: method `read` is private
    --> tests/ui/internals_out_of_reach.rs:101:16
     |
-101 |     let _ = ty.read(host, Entity(2));
-    |                ^^^^ private method
+101 |       let _ = ty.read(host, Entity::from_engine(2));
+    |                  ^^^^ private method
     |
    ::: $WORKSPACE/crates/internal/base/src/ecs.rs
     |
-    |     pub(crate) fn read(self, host: Host, entity: Entity) -> Option<*const core::ffi::c_void> {
-    |     ---------------------------------------------------------------------------------------- private method defined here
+    | /     pub(crate) fn read(
+    | |         self,
+    | |         host: Host,
+    | |         entity: Entity,
+    | |     ) -> Result<Option<*const core::ffi::c_void>, crate::abi::Status> {
+    | |_____________________________________________________________________- private method defined here
 
 error[E0624]: associated function `new` is private
    --> tests/ui/internals_out_of_reach.rs:102:31
     |
-102 |       let _ = CraftRecipeEvent::new(Entity(2), None, RecipeId::new(1), 1);
+102 |       let _ = CraftRecipeEvent::new(Entity::from_engine(2), None, RecipeId::new(1), 1);
     |                                 ^^^ private associated function
     |
    ::: $WORKSPACE/crates/internal/base/src/game_events.rs

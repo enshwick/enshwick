@@ -23,10 +23,12 @@ use enshwick::Entity;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let inventories = load.inventories()?;
-    let (corpse, player) = (Entity(40), Entity(2));
+    let (corpse, player) = (Entity::from_engine(40), Entity::from_engine(2));
     load.scheduler()?.next_tick(move || {
-        let full = inventories.read().slots(corpse).iter().filter(|s| !s.is_empty()).count();
-        enshwick::info!("{full} stacks to loot");
+        if let Ok(slots) = inventories.read().slots(corpse) {
+            let full = slots.iter().filter(|s| !s.is_empty()).count();
+            enshwick::info!("{full} stacks to loot");
+        }
         inventories.move_all(corpse, player, |outcome| {
             enshwick::info!("looted: {}", outcome.is_committed());
         });
@@ -54,9 +56,9 @@ the sub-inventory entity and the slot index, packed as the game packs them,
 use enshwick::Entity;
 use enshwick::inventory::SlotRef;
 
-let slot = SlotRef::new(Entity(0x41), 3);
+let slot = SlotRef::new(Entity::from_engine(0x41), 3);
 assert_eq!(slot.0, 0x3_0000_0041);
-assert_eq!((slot.inventory(), slot.index()), (Entity(0x41), 3));
+assert_eq!((slot.inventory(), slot.index()), (Entity::from_engine(0x41), 3));
 ```
 
 ## Reads
@@ -279,7 +281,7 @@ tests them:
   `MoveAll` from an inventory into itself.
 
 `submit` refuses a batch that breaks a limit before it reaches the game,
-with `Done::Refused(BatchError)`.
+with `Done::Refused(RunBatchError)`.
 [`Batch::split`](https://github.com/enshwick/enshwick/blob/main/crates/internal/inventory/src/inventory.rs)
 cuts a batch into parts that fit, in order, keeping its settings. Each part
 is all or nothing on its own; together they are not.
@@ -290,7 +292,7 @@ use enshwick::inventory::{Batch, Op};
 
 let mut everything = Batch::new();
 for chest in 100..120 {
-    everything.push(Op::MoveAll { from: Entity(chest), to: Entity(2), include_special: false });
+    everything.push(Op::MoveAll { from: Entity::from_engine(chest), to: Entity::from_engine(2), include_special: false });
 }
 let parts = everything.split();
 assert!(parts.len() > 1);
@@ -310,7 +312,7 @@ operation when the request ran, and are empty otherwise.
 | `RolledBack` | An operation failed or fell short; nothing changed. |
 | `Unavailable` | The build lacks a piece, the loader's hook is not in place, a client hosts no game, or 4096 requests already wait; nothing changed. A full queue passes again once the game runs the waiting requests. |
 | `TimedOut` | The game did not run its inventory system within 30 seconds; nothing changed. |
-| `Refused(BatchError)` | The batch broke a limit and never reached the game. |
+| `Refused(RunBatchError)` | The batch broke a limit and never reached the game. |
 
 An [`OpResult`](https://github.com/enshwick/enshwick/blob/main/crates/internal/inventory/src/inventory.rs)
 holds the game's `error` code, 0 for none. Its `remaining` is how much of the
@@ -344,7 +346,8 @@ Every request returns a
 [`Ticket`](https://github.com/enshwick/enshwick/blob/main/crates/internal/inventory/src/inventory.rs)
 that holds the same outcome once it is known. It serves polling instead of a
 callback, through `is_done()` and `outcome()`. Clone it freely. A callback that does
-nothing, `|_| {}`, is fine when you poll.
+nothing, `|_| {}`, is fine when you poll. A Luau request returns nothing:
+its outcome reaches the `done` function alone.
 
 ## Callbacks and threads
 

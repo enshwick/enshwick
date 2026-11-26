@@ -5,14 +5,14 @@
 mod tests {
     use std::sync::{Mutex, OnceLock};
 
-    use enshwick::abi::{BuffTypeInfo, Header, Status};
+    use enshwick::abi::{BuffTypeInfo, Status};
     use enshwick::buffs::{Apply, BuffTypeId, Buffs};
     use enshwick::content::id;
     use enshwick::stats::{Modifier, Op, Stat, StatChange, StatDef, Stats};
     use enshwick::{Entity, Load, Mod, Off};
 
     const CURSED: BuffTypeId = BuffTypeId::new(0xc0de);
-    const ENEMY: Entity = Entity(50);
+    const ENEMY: Entity = Entity::from_engine(50);
 
     static KIT: OnceLock<(Buffs, Stats, Stat)> = OnceLock::new();
     static CHANGES: Mutex<Vec<StatChange>> = Mutex::new(Vec::new());
@@ -45,14 +45,13 @@ mod tests {
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(started, Status::OK, "{:?}", loader.faults());
         let (buffs, stats, doom) = *KIT.get().unwrap();
-        let cursed = BuffTypeInfo {
-            header: Header::of::<BuffTypeInfo>(),
+        let cursed = enshwick::abi::headed!(BuffTypeInfo {
             id: CURSED,
             slot: BuffTypeInfo::DEBUFF,
             flags: 0,
             name: 0,
             duration_ns: 60_000_000_000,
-        };
+        });
         loader.set_buffs(&[cursed], &[ENEMY]);
         buffs.apply(ENEMY, CURSED, Apply::new()).unwrap();
 

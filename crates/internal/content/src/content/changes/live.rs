@@ -1,13 +1,13 @@
 //! Changes a mod declares at init and sets any time after, such as a burn
 //! time from a setting that changes per world.
 
-use crate::abi::{ChangeId, ChangeOp, DataChange, DataSelect, Header, Status, Str};
+use crate::abi::{ChangeId, ChangeOp, DataChange, DataSelect, Status, Str};
 use crate::content::Guid;
 use crate::{Host, Off};
 
 #[cfg(feature = "unstable")]
 use super::Items;
-use super::{Field, Value, ValueError};
+use super::{Field, SetFieldError, Value};
 
 /// What a change a mod sets later reaches.
 ///
@@ -38,8 +38,7 @@ impl Target {
                 (Guid::NIL, select, categories)
             }
         };
-        DataChange {
-            header: Header::of::<DataChange>(),
+        enshwick_abi::headed!(DataChange {
             entry,
             field: field.to_abi(),
             op: ChangeOp::TIMES,
@@ -48,16 +47,16 @@ impl Target {
             item: Guid::NIL,
             select,
             categories,
-        }
+        })
     }
 
     /// Whether a change of `field` may reach this target.
-    fn check(self, field: Field) -> Result<(), ValueError> {
+    fn check(self, field: Field) -> Result<(), SetFieldError> {
         match self {
             #[cfg(feature = "unstable")]
-            Self::Items(_) if !field.selectable() => Err(ValueError::NotSelectable { field }),
+            Self::Items(_) if !field.selectable() => Err(SetFieldError::NotSelectable { field }),
             _ if matches!(field, Field::Ingredient | Field::Station) => {
-                Err(ValueError::NotLive { field })
+                Err(SetFieldError::NotLive { field })
             }
             _ => Ok(()),
         }
@@ -79,7 +78,7 @@ impl Target {
 pub enum SetChangeError {
     /// The field does not take the value.
     #[error(transparent)]
-    Value(#[from] ValueError),
+    Value(#[from] SetFieldError),
     /// The loader refused it: the mod is off.
     #[error("the loader refused the value")]
     Refused,
@@ -239,7 +238,7 @@ mod tests {
         let target = Target::Entry(Guid([1; 16]));
         assert_eq!(
             target.check(Field::Ingredient),
-            Err(ValueError::NotLive {
+            Err(SetFieldError::NotLive {
                 field: Field::Ingredient
             })
         );

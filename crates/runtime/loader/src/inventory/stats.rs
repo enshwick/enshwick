@@ -42,8 +42,8 @@ use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
 use enshwick_core::abi::{
-    Header, PlayerData, StatChange, StatChangeFn, StatModifier, StatModify, StatRef, StatSource,
-    StatSpec, Str,
+    PlayerData, StatChange, StatChangeFn, StatModifier, StatModify, StatRef, StatSource, StatSpec,
+    Str,
 };
 use enshwick_core::affixes::lines_of;
 use enshwick_core::content::Id;
@@ -491,7 +491,7 @@ pub(crate) fn value(entity: Entity, stat: u32) -> Result<f32, StatsError> {
     let values = STATE.snapshot().load();
     Ok(values
         .values
-        .get(&entity.0)
+        .get(&entity.get())
         .and_then(|v| v.get(index))
         .copied()
         .unwrap_or(default))
@@ -510,7 +510,7 @@ pub(crate) fn modify(
 ) -> Result<(), StatsError> {
     let sealed = SEALED.get().ok_or(StatsError::NotRunning)?;
     let stat = request.modifier.stat;
-    if request.entity == Entity(0) {
+    if request.entity == Entity::from_engine(0) {
         return Err(StatsError::BadModifier);
     }
     if usize::try_from(stat).map_or(true, |s| s >= sealed.kinds.len()) {
@@ -533,7 +533,7 @@ pub(crate) fn modify(
         ),
     };
     STATE.with_world(|state| {
-        let watched = state.watched.entry(request.entity.0).or_default();
+        let watched = state.watched.entry(request.entity.get()).or_default();
         if saved && !remove && watched.player.is_none() {
             return Err(StatsError::NotPlayer);
         }
@@ -588,7 +588,7 @@ pub(crate) fn modify(
 /// Watches or stops watching `entity` for mod `owner`; it stays watched
 /// while any mod asks.
 pub(crate) fn watch(owner: ModIndex, entity: Entity, on: bool) -> Result<(), StatsError> {
-    if SEALED.get().is_none() || entity == Entity(0) {
+    if SEALED.get().is_none() || entity == Entity::from_engine(0) {
         return Err(StatsError::NothingToWatch);
     }
     if !serves() {
@@ -596,10 +596,10 @@ pub(crate) fn watch(owner: ModIndex, entity: Entity, on: bool) -> Result<(), Sta
     }
     STATE.with_world(|state| {
         if on {
-            let watched = state.watched.entry(entity.0).or_default();
+            let watched = state.watched.entry(entity.get()).or_default();
             watched.ask(owner, true);
             watched.dirty = true;
-        } else if let Some(watched) = state.watched.get_mut(&entity.0) {
+        } else if let Some(watched) = state.watched.get_mut(&entity.get()) {
             watched.ask(owner, false);
         }
     });
@@ -639,7 +639,7 @@ pub(crate) fn player_joined(loader: &Loader, player: &PlayerData) {
                 });
             }
         }
-        let watched = state.watched.entry(player.entity.0).or_default();
+        let watched = state.watched.entry(player.entity.get()).or_default();
         watched.player = Some(player.key.get());
         watched.modifiers.retain(|h| !h.saved);
         watched.modifiers.extend(restored);
@@ -740,7 +740,7 @@ pub(crate) fn sources(
     let held = STATE.with_world(|state| {
         state
             .watched
-            .get(&entity.0)
+            .get(&entity.get())
             .map_or_default(|w| w.modifiers.clone())
     });
     let (mut list, _) = gather(loader, sealed, entity, &held);
@@ -766,9 +766,8 @@ fn take_values(
         for (index, (&new, def)) in values.iter().zip(&sealed.defaults).enumerate() {
             let old = watched.values.get(index).copied().unwrap_or(*def);
             if old.to_bits() != new.to_bits() {
-                changes.push(StatChange {
-                    header: Header::of::<StatChange>(),
-                    entity: Entity(entity),
+                changes.push(enshwick_abi::headed!(StatChange {
+                    entity: Entity::from_engine(entity),
                     stat: StatRef {
                         index: u32::try_from(index).unwrap_or(u32::MAX),
                         key: key_of(&sealed.kinds[index].id).0,
@@ -776,7 +775,7 @@ fn take_values(
                     old,
                     new,
                     reserved: 0,
-                });
+                }));
             }
         }
         moved |= *watched.values != *values;
@@ -849,7 +848,7 @@ pub(crate) fn after_step(loader: &Loader, step: u64, now: Instant) {
     let generation = STATE.items.load(Ordering::Relaxed);
     let mut results = Vec::new();
     for (entity, held, signature, dirty) in due {
-        let (list, seen) = gather(loader, sealed, Entity(entity), &held);
+        let (list, seen) = gather(loader, sealed, Entity::from_engine(entity), &held);
         let seen = seen ^ generation.rotate_left(17);
         if dirty || seen != signature {
             results.push((entity, seen, work_out(sealed, &list)));
@@ -865,7 +864,7 @@ pub(crate) fn after_step(loader: &Loader, step: u64, now: Instant) {
         own::send_changed(sealed, state, &changes);
         for entity in entities {
             if let Some(watched) = state.watched.get_mut(&entity) {
-                raise_maxima(loader, sealed, Entity(entity), watched);
+                raise_maxima(loader, sealed, Entity::from_engine(entity), watched);
             }
         }
         (moved || forgot).then(|| publish(sealed, state))

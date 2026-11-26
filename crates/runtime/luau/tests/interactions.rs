@@ -9,12 +9,16 @@ mod tests {
     use crate::harness::run;
 
     fn opening(item: u32) -> Interaction {
-        Interaction {
+        enshwick::abi::headed!(Interaction {
             item: ItemId::new(item),
             known: 1,
             position: [1.0, 2.0, 3.0],
-            ..Interaction::new(Interaction::OPEN, Entity(2), Entity(9))
-        }
+            ..Interaction::new(
+                Interaction::OPEN,
+                Entity::from_engine(2),
+                Entity::from_engine(9),
+            )
+        })
     }
 
     #[test]

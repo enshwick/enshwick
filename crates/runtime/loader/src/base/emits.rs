@@ -331,7 +331,7 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
     let layout = layout(loader).ok_or(EmitError::Unavailable)?;
     let teleport = layout.teleport.ok_or(EmitError::Unavailable)?;
     let world = entity_world()?;
-    if request.entity == Entity(0) {
+    if request.entity == Entity::from_engine(0) {
         return Err(EmitError::NoEntity);
     }
     let position =
@@ -389,7 +389,7 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
             core::ptr::with_exposed_provenance_mut(buffer + layout.records),
             teleport.kind,
             size,
-            request.entity.0,
+            request.entity.get(),
         )
     };
     if record.is_null() {

@@ -38,7 +38,7 @@
 use crate::Entity;
 use crate::PlayerKey;
 use crate::WorldError;
-use crate::abi::{Header, SpawnRequest, TeleportRequest};
+use crate::abi::{SpawnRequest, TeleportRequest};
 use crate::engine_ids as ids;
 use crate::game_events::{EventType, Field, Scalar};
 use crate::{BaseLoad, Host, Off};
@@ -632,13 +632,12 @@ impl Effects {
         if how.facing.is_some() {
             flags |= TeleportRequest::ORIENTED;
         }
-        let request = TeleportRequest {
-            header: Header::of::<TeleportRequest>(),
+        let request = enshwick_abi::headed!(TeleportRequest {
             entity,
             flags,
             position,
             orientation: how.facing.unwrap_or([0.0, 0.0, 0.0, 1.0]),
-        };
+        });
         world_check(
             (self.0.host.api().teleport)(self.0.host.handle(), &raw const request),
             WorldError::Gone,
@@ -749,14 +748,13 @@ impl Effects {
         at: [f64; 3],
         how: ItemDrop,
     ) -> Result<Entity, WorldError> {
-        let request = crate::abi::DropRequest {
-            header: Header::of::<crate::abi::DropRequest>(),
+        let request = enshwick_abi::headed!(crate::abi::DropRequest {
             item,
             count,
             position: at,
             level: how.level,
             rarity: u32::from(how.rarity.to_raw()),
-        };
+        });
         let mut entity = Entity::NONE;
         world_check(
             (self.0.host.api().drop_items)(
@@ -802,8 +800,7 @@ impl Effects {
         let lifetime = how.despawn_after.map_or(0, |time| {
             u64::try_from(time.as_nanos()).unwrap_or(u64::MAX).max(1)
         });
-        let request = SpawnRequest {
-            header: Header::of::<SpawnRequest>(),
+        let request = enshwick_abi::headed!(SpawnRequest {
             template,
             position,
             orientation: how.orientation.unwrap_or([0.0, 0.0, 0.0, 1.0]),
@@ -814,7 +811,7 @@ impl Effects {
             } else {
                 0
             },
-        };
+        });
         let mut entity = Entity::NONE;
         world_status((api.spawn)(
             self.0.host.handle(),

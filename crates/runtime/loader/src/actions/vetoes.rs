@@ -23,9 +23,7 @@ use core::ffi::c_void;
 use core::ops::ControlFlow;
 use std::sync::OnceLock;
 
-use enshwick_core::abi::{
-    BuildCheck, BuildFilterFn, CraftCheck, CraftFilterFn, Header, HookFlags, Str,
-};
+use enshwick_core::abi::{BuildCheck, BuildFilterFn, CraftCheck, CraftFilterFn, HookFlags, Str};
 use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 
 use crate::engine::filters::Filters;
@@ -239,15 +237,14 @@ unsafe fn request(layout: &CraftLayout, payload: *mut u8) {
     // SAFETY: the event is a `CraftRecipeEvent` readable for its reflected
     // size (the caller's contract), and reflection places its `u16` `recipeAmount` at `amount`.
     let amount: u16 = unsafe { read_at(payload, layout.amount) };
-    let call = CraftCheck {
-        header: Header::of::<CraftCheck>(),
-        crafting_operator_id: enshwick_core::Entity(player),
-        crafting_station_id: enshwick_core::Entity(station),
+    let call = enshwick_abi::headed!(CraftCheck {
+        crafting_operator_id: enshwick_core::Entity::from_engine(player),
+        crafting_station_id: enshwick_core::Entity::from_engine(station),
         recipe_id: enshwick_core::RecipeId::new(recipe),
         recipe_amount: amount,
         reserved: 0,
-    };
-    if call.crafting_operator_id == enshwick_core::Entity(0) {
+    });
+    if call.crafting_operator_id == enshwick_core::Entity::from_engine(0) {
         return;
     }
     let disabled = crate::content::recipes::is_disabled(call.recipe_id.get());
@@ -271,7 +268,7 @@ unsafe fn request(layout: &CraftLayout, payload: *mut u8) {
             DEBUG,
             "craft of recipe {} by player {} refused{}",
             crate::content::recipes::recipe_words(call.recipe_id.0),
-            call.crafting_operator_id.0,
+            call.crafting_operator_id.get(),
             if disabled {
                 ": the recipe is disabled"
             } else {
@@ -362,10 +359,9 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
         CursorWorld::Unknown
     };
     let server = world == CursorWorld::Server;
-    let character = enshwick_core::Entity(player);
+    let character = enshwick_core::Entity::from_engine(player);
     let mut reason = Str::new("");
-    let call = BuildCheck {
-        header: Header::of::<BuildCheck>(),
+    let call = enshwick_abi::headed!(BuildCheck {
         character,
         item: enshwick_core::ItemId::new(item),
         // SAFETY: `transform` is non-null (the null checks return first) and
@@ -374,7 +370,7 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
         position: enshwick_core::ecs::metres(unsafe { read_at::<[i64; 3]>(transform.cast(), 0) }),
         reason: &raw mut reason,
         account: builder_account(world, character),
-    };
+    });
     // SAFETY: `call.reason` points at `reason`, live on this stack for the
     // whole chain.
     if let Some(filter) = unsafe { refuser(&BUILD_FILTERS, &call) } {
@@ -543,7 +539,7 @@ mod tests {
     #[test]
     fn a_hosting_client_s_own_prediction_gets_its_own_player_s_account() {
         let _carrier = crate::base::carrier::tests::alone();
-        let local = enshwick_core::Entity(40);
+        let local = enshwick_core::Entity::from_engine(40);
         assert_eq!(
             builder_account(CursorWorld::Client, local),
             enshwick_core::PlayerKey::default(),
@@ -587,14 +583,13 @@ mod tests {
         assert_eq!(filters.register(loader, silent, second), Ok(()));
         let _sealed = filters.seal();
         let mut reason = Str::EMPTY;
-        let call = BuildCheck {
-            header: Header::of::<BuildCheck>(),
-            character: enshwick_core::Entity(1),
+        let call = enshwick_abi::headed!(BuildCheck {
+            character: enshwick_core::Entity::from_engine(1),
             item: enshwick_core::ItemId::new(2),
             position: [0.0; 3],
             reason: &raw mut reason,
             account: enshwick_core::PlayerKey::default(),
-        };
+        });
         // SAFETY: `call.reason` points at `reason` on this stack for the call.
         let refused_by = unsafe { refuser(&filters, &call) };
         assert_eq!(refused_by.map(Registered::user), Some(second));

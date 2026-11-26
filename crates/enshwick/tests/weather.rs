@@ -6,7 +6,7 @@ mod tests {
     use std::time::Duration;
 
     use enshwick::WorldError;
-    use enshwick::abi::{ChunkData, Header, Status, WeatherFront};
+    use enshwick::abi::{ChunkData, Status, WeatherFront};
     use enshwick::events::{ChunkLoaded, ChunkUnloaded};
     use enshwick::weather::{Forecast, Weather, WeatherPhenomenonEffect, WeatherState};
     use enshwick::{Load, Mod, Off};
@@ -50,8 +50,7 @@ mod tests {
             weather.set(Forecast::Rain, None),
             Err(WorldError::Unavailable)
         );
-        let front = WeatherFront {
-            header: Header::of::<WeatherFront>(),
+        let front = enshwick::abi::headed!(WeatherFront {
             layer: 1,
             effect: WeatherFront::BLIZZARD,
             position: [5.0, 0.0, -7.0],
@@ -59,7 +58,7 @@ mod tests {
             reserved: 0,
             remaining_ns: 90_000_000_000,
             phenomenon: enshwick::content::Guid([9; 16]),
-        };
+        });
         loader.set_weather([0.1, 0.2, 0.6, 0.1], &[front]);
         assert_eq!(
             weather.at([1.0, 2.0, 3.0]).unwrap().state(),
@@ -112,12 +111,11 @@ mod tests {
         assert_eq!(warned(&loader), 1, "{:?}", loader.logs());
         assert_eq!(loader.forecasts().len(), 4, "the long rain still starts");
 
-        let chunk = ChunkData {
-            header: Header::of::<ChunkData>(),
+        let chunk = enshwick::abi::headed!(ChunkData {
             x: 1,
             z: 1,
             size: 256,
-        };
+        });
         assert_eq!(loader.raise::<ChunkLoaded>(&chunk), 1);
         assert_eq!(loader.raise::<ChunkUnloaded>(&chunk), 1);
         let logged = |line: &str| loader.logs().iter().any(|(_, l)| l.contains(line));

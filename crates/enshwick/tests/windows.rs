@@ -7,7 +7,7 @@ mod tests {
     use std::sync::OnceLock;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-    use enshwick::abi::{ActionCall, Header, PlayerInfo, Side, Status};
+    use enshwick::abi::{ActionCall, PlayerInfo, Side, Status};
     use enshwick::actions::sheet::ArgView;
     use enshwick::actions::window::{ButtonView, ItemView, decode};
     use enshwick::actions::{Action, Actions, Arg, Outcome, Row, Value, Window, WindowMap};
@@ -146,15 +146,14 @@ mod tests {
     );
 
     fn player(entity: u32, key: u64, name: &str, permissions: u32) -> PlayerInfo {
-        let mut info = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let mut info = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: enshwick::Entity(entity),
+            entity: enshwick::Entity::from_engine(entity),
             key: PlayerKey::new(key),
             permissions,
             name_len: u32::try_from(name.len()).unwrap(),
             name: [0; PlayerInfo::NAME_MAX],
-        };
+        });
         info.name[..name.len()].copy_from_slice(name.as_bytes());
         info
     }
@@ -195,14 +194,14 @@ mod tests {
                 ItemView::Text("2 у грі".into()),
                 ItemView::Row {
                     text: "Ann".into(),
-                    buttons: vec![ButtonView {
-                        label: "Ban".into(),
-                        action: "ban".into(),
-                        args: vec![Value::Player {
+                    buttons: vec![ButtonView::new(
+                        "Ban".into(),
+                        "ban".into(),
+                        vec![Value::Player {
                             key: PlayerKey::new(7),
                             name: String::new()
-                        }],
-                    }],
+                        }]
+                    )],
                 },
                 ItemView::Action("say".into()),
             ]
@@ -279,12 +278,12 @@ mod tests {
     #[test]
     fn a_waypoint_outside_the_map_s_frame_or_unmoved_across_a_reopen_runs_nothing() {
         let root = player(4, 9, "Root", PlayerInfo::CAN_KICK_BAN);
-        let frame = enshwick::abi::MapFrameInfo {
+        let frame = enshwick::abi::headed!(enshwick::abi::MapFrameInfo {
             origin: [0.0, 0.0],
             size: [1000.0, 1000.0],
             metres_per_cell: 8.0,
             ..enshwick::abi::MapFrameInfo::EMPTY
-        };
+        });
         let loader = start(
             enshwick::test::FakeHost::new()
                 .player(root)

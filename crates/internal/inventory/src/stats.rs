@@ -49,15 +49,14 @@
 use core::ffi::c_void;
 
 use crate::abi::{
-    Header, StatChange as StatChangeData, StatModifier, StatModify, StatRef, StatSource, Status,
-    Str,
+    StatChange as StatChangeData, StatModifier, StatModify, StatRef, StatSource, Status, Str,
 };
 use crate::buffs::BuffTypeId;
 use crate::content::Id;
 use crate::content::items::StatFormat;
 use crate::inventory::ItemInstance;
 use crate::item_data::ItemData;
-pub use crate::item_data::SetError;
+pub use crate::item_data::SetItemDataError;
 use crate::{Entity, ItemId};
 use crate::{Host, Off};
 
@@ -240,6 +239,7 @@ impl Stats {
 /// An op and its value, as `aggregate` takes them from a script.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, crate::Script)]
+#[non_exhaustive]
 pub struct ScriptModifier {
     /// What it does.
     pub op: Op,
@@ -338,14 +338,13 @@ impl Stats {
         flags: u32,
         duration_ms: u64,
     ) -> Result<(), ModifyError> {
-        let request = StatModify {
-            header: Header::of::<StatModify>(),
+        let request = enshwick_abi::headed!(StatModify {
             entity,
             key: key_hash(key),
             modifier,
             flags,
             duration_ms,
-        };
+        });
         match (self.host.api().stat_modify)(self.host.handle(), &raw const request) {
             Status::OK => Ok(()),
             Status::REFUSED if flags & StatModify::SAVED != 0 => Err(ModifyError::NotPlayer),
@@ -380,7 +379,7 @@ impl Stats {
     ///
     /// # Errors
     ///
-    /// [`SetError`] when the value is too large or the server refuses it.
+    /// [`SetItemDataError`] when the value is too large or the server refuses it.
     ///
     /// # Examples
     ///
@@ -395,7 +394,7 @@ impl Stats {
     /// ```
     #[cfg(feature = "unstable")]
     #[script]
-    pub fn set_item(&self, item: ItemInstance, stats: &ItemStats) -> Result<(), SetError> {
+    pub fn set_item(&self, item: ItemInstance, stats: &ItemStats) -> Result<(), SetItemDataError> {
         if *stats == ItemStats::default() {
             self.items.remove(item)
         } else {
@@ -444,7 +443,7 @@ impl Stats {
             .filter_map(|s| {
                 let origin = match s.kind {
                     StatSource::ITEM => Origin::Item(ItemInstance {
-                        pide: Entity(s.id),
+                        pide: Entity::from_engine(s.id),
                         item: ItemId::new(s.owner),
                     }),
                     StatSource::BUFF => Origin::Buff(BuffTypeId(s.id)),

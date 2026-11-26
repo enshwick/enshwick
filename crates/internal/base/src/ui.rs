@@ -36,7 +36,7 @@ pub enum Response {
 
 impl Response {
     /// Every response, in the order of their raw answers.
-    pub const ALL: [Self; 8] = [
+    pub const ALL: &'static [Self] = &[
         Self::Retry,
         Self::Disable,
         Self::Erase,
@@ -87,7 +87,8 @@ impl Response {
     #[must_use]
     pub fn from_raw(raw: u32) -> Option<Self> {
         Self::ALL
-            .into_iter()
+            .iter()
+            .copied()
             .find(|response| response.to_raw() == raw)
     }
 
@@ -106,7 +107,8 @@ impl Response {
     #[must_use]
     pub fn of_buttons(buttons: u32) -> Vec<Self> {
         Self::ALL
-            .into_iter()
+            .iter()
+            .copied()
             .filter(|response| buttons & 1 << response.to_raw() != 0)
             .collect()
     }

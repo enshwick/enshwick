@@ -97,6 +97,7 @@ impl QueryForm {
 /// }
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct NewQuery {
     /// Its content id; its query id is the FNV-1a of the id's GUID, and the
     /// id is its name in the database.

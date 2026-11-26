@@ -15,7 +15,7 @@ use std::sync::Mutex;
 use std::sync::OnceLock;
 
 #[cfg(windows)]
-use enshwick_core::abi::{Event, Header, VoxelEditRequest};
+use enshwick_core::abi::{Event, VoxelEditRequest};
 use enshwick_core::abi::{ModHandle, VoxelChange};
 
 use crate::base::wire::Drops;
@@ -213,14 +213,13 @@ pub(crate) fn after_step(loader: &Loader) {
         EDITS.editor.store(editor, Ordering::Release);
     }
     for edit in take() {
-        let data = VoxelEditRequest {
-            header: Header::of::<VoxelEditRequest>(),
+        let data = enshwick_abi::headed!(VoxelEditRequest {
             by: edit.by,
             min: edit.min,
             size: edit.size,
             changes: edit.changes.as_ptr(),
             count: u32::try_from(edit.changes.len()).unwrap_or(u32::MAX),
-        };
+        });
         loader.emit(Event::VOXELS_CHANGED, None, (&raw const data).cast());
     }
 }

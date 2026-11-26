@@ -20,7 +20,7 @@ use std::sync::OnceLock;
 
 use enshwick_core::Entity;
 use enshwick_core::abi::{
-    FILTER_REFUSE, FILTER_YES, Header, HookFlags, KnowledgeId, QuestPayment, QuestRewardFilterFn,
+    FILTER_REFUSE, FILTER_YES, HookFlags, KnowledgeId, QuestPayment, QuestRewardFilterFn,
 };
 
 use crate::engine::filters::Filters;
@@ -128,8 +128,7 @@ fn payment(
     quest: u32,
     experience: impl Iterator<Item = u32>,
 ) -> Option<QuestPayment> {
-    let mut payment = QuestPayment {
-        header: Header::of::<QuestPayment>(),
+    let mut payment = enshwick_abi::headed!(QuestPayment {
         entity,
         quest: KnowledgeId::new(quest),
         count: 0,
@@ -137,7 +136,7 @@ fn payment(
         allowed: 1,
         reserved: [0; 3],
         experience: [0; QuestPayment::MAX],
-    };
+    });
     for id in experience.filter(|&id| id != 0) {
         let at = usize::try_from(payment.count).ok()?;
         *payment.experience.get_mut(at)? = id;
@@ -199,7 +198,7 @@ unsafe fn filtered(
         return None;
     }
     // SAFETY: the caller's player pointer, a u32 entity id.
-    let entity = Entity(unsafe { read(player.addr(), 0) });
+    let entity = Entity::from_engine(unsafe { read(player.addr(), 0) });
     let experience = (0..count as usize).map(|i| {
         // SAFETY: `i` is below the list's count, so this is a row of the
         // caller's live list of `rows.size` bytes; `Rows::fit` put the u32
@@ -270,18 +269,18 @@ mod tests {
 
     #[test]
     fn the_payment_holds_the_rows_that_name_experience_in_order() {
-        let paid = payment(Entity(2), 0x51, [0, 7, 0, 9].into_iter()).unwrap();
+        let paid = payment(Entity::from_engine(2), 0x51, [0, 7, 0, 9].into_iter()).unwrap();
         assert_eq!((paid.count, paid.allowed, paid.limit), (2, 1, 3));
         assert_eq!(&paid.experience[..2], &[7, 9]);
         assert!(
-            payment(Entity(2), 0x51, core::iter::repeat_n(1, 9)).is_none(),
+            payment(Entity::from_engine(2), 0x51, core::iter::repeat_n(1, 9)).is_none(),
             "more than a filter sees"
         );
     }
 
     #[test]
     fn a_refusal_pays_nothing_and_a_long_list_is_cut_to_what_the_game_pays() {
-        let mut call = payment(Entity(2), 0x51, [7].into_iter()).unwrap();
+        let mut call = payment(Entity::from_engine(2), 0x51, [7].into_iter()).unwrap();
         call.count = 5;
         call.experience[..5].copy_from_slice(&[7, 7, 8, 8, 9]);
         assert_eq!(paid(&call), (&[7, 7, 8][..], true));

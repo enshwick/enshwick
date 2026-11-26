@@ -84,6 +84,25 @@ mod tests {
     }
 
     #[test]
+    fn an_uncaught_error_of_the_api_reports_its_call_and_message() {
+        let (loader, status) = start(
+            FakeHost::new(),
+            r#"
+            local _, why = pcall(enshwick.i18n.parse, '[xx]\na = "b"\n')
+            enshwick.log.info(`kind {why.kind}`)
+            enshwick.i18n.parse('[xx]\na = "b"\n')
+            "#,
+        );
+        assert_ne!(status, Status::OK);
+        assert!(logged(&loader, "kind Off"), "{:?}", loader.logs());
+        assert!(
+            logged(&loader, "enshwick.i18n.parse: ") && logged(&loader, "unknown language"),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
     fn a_text_key_without_any_text_refuses_the_start() {
         let (loader, status) = start(
             FakeHost::new(),

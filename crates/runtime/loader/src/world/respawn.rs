@@ -117,7 +117,7 @@ mod game {
     use std::sync::OnceLock;
 
     use enshwick_core::Entity;
-    use enshwick_core::abi::{Header, RespawnPointInfo};
+    use enshwick_core::abi::RespawnPointInfo;
 
     use super::{EventLayout, event_bytes, kind, target_entity};
     use crate::base::emits::EmitError;
@@ -246,7 +246,7 @@ mod game {
     /// Fails with [`RespawnError::NotPlayer`] unless `character` is a
     /// player's character in game.
     fn player(loader: &Loader, character: Entity) -> Result<(), RespawnError> {
-        if player_entities(loader)?.contains(&character.0) {
+        if player_entities(loader)?.contains(&character.get()) {
             Ok(())
         } else {
             Err(RespawnError::NotPlayer)
@@ -261,7 +261,7 @@ mod game {
     ) -> Result<RespawnPointInfo, RespawnError> {
         let layout = layout(loader).ok_or(RespawnError::Unread)?;
         player(loader, character)?;
-        let point = Entity(field(
+        let point = Entity::from_engine(field(
             loader,
             character,
             layout.targets,
@@ -269,13 +269,12 @@ mod game {
         )?);
         let kind = kind_of(loader, layout, point).ok_or(RespawnError::NoPoint)?;
         let (fixed, orientation) = pose(loader, point).ok_or(RespawnError::NoPoint)?;
-        Ok(RespawnPointInfo {
-            header: Header::of::<RespawnPointInfo>(),
+        Ok(enshwick_abi::headed!(RespawnPointInfo {
             entity: point,
             kind,
             position: enshwick_core::ecs::metres(fixed),
             orientation,
-        })
+        }))
     }
 
     /// Makes `spawn_point` the respawn point of `character`'s player and
@@ -306,7 +305,7 @@ mod game {
         let (hash, at) = set.scene;
         let scene = field::<u32>(loader, spawn_point, hash, at).ok();
         let event = event_bytes(&set.event, identity.0, base, scene);
-        let targets = component_mut(loader, character.0, layout.targets)?;
+        let targets = component_mut(loader, character.get(), layout.targets)?;
         if let Some(bytes) = event {
             crate::base::emits::push(loader, set.event.hash, &bytes)?;
         }
@@ -316,7 +315,7 @@ mod game {
         // runs; the spawn point target's `u32` entity sits at
         // `target_entity`, inside its size (checked by `target_entity`).
         unsafe {
-            enshwick_core::raw::write_at(targets.cast(), layout.target_entity, spawn_point.0);
+            enshwick_core::raw::write_at(targets.cast(), layout.target_entity, spawn_point.get());
         }
         Ok(())
     }

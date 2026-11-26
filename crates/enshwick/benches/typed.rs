@@ -15,8 +15,8 @@ use enshwick::world::World;
 use enshwick::{Entity, Load, Mod, Off};
 
 const FACTION: &str = "keen::ecs::Faction";
-const FACTIONS: Entity = Entity(4096);
-const TAGGED: Entity = Entity(4097);
+const FACTIONS: Entity = Entity::from_engine(4096);
+const TAGGED: Entity = Entity::from_engine(4097);
 
 type Resolved = (
     World,

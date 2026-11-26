@@ -7,7 +7,7 @@ mod tests {
     use std::sync::Mutex;
     use std::time::Duration;
 
-    use enshwick::abi::{Header, PlayerInfo, Status};
+    use enshwick::abi::{PlayerInfo, Status};
     use enshwick::actions::{Action, Outcome, Value};
     use enshwick::controls::{Control, GameAction, Key, Phase};
     use enshwick::i18n::Texts;
@@ -116,15 +116,14 @@ mod tests {
     }
 
     fn ann() -> PlayerInfo {
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: enshwick::Entity(2),
+            entity: enshwick::Entity::from_engine(2),
             key: enshwick::PlayerKey::new(7),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        }
+        })
     }
 
     #[test]

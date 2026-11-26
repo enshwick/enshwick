@@ -194,7 +194,7 @@ mod tests {
         let progression = enshwick::resources::fnv1a32(enshwick::test::PROGRESSION.as_bytes());
         let loader = run(
             FakeHost::new().progression().world().component(
-                enshwick::Entity(4096),
+                enshwick::Entity::from_engine(4096),
                 progression,
                 &[0, 0, 0, 0, 4, 0, 0, 0],
             ),
@@ -216,7 +216,7 @@ mod tests {
         assert!(logged(&loader, "nobody nil"), "{logs}");
         assert!(logged(&loader, "nobody refused true"), "{logs}");
         assert_eq!(
-            loader.component_bytes(enshwick::Entity(4096), progression),
+            loader.component_bytes(enshwick::Entity::from_engine(4096), progression),
             Some(vec![1, 0, 0, 0, 5, 0, 0, 0]),
             "set, its change counted"
         );

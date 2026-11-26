@@ -134,7 +134,8 @@ typedef struct EnshwickHeader {
 // restart goes in entity data or item data (the `unstable` modules
 // `entity_data` and `item_data`), which find their entities again after a
 // load. The engine's id 0 stands for no entity; the safe API hands it over
-// as `None` in an `Option<EnshwickEntity>`, never as an `EnshwickEntity`.
+// as `None` in an `Option<EnshwickEntity>`, never as an `EnshwickEntity`, so the type has no
+// `Default`.
 typedef uint32_t EnshwickEntity;
 
 // A player's account by the number the game keeps for it, the same in every
@@ -966,7 +967,7 @@ typedef struct EnshwickChatLine {
   struct EnshwickHeader header;
   // The sender's account key; zero when the game names none.
   EnshwickPlayerKey account;
-  // The sender's character, `EnshwickEntity(0)` when it has none in the world.
+  // The sender's character, entity 0 when it has none in the world.
   EnshwickEntity entity;
   // `EnshwickChatLine_PLAYER`, `EnshwickChatLine_EMOTE` or `EnshwickChatLine_NOTICE`.
   uint32_t kind;
@@ -5957,7 +5958,9 @@ typedef struct EnshwickHostApi {
   // them by to `out`; the same bytes give the same hash. The loader
   // keeps the bytes for the life of the process: bytes served before
   // answer their hash without a second copy, and every other serve adds
-  // to memory until the process ends. Any thread.
+  // to memory until the process ends, up to 3072 contents or 512 MiB in
+  // all; past that the call answers `EnshwickStatus_REFUSED` for the rest of
+  // the process. Any thread.
   EnshwickStatus (*content_serve)(EnshwickModHandle me,
                                   const uint8_t *data,
                                   uint32_t len,
@@ -6857,7 +6860,7 @@ typedef struct EnshwickHostApi {
   // up from it, one level a step, with its own events; experience
   // filters do not see it. Skill points follow the level, as the game
   // counts them from it. A mod asks for
-  // the writes during `init` with `PROGRESS_OPEN` and `EnshwickEntity(0)`;
+  // the writes during `init` with `PROGRESS_OPEN` and entity 0;
   // `EnshwickStatus_TOO_LATE` for that after `init`. `EnshwickStatus_OK` queues
   // the write; the step applies writes in the order given, and
   // `EnshwickEvent_PROGRESS_WRITTEN` tells the
@@ -6935,7 +6938,8 @@ typedef struct EnshwickHostApi {
   // which runs it as one transaction: all or nothing. `done` gets the
   // result with `user` on the game thread after a later step, unless the
   // mod is off by then. On an error status nothing is queued and `done` is
-  // never called.
+  // never called. `EnshwickStatus_BUSY` while 4096 requests wait already: the
+  // same call may pass once the game has run some of them.
   EnshwickStatus (*inventory_submit)(EnshwickModHandle me,
                                      const struct EnshwickInventoryRequest *request,
                                      EnshwickInventoryResultFn done,
@@ -7327,7 +7331,7 @@ typedef struct EnshwickHostApi {
   // game's query database, which quest steps and recipes name by id)
   // holds for the player whose character is `entity`, as the game reads
   // it when it pays a quest (the player's own state), or for the world
-  // when `entity` is `EnshwickEntity(0)`, and 0 when it does not.
+  // when `entity` is entity 0, and 0 when it does not.
   // `EnshwickStatus_UNAVAILABLE` on a build without the game's query calls or
   // while no world runs, `EnshwickStatus_MISSING` for a query the game does
   // not know or has not evaluated yet; `EnshwickStatus_REFUSED` for a player not in the game;

@@ -182,7 +182,7 @@ impl Installed {
     /// use enshwick::abi::Interaction;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let call = Interaction::new(Interaction::OPEN, enshwick::Entity(1), enshwick::Entity(2));
+    /// let call = Interaction::new(Interaction::OPEN, enshwick::Entity::from_engine(1), enshwick::Entity::from_engine(2));
     /// assert!(loader.interaction(&call));
     /// ```
     #[must_use]
@@ -228,7 +228,7 @@ impl Installed {
     /// use enshwick::abi::{CraftCheck, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let craft = CraftCheck { header: Header::of::<CraftCheck>(), crafting_operator_id: enshwick::Entity(2), crafting_station_id: enshwick::Entity(0), recipe_id: enshwick::RecipeId::new(1), recipe_amount: 1, reserved: 0 };
+    /// let craft = enshwick::abi::headed!(CraftCheck { crafting_operator_id: enshwick::Entity::from_engine(2), crafting_station_id: enshwick::Entity::from_engine(0), recipe_id: enshwick::RecipeId::new(1), recipe_amount: 1, reserved: 0 });
     /// assert!(loader.craft(&craft));
     /// ```
     #[must_use]
@@ -264,14 +264,13 @@ impl Installed {
     /// use enshwick::abi::{BuildCheck, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let wall = BuildCheck {
-    ///     header: Header::of::<BuildCheck>(),
-    ///     character: enshwick::Entity(2),
+    /// let wall = enshwick::abi::headed!(BuildCheck {
+    ///     character: enshwick::Entity::from_engine(2),
     ///     item: enshwick::ItemId::new(7),
     ///     position: [0.0; 3],
     ///     reason: core::ptr::null_mut(),
     ///     account: enshwick::PlayerKey::default(),
-    /// };
+    /// });
     /// assert_eq!(loader.build(&wall), Ok(()));
     /// ```
     pub fn build(&self, call: &enshwick_core::abi::BuildCheck) -> Result<(), Option<String>> {

@@ -129,6 +129,7 @@ pub fn vanilla_name(item: Guid, language: crate::i18n::Language) -> Option<&'sta
 /// assert!(item.meter.is_none() && item.stats.is_empty());
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct NewItem {
     /// The new item's id; its game id is [`ItemId::from_guid`](crate::ItemId::from_guid) of its GUID.
     pub id: Id,
@@ -193,10 +194,11 @@ impl NewItem {
 /// use enshwick::content::{Id, id};
 /// use enshwick::content::items::FuelSetup;
 ///
-/// let charges = FuelSetup { template: id!("charges"), max_fuel_charges: 5, start: 3 };
+/// let charges = FuelSetup::new(id!("charges"), 5, 3);
 /// assert!(charges.start <= charges.max_fuel_charges);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[non_exhaustive]
 pub struct FuelSetup {
     /// The id of the item's entity template; the name is enshwick's.
     pub template: Id,
@@ -208,6 +210,22 @@ pub struct FuelSetup {
 }
 
 impl FuelSetup {
+    /// A `FuelSetup` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`FuelSetup`].
+    #[must_use]
+    pub const fn new(template: Id, max_fuel_charges: u16, start: u16) -> Self {
+        Self {
+            template,
+            max_fuel_charges,
+            start,
+        }
+    }
+}
+
+impl FuelSetup {
     /// The fill `start` stands for, as the game's template keeps it.
     ///
     /// # Examples
@@ -216,7 +234,7 @@ impl FuelSetup {
     /// use enshwick::content::{Id, id};
     /// use enshwick::content::items::FuelSetup;
     ///
-    /// let meter = FuelSetup { template: id!("charges"), max_fuel_charges: 4, start: 1 };
+    /// let meter = FuelSetup::new(id!("charges"), 4, 1);
     /// assert!((meter.start_fill() - 0.25).abs() < f32::EPSILON);
     /// ```
     #[must_use]
@@ -239,7 +257,7 @@ impl FuelSetup {
     /// use enshwick::content::items::FuelSetup;
     ///
     /// let host = enshwick::test::FakeHost::new().meters();
-    /// let meter = FuelSetup { template: id!("charges"), max_fuel_charges: 4, start: 1 };
+    /// let meter = FuelSetup::new(id!("charges"), 4, 1);
     /// assert_eq!(meter.change(&host)?.component(), "fuel_setup");
     /// # Ok::<(), enshwick::Off>(())
     /// ```
@@ -286,14 +304,11 @@ pub fn fill(count: u16, max: u16) -> f32 {
 /// use enshwick::content::Guid;
 /// use enshwick::content::items::{ImpactUiValue, StatFormat};
 ///
-/// let charges = ImpactUiValue {
-///     loca_id: Guid::parse("c8d2e3f4-5061-4b72-9c83-d4e5f6071829"),
-///     value: 3,
-///     value_format: StatFormat::Number,
-/// };
+/// let charges = ImpactUiValue::new(Guid::parse("c8d2e3f4-5061-4b72-9c83-d4e5f6071829"), 3, StatFormat::Number);
 /// assert_eq!(charges.value, 3);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[non_exhaustive]
 pub struct ImpactUiValue {
     /// The tag of the line's text, given text with [`Load::add_texts`](../../struct.Load.html#method.add_texts).
     pub loca_id: Guid,
@@ -301,6 +316,22 @@ pub struct ImpactUiValue {
     pub value: i32,
     /// How the number reads.
     pub value_format: StatFormat,
+}
+
+impl ImpactUiValue {
+    /// A `ImpactUiValue` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`ImpactUiValue`].
+    #[must_use]
+    pub const fn new(loca_id: Guid, value: i32, value_format: StatFormat) -> Self {
+        Self {
+            loca_id,
+            value,
+            value_format,
+        }
+    }
 }
 
 /// How a [`ImpactUiValue`]'s number reads.
@@ -336,10 +367,14 @@ impl StatFormat {
 /// Where the fields an item edit touches sit on the running build, resolved
 /// by the loader.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// See [`ItemLayout::resolve`] and [`clone_item`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
+#[non_exhaustive]
 pub struct ItemLayout {
     /// The item's game id.
     pub id: usize,
@@ -416,6 +451,8 @@ const BLOB_STRING: usize = 8;
 /// made from the vanilla one in `like` with its id, object GUID, tags, meter
 /// and lines.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// `None` when `like` is too short for the layout, or when the item has a meter
 /// and `like` already has an entity of its own (a weapon's durability), which
 /// the meter's would replace. [`Load::add_item`](../../struct.Load.html#method.add_item) serves it; call it from a
@@ -427,10 +464,18 @@ const BLOB_STRING: usize = 8;
 /// use enshwick::content::{Guid, Id, id};
 /// use enshwick::content::items::{ItemLayout, NewItem, clone_item};
 ///
-/// let layout = ItemLayout {
-///     id: 0, object: 4, name: 0x48, description: 0x68, flags: 0x70, pid_entity: 0x78,
-///     ui_values: 0x88, icon_image: 0x58, ui_value: [0x28, 0, 4, 8, 0x24], refs: 0, names: 0x38,
-/// };
+/// let mut layout = ItemLayout::default();
+/// layout.id = 0;
+/// layout.object = 4;
+/// layout.name = 0x48;
+/// layout.description = 0x68;
+/// layout.flags = 0x70;
+/// layout.pid_entity = 0x78;
+/// layout.ui_values = 0x88;
+/// layout.icon_image = 0x58;
+/// layout.ui_value = [0x28, 0, 4, 8, 0x24];
+/// layout.refs = 0;
+/// layout.names = 0x38;
 /// let item = NewItem::new(
 ///     id!("locker"),
 ///     Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
@@ -443,6 +488,7 @@ const BLOB_STRING: usize = 8;
 /// # Ok::<(), &str>(())
 /// ```
 #[must_use]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
 pub fn clone_item(
     layout: &ItemLayout,
     like: &[u8],
@@ -496,6 +542,8 @@ pub fn clone_item(
 /// Builds in `out` the item registry with `guid` listed after the others, and
 /// its debug name beside it.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// `None` when the registry does not have the layout's arrays or lists another
 /// item with `guid`'s game id, which would stand for both.
 ///
@@ -514,6 +562,7 @@ pub fn clone_item(
 /// }
 /// ```
 #[must_use]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
 pub fn list_item(
     layout: &ItemLayout,
     registry: &[u8],

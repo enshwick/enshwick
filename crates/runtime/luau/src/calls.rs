@@ -5,7 +5,7 @@
 use std::sync::{Arc, OnceLock};
 
 use enshwick_core::points::DescribedField;
-use enshwick_core::services::{CallError, DescribedCall, DescribedCaller};
+use enshwick_core::services::{CallServiceError, DescribedCall, DescribedCaller};
 use mlua::{Lua, Table, Value as LuaValue};
 
 use crate::points::{Read, decode, encode, read_of, size_of_read};
@@ -186,10 +186,10 @@ impl ServedCall {
 }
 
 /// A call's error, as a script reads it.
-fn why(error: CallError) -> &'static str {
+fn why(error: CallServiceError) -> &'static str {
     match error {
-        CallError::Unmatched => "unmatched",
-        CallError::Off => "off",
+        CallServiceError::Unmatched => "unmatched",
+        CallServiceError::Off => "off",
         _ => "failed",
     }
 }

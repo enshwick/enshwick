@@ -6,7 +6,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Mutex, OnceLock};
 
-    use enshwick::abi::{ActionCall, Header, PlayerInfo, Status};
+    use enshwick::abi::{ActionCall, PlayerInfo, Status};
     use enshwick::actions::sheet::{ArgView, Entry};
     use enshwick::actions::{Action, Actions, Arg, Outcome, Subject, Value, Via, Window, window};
     use enshwick::console;
@@ -44,7 +44,7 @@ mod tests {
                 .help("access.help")
                 .at(|ask| {
                     LOOKS.fetch_add(1, Ordering::Relaxed);
-                    if ask.player.entity.0 == 0 {
+                    if ask.player.entity.get() == 0 {
                         Err(ask.say("none", &[]).into())
                     } else {
                         Ok(Subject::new(42, ask.say("locker", &[])))
@@ -98,15 +98,14 @@ mod tests {
     );
 
     fn player(entity: u32, key: u64, name: &str, admin: bool) -> PlayerInfo {
-        let mut info = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let mut info = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: enshwick::Entity(entity),
+            entity: enshwick::Entity::from_engine(entity),
             key: enshwick::PlayerKey::new(key),
             permissions: if admin { PlayerInfo::CAN_KICK_BAN } else { 0 },
             name_len: u32::try_from(name.len()).unwrap(),
             name: [0; PlayerInfo::NAME_MAX],
-        };
+        });
         info.name[..name.len()].copy_from_slice(name.as_bytes());
         info
     }

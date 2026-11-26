@@ -6,7 +6,7 @@ mod tests {
     use std::sync::OnceLock;
 
     use enshwick::WorldError;
-    use enshwick::abi::{DaytimeInfo, Header, Status};
+    use enshwick::abi::{DaytimeInfo, Status};
     use enshwick::daytime::{Clock, ClockSpeed};
     use enshwick::events::NightStarted;
     use enshwick::{Load, Mod, Off};
@@ -44,8 +44,7 @@ mod tests {
 
         assert_eq!(clock.now(), None, "no world runs yet");
         assert_eq!(clock.set_hours(3.0), Err(WorldError::Unavailable));
-        loader.set_daytime(DaytimeInfo {
-            header: Header::of::<DaytimeInfo>(),
+        loader.set_daytime(enshwick::abi::headed!(DaytimeInfo {
             time_ns: 7 * HOUR,
             day_start_ns: 6 * HOUR,
             day_end_ns: 18 * HOUR,
@@ -53,7 +52,7 @@ mod tests {
             night_length_ns: 720_000_000_000,
             speed: 1.0,
             flags: DaytimeInfo::DAY,
-        });
+        }));
         let now = clock.now().unwrap();
         assert!((now.hours - 7.0).abs() < 1e-4);
         assert!(now.is_day);

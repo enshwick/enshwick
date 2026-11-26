@@ -1,15 +1,14 @@
 //! Host functions for the game build: symbols, systems, layouts and constants.
 
 use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{BuildInfo, Header, Level, Status, Str};
+use enshwick_core::abi::{BuildInfo, Level, Status, Str};
 
 use crate::engine::kept_text::keep;
 use crate::host::layer::{AnyMod, Caller, HeadedOut, Out, Text, Writer, entries, loaded};
 
 entries! {
     fn build(loader as Caller, out as HeadedOut<BuildInfo>) -> Status {
-        out.put(BuildInfo {
-            header: Header::of::<BuildInfo>(),
+        out.put(enshwick_abi::headed!(BuildInfo {
             side: loader.side,
             base: loader.base,
             fingerprint: enshwick_core::abi::Fingerprint {
@@ -17,7 +16,7 @@ entries! {
                 age: loader.fingerprint.age(),
             },
             complete: u8::from(loader.build.complete()),
-        })
+        }))
     }
 
     fn symbol(me as Writer, name as Text, out as Out<u64>) -> Status {

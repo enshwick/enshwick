@@ -20,7 +20,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
         for altar in altars.list() {
             enshwick::info!(
                 "altar {} level {} zone {:?}",
-                altar.entity.0,
+                altar.entity,
                 altar.level,
                 altar.zone
             );
@@ -125,7 +125,7 @@ not the built zones.
 `load.add_flame_altar(NewFlameAltar)` adds a kind of Flame Altar. The kind is a
 [prop](content/props.md) copied from the vanilla altar whose item is
 `item.like`. It has its item, its template and, with `recipe_cost`, its
-recipe. Its altars take `zones`, one `KindZone { grow, height }` per level
+recipe. Its altars take `zones`, one `KindZone::new(grow, height)` per level
 from 1. Each entry gives the cells added on each side of the vanilla zone and
 the height, in the terms of a zone filter. A level past the list takes the last entry. The kind sizes its
 altars through a zone filter of the mod, so filters that run after it see the
@@ -142,11 +142,9 @@ use enshwick::content::{Guid, id};
 use enshwick::content::items::NewItem;
 
 fn init(load: &mut enshwick::Load<'_>, altar: Guid) -> Result<(), enshwick::Off> {
-    load.add_flame_altar(NewFlameAltar {
-        item: NewItem::new(id!("wide-altar"), altar),
-        zones: vec![KindZone { grow: 20, height: 80 }],
-        recipe_cost: Some(2),
-    })?;
+    let mut flame_altar = NewFlameAltar::new(NewItem::new(id!("wide-altar"), altar), vec![KindZone::new(20, 80)]);
+    flame_altar.recipe_cost = Some(2);
+    load.add_flame_altar(flame_altar)?;
     Ok(())
 }
 ```
@@ -167,7 +165,7 @@ enshwick.log.info(`wide altars are {wide.template}`)
 ### A maximum level for a kind
 
 `load.limit_altar_level(kind, max_level)` keeps a kind's altars at
-`max_level` or below. It is unstable: it needs the `unstable` feature. An
+`max_level` or below. An
 altar's level rises by an upgrade recipe crafted at the altar. On the server,
 a craft filter of the mod refuses the vanilla altar upgrades from
 `max_level` up at an altar of the kind. The filter runs before
@@ -183,11 +181,7 @@ use enshwick::content::{Guid, id};
 use enshwick::content::items::NewItem;
 
 fn init(load: &mut enshwick::Load<'_>, altar: Guid) -> Result<(), enshwick::Off> {
-    let small = load.add_flame_altar(NewFlameAltar {
-        item: NewItem::new(id!("small-altar"), altar),
-        zones: Vec::new(),
-        recipe_cost: None,
-    })?;
+    let small = load.add_flame_altar(NewFlameAltar::new(NewItem::new(id!("small-altar"), altar), Vec::new()))?;
     load.limit_altar_level(small, 2)
 }
 ```
@@ -263,8 +257,7 @@ lets it group every zone it lists and allows up to 32 altars a level. With it,
 the game refuses an altar that would start a 17th base with its own "too many
 altars".
 
-`load.request_base_limits(zones, bases)` needs the `unstable` feature
-([Stability](stability.md)). It allows up to `zones` altars a level, at most
+`load.request_base_limits(zones, bases)` allows up to `zones` altars a level, at most
 255. The game then groups every zone it lists, in up to `bases` bases, at most
 179. The largest request of every mod holds. A value past
 `base_limit().max_zones` or `max_bases` turns the mod off.

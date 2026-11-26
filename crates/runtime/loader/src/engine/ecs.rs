@@ -596,7 +596,7 @@ impl Engine {
     pub(crate) unsafe fn component(&self, ctx: *mut u64, kind: u16, entity: Entity) -> *const u8 {
         // SAFETY: the caller guarantees a live context on its system's
         // thread; `kind` lives on this stack for the call.
-        unsafe { (self.component_read)(ctx, &raw const kind, entity.0) }
+        unsafe { (self.component_read)(ctx, &raw const kind, entity.get()) }
     }
 
     /// The full zone size of an altar at `level`, `None` when the balancing

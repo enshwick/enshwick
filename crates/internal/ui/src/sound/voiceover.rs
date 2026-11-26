@@ -61,6 +61,7 @@ impl VoiceoverId {
 ///
 /// See [`NewVoiceover`].
 #[derive(Clone, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct VoiceLine {
     /// The language: a field of the game's `Voiceover` in snake case; the
     /// game's voice language setting picks one, and a language without a
@@ -97,16 +98,15 @@ impl VoiceLine {
 /// use enshwick::content::id;
 /// use enshwick::sound::{NewVoiceover, VoiceLine};
 ///
-/// let welcome = NewVoiceover {
-///     fallback: Some("english".into()),
-///     ..NewVoiceover::new(
+/// let mut welcome = NewVoiceover::new(
 ///         id!("welcome"),
 ///         vec![VoiceLine::new("english", "voice/en/welcome.ogg"), VoiceLine::new("german", "voice/de/welcome.ogg")],
-///     )
-/// };
+///     );
+/// welcome.fallback = Some("english".into());
 /// assert_eq!(welcome.lines.len(), 2);
 /// ```
 #[derive(Clone, Debug, crate::Script)]
+#[non_exhaustive]
 pub struct NewVoiceover {
     /// The line's content id; each language's container is
     /// `<id>.<language>` and its recordings `<id>.<language>.sound` on.

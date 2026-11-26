@@ -145,7 +145,7 @@ These belong to the `enshwick` table itself:
 | `enshwick.extend(point, handler, order)` | a link into another mod's [extension point](extending.md#from-luau) |
 | `enshwick.points.define_point(name)` | an [extension point](extending.md#defining-a-point-in-luau) of the mod's own, declared in `pack.toml` |
 | `enshwick.on_mod_event(event, handler)`, `enshwick.define_event(event)` | [mod events](services.md#mod-events), heard and sent |
-| `enshwick.caller(call)` | a function that runs [another mod's call](calls.md#from-luau); unstable |
+| `enshwick.caller(call)` | a function that runs [another mod's call](calls.md#from-luau) |
 | `enshwick.deps` | the mods the pack's `requires` and `after` tables name, [by alias](services.md#other-mods-by-alias) |
 | `enshwick.settings()` | the mod's [settings](settings.md#settings-of-a-luau-mod) in force, as a table |
 | `require("./name")` | another script of the same folder, as Luau resolves it |
@@ -176,9 +176,22 @@ is no second copy. `#[derive(Script)]` describes a type.
 event tables describe each event. A new event or a newly marked method
 reaches Luau and the definitions with no other change.
 
-A call that fails raises a Luau error with the call's name and the reason,
-such as `enshwick.world.broadcast: text: expected a string, got a number`.
-`pcall` catches it.
+A call that fails raises a Luau error as a table. Its `kind` is the name of
+the Rust error's variant, and its `message` says what went wrong. Its `call`
+names the call that failed. A kind is `WrongThread` for
+`WorldError::WrongThread`, for example. It is `BadArgs` for an argument the
+call cannot take. It is `WrongTime` for a call at the wrong time, such as a
+start call after the start. It is `Gone` for a call on an object whose call
+ended. `pcall` catches the table. `tostring` reads it as the call
+and the message, such as
+`enshwick.world.broadcast: text: expected a string, got a number`.
+
+```luau
+local ok, why = pcall(enshwick.world.broadcast, "Dinner is ready")
+if not ok and why.kind == "WrongThread" then
+    enshwick.log.info(`later: {why}`)
+end
+```
 
 ## Where Luau differs from Rust
 
@@ -207,13 +220,14 @@ mirror, unless this table names it and says why.
 | `input::Password::new` | A join's password wraps its text so a Rust `Debug` print shows none of it. Luau gives the text as the command's `password` field. |
 | `content::Blob::*`, `content::ItemLayout::*`, `content::RecipeLayout::*`, `content::WorkshopLayout::*`, `content::MenuLayout::*`, `content::LootLayout::*`, `content::FillTableLayout::*`, `content::ContainerLayout::*`, `content::ImageLayout::*`, `buffs::BuffLayout::*`, `content::RecipeEdit::*`, `content::ResourceType::*`, `resources::Host::game_resource`, `resources::Host::served_resource`, `content::game_resource`, `content::Load::serve`, `resources::Output::*`, `content::Load::allow_rebuild`, `content::rebuild`, `content::add_recipe_to`, `content::at_workshop`, `content::change_fill_table`, `content::change_random_loot`, `content::change_recipes_in`, `content::clone_image`, `content::clone_item`, `content::clone_station`, `content::derive_recipes_in`, `content::fill_items`, `content::list_item`, `content::list_recipes`, `content::list_workshop`, `content::move_recipes`, `content::recipe_workshops`, `content::resize_container`, `content::template_table` | A resource's bytes and their layouts. Luau reads the same resources as values with `enshwick.resources.game_value`, and as served with `served_value`. It serves them with `serve` and `serve_new`. The Rust trait `resources::Grow`, the byte stores these helpers build in, has no Luau form. |
 | `content::Vanilla::game`, `content::Vanilla::new` | The vanilla content as a Rust value. Luau reaches its lookups as `enshwick.content` functions. |
+| `actions::View::new`, `actions::ButtonView::new`, `actions::MarkerView::new`, `content::MenuEntry::new`, `content::RecipeTraits::new` | A script writes these values as tables with their fields. Rust needs the constructors because it refuses a struct expression of these types outside the API. |
 | `content::RecipeRule::*` | Luau names a rule as the table `{ Recipe = name }` or `{ Output = name }`. It also takes the table `{ Workshop = name }` or `"Hand"`. |
 | `files::read_if_present`, `files::read_to_string_if_present` | A script reads only its own folder, with `enshwick.mods.read`, and keeps a world's data with `enshwick.state`. It writes any file with `enshwick.files.write_atomically`. |
 | `loot::Containers::*`, `loot::LootPass::*` | Reads of the game's context inside a system, which lives only during the call. Luau's `on_loot_pass` handler gets the pass's containers as a list. |
 | `inventory::Inventories::read`, `inventory::Inventories::read_in` | A reader borrowed for one call. Luau reads through `enshwick.inventory` itself. Its calls are `slot` and `root`. It also has `durability` and `meter`. |
 | `stats::Stat::from_ref`, `stats::Def::to_def` | A stat from the binary interface's reference or the loader's own table, which a script never holds. |
 | `world::World::component` | A pointer into the game's memory. |
-| `vetoes::BuildVerdict::refuse_because` | A Luau build filter refuses with a reason by returning the reason as a string. |
+| `vetoes::Verdict::refuse_because`, `vetoes::Verdict::passes`, `vetoes::Verdict::decision` | A Luau filter answers `false`, `true`, nil or a reason as a string, and has no verdict value to ask. |
 | `status::Load::feature`, `state::ModLocal::*` | Rust's own init and statics. A script's start is its `main.luau`, and it keeps values in its own locals. |
 | `resources::Type::*`, `resources::Field::*`, `resources::Attribute::*`, `resources::Constant::*`, `resources::Kind::*`, `resources::Registry::*`, `resources::TypeTable::*`, `resources::Variant::*`, `resources::CodecError::*` | The reflected types as Rust values. Luau gets a type as the table `enshwick.resources.named` gives: its names, hashes, layout, fields, constants and attributes; a variant is `{ type = ..., value = ... }`. |
 | `game_events::EventType::*`, `game_events::RawGameEvent::*`, `game_events::Load::game_event_types`, `Load::game_event_type`, `Load::on_raw_game_event`, `Load::on_every_raw_game_event`, `Load::on_client_raw_game_event`, `Load::on_every_client_raw_game_event`, `Load::on_raw_event`, `Load::type_size` | A game event by its reflected type, read field by field in Rust. Luau names the fields and their kinds through `enshwick.on_game_type`, and through `enshwick.on_client_game_type` for the client's own world. `enshwick.game_event_types` lists the types. |

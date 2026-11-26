@@ -9,12 +9,11 @@ Entity::SCHEMA_NAME
 Entity::SHAPE
 Entity::TY
 Entity::fmt
-Entity::from
 Entity::from_bytes
+Entity::from_raw
 Entity::from_value
 Entity::get
 Entity::into_value
-Entity::new
 Entity::to_bytes
 FnPtr
 FnPtr::Output
@@ -105,7 +104,7 @@ Load::altars
 Load::base
 Load::base_mut
 Load::buffs
-Load::caller unstable
+Load::caller
 Load::cap_task_workers
 Load::change
 Load::change_arsenal unstable
@@ -131,17 +130,17 @@ Load::data_dir
 Load::declare
 Load::declare_change
 Load::define_affix
-Load::define_described_event unstable
-Load::define_described_point unstable
+Load::define_described_event
+Load::define_described_point
 Load::define_event
 Load::define_point
 Load::define_stat
 Load::derive_recipes unstable
-Load::described_caller unstable
+Load::described_caller
 Load::effects
 Load::entity_data unstable
 Load::export_dir
-Load::extend_described_point unstable
+Load::extend_described_point
 Load::extend_item_tooltip unstable
 Load::extend_point
 Load::extend_screen unstable
@@ -164,7 +163,7 @@ Load::inventories
 Load::item_data unstable
 Load::knowledge
 Load::knowledge_rules unstable
-Load::limit_altar_level unstable
+Load::limit_altar_level
 Load::map unstable
 Load::mod_dir
 Load::observe_point
@@ -180,7 +179,7 @@ Load::on_client_raw_game_event unstable
 Load::on_comfort
 Load::on_craft
 Load::on_damage unstable
-Load::on_described_mod_event unstable
+Load::on_described_mod_event
 Load::on_every_client_raw_game_event unstable
 Load::on_every_raw_game_event
 Load::on_every_step
@@ -236,12 +235,12 @@ Load::remove_quest unstable
 Load::remove_workshop unstable
 Load::rename_content
 Load::replace_sound unstable
-Load::request_base_limits unstable
+Load::request_base_limits
 Load::rewards unstable
 Load::scheduler
 Load::serve
-Load::serve_call unstable
-Load::serve_described_call unstable
+Load::serve_call
+Load::serve_described_call
 Load::serve_new
 Load::service
 Load::size
@@ -360,6 +359,7 @@ abi::ActionCall::WINDOW
 abi::ActionCall::WINDOW_CLOSED
 abi::ActionCall::action
 abi::ActionCall::args
+abi::ActionCall::blank
 abi::ActionCall::header
 abi::ActionCall::kind
 abi::ActionCall::language
@@ -372,6 +372,7 @@ abi::ActionCall::word
 abi::ActionFn
 abi::ActionReply
 abi::ActionReply::BORN
+abi::ActionReply::blank
 abi::ActionReply::done
 abi::ActionReply::header
 abi::ActionReply::text
@@ -380,6 +381,7 @@ abi::ActionTarget::BORN
 abi::ActionTarget::ENTITY
 abi::ActionTarget::NONE
 abi::ActionTarget::POSITION
+abi::ActionTarget::blank
 abi::ActionTarget::entity
 abi::ActionTarget::flags
 abi::ActionTarget::header
@@ -388,6 +390,7 @@ abi::ActionTarget::position
 abi::ActionTarget::read
 abi::ActiveBuff
 abi::ActiveBuff::BORN
+abi::ActiveBuff::blank
 abi::ActiveBuff::duration_ns
 abi::ActiveBuff::entity
 abi::ActiveBuff::header
@@ -405,6 +408,7 @@ abi::AffixModifierSpec::step
 abi::AffixRoll
 abi::AffixRoll::BORN
 abi::AffixRoll::ONCE
+abi::AffixRoll::blank
 abi::AffixRoll::flags
 abi::AffixRoll::header
 abi::AffixRoll::item
@@ -415,6 +419,7 @@ abi::AffixRoll::pide
 abi::AffixRoll::seed
 abi::AffixSpec
 abi::AffixSpec::BORN
+abi::AffixSpec::blank
 abi::AffixSpec::categories
 abi::AffixSpec::group
 abi::AffixSpec::header
@@ -426,6 +431,7 @@ abi::AffixSpec::weight
 abi::AltarInfo
 abi::AltarInfo::BORN
 abi::AltarInfo::EMPTY
+abi::AltarInfo::blank
 abi::AltarInfo::entity
 abi::AltarInfo::header
 abi::AltarInfo::level
@@ -438,6 +444,7 @@ abi::AltarInfo::zone
 abi::AltarLimit
 abi::AltarLimit::BORN
 abi::AltarLimit::allowed
+abi::AltarLimit::blank
 abi::AltarLimit::flame_level
 abi::AltarLimit::header
 abi::AltarLimit::reserved
@@ -446,6 +453,7 @@ abi::AltarLimitFilterFn
 abi::AltarZone
 abi::AltarZone::BORN
 abi::AltarZone::altar
+abi::AltarZone::blank
 abi::AltarZone::grow
 abi::AltarZone::header
 abi::AltarZone::height
@@ -455,6 +463,7 @@ abi::AltarZoneFilterFn
 abi::BaseLimitInfo
 abi::BaseLimitInfo::BORN
 abi::BaseLimitInfo::bases
+abi::BaseLimitInfo::blank
 abi::BaseLimitInfo::header
 abi::BaseLimitInfo::max_bases
 abi::BaseLimitInfo::max_zones
@@ -466,6 +475,7 @@ abi::BedCheck
 abi::BedCheck::BORN
 abi::BedCheck::bed_at
 abi::BedCheck::bed_id
+abi::BedCheck::blank
 abi::BedCheck::entity
 abi::BedCheck::header
 abi::BedCheck::home
@@ -473,6 +483,7 @@ abi::BedCheck::npc_id
 abi::BedCheckFn
 abi::BlockPlace
 abi::BlockPlace::BORN
+abi::BlockPlace::blank
 abi::BlockPlace::header
 abi::BlockPlace::material
 abi::BlockPlace::position
@@ -485,6 +496,7 @@ abi::Bounds::max
 abi::Bounds::min
 abi::BuffRequest
 abi::BuffRequest::BORN
+abi::BuffRequest::blank
 abi::BuffRequest::duration_ns
 abi::BuffRequest::entity
 abi::BuffRequest::header
@@ -507,6 +519,7 @@ abi::BuffTypeAdd::SET_HIDE_DURATION_IN_UI
 abi::BuffTypeAdd::SET_HIDE_IN_UI
 abi::BuffTypeAdd::SET_SAVED
 abi::BuffTypeAdd::SLOT
+abi::BuffTypeAdd::blank
 abi::BuffTypeAdd::changes
 abi::BuffTypeAdd::description
 abi::BuffTypeAdd::flags
@@ -539,6 +552,7 @@ abi::BuffTypeInfo::HIDDEN
 abi::BuffTypeInfo::RESTED
 abi::BuffTypeInfo::SAVED
 abi::BuffTypeInfo::TERRAIN
+abi::BuffTypeInfo::blank
 abi::BuffTypeInfo::duration_ns
 abi::BuffTypeInfo::flags
 abi::BuffTypeInfo::header
@@ -548,6 +562,7 @@ abi::BuffTypeInfo::slot
 abi::BuildCheck
 abi::BuildCheck::BORN
 abi::BuildCheck::account
+abi::BuildCheck::blank
 abi::BuildCheck::character
 abi::BuildCheck::header
 abi::BuildCheck::item
@@ -557,6 +572,7 @@ abi::BuildFilterFn
 abi::BuildInfo
 abi::BuildInfo::BORN
 abi::BuildInfo::base
+abi::BuildInfo::blank
 abi::BuildInfo::complete
 abi::BuildInfo::fingerprint
 abi::BuildInfo::header
@@ -568,6 +584,7 @@ abi::BuildRights::INSIDE_STRICT_BUILD_INHIBITOR_ZONE
 abi::BuildRights::NO_CAN_EDIT_BASE
 abi::BuildRights::NO_CAN_EDIT_WORLD
 abi::BuildRights::OUTSIDE_BUILDING_ZONE
+abi::BuildRights::blank
 abi::BuildRights::character
 abi::BuildRights::header
 abi::BuildRights::max
@@ -586,6 +603,7 @@ abi::BuildingData::PICKED_UP
 abi::BuildingData::PLACED
 abi::BuildingData::TORN_DOWN
 abi::BuildingData::TY
+abi::BuildingData::blank
 abi::BuildingData::character
 abi::BuildingData::entity
 abi::BuildingData::header
@@ -597,6 +615,7 @@ abi::BuildingData::replay
 abi::BuildingData::template
 abi::BuildingZoneCheck
 abi::BuildingZoneCheck::BORN
+abi::BuildingZoneCheck::blank
 abi::BuildingZoneCheck::header
 abi::BuildingZoneCheck::margin
 abi::BuildingZoneCheck::object
@@ -606,6 +625,7 @@ abi::BuildingZoneFilterFn
 abi::CallFn
 abi::CallSpec
 abi::CallSpec::BORN
+abi::CallSpec::blank
 abi::CallSpec::header
 abi::CallSpec::input
 abi::CallSpec::major
@@ -636,6 +656,7 @@ abi::ChatLine::EMOTE
 abi::ChatLine::NOTICE
 abi::ChatLine::PLAYER
 abi::ChatLine::account
+abi::ChatLine::blank
 abi::ChatLine::entity
 abi::ChatLine::header
 abi::ChatLine::kind
@@ -646,6 +667,7 @@ abi::ChatRewrite::BORN
 abi::ChatRewrite::DROP
 abi::ChatRewrite::KEEP
 abi::ChatRewrite::REWRITTEN
+abi::ChatRewrite::blank
 abi::ChatRewrite::buffer
 abi::ChatRewrite::capacity
 abi::ChatRewrite::header
@@ -657,6 +679,7 @@ abi::CheckAbiError::OtherMajor
 abi::ChunkData
 abi::ChunkData::BORN
 abi::ChunkData::TY
+abi::ChunkData::blank
 abi::ChunkData::header
 abi::ChunkData::into_value
 abi::ChunkData::size
@@ -703,6 +726,7 @@ abi::ClientCommand::WINDOW_PRESS
 abi::ClientCommand::WINDOW_TEXT
 abi::ClientCommand::amount
 abi::ClientCommand::answer
+abi::ClientCommand::blank
 abi::ClientCommand::cancels
 abi::ClientCommand::character
 abi::ClientCommand::dialog
@@ -759,6 +783,7 @@ abi::ClientCommandStatus::UNREACHABLE
 abi::ClientCommandStatus::VERSION_MISMATCH
 abi::ClientCommandStatus::WRONG_PASSWORD
 abi::ClientCommandStatus::age_ms
+abi::ClientCommandStatus::blank
 abi::ClientCommandStatus::failure
 abi::ClientCommandStatus::header
 abi::ClientCommandStatus::kind
@@ -770,6 +795,7 @@ abi::ClientSlot
 abi::ClientSlot::ACTIONBAR
 abi::ClientSlot::BORN
 abi::ClientSlot::EMPTY
+abi::ClientSlot::blank
 abi::ClientSlot::category
 abi::ClientSlot::count
 abi::ClientSlot::flags
@@ -809,6 +835,7 @@ abi::ClientSnapshot::VITALS
 abi::ClientSnapshot::actionbar_slot
 abi::ClientSnapshot::age_ms
 abi::ClientSnapshot::available
+abi::ClientSnapshot::blank
 abi::ClientSnapshot::character
 abi::ClientSnapshot::dialog
 abi::ClientSnapshot::dialog_buttons
@@ -855,6 +882,7 @@ abi::ClientWindowItem::SWITCH
 abi::ClientWindowItem::TEMPLATE
 abi::ClientWindowItem::TEXT
 abi::ClientWindowItem::TOGGLE
+abi::ClientWindowItem::blank
 abi::ClientWindowItem::field
 abi::ClientWindowItem::flags
 abi::ClientWindowItem::header
@@ -866,6 +894,7 @@ abi::ClientWindowItem::reserved
 abi::ClientWindowItem::window
 abi::Comfort
 abi::Comfort::BORN
+abi::Comfort::blank
 abi::Comfort::category
 abi::Comfort::header
 abi::Comfort::position
@@ -874,12 +903,14 @@ abi::ComfortFilterFn
 abi::CommandInfo
 abi::CommandInfo::BORN
 abi::CommandInfo::alias
+abi::CommandInfo::blank
 abi::CommandInfo::header
 abi::CommandInfo::mod_id
 abi::CommandInfo::name
 abi::ConfigCheckFn
 abi::ContainerPut
 abi::ContainerPut::BORN
+abi::ContainerPut::blank
 abi::ContainerPut::container
 abi::ContainerPut::container_item
 abi::ContainerPut::count
@@ -892,6 +923,7 @@ abi::ContentRename::from
 abi::ContentRename::to
 abi::ControlEvent
 abi::ControlEvent::BORN
+abi::ControlEvent::blank
 abi::ControlEvent::header
 abi::ControlEvent::kind
 abi::ControlEvent::name
@@ -905,6 +937,7 @@ abi::ControlSpec::HOLD
 abi::ControlSpec::PRESS
 abi::ControlSpec::RELEASE
 abi::ControlSpec::action
+abi::ControlSpec::blank
 abi::ControlSpec::fires
 abi::ControlSpec::header
 abi::ControlSpec::hold_ms
@@ -915,6 +948,7 @@ abi::ControlSpec::name
 abi::ControlSpec::second
 abi::CraftCheck
 abi::CraftCheck::BORN
+abi::CraftCheck::blank
 abi::CraftCheck::crafting_operator_id
 abi::CraftCheck::crafting_station_id
 abi::CraftCheck::header
@@ -936,6 +970,7 @@ abi::DamageCheck::SUFFOCATED
 abi::DamageCheck::amount_count
 abi::DamageCheck::amounts
 abi::DamageCheck::attacker
+abi::DamageCheck::blank
 abi::DamageCheck::cause
 abi::DamageCheck::header
 abi::DamageCheck::source
@@ -944,6 +979,7 @@ abi::DamageCheck::total
 abi::DamageFilterFn
 abi::DataChange
 abi::DataChange::BORN
+abi::DataChange::blank
 abi::DataChange::categories
 abi::DataChange::entry
 abi::DataChange::field
@@ -983,6 +1019,7 @@ abi::DataSelect::selects_items
 abi::DaytimeInfo
 abi::DaytimeInfo::BORN
 abi::DaytimeInfo::DAY
+abi::DaytimeInfo::blank
 abi::DaytimeInfo::day_end_ns
 abi::DaytimeInfo::day_length_ns
 abi::DaytimeInfo::day_start_ns
@@ -997,6 +1034,7 @@ abi::Dependency::range
 abi::Dependency::relation
 abi::DropRequest
 abi::DropRequest::BORN
+abi::DropRequest::blank
 abi::DropRequest::count
 abi::DropRequest::header
 abi::DropRequest::item
@@ -1009,17 +1047,17 @@ abi::Entity::SCHEMA_NAME
 abi::Entity::SHAPE
 abi::Entity::TY
 abi::Entity::fmt
-abi::Entity::from
 abi::Entity::from_bytes
+abi::Entity::from_raw
 abi::Entity::from_value
 abi::Entity::get
 abi::Entity::into_value
-abi::Entity::new
 abi::Entity::to_bytes
 abi::EntityDataFlags
 abi::EntityDataFlags::NONE
 abi::EntityDataFlags::SENT
 abi::EntityPlace
+abi::EntityPlace::default
 abi::EntityPlace::entity
 abi::EntityPlace::position
 abi::EntityPlace::reserved
@@ -1057,11 +1095,13 @@ abi::Event::WORLD_SAVING
 abi::EventFn
 abi::EventSpec
 abi::EventSpec::BORN
+abi::EventSpec::blank
 abi::EventSpec::header
 abi::EventSpec::layout
 abi::EventSpec::name
 abi::EventTypeInfo
 abi::EventTypeInfo::BORN
+abi::EventTypeInfo::blank
 abi::EventTypeInfo::hash
 abi::EventTypeInfo::header
 abi::EventTypeInfo::name
@@ -1069,6 +1109,7 @@ abi::EventTypeInfo::size
 abi::ExperienceFilterFn
 abi::ExperiencePass
 abi::ExperiencePass::BORN
+abi::ExperiencePass::blank
 abi::ExperiencePass::header
 abi::ExperiencePass::level_cap
 abi::ExperiencePass::need_for
@@ -1076,6 +1117,7 @@ abi::ExperiencePass::row_count
 abi::ExperiencePass::rows
 abi::ExperiencePass::token
 abi::ExperienceRow
+abi::ExperienceRow::default
 abi::ExperienceRow::entity
 abi::ExperienceRow::gained
 abi::ExperienceRow::level
@@ -1095,6 +1137,7 @@ abi::Fingerprint::guid
 abi::FogInfo
 abi::FogInfo::BORN
 abi::FogInfo::EMPTY
+abi::FogInfo::blank
 abi::FogInfo::header
 abi::FogInfo::height
 abi::FogInfo::metres_per_pixel
@@ -1111,11 +1154,13 @@ abi::GameBinding
 abi::GameBinding::BORN
 abi::GameBinding::EMPTY
 abi::GameBinding::OTHER
+abi::GameBinding::blank
 abi::GameBinding::first
 abi::GameBinding::header
 abi::GameBinding::second
 abi::GameEventData
 abi::GameEventData::BORN
+abi::GameEventData::blank
 abi::GameEventData::data
 abi::GameEventData::header
 abi::GameEventData::size
@@ -1144,6 +1189,7 @@ abi::Guid::try_named
 abi::Guid::try_parse
 abi::Headed
 abi::Headed::BORN
+abi::Headed::blank
 abi::Header
 abi::Header::abi_major
 abi::Header::abi_minor
@@ -1157,6 +1203,7 @@ abi::HookFlags::NONE
 abi::HookFlags::contains
 abi::HookSpec
 abi::HookSpec::BORN
+abi::HookSpec::blank
 abi::HookSpec::detour
 abi::HookSpec::flags
 abi::HookSpec::header
@@ -1419,6 +1466,7 @@ abi::Interaction::TRANSFER_TO_BACKPACK
 abi::Interaction::UPGRADE
 abi::Interaction::action
 abi::Interaction::amount
+abi::Interaction::blank
 abi::Interaction::character
 abi::Interaction::from
 abi::Interaction::from_slot
@@ -1441,6 +1489,7 @@ abi::InteractionFilterFn
 abi::InteractionPrompt
 abi::InteractionPrompt::BORN
 abi::InteractionPrompt::REPLACE_ACTION
+abi::InteractionPrompt::blank
 abi::InteractionPrompt::flags
 abi::InteractionPrompt::header
 abi::InteractionPrompt::is_valid
@@ -1457,6 +1506,7 @@ abi::InventoryOp::MOVE_SLOT
 abi::InventoryOp::RENEW
 abi::InventoryOp::TAKE
 abi::InventoryOp::count
+abi::InventoryOp::default
 abi::InventoryOp::fill
 abi::InventoryOp::flags
 abi::InventoryOp::item
@@ -1474,6 +1524,7 @@ abi::InventoryRequest::BORN
 abi::InventoryRequest::HIDE_IN_UI
 abi::InventoryRequest::NOTIFY
 abi::InventoryRequest::actor
+abi::InventoryRequest::blank
 abi::InventoryRequest::flags
 abi::InventoryRequest::header
 abi::InventoryRequest::op_count
@@ -1485,6 +1536,7 @@ abi::InventoryResult::COMMITTED
 abi::InventoryResult::ROLLED_BACK
 abi::InventoryResult::TIMED_OUT
 abi::InventoryResult::UNAVAILABLE
+abi::InventoryResult::blank
 abi::InventoryResult::header
 abi::InventoryResult::op_count
 abi::InventoryResult::ops
@@ -1499,6 +1551,7 @@ abi::ItemAction::PICKUP
 abi::ItemAction::PLACE
 abi::ItemAction::TRASH
 abi::ItemAction::UNEQUIP
+abi::ItemAction::blank
 abi::ItemAction::character
 abi::ItemAction::count
 abi::ItemAction::header
@@ -1531,6 +1584,7 @@ abi::ItemTypeInfo::HAS_PIDE
 abi::ItemTypeInfo::IS_BLUEPRINT
 abi::ItemTypeInfo::IS_CONTAINER
 abi::ItemTypeInfo::USES_FUEL
+abi::ItemTypeInfo::blank
 abi::ItemTypeInfo::category
 abi::ItemTypeInfo::flags
 abi::ItemTypeInfo::header
@@ -1541,6 +1595,7 @@ abi::ItemTypeInfo::rarity
 abi::JoinCall
 abi::JoinCall::BORN
 abi::JoinCall::account
+abi::JoinCall::blank
 abi::JoinCall::header
 abi::JoinRuleFn
 abi::KnowledgeChange
@@ -1550,6 +1605,7 @@ abi::KnowledgeChange::QUIET
 abi::KnowledgeChange::REVOKE
 abi::KnowledgeChange::SHOWN
 abi::KnowledgeChange::account
+abi::KnowledgeChange::blank
 abi::KnowledgeChange::entity
 abi::KnowledgeChange::header
 abi::KnowledgeChange::id
@@ -1560,6 +1616,7 @@ abi::KnowledgeChange::value
 abi::KnowledgeData
 abi::KnowledgeData::BORN
 abi::KnowledgeData::TY
+abi::KnowledgeData::blank
 abi::KnowledgeData::entity
 abi::KnowledgeData::header
 abi::KnowledgeData::id
@@ -1585,6 +1642,7 @@ abi::KnowledgeInfo::COUNTER
 abi::KnowledgeInfo::FLAGS
 abi::KnowledgeInfo::PLAYER
 abi::KnowledgeInfo::WORLD
+abi::KnowledgeInfo::blank
 abi::KnowledgeInfo::flags
 abi::KnowledgeInfo::header
 abi::KnowledgeInfo::id
@@ -1605,6 +1663,7 @@ abi::KnowledgeInput::SKILL_POINTS
 abi::KnowledgeInput::UNKNOWN
 abi::KnowledgeInput::WORLD
 abi::KnowledgeInput::allowed
+abi::KnowledgeInput::blank
 abi::KnowledgeInput::character
 abi::KnowledgeInput::header
 abi::KnowledgeInput::id
@@ -1638,6 +1697,7 @@ abi::LoaderOff
 abi::LoaderOff::BORN
 abi::LoaderOff::EMPTY
 abi::LoaderOff::at
+abi::LoaderOff::blank
 abi::LoaderOff::header
 abi::LoaderOff::name
 abi::LoaderOff::reason
@@ -1651,11 +1711,13 @@ abi::LocalInputInfo::READ_ENABLED
 abi::LocalInputInfo::REQUESTED
 abi::LocalInputInfo::SAMPLE_PRESENT
 abi::LocalInputInfo::age_ms
+abi::LocalInputInfo::blank
 abi::LocalInputInfo::flags
 abi::LocalInputInfo::header
 abi::LocalInputInfo::reserved
 abi::LoopWaitData
 abi::LoopWaitData::BORN
+abi::LoopWaitData::blank
 abi::LoopWaitData::header
 abi::LoopWaitData::left_ns
 abi::LoopWaitData::ms
@@ -1671,6 +1733,7 @@ abi::Manifest
 abi::Manifest::BORN
 abi::Manifest::author_count
 abi::Manifest::authors
+abi::Manifest::blank
 abi::Manifest::build_count
 abi::Manifest::builds
 abi::Manifest::dependencies
@@ -1694,6 +1757,7 @@ abi::ManifestFlags::contains
 abi::MapFrameInfo
 abi::MapFrameInfo::BORN
 abi::MapFrameInfo::EMPTY
+abi::MapFrameInfo::blank
 abi::MapFrameInfo::header
 abi::MapFrameInfo::metres_per_cell
 abi::MapFrameInfo::origin
@@ -1701,6 +1765,7 @@ abi::MapFrameInfo::size
 abi::MapMarkerInfo
 abi::MapMarkerInfo::BORN
 abi::MapMarkerInfo::EMPTY
+abi::MapMarkerInfo::blank
 abi::MapMarkerInfo::header
 abi::MapMarkerInfo::label
 abi::MapMarkerInfo::marker_type
@@ -1708,6 +1773,7 @@ abi::MapMarkerInfo::position
 abi::MapMarkerTypeInfo
 abi::MapMarkerTypeInfo::BORN
 abi::MapMarkerTypeInfo::EMPTY
+abi::MapMarkerTypeInfo::blank
 abi::MapMarkerTypeInfo::header
 abi::MapMarkerTypeInfo::is_custom_marker_type
 abi::MapMarkerTypeInfo::is_fast_travel_destination
@@ -1729,6 +1795,7 @@ abi::MidHookFn
 abi::MidHookSpec
 abi::MidHookSpec::BORN
 abi::MidHookSpec::address
+abi::MidHookSpec::blank
 abi::MidHookSpec::flags
 abi::MidHookSpec::handler
 abi::MidHookSpec::header
@@ -1742,6 +1809,7 @@ abi::ModInfo::BORN
 abi::ModInfo::EMPTY
 abi::ModInfo::author_count
 abi::ModInfo::authors
+abi::ModInfo::blank
 abi::ModInfo::description
 abi::ModInfo::file
 abi::ModInfo::flags
@@ -1756,6 +1824,7 @@ abi::ModInfo::version
 abi::NetMessage
 abi::NetMessage::BORN
 abi::NetMessage::SERVER
+abi::NetMessage::blank
 abi::NetMessage::channel
 abi::NetMessage::data
 abi::NetMessage::header
@@ -1785,6 +1854,7 @@ abi::ParseLevelError
 abi::PlayerData
 abi::PlayerData::BORN
 abi::PlayerData::TY
+abi::PlayerData::blank
 abi::PlayerData::entity
 abi::PlayerData::header
 abi::PlayerData::into_value
@@ -1793,6 +1863,7 @@ abi::PlayerData::slot
 abi::PlayerDeathData
 abi::PlayerDeathData::BORN
 abi::PlayerDeathData::TY
+abi::PlayerDeathData::blank
 abi::PlayerDeathData::cause
 abi::PlayerDeathData::cause_guid
 abi::PlayerDeathData::entity
@@ -1813,6 +1884,7 @@ abi::PlayerInfo::CAN_KICK_BAN
 abi::PlayerInfo::CAN_RECEIVE_EXP
 abi::PlayerInfo::NAME_MAX
 abi::PlayerInfo::admin
+abi::PlayerInfo::blank
 abi::PlayerInfo::entity
 abi::PlayerInfo::header
 abi::PlayerInfo::is_admin
@@ -1846,6 +1918,7 @@ abi::PointFn
 abi::PointHandle
 abi::PointHandle::BORN
 abi::PointHandle::EMPTY
+abi::PointHandle::blank
 abi::PointHandle::header
 abi::PointHandle::id
 abi::PointHandle::live
@@ -1855,6 +1928,7 @@ abi::PointLink::after
 abi::PointLink::after_count
 abi::PointLink::before
 abi::PointLink::before_count
+abi::PointLink::blank
 abi::PointLink::header
 abi::PointLink::point
 abi::PointLink::priority
@@ -1864,6 +1938,7 @@ abi::PointMode::OBSERVE
 abi::PointMode::OVERRIDE
 abi::PointSpec
 abi::PointSpec::BORN
+abi::PointSpec::blank
 abi::PointSpec::flags
 abi::PointSpec::header
 abi::PointSpec::input
@@ -1884,6 +1959,7 @@ abi::ProgressWriteData::NO_LEVEL_STEP
 abi::ProgressWriteData::TY
 abi::ProgressWriteData::UNCONFIRMED
 abi::ProgressWriteData::UNREADABLE
+abi::ProgressWriteData::blank
 abi::ProgressWriteData::entity
 abi::ProgressWriteData::experience
 abi::ProgressWriteData::gained
@@ -1895,6 +1971,7 @@ abi::ProgressWriteData::value
 abi::ProgressWriteData::what
 abi::PropPlace
 abi::PropPlace::BORN
+abi::PropPlace::blank
 abi::PropPlace::header
 abi::PropPlace::item
 abi::PropPlace::orientation
@@ -1903,6 +1980,7 @@ abi::PropPlace::reserved
 abi::PropPlacementInfo
 abi::PropPlacementInfo::BORN
 abi::PropPlacementInfo::HAS_LOCAL_BOX
+abi::PropPlacementInfo::blank
 abi::PropPlacementInfo::declares_box
 abi::PropPlacementInfo::flags
 abi::PropPlacementInfo::header
@@ -1912,12 +1990,14 @@ abi::PropPlacementInfo::template
 abi::PropRemove
 abi::PropRemove::BORN
 abi::PropRemove::DISCARD_STATE
+abi::PropRemove::blank
 abi::PropRemove::entity
 abi::PropRemove::flags
 abi::PropRemove::header
 abi::QuestData
 abi::QuestData::BORN
 abi::QuestData::TY
+abi::QuestData::blank
 abi::QuestData::entity
 abi::QuestData::header
 abi::QuestData::into_value
@@ -1926,6 +2006,7 @@ abi::QuestPayment
 abi::QuestPayment::BORN
 abi::QuestPayment::MAX
 abi::QuestPayment::allowed
+abi::QuestPayment::blank
 abi::QuestPayment::count
 abi::QuestPayment::entity
 abi::QuestPayment::experience
@@ -1936,6 +2017,7 @@ abi::QuestPayment::reserved
 abi::QuestProgressData
 abi::QuestProgressData::BORN
 abi::QuestProgressData::TY
+abi::QuestProgressData::blank
 abi::QuestProgressData::entity
 abi::QuestProgressData::header
 abi::QuestProgressData::into_value
@@ -1948,6 +2030,7 @@ abi::QuestRewardFilterFn
 abi::QuestStepData
 abi::QuestStepData::BORN
 abi::QuestStepData::TY
+abi::QuestStepData::blank
 abi::QuestStepData::entity
 abi::QuestStepData::header
 abi::QuestStepData::into_value
@@ -2015,6 +2098,7 @@ abi::Relation::BREAKS
 abi::Relation::REQUIRES
 abi::RenameCall
 abi::RenameCall::BORN
+abi::RenameCall::blank
 abi::RenameCall::entity
 abi::RenameCall::header
 abi::RenameCall::player
@@ -2032,6 +2116,7 @@ abi::RespawnPointInfo::NO_RESPAWN
 abi::RespawnPointInfo::OTHER
 abi::RespawnPointInfo::SAVE_POINT
 abi::RespawnPointInfo::START_LOCATION
+abi::RespawnPointInfo::blank
 abi::RespawnPointInfo::entity
 abi::RespawnPointInfo::header
 abi::RespawnPointInfo::kind
@@ -2041,6 +2126,7 @@ abi::SURVIVOR_STATUS_SET
 abi::SaveInfo
 abi::SaveInfo::BORN
 abi::SaveInfo::backups
+abi::SaveInfo::blank
 abi::SaveInfo::header
 abi::SaveInfo::reserved
 abi::SaveInfo::saved_at
@@ -2050,6 +2136,7 @@ abi::ServerWaitFn
 abi::ServiceFound
 abi::ServiceFound::BORN
 abi::ServiceFound::EMPTY
+abi::ServiceFound::blank
 abi::ServiceFound::fields
 abi::ServiceFound::header
 abi::ServiceFound::owner
@@ -2058,6 +2145,7 @@ abi::ServiceFound::reason
 abi::ServiceFound::table
 abi::ServiceSpec
 abi::ServiceSpec::BORN
+abi::ServiceSpec::blank
 abi::ServiceSpec::header
 abi::ServiceSpec::layout
 abi::ServiceSpec::major
@@ -2078,6 +2166,7 @@ abi::SkillCheck::LOCKED
 abi::SkillCheck::OTHER
 abi::SkillCheck::UNLOCKED
 abi::SkillCheck::VANILLA
+abi::SkillCheck::blank
 abi::SkillCheck::gate
 abi::SkillCheck::header
 abi::SkillCheck::node
@@ -2104,6 +2193,7 @@ abi::SoundAudience::MAX_RADIUS
 abi::SoundAudience::NEAR
 abi::SoundAudience::PLAYER
 abi::SoundAudience::at
+abi::SoundAudience::blank
 abi::SoundAudience::header
 abi::SoundAudience::hears
 abi::SoundAudience::in_bounds
@@ -2122,6 +2212,7 @@ abi::SoundInfo::NO_SCENE
 abi::SoundInfo::OFF
 abi::SoundInfo::PENDING
 abi::SoundInfo::PLAYING
+abi::SoundInfo::blank
 abi::SoundInfo::header
 abi::SoundInfo::reason
 abi::SoundInfo::state
@@ -2135,6 +2226,7 @@ abi::SoundPlay::MUSIC
 abi::SoundPlay::ON
 abi::SoundPlay::SCREEN
 abi::SoundPlay::at
+abi::SoundPlay::blank
 abi::SoundPlay::container
 abi::SoundPlay::entity
 abi::SoundPlay::fade_in_ms
@@ -2150,6 +2242,7 @@ abi::SoundSteer::STOP
 abi::SoundSteer::STOP_ALL
 abi::SoundSteer::VOLUME
 abi::SoundSteer::at
+abi::SoundSteer::blank
 abi::SoundSteer::fade_ms
 abi::SoundSteer::header
 abi::SoundSteer::in_bounds
@@ -2159,6 +2252,7 @@ abi::SoundSteer::volume
 abi::SpawnRequest
 abi::SpawnRequest::BORN
 abi::SpawnRequest::DO_NOT_SAVE
+abi::SpawnRequest::blank
 abi::SpawnRequest::flags
 abi::SpawnRequest::header
 abi::SpawnRequest::level
@@ -2168,6 +2262,7 @@ abi::SpawnRequest::position
 abi::SpawnRequest::template
 abi::StatChange
 abi::StatChange::BORN
+abi::StatChange::blank
 abi::StatChange::entity
 abi::StatChange::header
 abi::StatChange::new
@@ -2188,6 +2283,7 @@ abi::StatModify
 abi::StatModify::BORN
 abi::StatModify::REMOVE
 abi::StatModify::SAVED
+abi::StatModify::blank
 abi::StatModify::duration_ms
 abi::StatModify::entity
 abi::StatModify::flags
@@ -2227,6 +2323,7 @@ abi::StatSpec::MULTIPLICATIVE
 abi::StatSpec::NUMBER
 abi::StatSpec::PERCENT
 abi::StatSpec::SIGNED
+abi::StatSpec::blank
 abi::StatSpec::default
 abi::StatSpec::flags
 abi::StatSpec::format
@@ -2269,6 +2366,7 @@ abi::Summon::BORN
 abi::Summon::REFUSE
 abi::Summon::TAKE
 abi::Summon::ammo
+abi::Summon::blank
 abi::Summon::consumed
 abi::Summon::header
 abi::Summon::item
@@ -2290,6 +2388,7 @@ abi::SurvivorLookup::ROAMING
 abi::SurvivorLookup::SPAWN
 abi::SurvivorLookup::UNIQUENESS
 abi::SurvivorLookup::bed_of
+abi::SurvivorLookup::blank
 abi::SurvivorLookup::cell
 abi::SurvivorLookup::entity
 abi::SurvivorLookup::header
@@ -2306,6 +2405,7 @@ abi::TeleportRequest
 abi::TeleportRequest::BEST_SPAWN
 abi::TeleportRequest::BORN
 abi::TeleportRequest::ORIENTED
+abi::TeleportRequest::blank
 abi::TeleportRequest::entity
 abi::TeleportRequest::flags
 abi::TeleportRequest::header
@@ -2319,6 +2419,7 @@ abi::TerrainEdit::DRY_RUN
 abi::TerrainEdit::FLATTEN
 abi::TerrainEdit::ROUND
 abi::TerrainEdit::SQUARE
+abi::TerrainEdit::blank
 abi::TerrainEdit::flags
 abi::TerrainEdit::header
 abi::TerrainEdit::height
@@ -2335,6 +2436,7 @@ abi::TerrainMaterialAdd::FLATTENS
 abi::TerrainMaterialAdd::HARDNESS
 abi::TerrainMaterialAdd::HEALTH
 abi::TerrainMaterialAdd::ITEM
+abi::TerrainMaterialAdd::blank
 abi::TerrainMaterialAdd::changes
 abi::TerrainMaterialAdd::fallback
 abi::TerrainMaterialAdd::flags
@@ -2348,6 +2450,7 @@ abi::TerrainMaterialAdd::reserved
 abi::TerrainMaterialInfo
 abi::TerrainMaterialInfo::BORN
 abi::TerrainMaterialInfo::FLATTENS
+abi::TerrainMaterialInfo::blank
 abi::TerrainMaterialInfo::flags
 abi::TerrainMaterialInfo::hardness
 abi::TerrainMaterialInfo::header
@@ -2358,6 +2461,7 @@ abi::TerrainMaterialInfo::reserved
 abi::TerrainPageData
 abi::TerrainPageData::BORN
 abi::TerrainPageData::TY
+abi::TerrainPageData::blank
 abi::TerrainPageData::header
 abi::TerrainPageData::into_value
 abi::TerrainPageData::size
@@ -2366,6 +2470,7 @@ abi::TerrainPageData::z
 abi::TickData
 abi::TickData::BORN
 abi::TickData::TY
+abi::TickData::blank
 abi::TickData::cost
 abi::TickData::cost_ns
 abi::TickData::elapsed
@@ -2399,6 +2504,7 @@ abi::TransactionInfo::UNDOING
 abi::TransactionInfo::UNDONE
 abi::TransactionInfo::UNDO_REFUSED
 abi::TransactionInfo::applied
+abi::TransactionInfo::blank
 abi::TransactionInfo::bricks
 abi::TransactionInfo::created
 abi::TransactionInfo::header
@@ -2432,6 +2538,7 @@ abi::TypeEntry::EMPTY
 abi::TypeEntry::align
 abi::TypeEntry::attribute_count
 abi::TypeEntry::attributes
+abi::TypeEntry::blank
 abi::TypeEntry::constant_count
 abi::TypeEntry::constants
 abi::TypeEntry::count
@@ -2468,6 +2575,7 @@ abi::UiDialog::OVERWRITE
 abi::UiDialog::RESET
 abi::UiDialog::RETRY
 abi::UiDialog::WAITING
+abi::UiDialog::blank
 abi::UiDialog::buttons
 abi::UiDialog::detail
 abi::UiDialog::flags
@@ -2486,6 +2594,7 @@ abi::UiExtension::RIGHT
 abi::UiExtension::START
 abi::UiExtension::TOP
 abi::UiExtension::align
+abi::UiExtension::blank
 abi::UiExtension::edge
 abi::UiExtension::header
 abi::UiExtension::host_count
@@ -2503,6 +2612,7 @@ abi::UiFrame::BORN
 abi::UiFrame::IN_GAME
 abi::UiFrame::LOADING
 abi::UiFrame::MENU
+abi::UiFrame::blank
 abi::UiFrame::header
 abi::UiFrame::hovered_count
 abi::UiFrame::hovered_item
@@ -2529,6 +2639,7 @@ abi::UiMarker::RED
 abi::UiMarker::TURQUOISE
 abi::UiMarker::WHITE
 abi::UiMarker::YELLOW
+abi::UiMarker::blank
 abi::UiMarker::color
 abi::UiMarker::header
 abi::UiMarker::label
@@ -2538,6 +2649,7 @@ abi::UiTooltipFn
 abi::UiTooltipItem
 abi::UiTooltipItem::BORN
 abi::UiTooltipItem::MAX_LINES
+abi::UiTooltipItem::blank
 abi::UiTooltipItem::header
 abi::UiTooltipItem::item
 abi::UiTooltipItem::pide
@@ -2580,6 +2692,7 @@ abi::UiWidget::TOP_RIGHT
 abi::UiWidget::WINDOW
 abi::UiWidget::WRAP
 abi::UiWidget::anchor
+abi::UiWidget::blank
 abi::UiWidget::count
 abi::UiWidget::detail
 abi::UiWidget::flags
@@ -2616,6 +2729,7 @@ abi::VoxelChange::at
 abi::VoxelChange::before
 abi::VoxelEditRequest
 abi::VoxelEditRequest::BORN
+abi::VoxelEditRequest::blank
 abi::VoxelEditRequest::by
 abi::VoxelEditRequest::changes
 abi::VoxelEditRequest::count
@@ -2624,11 +2738,13 @@ abi::VoxelEditRequest::min
 abi::VoxelEditRequest::size
 abi::VoxelRegion
 abi::VoxelRegion::BORN
+abi::VoxelRegion::blank
 abi::VoxelRegion::header
 abi::VoxelRegion::min
 abi::VoxelRegion::size
 abi::VoxelWrite
 abi::VoxelWrite::BORN
+abi::VoxelWrite::blank
 abi::VoxelWrite::count
 abi::VoxelWrite::header
 abi::VoxelWrite::min
@@ -2640,6 +2756,7 @@ abi::WINDOW_UPDATE
 abi::WaypointData
 abi::WaypointData::BORN
 abi::WaypointData::EMPTY
+abi::WaypointData::blank
 abi::WaypointData::entity
 abi::WaypointData::header
 abi::WaypointData::key
@@ -2651,6 +2768,7 @@ abi::WeatherFront::BLIZZARD
 abi::WeatherFront::BORN
 abi::WeatherFront::NONE
 abi::WeatherFront::RAIN
+abi::WeatherFront::blank
 abi::WeatherFront::effect
 abi::WeatherFront::header
 abi::WeatherFront::layer
@@ -2661,6 +2779,7 @@ abi::WeatherFront::remaining_ns
 abi::WeatherFront::reserved
 abi::WeatherSample
 abi::WeatherSample::BORN
+abi::WeatherSample::blank
 abi::WeatherSample::blizzard
 abi::WeatherSample::clear
 abi::WeatherSample::header
@@ -2674,6 +2793,7 @@ abi::exports::INIT
 abi::exports::QUERY
 abi::exports::READY
 abi::guid
+abi::headed
 abi::in_fixed_range
 abi::is_valid_id
 abi::read_headed
@@ -2861,6 +2981,7 @@ actions::window::ButtonView unstable
 actions::window::ButtonView::action unstable
 actions::window::ButtonView::args unstable
 actions::window::ButtonView::label unstable
+actions::window::ButtonView::new unstable
 actions::window::ItemView unstable
 actions::window::ItemView::Action unstable
 actions::window::ItemView::Map unstable
@@ -2883,6 +3004,7 @@ actions::window::MapView::run_at unstable
 actions::window::MarkerView unstable
 actions::window::MarkerView::args unstable
 actions::window::MarkerView::label unstable
+actions::window::MarkerView::new unstable
 actions::window::MarkerView::position unstable
 actions::window::NEAR unstable
 actions::window::Row unstable
@@ -2891,6 +3013,7 @@ actions::window::Row::new unstable
 actions::window::View unstable
 actions::window::View::entries unstable
 actions::window::View::items unstable
+actions::window::View::new unstable
 actions::window::View::title unstable
 actions::window::Window unstable
 actions::window::Window::action unstable
@@ -2968,6 +3091,7 @@ affixes::Affixes::roll unstable
 affixes::Candidate
 affixes::Candidate::def
 affixes::Candidate::key
+affixes::Candidate::new
 affixes::ItemRarity
 affixes::ItemRarity::Common
 affixes::ItemRarity::Epic
@@ -3026,6 +3150,7 @@ altars::Altar::from_value
 altars::Altar::into_value
 altars::Altar::level
 altars::Altar::levels
+altars::Altar::new
 altars::Altar::position
 altars::Altar::template
 altars::Altar::tilted
@@ -3107,6 +3232,7 @@ altars::Grouping::TY
 altars::Grouping::bases
 altars::Grouping::from_value
 altars::Grouping::into_value
+altars::Grouping::new
 altars::Grouping::zones
 altars::KindZone
 altars::KindZone::TY
@@ -3114,12 +3240,14 @@ altars::KindZone::from_value
 altars::KindZone::grow
 altars::KindZone::height
 altars::KindZone::into_value
+altars::KindZone::new
 altars::MAX_ZONES
 altars::NewFlameAltar
 altars::NewFlameAltar::TY
 altars::NewFlameAltar::from_value
 altars::NewFlameAltar::into_value
 altars::NewFlameAltar::item
+altars::NewFlameAltar::new
 altars::NewFlameAltar::recipe_cost
 altars::NewFlameAltar::zones
 altars::ResizeError
@@ -3135,7 +3263,7 @@ altars::bases_of
 altars::cell_of_fixed
 altars::cell_of_metres
 altars::grouping
-altars::set_base_limit unstable
+altars::set_base_limit
 buffs
 buffs::Apply
 buffs::Apply::TY
@@ -3241,9 +3369,8 @@ buffs::NewBuff::like unstable
 buffs::NewBuff::name unstable
 buffs::NewBuff::new unstable
 buffs::NewBuff::plain unstable
-buffs::NewBuff::saved unstable
 buffs::NewBuff::slot unstable
-call unstable
+call
 chat
 chat::ChatKind
 chat::ChatKind::Emote
@@ -3265,6 +3392,7 @@ chat::ChatVerdict::Drop
 chat::ChatVerdict::Keep
 chat::ChatVerdict::Rewrite
 chat::ChatVerdict::TY
+chat::ChatVerdict::from
 chat::ChatVerdict::from_answer
 code
 code::FindError
@@ -3382,15 +3510,15 @@ config::TableConfig::schema
 config::TableConfig::set
 config::set
 config::value_at
-console unstable
-console::RunError unstable
-console::RunError::Empty unstable
-console::RunError::NoLoader unstable
-console::RunError::NotOnGameThread unstable
-console::RunError::Refused unstable
-console::RunError::Unknown unstable
-console::RunError::of unstable
-console::run unstable
+console
+console::RunLineError
+console::RunLineError::Empty
+console::RunLineError::NoLoader
+console::RunLineError::NotOnGameThread
+console::RunLineError::Refused
+console::RunLineError::Unknown
+console::RunLineError::of
+console::run
 content
 content::Blob
 content::Blob::append
@@ -3563,6 +3691,7 @@ content::changes::ItemsChange::value unstable
 content::changes::MAX_FACTOR
 content::changes::RecipeTraits
 content::changes::RecipeTraits::kind
+content::changes::RecipeTraits::new
 content::changes::RecipeTraits::workshop
 content::changes::Recipes
 content::changes::Recipes::Kind
@@ -3586,6 +3715,18 @@ content::changes::SetChangeError
 content::changes::SetChangeError::Refused
 content::changes::SetChangeError::Restart
 content::changes::SetChangeError::Value
+content::changes::SetFieldError
+content::changes::SetFieldError::BadFactor
+content::changes::SetFieldError::FactorOnly
+content::changes::SetFieldError::Item
+content::changes::SetFieldError::NotInSteps
+content::changes::SetFieldError::NotLive
+content::changes::SetFieldError::NotRecipeSelectable
+content::changes::SetFieldError::NotSelectable unstable
+content::changes::SetFieldError::NotWhole
+content::changes::SetFieldError::OutOfRange
+content::changes::SetFieldError::SetOnly
+content::changes::SetFieldError::Shrinks
 content::changes::Target
 content::changes::Target::Entry
 content::changes::Target::Items unstable
@@ -3599,28 +3740,16 @@ content::changes::Value::Times
 content::changes::Value::fmt
 content::changes::Value::from_value
 content::changes::Value::into_value
-content::changes::ValueError
-content::changes::ValueError::BadFactor
-content::changes::ValueError::FactorOnly
-content::changes::ValueError::Item
-content::changes::ValueError::NotInSteps
-content::changes::ValueError::NotLive
-content::changes::ValueError::NotRecipeSelectable
-content::changes::ValueError::NotSelectable unstable
-content::changes::ValueError::NotWhole
-content::changes::ValueError::OutOfRange
-content::changes::ValueError::SetOnly
-content::changes::ValueError::Shrinks
 content::containers
-content::containers::ContainerLayout
-content::containers::ContainerLayout::available
-content::containers::ContainerLayout::components
-content::containers::ContainerLayout::generic
-content::containers::ContainerLayout::overwrite
-content::containers::ContainerLayout::resolve
-content::containers::ContainerLayout::setup
-content::containers::container_slots
-content::containers::resize_container
+content::containers::ContainerLayout unstable
+content::containers::ContainerLayout::available unstable
+content::containers::ContainerLayout::components unstable
+content::containers::ContainerLayout::generic unstable
+content::containers::ContainerLayout::overwrite unstable
+content::containers::ContainerLayout::resolve unstable
+content::containers::ContainerLayout::setup unstable
+content::containers::container_slots unstable
+content::containers::resize_container unstable
 content::content_id
 content::enemies unstable
 content::enemies::ARSENAL_REGISTRY unstable
@@ -3654,6 +3783,7 @@ content::enemies::NewArsenal::from_value unstable
 content::enemies::NewArsenal::id unstable
 content::enemies::NewArsenal::into_value unstable
 content::enemies::NewArsenal::like unstable
+content::enemies::NewArsenal::new unstable
 content::enemies::NewEnemy unstable
 content::enemies::NewEnemy::TY unstable
 content::enemies::NewEnemy::arsenal unstable
@@ -3676,15 +3806,16 @@ content::icons::Icon::from_value
 content::icons::Icon::id
 content::icons::Icon::into_value
 content::icons::Icon::like
+content::icons::Icon::new
 content::icons::Icon::pixels
-content::icons::ImageLayout
-content::icons::ImageLayout::content
-content::icons::ImageLayout::flags
-content::icons::ImageLayout::format
-content::icons::ImageLayout::height
-content::icons::ImageLayout::levels
-content::icons::ImageLayout::resolve
-content::icons::ImageLayout::width
+content::icons::ImageLayout unstable
+content::icons::ImageLayout::content unstable
+content::icons::ImageLayout::flags unstable
+content::icons::ImageLayout::format unstable
+content::icons::ImageLayout::height unstable
+content::icons::ImageLayout::levels unstable
+content::icons::ImageLayout::resolve unstable
+content::icons::ImageLayout::width unstable
 content::icons::MAX_SIDE
 content::icons::Pixels
 content::icons::Pixels::Png
@@ -3698,7 +3829,8 @@ content::icons::Tint::amount
 content::icons::Tint::colour
 content::icons::Tint::from_value
 content::icons::Tint::into_value
-content::icons::clone_image
+content::icons::Tint::new
+content::icons::clone_image unstable
 content::icons::decode
 content::icons::decode_png
 content::icons::encode_png
@@ -3721,6 +3853,7 @@ content::items::FuelSetup::change
 content::items::FuelSetup::from_value
 content::items::FuelSetup::into_value
 content::items::FuelSetup::max_fuel_charges
+content::items::FuelSetup::new
 content::items::FuelSetup::start
 content::items::FuelSetup::start_fill
 content::items::FuelSetup::template
@@ -3730,21 +3863,22 @@ content::items::ImpactUiValue::TY
 content::items::ImpactUiValue::from_value
 content::items::ImpactUiValue::into_value
 content::items::ImpactUiValue::loca_id
+content::items::ImpactUiValue::new
 content::items::ImpactUiValue::value
 content::items::ImpactUiValue::value_format
-content::items::ItemLayout
-content::items::ItemLayout::description
-content::items::ItemLayout::flags
-content::items::ItemLayout::icon_image
-content::items::ItemLayout::id
-content::items::ItemLayout::name
-content::items::ItemLayout::names
-content::items::ItemLayout::object
-content::items::ItemLayout::pid_entity
-content::items::ItemLayout::refs
-content::items::ItemLayout::resolve
-content::items::ItemLayout::ui_value
-content::items::ItemLayout::ui_values
+content::items::ItemLayout unstable
+content::items::ItemLayout::description unstable
+content::items::ItemLayout::flags unstable
+content::items::ItemLayout::icon_image unstable
+content::items::ItemLayout::id unstable
+content::items::ItemLayout::name unstable
+content::items::ItemLayout::names unstable
+content::items::ItemLayout::object unstable
+content::items::ItemLayout::pid_entity unstable
+content::items::ItemLayout::refs unstable
+content::items::ItemLayout::resolve unstable
+content::items::ItemLayout::ui_value unstable
+content::items::ItemLayout::ui_values unstable
 content::items::METER_TEMPLATE_BASE
 content::items::NewItem
 content::items::NewItem::TY
@@ -3766,9 +3900,9 @@ content::items::StatFormat::Signed
 content::items::StatFormat::TY
 content::items::StatFormat::from_value
 content::items::StatFormat::into_value
-content::items::clone_item
+content::items::clone_item unstable
 content::items::fill
-content::items::list_item
+content::items::list_item unstable
 content::items::vanilla_name
 content::items::vanilla_name_tag
 content::journal unstable
@@ -3816,6 +3950,7 @@ content::journal::ItemSetHint::from_value unstable
 content::journal::ItemSetHint::into_value unstable
 content::journal::ItemSetHint::level unstable
 content::journal::ItemSetHint::marker unstable
+content::journal::ItemSetHint::new unstable
 content::journal::ItemSetHint::objective unstable
 content::journal::ItemSetHint::shown_when unstable
 content::journal::ItemSetHint::text unstable
@@ -3852,6 +3987,7 @@ content::journal::NewJournalPage::from_value unstable
 content::journal::NewJournalPage::id unstable
 content::journal::NewJournalPage::into_value unstable
 content::journal::NewJournalPage::name unstable
+content::journal::NewJournalPage::new unstable
 content::journal::NewQuest unstable
 content::journal::NewQuest::TY unstable
 content::journal::NewQuest::document unstable
@@ -3894,6 +4030,7 @@ content::journal::PageEntry::TY unstable
 content::journal::PageEntry::from_value unstable
 content::journal::PageEntry::into_value unstable
 content::journal::PageEntry::name unstable
+content::journal::PageEntry::new unstable
 content::journal::PageEntry::shown_when unstable
 content::journal::PageEntry::text unstable
 content::journal::QuestChange unstable
@@ -3960,6 +4097,7 @@ content::journal::StepInsert::TY unstable
 content::journal::StepInsert::at unstable
 content::journal::StepInsert::from_value unstable
 content::journal::StepInsert::into_value unstable
+content::journal::StepInsert::new unstable
 content::journal::StepInsert::step unstable
 content::journal::StepMove unstable
 content::journal::StepMove::TY unstable
@@ -4026,6 +4164,7 @@ content::knowledge::KnowledgeQuery::game unstable
 content::knowledge::KnowledgeQuery::id unstable
 content::knowledge::KnowledgeQuery::into_value unstable
 content::knowledge::KnowledgeQuery::is_set unstable
+content::knowledge::KnowledgeQuery::new unstable
 content::knowledge::KnowledgeQuery::not unstable
 content::knowledge::KnowledgeQuery::scope unstable
 content::knowledge::KnowledgeQuery::test unstable
@@ -4077,65 +4216,67 @@ content::knowledge::QueryForm::TY unstable
 content::knowledge::QueryForm::from_value unstable
 content::knowledge::QueryForm::into_value unstable
 content::loot_tables
-content::loot_tables::FillTableLayout
-content::loot_tables::FillTableLayout::components
-content::loot_tables::FillTableLayout::fill
-content::loot_tables::FillTableLayout::name
-content::loot_tables::FillTableLayout::resolve
-content::loot_tables::FillTableLayout::table
-content::loot_tables::LootLayout
-content::loot_tables::LootLayout::count_max
-content::loot_tables::LootLayout::count_min
-content::loot_tables::LootLayout::group
-content::loot_tables::LootLayout::groups
-content::loot_tables::LootLayout::item
-content::loot_tables::LootLayout::item_id
-content::loot_tables::LootLayout::items
-content::loot_tables::LootLayout::probability
-content::loot_tables::LootLayout::resolve
-content::loot_tables::LootLayout::root
-content::loot_tables::LootLayout::stack
-content::loot_tables::LootLayout::stack_item
-content::loot_tables::LootLayout::stack_max
-content::loot_tables::LootLayout::stack_max_scaled
-content::loot_tables::LootLayout::stack_min
-content::loot_tables::LootLayout::stacks
-content::loot_tables::LootLayout::weight
+content::loot_tables::FillTableLayout unstable
+content::loot_tables::FillTableLayout::components unstable
+content::loot_tables::FillTableLayout::fill unstable
+content::loot_tables::FillTableLayout::name unstable
+content::loot_tables::FillTableLayout::resolve unstable
+content::loot_tables::FillTableLayout::table unstable
+content::loot_tables::LootLayout unstable
+content::loot_tables::LootLayout::count_max unstable
+content::loot_tables::LootLayout::count_min unstable
+content::loot_tables::LootLayout::group unstable
+content::loot_tables::LootLayout::groups unstable
+content::loot_tables::LootLayout::item unstable
+content::loot_tables::LootLayout::item_id unstable
+content::loot_tables::LootLayout::items unstable
+content::loot_tables::LootLayout::probability unstable
+content::loot_tables::LootLayout::resolve unstable
+content::loot_tables::LootLayout::root unstable
+content::loot_tables::LootLayout::stack unstable
+content::loot_tables::LootLayout::stack_item unstable
+content::loot_tables::LootLayout::stack_max unstable
+content::loot_tables::LootLayout::stack_max_scaled unstable
+content::loot_tables::LootLayout::stack_min unstable
+content::loot_tables::LootLayout::stacks unstable
+content::loot_tables::LootLayout::weight unstable
 content::loot_tables::LootValue
-content::loot_tables::change_fill_table
-content::loot_tables::change_random_loot
-content::loot_tables::fill_items
+content::loot_tables::change_fill_table unstable
+content::loot_tables::change_random_loot unstable
+content::loot_tables::fill_items unstable
 content::loot_tables::scaled_ceiling
-content::loot_tables::template_table
+content::loot_tables::template_table unstable
 content::menu
 content::menu::GROUP_ENTRIES
 content::menu::MenuEntry
 content::menu::MenuEntry::after
+content::menu::MenuEntry::new
 content::menu::MenuEntry::recipe
 content::menu::MenuEntry::workshop
-content::menu::MenuLayout
-content::menu::MenuLayout::collection
-content::menu::MenuLayout::entries
-content::menu::MenuLayout::group
-content::menu::MenuLayout::group_id
-content::menu::MenuLayout::groups
-content::menu::MenuLayout::max_groups
-content::menu::MenuLayout::max_sets
-content::menu::MenuLayout::resolve
-content::menu::MenuLayout::set
-content::menu::MenuLayout::sets
-content::menu::MenuLayout::tree
-content::menu::MenuLayout::trees
-content::menu::MenuLayout::workshops
+content::menu::MenuLayout unstable
+content::menu::MenuLayout::collection unstable
+content::menu::MenuLayout::entries unstable
+content::menu::MenuLayout::group unstable
+content::menu::MenuLayout::group_id unstable
+content::menu::MenuLayout::groups unstable
+content::menu::MenuLayout::max_groups unstable
+content::menu::MenuLayout::max_sets unstable
+content::menu::MenuLayout::resolve unstable
+content::menu::MenuLayout::set unstable
+content::menu::MenuLayout::sets unstable
+content::menu::MenuLayout::tree unstable
+content::menu::MenuLayout::trees unstable
+content::menu::MenuLayout::workshops unstable
 content::menu::UI_BUNDLE
-content::menu::list_recipes
-content::menu::list_workshop
-content::menu::move_recipes
+content::menu::list_recipes unstable
+content::menu::list_workshop unstable
+content::menu::move_recipes unstable
 content::props
 content::props::CraftingPropSetup
 content::props::CraftingPropSetup::TY
 content::props::CraftingPropSetup::from_value
 content::props::CraftingPropSetup::into_value
+content::props::CraftingPropSetup::new
 content::props::CraftingPropSetup::recipes
 content::props::NewProp
 content::props::NewProp::TY
@@ -4152,6 +4293,7 @@ content::props::PropId::crafting_prop
 content::props::PropId::from_value
 content::props::PropId::into_value
 content::props::PropId::item
+content::props::PropId::new
 content::props::PropId::template
 content::rebuild
 content::recipes
@@ -4160,6 +4302,7 @@ content::recipes::Derived::TY
 content::recipes::Derived::cost
 content::recipes::Derived::from_value
 content::recipes::Derived::into_value
+content::recipes::Derived::new
 content::recipes::Derived::output
 content::recipes::Derived::workshop
 content::recipes::Name
@@ -4174,6 +4317,7 @@ content::recipes::NewRecipe::from_value
 content::recipes::NewRecipe::id
 content::recipes::NewRecipe::into_value
 content::recipes::NewRecipe::like
+content::recipes::NewRecipe::new
 content::recipes::NewRecipe::output
 content::recipes::NewRecipe::output_count
 content::recipes::NewRecipe::workshop
@@ -4198,22 +4342,22 @@ content::recipes::RecipeKind::from_value
 content::recipes::RecipeKind::into_value
 content::recipes::RecipeKind::name
 content::recipes::RecipeKind::named
-content::recipes::RecipeLayout
-content::recipes::RecipeLayout::completion
-content::recipes::RecipeLayout::guid
-content::recipes::RecipeLayout::id
-content::recipes::RecipeLayout::input
-content::recipes::RecipeLayout::input_size
-content::recipes::RecipeLayout::output
-content::recipes::RecipeLayout::recipe
-content::recipes::RecipeLayout::recipes
-content::recipes::RecipeLayout::relative
-content::recipes::RecipeLayout::resolve
-content::recipes::RecipeLayout::stack_count
-content::recipes::RecipeLayout::stack_item
-content::recipes::RecipeLayout::stack_size
-content::recipes::RecipeLayout::workshop
-content::recipes::RecipeLayout::workshop_guid
+content::recipes::RecipeLayout unstable
+content::recipes::RecipeLayout::completion unstable
+content::recipes::RecipeLayout::guid unstable
+content::recipes::RecipeLayout::id unstable
+content::recipes::RecipeLayout::input unstable
+content::recipes::RecipeLayout::input_size unstable
+content::recipes::RecipeLayout::output unstable
+content::recipes::RecipeLayout::recipe unstable
+content::recipes::RecipeLayout::recipes unstable
+content::recipes::RecipeLayout::relative unstable
+content::recipes::RecipeLayout::resolve unstable
+content::recipes::RecipeLayout::stack_count unstable
+content::recipes::RecipeLayout::stack_item unstable
+content::recipes::RecipeLayout::stack_size unstable
+content::recipes::RecipeLayout::workshop unstable
+content::recipes::RecipeLayout::workshop_guid unstable
 content::recipes::RecipeRule
 content::recipes::RecipeRule::Hand
 content::recipes::RecipeRule::Output
@@ -4230,15 +4374,15 @@ content::recipes::RecipeView::into_value
 content::recipes::RecipeView::kind
 content::recipes::RecipeView::output
 content::recipes::WORKSHOP_RECIPES
-content::recipes::add_recipe_to
-content::recipes::change_recipes_in
-content::recipes::derive_recipes_in
+content::recipes::add_recipe_to unstable
+content::recipes::change_recipes_in unstable
+content::recipes::derive_recipes_in unstable
 content::recipes::derived_guid
 content::recipes::disable
 content::recipes::enable
 content::recipes::is_disabled
 content::recipes::rebuild_recipes
-content::recipes::recipe_workshops
+content::recipes::recipe_workshops unstable
 content::recipes::workshop_limit
 content::removal unstable
 content::renames
@@ -4257,6 +4401,7 @@ content::skills::NewPerk::id unstable
 content::skills::NewPerk::into_value unstable
 content::skills::NewPerk::like unstable
 content::skills::NewPerk::name unstable
+content::skills::NewPerk::new unstable
 content::skills::NewSkillNode unstable
 content::skills::NewSkillNode::TY unstable
 content::skills::NewSkillNode::cost unstable
@@ -4368,6 +4513,7 @@ content::vanilla::ExperienceBalanceValue::TY unstable
 content::vanilla::ExperienceBalanceValue::from_value unstable
 content::vanilla::ExperienceBalanceValue::gain unstable
 content::vanilla::ExperienceBalanceValue::into_value unstable
+content::vanilla::ExperienceBalanceValue::new unstable
 content::vanilla::ExperienceBalanceValue::source unstable
 content::vanilla::ExperienceBalanceValue::value unstable
 content::vanilla::LootTable
@@ -4468,23 +4614,23 @@ content::workshops::WorkshopId::guid
 content::workshops::WorkshopId::id
 content::workshops::WorkshopId::into_value
 content::workshops::WorkshopId::new
-content::workshops::WorkshopLayout
-content::workshops::WorkshopLayout::components
-content::workshops::WorkshopLayout::crafting_types
-content::workshops::WorkshopLayout::entry
-content::workshops::WorkshopLayout::entry_guid
-content::workshops::WorkshopLayout::entry_id
-content::workshops::WorkshopLayout::entry_item
-content::workshops::WorkshopLayout::entry_item_ref
-content::workshops::WorkshopLayout::entry_name
-content::workshops::WorkshopLayout::entry_npc
-content::workshops::WorkshopLayout::placed_entity
-content::workshops::WorkshopLayout::resolve
-content::workshops::WorkshopLayout::templates
-content::workshops::WorkshopLayout::workshops
+content::workshops::WorkshopLayout unstable
+content::workshops::WorkshopLayout::components unstable
+content::workshops::WorkshopLayout::crafting_types unstable
+content::workshops::WorkshopLayout::entry unstable
+content::workshops::WorkshopLayout::entry_guid unstable
+content::workshops::WorkshopLayout::entry_id unstable
+content::workshops::WorkshopLayout::entry_item unstable
+content::workshops::WorkshopLayout::entry_item_ref unstable
+content::workshops::WorkshopLayout::entry_name unstable
+content::workshops::WorkshopLayout::entry_npc unstable
+content::workshops::WorkshopLayout::placed_entity unstable
+content::workshops::WorkshopLayout::resolve unstable
+content::workshops::WorkshopLayout::templates unstable
+content::workshops::WorkshopLayout::workshops unstable
 content::workshops::at_workshop
-content::workshops::clone_station
-content::workshops::list_workshop
+content::workshops::clone_station unstable
+content::workshops::list_workshop unstable
 content::workshops::stations
 content::workshops::stations::WORKBENCH
 controls unstable
@@ -4779,14 +4925,14 @@ entity_data::Replication::Server unstable
 entity_data::Replication::TY unstable
 entity_data::Replication::from_value unstable
 entity_data::Replication::into_value unstable
-entity_data::SetError unstable
-entity_data::SetError::Encode unstable
-entity_data::SetError::NoEntity unstable
-entity_data::SetError::NotKept unstable
-entity_data::SetError::NotServer unstable
-entity_data::SetError::Refused unstable
-entity_data::SetError::TooLarge unstable
-entity_data::SetError::of unstable
+entity_data::SetItemDataError unstable
+entity_data::SetItemDataError::Encode unstable
+entity_data::SetItemDataError::NoEntity unstable
+entity_data::SetItemDataError::NotKept unstable
+entity_data::SetItemDataError::NotServer unstable
+entity_data::SetItemDataError::Refused unstable
+entity_data::SetItemDataError::TooLarge unstable
+entity_data::SetItemDataError::of unstable
 error
 error_every
 error_once
@@ -5304,6 +5450,12 @@ game_settings::Settings::threat_bonus
 game_settings::Settings::tombstone_mode
 game_settings::Settings::view
 game_settings::Settings::weather_frequency
+game_settings::SettingsRead
+game_settings::SettingsRead::TY
+game_settings::SettingsRead::from_value
+game_settings::SettingsRead::into_value
+game_settings::SettingsRead::preset
+game_settings::SettingsRead::settings
 game_settings::TamingStartleRepercussion
 game_settings::TamingStartleRepercussion::KeepProgress
 game_settings::TamingStartleRepercussion::LoseAllProgress
@@ -5811,12 +5963,6 @@ inventory::Batch::ops
 inventory::Batch::push
 inventory::Batch::split
 inventory::Batch::with
-inventory::BatchError
-inventory::BatchError::Empty
-inventory::BatchError::Malformed
-inventory::BatchError::TooLarge
-inventory::BatchError::TooManyInventories
-inventory::BatchError::TooManyOps
 inventory::Done
 inventory::Done::Committed
 inventory::Done::Refused
@@ -5895,14 +6041,6 @@ inventory::Op::TY
 inventory::Op::Take
 inventory::Op::from_value
 inventory::Op::into_value
-inventory::OpError
-inventory::OpError::InvalidState
-inventory::OpError::NotRun
-inventory::OpError::Other
-inventory::OpError::OutOfMemory
-inventory::OpError::TY
-inventory::OpError::from_value
-inventory::OpError::into_value
 inventory::OpResult
 inventory::OpResult::TY
 inventory::OpResult::error
@@ -5916,6 +6054,7 @@ inventory::Outcome::done
 inventory::Outcome::from_value
 inventory::Outcome::into_value
 inventory::Outcome::is_committed
+inventory::Outcome::new
 inventory::Outcome::ops
 inventory::Reader
 inventory::Reader::count
@@ -5924,6 +6063,20 @@ inventory::Reader::meter
 inventory::Reader::root
 inventory::Reader::slot
 inventory::Reader::slots
+inventory::RunBatchError
+inventory::RunBatchError::Empty
+inventory::RunBatchError::Malformed
+inventory::RunBatchError::TooLarge
+inventory::RunBatchError::TooManyInventories
+inventory::RunBatchError::TooManyOps
+inventory::RunOpError
+inventory::RunOpError::InvalidState
+inventory::RunOpError::NotRun
+inventory::RunOpError::Other
+inventory::RunOpError::OutOfMemory
+inventory::RunOpError::TY
+inventory::RunOpError::from_value
+inventory::RunOpError::into_value
 inventory::Slot
 inventory::Slot::TY
 inventory::Slot::at
@@ -5933,6 +6086,7 @@ inventory::Slot::from_value
 inventory::Slot::into_value
 inventory::Slot::is_empty
 inventory::Slot::item
+inventory::Slot::new
 inventory::Slot::pide
 inventory::SlotRef
 inventory::SlotRef::TY
@@ -5974,14 +6128,14 @@ item_data::ItemData::get unstable
 item_data::ItemData::remove unstable
 item_data::ItemData::set unstable
 item_data::MAX_VALUE unstable
-item_data::SetError unstable
-item_data::SetError::Encode unstable
-item_data::SetError::NoEntity unstable
-item_data::SetError::NotKept unstable
-item_data::SetError::NotServer unstable
-item_data::SetError::Refused unstable
-item_data::SetError::TooLarge unstable
-item_data::SetError::of unstable
+item_data::SetItemDataError unstable
+item_data::SetItemDataError::Encode unstable
+item_data::SetItemDataError::NoEntity unstable
+item_data::SetItemDataError::NotKept unstable
+item_data::SetItemDataError::NotServer unstable
+item_data::SetItemDataError::Refused unstable
+item_data::SetItemDataError::TooLarge unstable
+item_data::SetItemDataError::of unstable
 items unstable
 items::ItemAction unstable
 items::ItemAction::TY unstable
@@ -6087,6 +6241,7 @@ knowledge::NewRule::from_value unstable
 knowledge::NewRule::grant unstable
 knowledge::NewRule::id unstable
 knowledge::NewRule::into_value unstable
+knowledge::NewRule::new unstable
 knowledge::NewRule::scope unstable
 knowledge::NewRule::when unstable
 knowledge::Refusal unstable
@@ -6121,6 +6276,7 @@ knowledge::RuleGrant::from_value unstable
 knowledge::RuleGrant::grant unstable
 knowledge::RuleGrant::id unstable
 knowledge::RuleGrant::into_value unstable
+knowledge::RuleGrant::new unstable
 knowledge::RuleId unstable
 knowledge::RuleId::TY unstable
 knowledge::RuleId::from_value unstable
@@ -6152,6 +6308,7 @@ loot::Container::into_value
 loot::Container::is_empty
 loot::Container::is_enemy_loot
 loot::Container::is_open
+loot::Container::new
 loot::Container::offer
 loot::Container::position
 loot::Containers
@@ -6178,6 +6335,7 @@ loot::InteractionOfferRuntime::guest_id
 loot::InteractionOfferRuntime::into_value
 loot::InteractionOfferRuntime::is_disabled
 loot::InteractionOfferRuntime::last_accept_time
+loot::InteractionOfferRuntime::new
 loot::Kinds
 loot::Kinds::CHESTS
 loot::Kinds::CONTAINERS
@@ -6207,6 +6365,7 @@ loot::MeterRoll::from_value
 loot::MeterRoll::into_value
 loot::MeterRoll::max
 loot::MeterRoll::min
+loot::MeterRoll::new
 loot::MeterRoll::of
 loot::Roll
 loot::Roll::TY
@@ -6217,6 +6376,7 @@ loot::Roll::into_value
 loot::Roll::kind
 loot::Roll::labels
 loot::Roll::locked
+loot::Roll::new
 loot::Roll::node
 loot::SYSTEM
 loot::Source
@@ -6271,6 +6431,7 @@ map::FogState::from_value unstable
 map::FogState::height unstable
 map::FogState::into_value unstable
 map::FogState::metres_per_pixel unstable
+map::FogState::new unstable
 map::FogState::pixel_of unstable
 map::FogState::session unstable
 map::FogState::size_z unstable
@@ -6296,6 +6457,7 @@ map::MapAltar::base unstable
 map::MapAltar::from_value unstable
 map::MapAltar::into_value unstable
 map::MapAltar::level unstable
+map::MapAltar::new unstable
 map::MapAltar::position unstable
 map::MapAltar::zone unstable
 map::MapFrame unstable
@@ -6303,6 +6465,7 @@ map::MapFrame::TY unstable
 map::MapFrame::from_value unstable
 map::MapFrame::into_value unstable
 map::MapFrame::metres_per_cell unstable
+map::MapFrame::new unstable
 map::MapFrame::origin unstable
 map::MapFrame::size unstable
 map::MapMarker unstable
@@ -6311,6 +6474,7 @@ map::MapMarker::from_value unstable
 map::MapMarker::into_value unstable
 map::MapMarker::label unstable
 map::MapMarker::marker_type unstable
+map::MapMarker::new unstable
 map::MapMarker::position unstable
 map::MapMarkerType unstable
 map::MapMarkerType::TY unstable
@@ -6343,6 +6507,7 @@ map::MapPlayer::from_value unstable
 map::MapPlayer::into_value unstable
 map::MapPlayer::key unstable
 map::MapPlayer::name unstable
+map::MapPlayer::new unstable
 map::MapPlayer::position unstable
 map::MapPlayer::waypoint unstable
 map::MapPoint unstable
@@ -6351,6 +6516,7 @@ map::MapPoint::from_value unstable
 map::MapPoint::into_value unstable
 map::MapPoint::label unstable
 map::MapPoint::marker_type unstable
+map::MapPoint::new unstable
 map::MapPoint::position unstable
 map::MapSnapshot unstable
 map::MapSnapshot::TY unstable
@@ -6608,29 +6774,29 @@ points::Decision::Kept
 points::Decision::Refused
 points::Decision::is_refused
 points::Decision::value_or
-points::DescribedField unstable
-points::DescribedField::hash unstable
-points::DescribedField::name unstable
-points::DescribedField::new unstable
-points::DescribedOwnedPoint unstable
-points::DescribedOwnedPoint::decide unstable
-points::DescribedOwnedPoint::fmt unstable
-points::DescribedOwnedPoint::is_extended unstable
-points::DescribedPoint unstable
-points::DescribedPoint::input unstable
-points::DescribedPoint::input_size unstable
-points::DescribedPoint::mode unstable
-points::DescribedPoint::name unstable
-points::DescribedPoint::new unstable
-points::DescribedPoint::output_hash unstable
-points::DescribedPoint::output_size unstable
-points::DescribedPoint::refusable unstable
-points::DescribedPoint::with_input unstable
-points::DescribedPoint::with_output unstable
-points::DescribedVerdict unstable
-points::DescribedVerdict::Pass unstable
-points::DescribedVerdict::Refuse unstable
-points::DescribedVerdict::Set unstable
+points::DescribedField
+points::DescribedField::hash
+points::DescribedField::name
+points::DescribedField::new
+points::DescribedOwnedPoint
+points::DescribedOwnedPoint::decide
+points::DescribedOwnedPoint::fmt
+points::DescribedOwnedPoint::is_extended
+points::DescribedPoint
+points::DescribedPoint::input
+points::DescribedPoint::input_size
+points::DescribedPoint::mode
+points::DescribedPoint::name
+points::DescribedPoint::new
+points::DescribedPoint::output_hash
+points::DescribedPoint::output_size
+points::DescribedPoint::refusable
+points::DescribedPoint::with_input
+points::DescribedPoint::with_output
+points::DescribedVerdict
+points::DescribedVerdict::Pass
+points::DescribedVerdict::Refuse
+points::DescribedVerdict::Set
 points::Mode
 points::Mode::Advise
 points::Mode::Observe
@@ -6716,6 +6882,7 @@ quests::Holder::TY unstable
 quests::Holder::World unstable
 quests::Holder::from_value unstable
 quests::Holder::into_value unstable
+quests::Holder::player unstable
 quests::ItemSetEntryInfo unstable
 quests::ItemSetEntryInfo::TY unstable
 quests::ItemSetEntryInfo::done_when unstable
@@ -7179,7 +7346,13 @@ script::Declared::doc unstable
 script::Declared::name unstable
 script::Declared::signature unstable
 script::Error unstable
+script::Error::BAD_ARGS unstable
+script::Error::GONE unstable
+script::Error::WRONG_TIME unstable
+script::Error::failed unstable
+script::Error::kind unstable
 script::Error::new unstable
+script::Error::with_kind unstable
 script::EventKind unstable
 script::EventKind::data unstable
 script::EventKind::doc unstable
@@ -7296,38 +7469,38 @@ script::events unstable
 script::game_events unstable
 service
 services
-services::Call unstable
-services::Call::LAYOUT unstable
-services::Call::MAJOR unstable
-services::Call::NAME unstable
-services::Call::OUTPUT unstable
-services::Call::Output unstable
-services::Call::SCHEMA unstable
-services::CallError unstable
-services::CallError::Failed unstable
-services::CallError::Off unstable
-services::CallError::Unmatched unstable
-services::CallError::of unstable
-services::Caller unstable
-services::Caller::call unstable
-services::Caller::clone unstable
-services::DescribedCall unstable
-services::DescribedCall::input unstable
-services::DescribedCall::input_size unstable
-services::DescribedCall::major unstable
-services::DescribedCall::name unstable
-services::DescribedCall::new unstable
-services::DescribedCall::output unstable
-services::DescribedCall::output_size unstable
-services::DescribedCaller unstable
-services::DescribedCaller::call unstable
-services::DescribedEmitter unstable
-services::DescribedEmitter::send unstable
-services::DescribedEvent unstable
-services::DescribedEvent::fields unstable
-services::DescribedEvent::name unstable
-services::DescribedEvent::new unstable
-services::DescribedEvent::size unstable
+services::Call
+services::Call::LAYOUT
+services::Call::MAJOR
+services::Call::NAME
+services::Call::OUTPUT
+services::Call::Output
+services::Call::SCHEMA
+services::CallServiceError
+services::CallServiceError::Failed
+services::CallServiceError::Off
+services::CallServiceError::Unmatched
+services::CallServiceError::of
+services::Caller
+services::Caller::call
+services::Caller::clone
+services::DescribedCall
+services::DescribedCall::input
+services::DescribedCall::input_size
+services::DescribedCall::major
+services::DescribedCall::name
+services::DescribedCall::new
+services::DescribedCall::output
+services::DescribedCall::output_size
+services::DescribedCaller
+services::DescribedCaller::call
+services::DescribedEmitter
+services::DescribedEmitter::send
+services::DescribedEvent
+services::DescribedEvent::fields
+services::DescribedEvent::name
+services::DescribedEvent::new
+services::DescribedEvent::size
 services::Emitter
 services::Emitter::clone
 services::Emitter::fmt
@@ -7617,10 +7790,10 @@ state::ModLocal::get
 state::ModLocal::get_or_init
 state::ModLocal::new
 state::ModLocal::set
-state::StoreError
-state::StoreError::Io
-state::StoreError::Parse
-state::StoreError::Serialize
+state::StoreFileError
+state::StoreFileError::Io
+state::StoreFileError::Parse
+state::StoreFileError::Serialize
 state::WorldStore
 state::WorldStore::clone
 state::WorldStore::flush
@@ -7636,6 +7809,7 @@ stats::ItemModifier
 stats::ItemModifier::TY
 stats::ItemModifier::from_value
 stats::ItemModifier::into_value
+stats::ItemModifier::new
 stats::ItemModifier::op
 stats::ItemModifier::stat
 stats::ItemModifier::value
@@ -7683,14 +7857,14 @@ stats::Origin::Mod
 stats::Origin::TY
 stats::Origin::from_value
 stats::Origin::into_value
-stats::SetError
-stats::SetError::Encode
-stats::SetError::NoEntity
-stats::SetError::NotKept
-stats::SetError::NotServer
-stats::SetError::Refused
-stats::SetError::TooLarge
-stats::SetError::of
+stats::SetItemDataError
+stats::SetItemDataError::Encode
+stats::SetItemDataError::NoEntity
+stats::SetItemDataError::NotKept
+stats::SetItemDataError::NotServer
+stats::SetItemDataError::Refused
+stats::SetItemDataError::TooLarge
+stats::SetItemDataError::of
 stats::Source
 stats::Source::TY
 stats::Source::from_value
@@ -35180,19 +35354,12 @@ ui::Ui::resolve
 ui::Ui::set_markers unstable
 ui::UiError
 ui::UiError::Busy
+ui::UiError::Missing
 ui::UiError::Refused
 ui::UiError::Unavailable
 ui::UiError::WrongThread
 ui::UiError::of
 vetoes
-vetoes::BuildVerdict
-vetoes::BuildVerdict::Allow
-vetoes::BuildVerdict::Refuse
-vetoes::BuildVerdict::RefuseBecause
-vetoes::BuildVerdict::TY
-vetoes::BuildVerdict::from
-vetoes::BuildVerdict::from_answer
-vetoes::BuildVerdict::refuse_because
 vetoes::Placement
 vetoes::Placement::TY
 vetoes::Placement::account
@@ -35201,6 +35368,17 @@ vetoes::Placement::into_value
 vetoes::Placement::item
 vetoes::Placement::player
 vetoes::Placement::position
+vetoes::Verdict
+vetoes::Verdict::Allow
+vetoes::Verdict::Pass
+vetoes::Verdict::Refuse
+vetoes::Verdict::RefuseBecause
+vetoes::Verdict::TY
+vetoes::Verdict::decision
+vetoes::Verdict::from
+vetoes::Verdict::from_answer
+vetoes::Verdict::passes
+vetoes::Verdict::refuse_because
 voxels
 voxels::EditSource
 voxels::EditSource::Game
@@ -35312,7 +35490,6 @@ weather::NewPhenomenon unstable
 weather::NewPhenomenon::TY unstable
 weather::NewPhenomenon::from_value unstable
 weather::NewPhenomenon::id unstable
-weather::NewPhenomenon::in_layer unstable
 weather::NewPhenomenon::into_value unstable
 weather::NewPhenomenon::layer unstable
 weather::NewPhenomenon::like unstable
@@ -35403,6 +35580,7 @@ world::CapturedProp::from unstable
 world::CapturedProp::from_value unstable
 world::CapturedProp::into_value unstable
 world::CapturedProp::item unstable
+world::CapturedProp::new unstable
 world::CapturedProp::transform unstable
 world::ContainerKinds
 world::ContainerKinds::ALL
@@ -35459,6 +35637,7 @@ world::Placed::distance
 world::Placed::entity
 world::Placed::from_value
 world::Placed::into_value
+world::Placed::new
 world::Placed::position
 world::Player
 world::Player::TY
@@ -35470,6 +35649,7 @@ world::Player::is_admin
 world::Player::is_named
 world::Player::key
 world::Player::name
+world::Player::new
 world::Player::permissions
 world::Player::slot
 world::PlayerPermissions unstable
@@ -35485,6 +35665,13 @@ world::PlayerPermissions::TY unstable
 world::PlayerPermissions::bit unstable
 world::PlayerPermissions::from_value unstable
 world::PlayerPermissions::into_value unstable
+world::PlayerRef
+world::PlayerRef::TY
+world::PlayerRef::entity
+world::PlayerRef::from
+world::PlayerRef::from_value
+world::PlayerRef::into_value
+world::PlayerRef::key
 world::PlayerSpawnType unstable
 world::PlayerSpawnType::Base unstable
 world::PlayerSpawnType::NoRespawn unstable
@@ -35507,6 +35694,7 @@ world::Prop::entity unstable
 world::Prop::from_value unstable
 world::Prop::into_value unstable
 world::Prop::item unstable
+world::Prop::new unstable
 world::Prop::transform unstable
 world::PropPlacementBox unstable
 world::PropPlacementBox::TY unstable
@@ -35514,6 +35702,7 @@ world::PropPlacementBox::from_value unstable
 world::PropPlacementBox::into_value unstable
 world::PropPlacementBox::max unstable
 world::PropPlacementBox::min unstable
+world::PropPlacementBox::new unstable
 world::PropPlacementInfo unstable
 world::PropPlacementInfo::TY unstable
 world::PropPlacementInfo::from_value unstable
@@ -35614,7 +35803,7 @@ world::World::capture unstable
 world::World::change_fog_resistance
 world::World::change_item_meter
 world::World::change_permissions unstable
-world::World::component
+world::World::component unstable
 world::World::containers
 world::World::data_dir
 world::World::destroy
@@ -35681,6 +35870,7 @@ world::WorldTransform::UPRIGHT unstable
 world::WorldTransform::at unstable
 world::WorldTransform::from_value unstable
 world::WorldTransform::into_value unstable
+world::WorldTransform::new unstable
 world::WorldTransform::orientation unstable
 world::WorldTransform::position unstable
 world::WritableType

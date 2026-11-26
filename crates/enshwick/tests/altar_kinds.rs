@@ -12,8 +12,8 @@ mod tests {
     use enshwick::{Entity, Load, Mod, Off, RecipeId};
 
     const WIDE: Id = Id::new("you.kinds:wide");
-    const KIND_ALTAR: Entity = Entity(10);
-    const OTHER_ALTAR: Entity = Entity(11);
+    const KIND_ALTAR: Entity = Entity::from_engine(10);
+    const OTHER_ALTAR: Entity = Entity::from_engine(11);
     const CLAIM: Guid = Guid([0xc0; 16]);
     const UPGRADE: Guid = Guid([0xc1; 16]);
     const FLAME: Guid = Guid([0xc2; 16]);
@@ -25,19 +25,13 @@ mod tests {
 
     impl Mod for Kinds {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let wide = load.add_flame_altar(NewFlameAltar {
-                item: NewItem::new(WIDE, PROP_ITEM),
-                zones: vec![
-                    KindZone {
-                        grow: 5,
-                        height: 40,
-                    },
-                    KindZone {
-                        grow: 9,
-                        height: 50,
-                    },
-                ],
-                recipe_cost: Some(1),
+            let wide = load.add_flame_altar({
+                let mut value = NewFlameAltar::new(
+                    NewItem::new(WIDE, PROP_ITEM),
+                    vec![KindZone::new(5, 40), KindZone::new(9, 50)],
+                );
+                value.recipe_cost = Some(1);
+                value
             })?;
             #[cfg(feature = "unstable")]
             load.limit_altar_level(wide, limit::MAX.load(core::sync::atomic::Ordering::Relaxed))?;
@@ -87,7 +81,7 @@ mod tests {
     mod limit {
         use std::sync::atomic::{AtomicU8, Ordering};
 
-        use enshwick::abi::{CraftCheck, Header, Status};
+        use enshwick::abi::{CraftCheck, Status};
         use enshwick::test::Installed;
         use enshwick::{Entity, RecipeId};
 
@@ -100,14 +94,13 @@ mod tests {
         pub(super) static MAX: AtomicU8 = AtomicU8::new(1);
 
         fn craft(loader: &Installed, station: Entity, recipe: RecipeId) -> bool {
-            loader.craft(&CraftCheck {
-                header: Header::of::<CraftCheck>(),
-                crafting_operator_id: Entity(2),
+            loader.craft(&enshwick::abi::headed!(CraftCheck {
+                crafting_operator_id: Entity::from_engine(2),
                 crafting_station_id: station,
                 recipe_id: recipe,
                 recipe_amount: 1,
                 reserved: 0,
-            })
+            }))
         }
 
         #[test]
@@ -118,7 +111,7 @@ mod tests {
             assert!(craft(&loader, KIND_ALTAR, claim), "below the maximum");
             assert!(!craft(&loader, KIND_ALTAR, upgrade), "past the maximum");
             assert!(craft(&loader, OTHER_ALTAR, upgrade), "another kind's altar");
-            assert!(craft(&loader, Entity(0), upgrade), "by hand");
+            assert!(craft(&loader, Entity::from_engine(0), upgrade), "by hand");
             assert!(
                 craft(&loader, KIND_ALTAR, RecipeId(FLAME.fnv1a())),
                 "the Flame's own upgrade at the kind's altar"

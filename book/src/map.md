@@ -225,8 +225,10 @@ loader stopped copying it, they fail with `FogError::Missing`.
 ## Uncover a player's fog of war
 
 `map.uncover(player, at, radius)` uncovers a player's fog of war in a
-circle, as exploring there does. The centre is world x and z in metres. The
-radius is above 0 and at most 100 000 metres. Everything inside the circle
+circle, as exploring there does. The player is a `world::PlayerRef`: the
+account's key, the character or a `Player`, as for every call that names
+one player. The centre is a position in metres, and
+its height does not count. The radius is above 0 and at most 100 000 metres. Everything inside the circle
 is uncovered, and the fog thins out from its edge to twice the radius.
 `map.uncover_all(player)`
 uncovers the whole map, the circle around the map's frame. The server holds

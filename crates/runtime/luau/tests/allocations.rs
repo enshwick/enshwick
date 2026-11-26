@@ -9,7 +9,7 @@ mod tests {
     use std::fmt::Write as _;
     use std::time::Duration;
 
-    use enshwick::abi::{DamageCheck, Header, Status};
+    use enshwick::abi::{DamageCheck, Status};
     use enshwick::test::FakeHost;
     use enshwick::{Load, Mod, Off};
     use enshwick_luau::{Limits, Scripts};
@@ -132,16 +132,15 @@ mod tests {
     );
 
     fn fire() -> DamageCheck {
-        DamageCheck {
-            header: Header::of::<DamageCheck>(),
+        enshwick::abi::headed!(DamageCheck {
             cause: DamageCheck::IMPACT,
-            target: enshwick::Entity(2),
-            source: enshwick::Entity(3),
-            attacker: enshwick::Entity(3),
+            target: enshwick::Entity::from_engine(2),
+            source: enshwick::Entity::from_engine(3),
+            attacker: enshwick::Entity::from_engine(3),
             total: 40.0,
             amount_count: 0,
             amounts: core::ptr::null_mut(),
-        }
+        })
     }
 
     /// The fire a hit of 40 fire leaves after the filters.
@@ -173,11 +172,11 @@ mod tests {
 
     /// A hit that makes the calls of the kind `total` names.
     fn calls_of(total: f32) -> DamageCheck {
-        DamageCheck {
+        enshwick::abi::headed!(DamageCheck {
             cause: DamageCheck::FALL_DAMAGE,
             total,
             ..fire()
-        }
+        })
     }
 
     #[test]

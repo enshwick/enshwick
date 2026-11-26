@@ -9,8 +9,8 @@ mod tests {
     use std::sync::{Mutex, PoisonError};
 
     use enshwick::abi::{
-        Header, HookFlags, HookSpec, HostApi, Layout, ModHandle, PointFlags, PointHandle,
-        PointLink, PointMode, PointSpec, PointVerdict, Status, Str,
+        HookFlags, HookSpec, HostApi, Layout, ModHandle, PointFlags, PointHandle, PointLink,
+        PointMode, PointSpec, PointVerdict, Status, Str,
     };
     #[cfg(feature = "unstable")]
     use enshwick::rates::{ExperienceGroup, Rate};
@@ -40,14 +40,13 @@ mod tests {
     }
 
     fn hook_spec(target: u64, detour: usize, next: &'static AtomicUsize) -> HookSpec {
-        HookSpec {
-            header: Header::of::<HookSpec>(),
+        enshwick::abi::headed!(HookSpec {
             target,
             detour,
             next: &raw const *next,
             priority: 0,
             flags: HookFlags::NONE,
-        }
+        })
     }
 
     const EMPTY_LAYOUT: Layout = Layout {
@@ -57,14 +56,13 @@ mod tests {
     };
 
     fn point_spec(name: &'static str) -> PointSpec {
-        PointSpec {
-            header: Header::of::<PointSpec>(),
+        enshwick::abi::headed!(PointSpec {
             name: Str::new(name),
             mode: PointMode::OBSERVE,
             flags: PointFlags::NONE,
             input: EMPTY_LAYOUT,
             output: EMPTY_LAYOUT,
-        }
+        })
     }
 
     fn code_at(offset: usize) -> u64 {
@@ -85,14 +83,14 @@ mod tests {
             let mut out = PointHandle::EMPTY;
             (api.define_point)(me, &raw const spec, &raw mut out)
         };
-        let null_next = HookSpec {
+        let null_next = enshwick::abi::headed!(HookSpec {
             next: core::ptr::null(),
             ..hook_spec(0x1000, detour, &FIRST)
-        };
-        let exclusive = HookSpec {
+        });
+        let exclusive = enshwick::abi::headed!(HookSpec {
             flags: HookFlags::EXCLUSIVE,
             ..hook_spec(0x5000, detour, &FIFTH)
-        };
+        });
         let answers = vec![
             ("hook without a slot", hook(null_next)),
             ("hook at address 0", hook(hook_spec(0, detour, &FIRST))),
@@ -252,15 +250,14 @@ mod tests {
         let defined = (api.define_point)(loader.handle(), &raw const spec, &raw mut out);
         assert_eq!(defined, Status::TOO_LATE);
         let point = point_spec("other.mod:limit");
-        let attach = PointLink {
-            header: Header::of::<PointLink>(),
+        let attach = enshwick::abi::headed!(PointLink {
             point: &raw const point,
             before: core::ptr::null(),
             after: core::ptr::null(),
             before_count: 0,
             after_count: 0,
             priority: 0,
-        };
+        });
         let attached = (api.attach_point)(
             loader.handle(),
             &raw const attach,
@@ -296,11 +293,10 @@ mod tests {
             &raw mut tick,
         );
         assert_eq!(ticked, Status::TOO_LATE);
-        let spec = enshwick::abi::EventSpec {
-            header: Header::of::<enshwick::abi::EventSpec>(),
+        let spec = enshwick::abi::headed!(enshwick::abi::EventSpec {
             name: Str::new("you.refusals:later"),
             layout: EMPTY_LAYOUT,
-        };
+        });
         let mod_event = (api.subscribe_mod_event)(
             loader.handle(),
             &raw const spec,

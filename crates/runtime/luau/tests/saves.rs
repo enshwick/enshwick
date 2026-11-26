@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{Event, Header, SaveInfo, SpawnRequest};
+    use enshwick::abi::{Event, SaveInfo, SpawnRequest};
     use enshwick::test::FakeHost;
 
     use crate::harness::{logged, run};
@@ -24,14 +24,13 @@ mod tests {
             end)
             "#,
         );
-        loader.set_save_info(Some(SaveInfo {
-            header: Header::of::<SaveInfo>(),
+        loader.set_save_info(Some(enshwick::abi::headed!(SaveInfo {
             world: enshwick::content::Guid([9; 16]),
             saved_at: 1_762_300_000,
             size: 4_096,
             backups: 3,
             reserved: 0,
-        }));
+        })));
         // SAFETY: the event carries no data.
         let handled = unsafe { loader.raise_raw(Event::WORLD_SAVING, core::ptr::null()) };
         assert_eq!(handled, 1, "{:?}", loader.logs());
@@ -95,7 +94,7 @@ mod tests {
     fn a_script_keeps_its_own_entity_out_of_the_save_and_never_a_vanilla_one() {
         let loader = run(
             FakeHost::new().world().prop(
-                enshwick::Entity(500),
+                enshwick::Entity::from_engine(500),
                 enshwick::ItemId::new(30),
                 [0.0; 3],
             ),
@@ -122,7 +121,7 @@ mod tests {
         assert!(
             logged(
                 &loader,
-                "same step left out false: runtime error: enshwick.world.set_saved: the entity is not in the world"
+                "same step left out false: enshwick.world.set_saved: the entity is not in the world"
             ),
             "{:?}",
             loader.logs()
@@ -130,13 +129,13 @@ mod tests {
         let spawned: Vec<_> = loader
             .spawns()
             .into_iter()
-            .map(|(id, _)| enshwick::Entity(id))
+            .map(|(id, _)| enshwick::Entity::from_engine(id))
             .collect();
         assert_eq!(loader.unsaved(), spawned, "{:?}", loader.logs());
         assert!(
             logged(
                 &loader,
-                "vanilla left out false: runtime error: enshwick.world.set_saved: refused by the world"
+                "vanilla left out false: enshwick.world.set_saved: refused by the world"
             ),
             "{:?}",
             loader.logs()

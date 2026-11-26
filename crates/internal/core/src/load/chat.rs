@@ -10,8 +10,9 @@ impl Load<'_> {
     /// Runs `filter` on every line a player types, inside the game's chat
     /// post on the server's game thread, after the chat mute and in load
     /// order with other mods' filters; it keeps, drops or rewrites the
-    /// line. A panic turns this filter off alone, and lines pass it. On a
-    /// client it runs while it hosts a game.
+    /// line. A `bool` keeps or drops it, and a [`Verdict`](crate::vetoes::Verdict)
+    /// drops it when it refuses. A panic turns this filter off alone, and
+    /// lines pass it. On a client it runs while it hosts a game.
     ///
     /// # Errors
     ///
@@ -20,8 +21,22 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](crate::chat).
-    #[script]
-    pub fn on_chat<F>(&mut self, filter: F) -> Result<(), Off>
+    pub fn on_chat<F, V>(&mut self, filter: F) -> Result<(), Off>
+    where
+        F: Fn(&ChatLine) -> V + Send + Sync + 'static,
+        V: Into<ChatVerdict>;
+
+    /// Runs `filter` on every line a player types, inside the game's chat
+    /// post on the server's game thread, after the chat mute and in load
+    /// order with other mods' filters: `false` drops the line, a string
+    /// rewrites it, and nil or `true` keeps it. A script error lets the line
+    /// pass. On a client it runs while it hosts a game.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::on_chat`].
+    #[script(name = "on_chat")]
+    pub(crate) fn chat_filter<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&ChatLine) -> ChatVerdict + Send + Sync + 'static;
 

@@ -6,7 +6,7 @@
 mod tests {
     use core::time::Duration;
 
-    use enshwick::abi::{Header, PlayerInfo, Side, SoundPlay, Status};
+    use enshwick::abi::{PlayerInfo, Side, SoundPlay, Status};
     use enshwick::content::{Guid, types};
     use enshwick::net::Peer;
     use enshwick::sound::{self, Audience, MAX_PLAYS, Place, Play, SoundContainerId};
@@ -17,7 +17,7 @@ mod tests {
     const HASH: u32 = 0xf257_640c;
     /// A camp entity, and three players: two with Enshwick near it and far
     /// from it, one vanilla client beside it.
-    const CAMP: Entity = Entity(4096);
+    const CAMP: Entity = Entity::from_engine(4096);
     const NEAR: PlayerKey = PlayerKey::new(1);
     const FAR: PlayerKey = PlayerKey::new(2);
     const VANILLA: PlayerKey = PlayerKey::new(3);
@@ -41,15 +41,14 @@ mod tests {
     );
 
     fn player(key: PlayerKey, entity: u32) -> PlayerInfo {
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick::abi::headed!(PlayerInfo {
             slot: entity,
-            entity: Entity(entity),
+            entity: Entity::from_engine(entity),
             key,
             permissions: 0,
             name_len: 0,
             name: [0; 128],
-        }
+        })
     }
 
     fn installed(fake: FakeHost) -> Installed {
@@ -74,9 +73,9 @@ mod tests {
                 .player(player(VANILLA, 12))
                 .net_peer(Peer::Player(NEAR))
                 .net_peer(Peer::Player(FAR))
-                .placed(0, Entity(10), [3.0, 0.0, 4.0])
-                .placed(0, Entity(11), [60.0, 0.0, 0.0])
-                .placed(0, Entity(12), [1.0, 0.0, 0.0])
+                .placed(0, Entity::from_engine(10), [3.0, 0.0, 4.0])
+                .placed(0, Entity::from_engine(11), [60.0, 0.0, 0.0])
+                .placed(0, Entity::from_engine(12), [1.0, 0.0, 0.0])
                 .placed(0, CAMP, [0.0, 0.0, 0.0]),
         )
     }
@@ -185,11 +184,11 @@ mod tests {
         let loader = installed(FakeHost::new().side(Side::CLIENT));
         // SAFETY: the fake's table lives for the process.
         let api = unsafe { &*loader.api() };
-        let beyond = enshwick::abi::SoundAudience {
+        let beyond = enshwick::abi::headed!(enshwick::abi::SoundAudience {
             kind: enshwick::abi::SoundAudience::NEAR,
             radius: f32::MAX,
             ..enshwick::abi::SoundAudience::EMPTY
-        };
+        });
         let (play, mut id) = (SoundPlay::EMPTY, 0);
         let status = (api.sound_play_for)(
             loader.handle(),
@@ -211,16 +210,16 @@ mod tests {
     #[test]
     fn a_client_drops_a_server_sound_whose_container_it_lacks() {
         let loader = installed(FakeHost::new().side(Side::CLIENT));
-        let unknown = SoundPlay {
+        let unknown = enshwick::abi::headed!(SoundPlay {
             container: Guid::named("you.horns:hron"),
             ..SoundPlay::EMPTY
-        };
+        });
         assert!(!loader.hear_sound(unknown));
         assert!(loader.sounds().is_empty());
-        let known = SoundPlay {
+        let known = enshwick::abi::headed!(SoundPlay {
             container: HORN.guid(),
             ..SoundPlay::EMPTY
-        };
+        });
         assert!(loader.hear_sound(known));
         assert_eq!(loader.sounds().len(), 1);
     }

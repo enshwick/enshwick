@@ -98,10 +98,10 @@ mod tests {
 
         *NAMES.lock().unwrap() = names;
         let loader = enshwick::test::FakeHost::new()
-            .loaded(ModInfo {
+            .loaded(enshwick::abi::headed!(ModInfo {
                 id: Str::new("you.lanterns"),
                 ..ModInfo::EMPTY
-            })
+            }))
             .exports("you.lockers", &["content:locker", "point:key"])
             .exports("you.lanterns", &["content:lantern"])
             .install();
@@ -204,14 +204,14 @@ mod tests {
         );
 
         let loader = enshwick::test::FakeHost::new()
-            .loaded(ModInfo {
+            .loaded(enshwick::abi::headed!(ModInfo {
                 id: Str::new("you.hello"),
                 ..ModInfo::EMPTY
-            })
-            .loaded(ModInfo {
+            }))
+            .loaded(enshwick::abi::headed!(ModInfo {
                 id: Str::new("you.lanterns"),
                 ..ModInfo::EMPTY
-            })
+            }))
             .install();
         // SAFETY: both functions are the exports of this test's `declare_mod!(Hello)`.
         let status =

@@ -25,13 +25,11 @@ use enshwick::content::workshops::{NewWorkshop, stations};
 const BENCH: Id = id!("bulk-bench");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let new = NewWorkshop {
-        named: true,
-        described: true,
-        recipe_cost: Some(1),
-        debug_name: "Craftingstation_BulkWorkbench".into(),
-        ..NewWorkshop::new(BENCH, stations::WORKBENCH)
-    };
+    let mut new = NewWorkshop::new(BENCH, stations::WORKBENCH);
+    new.named = true;
+    new.described = true;
+    new.recipe_cost = Some(1);
+    new.debug_name = "Craftingstation_BulkWorkbench".into();
     let texts = load.texts_from(r#"
 [en]
 "bench.name" = "Bulk Workbench"
@@ -43,10 +41,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ])?;
     let bench = load.add_workshop(new)?;
     load.derive_recipes("my-mod", move |recipe| {
-        recipe
-            .debug_name()
-            .starts_with("Block_")
-            .then_some(Derived { output: 2, cost: 1, workshop: Some(bench) })
+        let mut derived = Derived::new(2, 1);
+        derived.workshop = Some(bench);
+        recipe.debug_name().starts_with("Block_").then_some(derived)
     })
 }
 ```

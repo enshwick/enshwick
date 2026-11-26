@@ -9,7 +9,7 @@ use crate::test::table::base::io::list;
 use crate::test::table::{Registered, put, with};
 use crate::test::world::BaseCode;
 use enshwick_core::abi::{
-    AltarInfo, AltarLimitFilterFn, AltarZoneFilterFn, BaseLimitInfo, BuildingZoneFilterFn, Header,
+    AltarInfo, AltarLimitFilterFn, AltarZoneFilterFn, BaseLimitInfo, BuildingZoneFilterFn,
     ModHandle, Status,
 };
 
@@ -189,8 +189,7 @@ entries! {
     pub(crate) fn base_limit(me as Caller, out: *mut BaseLimitInfo as args::HeadedOut) -> Status {
         let (zones, bases) = zones_and_bases();
         let (max_zones, max_bases) = most();
-        let limit = BaseLimitInfo {
-            header: Header::of::<BaseLimitInfo>(),
+        let limit = enshwick_core::headed!(BaseLimitInfo {
             zones,
             bases,
             vanilla_zones: VANILLA.0,
@@ -198,7 +197,7 @@ entries! {
             vanilla_bases: VANILLA.1,
             max_zones,
             max_bases,
-        };
+        });
         // SAFETY: the safe layer passes `out` null or a `BaseLimitInfo` with
         // its header set, writable for the call.
         if unsafe { enshwick_core::abi::write_headed(out, limit) } {

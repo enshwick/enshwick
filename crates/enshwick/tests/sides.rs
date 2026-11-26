@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{Header, Manifest, ModInfo, Side, Status, Str};
+    use enshwick::abi::{Manifest, ModInfo, Side, Status, Str};
     use enshwick::net::Channel;
     use enshwick::{Load, Mod, Off};
 
@@ -33,10 +33,10 @@ mod tests {
             // SAFETY: `enshwick_mod_query` returns the manifest of
             // `declare_mod!`, valid for the process.
             let declared = unsafe { *enshwick_mod_query() };
-            Box::leak(Box::new(Manifest {
+            Box::leak(Box::new(enshwick::abi::headed!(Manifest {
                 side: Side::CLIENT,
                 ..declared
-            }))
+            })))
         }
     }
 
@@ -112,14 +112,13 @@ mod tests {
     #[test]
     fn a_refused_join_lists_ids_and_versions_and_nothing_a_server_chose() {
         let loader = enshwick::test::FakeHost::new()
-            .join_missing(ModInfo {
-                header: Header::of::<ModInfo>(),
+            .join_missing(enshwick::abi::headed!(ModInfo {
                 id: Str::new("you.trading-post"),
                 version: Str::new("0.3.0"),
                 side: Side::BOTH,
                 off: 1,
                 ..ModInfo::EMPTY
-            })
+            }))
             .install();
         // SAFETY: the three functions are the exports of `both`'s `declare_mod!`.
         let status = unsafe {

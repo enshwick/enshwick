@@ -2,8 +2,8 @@
 //! voxels.
 
 use enshwick_core::abi::{
-    DaytimeInfo, Header, Status, TerrainEdit, TerrainMaterialAdd, TerrainMaterialInfo, Voxel,
-    WeatherFront, WeatherSample,
+    DaytimeInfo, Status, TerrainEdit, TerrainMaterialAdd, TerrainMaterialInfo, Voxel, WeatherFront,
+    WeatherSample,
 };
 
 use crate::engine::conflicts::Mode;
@@ -71,7 +71,7 @@ entries! {
     fn weather_at(loader as Caller, position as In<[f64; 3]>, out as HeadedOut<WeatherSample>) -> Status {
         let position = enshwick_core::ecs::checked_fixed(position).ok_or(Status::BAD_ARGS)?;
         let [clear, rain, snow, blizzard] = crate::world::weather::sample(loader, position)?;
-        out.put(WeatherSample { header: Header::of::<WeatherSample>(), clear, rain, snow, blizzard })
+        out.put(enshwick_abi::headed!(WeatherSample { clear, rain, snow, blizzard }))
     }
 
     fn weather_fronts(loader as Caller, [out, entry_size, capacity, count] as SizedListOut<WeatherFront>) -> Status {

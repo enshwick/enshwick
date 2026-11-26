@@ -278,7 +278,7 @@ pub(super) fn carried_for<'a>(
 
 #[cfg(test)]
 mod tests {
-    use enshwick_core::abi::{ControlEvent, Header};
+    use enshwick_core::abi::ControlEvent;
     use enshwick_core::{Entity, PlayerKey};
 
     use super::*;
@@ -303,15 +303,14 @@ mod tests {
     }
 
     fn player(key: u64, permissions: u32) -> PlayerInfo {
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick_abi::headed!(PlayerInfo {
             slot: 0,
-            entity: Entity(1),
+            entity: Entity::from_engine(1),
             key: PlayerKey::new(key),
             permissions,
             name_len: 0,
             name: [0; 128],
-        }
+        })
     }
 
     fn names<'a>(controls: impl Iterator<Item = &'a Declared>) -> Vec<&'a str> {

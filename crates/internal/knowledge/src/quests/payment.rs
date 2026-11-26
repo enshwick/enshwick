@@ -154,19 +154,17 @@ impl LoadMethods for crate::BaseLoad {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::abi::Header;
 
     fn raw(count: u32) -> RawPayment {
-        RawPayment {
-            header: Header::of::<RawPayment>(),
-            entity: Entity(2),
+        enshwick_abi::headed!(RawPayment {
+            entity: Entity::from_engine(2),
             quest: KnowledgeId::new(0x51),
             count,
             limit: 3,
             allowed: 1,
             reserved: [0; 3],
             experience: [7; RawPayment::MAX],
-        }
+        })
     }
 
     #[test]

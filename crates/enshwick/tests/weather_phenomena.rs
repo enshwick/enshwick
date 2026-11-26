@@ -288,7 +288,7 @@ mod tests {
                 NewPhenomenon::new(Id::new("you.weather:drizzle"), guid(2)).values(rain),
             )?;
             let mist = load.add_weather_phenomenon(
-                NewPhenomenon::new(Id::new("you.weather:mist"), guid(1)).in_layer(guid(20)),
+                NewPhenomenon::new(Id::new("you.weather:mist"), guid(1)).layer(guid(20)),
             )?;
             load.change_weather_phenomenon(
                 guid(3),
@@ -298,7 +298,7 @@ mod tests {
             )?;
             let refused = load
                 .add_weather_phenomenon(
-                    NewPhenomenon::new(Id::new("you.weather:fog"), guid(1)).in_layer(guid(30)),
+                    NewPhenomenon::new(Id::new("you.weather:fog"), guid(1)).layer(guid(30)),
                 )
                 .map(drop)
                 .map_err(|off| off.to_string());

@@ -42,14 +42,14 @@ pub use snapshot::{
 };
 
 use crate::__load::*;
+use crate::BaseLoad;
 use crate::Host;
 use crate::Off;
 use crate::WorldError;
 use crate::abi::{MapFrameInfo, MapMarkerInfo, WaypointData};
 use crate::altars::Altars;
 use crate::content::Guid;
-use crate::world::World;
-use crate::{BaseLoad, Entity};
+use crate::world::{PlayerRef, World};
 
 /// The key of a map marker type, as the game's marker type registry
 /// numbers them (`MapMarkerTypeId`).
@@ -115,6 +115,7 @@ impl MapMarkerTypeId {
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct MapMarker {
     /// Where it is, in metres.
     pub position: [f64; 3],
@@ -124,6 +125,22 @@ pub struct MapMarker {
     /// [`game_text`](crate::i18n::game_text) reads by [`Guid::fnv1a`] on a
     /// client; `None` for a marker without one.
     pub label: Option<Guid>,
+}
+
+impl MapMarker {
+    /// A `MapMarker` of its parts; `marker_type` and `label` start as `None`.
+    ///
+    /// # Examples
+    ///
+    /// See [`MapMarker`].
+    #[must_use]
+    pub const fn new(position: [f64; 3]) -> Self {
+        Self {
+            position,
+            marker_type: None,
+            label: None,
+        }
+    }
 }
 
 /// The group the client's map sorts a marker type into, the game's
@@ -231,11 +248,12 @@ impl MapMarkerType {
 /// ```
 /// use enshwick::map::MapFrame;
 ///
-/// let frame = MapFrame { origin: [0.0, 0.0], size: [10240.0, 10240.0], metres_per_cell: 8.0 };
+/// let frame = MapFrame::new([0.0, 0.0], [10240.0, 10240.0], 8.0);
 /// let cells = frame.size.map(|metres| metres / frame.metres_per_cell);
 /// assert_eq!(cells, [1280.0, 1280.0]);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize, crate::Script)]
+#[non_exhaustive]
 pub struct MapFrame {
     /// The map's corner of lowest x and z, in metres, x then z.
     pub origin: [f64; 2],
@@ -243,6 +261,22 @@ pub struct MapFrame {
     pub size: [f64; 2],
     /// The metres one cell of the game's map covers on each axis.
     pub metres_per_cell: f64,
+}
+
+impl MapFrame {
+    /// A `MapFrame` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`MapFrame`].
+    #[must_use]
+    pub const fn new(origin: [f64; 2], size: [f64; 2], metres_per_cell: f64) -> Self {
+        Self {
+            origin,
+            size,
+            metres_per_cell,
+        }
+    }
 }
 
 impl MapFrame {
@@ -308,9 +342,9 @@ impl crate::script::Bound for Map {
 impl crate::script::Bound for FogOfWar {
     const NAME: &'static str = <Map as crate::script::Bound>::NAME;
     const DOC: &'static str = <Map as crate::script::Bound>::DOC;
-    // One list with the object class the type has.
-    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
-        <Self as crate::script::Object>::PARTS;
+    // Only `map.fog_of_war` names it there; its functions are the methods of
+    // the object that returns, as `FogOfWar`'s are in Rust, not `map`'s.
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[];
 
     fn resolve(load: &mut impl crate::Loading) -> Result<Self, Off> {
         load.base_mut().fog_of_war()
@@ -459,7 +493,7 @@ impl Map {
     }
 
     /// Uncovers the fog of war of `player` in the circle of `radius` metres
-    /// around world x and z `at`, as exploring there does: all of the
+    /// around `at` on the footprint, its height ignored, as exploring there does: all of the
     /// circle, with the fog thinning out from its edge to twice the radius.
     /// The server holds
     /// no fog: the loader sends the circle to the loader on the player's
@@ -477,15 +511,16 @@ impl Map {
     /// from the loader, as one without Enshwick or not online, and on a
     /// client in another's game; [`WorldError::Refused`] for a place that
     /// is not finite, a radius that is not above 0 and at most 100 000
-    /// metres, or a link to the player with no room.
+    /// metres, or a link to the player with no room; [`WorldError::Gone`]
+    /// for a character no connected player has.
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick::map::Map;
     ///
-    /// fn show_the_shrine(map: Map, player: enshwick::PlayerKey) {
-    ///     if let Err(why) = map.uncover(player, [1250.0, -830.0], 200.0) {
+    /// fn show_the_shrine(map: Map, player: &enshwick::world::Player) {
+    ///     if let Err(why) = map.uncover(player, [1250.0, 0.0, -830.0], 200.0) {
     ///         enshwick::warn!("fog not uncovered: {why}");
     ///     }
     /// }
@@ -493,16 +528,17 @@ impl Map {
     #[script]
     pub fn uncover(
         self,
-        player: crate::PlayerKey,
-        at: [f64; 2],
+        player: impl Into<PlayerRef>,
+        at: [f64; 3],
         radius: f32,
     ) -> Result<(), WorldError> {
         #[expect(
             clippy::cast_possible_truncation,
             reason = "the game's reveal takes the place as f32, as its world is far smaller than f32's range"
         )]
-        let (x, z) = (at[0] as f32, at[1] as f32);
+        let (x, z) = (at[0] as f32, at[2] as f32);
         let host = self.0.host;
+        let player = player.into().key_in(host)?;
         WorldError::from_status((host.api().fog_uncover)(
             host.handle(),
             player,
@@ -530,10 +566,11 @@ impl Map {
     /// }
     /// ```
     #[script]
-    pub fn uncover_all(self, player: crate::PlayerKey) -> Result<(), WorldError> {
+    pub fn uncover_all(self, player: impl Into<PlayerRef>) -> Result<(), WorldError> {
         let frame = self.frame()?;
         let centre = [
             frame.origin[0] + frame.size[0] / 2.0,
+            0.0,
             frame.origin[1] + frame.size[1] / 2.0,
         ];
         #[expect(
@@ -552,14 +589,16 @@ impl Map {
     ///
     /// [`WorldError::WrongThread`] off the server's game thread or inside a
     /// step; [`WorldError::Unavailable`] before a world runs or on a game build
-    /// without waypoints.
+    /// without waypoints; [`WorldError::Gone`] for an account no connected
+    /// player has.
     ///
     /// # Examples
     ///
     /// See the [module](self).
     #[script]
-    pub fn waypoint(self, player: Entity) -> Result<Option<[f64; 3]>, WorldError> {
+    pub fn waypoint(self, player: impl Into<PlayerRef>) -> Result<Option<[f64; 3]>, WorldError> {
         let host = self.0.host;
+        let player = player.into().entity_in(host)?;
         let mut data = WaypointData::EMPTY;
         WorldError::from_status((host.api().waypoint)(host.handle(), player, &raw mut data))?;
         Ok((data.set != 0).then_some(data.position))
@@ -642,7 +681,7 @@ impl Map {
 /// The altars of `altars`, by entity, each with its base's number.
 fn snapshot_altars(altars: Altars) -> Vec<MapAltar> {
     let mut list = altars.list();
-    list.sort_unstable_by_key(|altar| altar.entity.0);
+    list.sort_unstable_by_key(|altar| altar.entity.get());
     let bases = crate::altars::bases_of(&list);
     list.iter()
         .map(|altar| MapAltar {

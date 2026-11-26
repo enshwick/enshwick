@@ -167,7 +167,7 @@ entries! {
                 owner: me,
                 kind: spec.kind,
                 target,
-                status: Raw {
+                status: enshwick_core::headed!(Raw {
                     kind: spec.kind,
                     // As the loader queues them: a join waits for its server's
                     // answer, a leave starts in the world.
@@ -178,7 +178,7 @@ entries! {
                         _ => 0,
                     },
                     ..Raw::EMPTY
-                },
+                }),
             });
             // SAFETY: the safe layer passes a writable `u64`, non-null above.
             unsafe { id.write(next) };
@@ -388,10 +388,12 @@ mod tests {
                 len: bytes.len(),
             })
         };
-        let chat = |text| Spec {
-            kind: Spec::CHAT,
-            text,
-            ..Spec::EMPTY
+        let chat = |text| {
+            enshwick_abi::headed!(Spec {
+                kind: Spec::CHAT,
+                text,
+                ..Spec::EMPTY
+            })
         };
         assert!(named_as_the_loader_takes(&chat(Str::new("hello"))));
         assert!(!named_as_the_loader_takes(&chat(broken)));

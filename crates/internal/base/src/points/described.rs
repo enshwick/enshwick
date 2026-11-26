@@ -5,15 +5,13 @@
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use crate::abi::{Header, Layout, LayoutField, PointFlags, PointVerdict, Status, Str};
+use crate::abi::{Layout, LayoutField, PointFlags, PointVerdict, Status, Str};
 use crate::load::{hand_over, ok};
 use crate::points::{Decision, Mode, Order};
 use crate::{BaseLoad, Off};
 
 /// A field of a described input or answer: its name and the layout hash the
 /// owner's build wrote for it.
-///
-/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Examples
 ///
@@ -44,8 +42,6 @@ impl DescribedField {
 
 /// Another mod's extension point as its schema describes it, for a link
 /// that reads the input and writes the answer as bytes.
-///
-/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Examples
 ///
@@ -146,8 +142,6 @@ impl DescribedPoint {
 
 /// What a described link answers.
 ///
-/// Unstable: needs the `unstable` feature and may change in any release.
-///
 /// # Examples
 ///
 /// See [`DescribedPoint`].
@@ -201,15 +195,14 @@ impl BaseLoad {
             run: link,
         };
         point.with_spec(|spec| {
-            let raw = crate::abi::PointLink {
-                header: Header::of::<crate::abi::PointLink>(),
+            let raw = enshwick_abi::headed!(crate::abi::PointLink {
                 point: spec,
                 before: before.as_ptr(),
                 after: after.as_ptr(),
                 before_count: count(before.len()),
                 after_count: count(after.len()),
                 priority: order.priority,
-            };
+            });
             hand_over(
                 link,
                 |user| {
@@ -283,8 +276,7 @@ impl DescribedPoint {
             name: Str::new("output"),
             hash: self.output_hash,
         }];
-        let spec = crate::abi::PointSpec {
-            header: Header::of::<crate::abi::PointSpec>(),
+        let spec = enshwick_abi::headed!(crate::abi::PointSpec {
             name: Str::new(&self.name),
             mode: self.mode.to_abi(),
             flags: if self.refusable {
@@ -302,7 +294,7 @@ impl DescribedPoint {
                 count: 1,
                 size: self.output_size,
             },
-        };
+        });
         f(&raw const spec)
     }
 }
@@ -310,8 +302,6 @@ impl DescribedPoint {
 /// A described point this mod defined, from
 /// [`Load::define_described_point`](../struct.Load.html#method.define_described_point): asks the links with the input and the
 /// answer as bytes, from any thread.
-///
-/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Examples
 ///

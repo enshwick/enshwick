@@ -97,8 +97,7 @@ mod tests {
             end)
             ",
         );
-        loader.set_daytime(enshwick::abi::DaytimeInfo {
-            header: enshwick::abi::Header::of::<enshwick::abi::DaytimeInfo>(),
+        loader.set_daytime(enshwick::abi::headed!(enshwick::abi::DaytimeInfo {
             time_ns: 12 * 3_600_000_000_000,
             day_start_ns: 6 * 3_600_000_000_000,
             day_end_ns: 22 * 3_600_000_000_000,
@@ -106,7 +105,7 @@ mod tests {
             night_length_ns: 720_000_000_000,
             speed: 1.0,
             flags: enshwick::abi::DaytimeInfo::DAY,
-        });
+        }));
         let _handled = loader.raise::<enshwick::events::WorldSaved>(&());
         assert!(logged(&loader, "now true 1"), "{:?}", loader.logs());
     }

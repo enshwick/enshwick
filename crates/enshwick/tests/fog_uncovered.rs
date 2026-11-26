@@ -31,7 +31,7 @@ mod tests {
     /// A fog of 4 × 3 pixels of 8 m whose last window of uncovering is
     /// `window`, the pixels 1 to 2 of row 1.
     fn fog(window: u64) -> FogInfo {
-        FogInfo {
+        enshwick::abi::headed!(FogInfo {
             width: 4,
             height: 3,
             metres_per_pixel: 8.0,
@@ -42,7 +42,7 @@ mod tests {
             uncovered_min: [1, 1],
             uncovered_size: [2, 1],
             ..FogInfo::EMPTY
-        }
+        })
     }
 
     #[test]

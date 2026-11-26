@@ -408,19 +408,11 @@ fn write_kept(key: &str, fields: &BTreeMap<String, Vec<u8>>) {
     let path = crate::base::world_folders::loader_data(key, FILE);
     let written = if fields.is_empty() {
         match std::fs::remove_file(&path) {
-            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.into()),
             _ => Ok(()),
         }
     } else {
-        let kept = KeptFile {
-            kept: fields.iter().map(|(n, v)| (n.clone(), hex(v))).collect(),
-        };
-        let text = format!(
-            "# Game settings mods keep for this world, applied each time it loads:\n\
-             # each field by its reflected name, its bytes as hex.\n{}",
-            toml::to_string(&kept).unwrap_or_default()
-        );
-        enshwick_core::files::write_atomically(&path, text)
+        write_text(&path, kept_text(fields))
     };
     if let Err(error) = written {
         crate::log!(
@@ -429,6 +421,37 @@ fn write_kept(key: &str, fields: &BTreeMap<String, Vec<u8>>) {
             path.display()
         );
     }
+}
+
+/// Why the file of kept fields was not written.
+#[derive(Debug, thiserror::Error)]
+enum KeptFileError {
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
+    #[error("the fields do not encode: {0}")]
+    Encode(#[from] toml::ser::Error),
+}
+
+/// The file of kept `fields`, with its header.
+fn kept_text(fields: &BTreeMap<String, Vec<u8>>) -> Result<String, toml::ser::Error> {
+    let kept = KeptFile {
+        kept: fields.iter().map(|(n, v)| (n.clone(), hex(v))).collect(),
+    };
+    Ok(format!(
+        "# Game settings mods keep for this world, applied each time it loads:\n\
+         # each field by its reflected name, its bytes as hex.\n{}",
+        toml::to_string(&kept)?
+    ))
+}
+
+/// Writes `text` to `path`, and nothing when it did not encode, so the file
+/// kept from before stays rather than an empty one.
+fn write_text(
+    path: &std::path::Path,
+    text: Result<String, toml::ser::Error>,
+) -> Result<(), KeptFileError> {
+    enshwick_core::files::write_atomically(path, text?)?;
+    Ok(())
 }
 
 /// Follows the server's world: reads the kept fields when one loads, for
@@ -559,6 +582,24 @@ mod tests {
             event_settings: 0,
             fields: spans([("b", 4), ("a", 0), ("c", 9)].into_iter(), 12),
         }
+    }
+
+    #[test]
+    fn fields_that_do_not_encode_leave_the_kept_file_as_it_was() {
+        let dir = std::env::temp_dir().join(format!("enshwick-kept-{}", std::process::id()));
+        let path = dir.join(FILE);
+        let before = kept_text(&BTreeMap::from([("a".to_owned(), vec![1])])).unwrap();
+        write_text(&path, Ok(before.clone())).unwrap();
+
+        let failed = <toml::ser::Error as serde::ser::Error>::custom("no encoding");
+        let refused = write_text(&path, Err(failed));
+
+        assert!(
+            matches!(refused, Err(KeptFileError::Encode(_))),
+            "{refused:?}"
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use crate::abi::{AffixModifierSpec, AffixSpec, Header, Str};
+use crate::abi::{AffixModifierSpec, AffixSpec, Str};
 use crate::content::categories::ItemCategoryMask;
 use crate::stats::{Op, Stat};
 
@@ -70,6 +70,7 @@ impl ItemRarity {
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct Range {
     /// The stat.
     pub stat: Stat,
@@ -249,8 +250,7 @@ impl AffixDef {
     /// ```
     #[must_use]
     pub fn to_data(&self, ranges: &[AffixModifierSpec]) -> AffixSpec {
-        AffixSpec {
-            header: Header::of::<AffixSpec>(),
+        enshwick_abi::headed!(AffixSpec {
             group: self.group.as_deref().map_or(Str::EMPTY, Str::new),
             modifiers: ranges.as_ptr(),
             modifier_count: u32::try_from(ranges.len()).unwrap_or(u32::MAX),
@@ -258,7 +258,7 @@ impl AffixDef {
             categories: self.categories.0,
             rarity: self.rarity.to_raw(),
             reserved: [0; 3],
-        }
+        })
     }
 
     /// The definition the loader took, without its text, its stats named by
@@ -396,6 +396,10 @@ enshwick_abi::id_conversions!(AffixId(u32));
     serde::Serialize,
     serde::Deserialize,
     crate::Script,
+)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
 )]
 pub struct AffixKey(pub u32);
 

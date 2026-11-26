@@ -167,7 +167,7 @@ pub(super) unsafe fn drive(layout: &ActLayout, input: *mut u8, mode: u32) {
     REQUEST.written_at.store(before, Ordering::Relaxed);
     if REQUEST.handoff.advance(id, stage::WRITE, stage::WRITTEN) {
         // SAFETY: the caller's record, on the builder's thread.
-        unsafe { layout.write(input, player.0, act) };
+        unsafe { layout.write(input, player.get(), act) };
     }
 }
 

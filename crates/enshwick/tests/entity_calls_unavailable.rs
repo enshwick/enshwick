@@ -37,8 +37,8 @@ mod tests {
             .world()
             .type_hash("keen::ecs::CombatFlags", 6)
             .type_size("keen::ecs::CombatFlags", 8)
-            .component(Entity(5), 6, &[0; 8])
-            .template(Entity(5), enshwick::content::Guid([5; 16]))
+            .component(Entity::from_engine(5), 6, &[0; 8])
+            .template(Entity::from_engine(5), enshwick::content::Guid([5; 16]))
     }
 
     /// What destroy, `set_saved`, teleport and a component write answer for
@@ -60,9 +60,9 @@ mod tests {
 
     #[test]
     fn on_a_client_that_hosts_no_game_every_entity_call_is_missing_not_gone() {
-        let answered = answers(world().side(Side::CLIENT), Entity(5));
+        let answered = answers(world().side(Side::CLIENT), Entity::from_engine(5));
         assert_eq!(answered, [Err(WorldError::Unavailable); 4]);
-        let unknown = answers(world().side(Side::CLIENT), Entity(9));
+        let unknown = answers(world().side(Side::CLIENT), Entity::from_engine(9));
         assert_eq!(unknown, [Err(WorldError::Unavailable); 4]);
     }
 
@@ -75,7 +75,7 @@ mod tests {
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         let (world, _, _) = CALLS.get().unwrap();
         let world = *world;
-        let answered = std::thread::spawn(move || world.set_saved(Entity(5), false))
+        let answered = std::thread::spawn(move || world.set_saved(Entity::from_engine(5), false))
             .join()
             .unwrap();
         assert_eq!(answered, Err(WorldError::Unavailable));
@@ -83,15 +83,18 @@ mod tests {
 
     #[test]
     fn a_client_that_hosts_its_game_answers_gone_for_an_entity_not_in_the_world() {
-        let answered = answers(world().side(Side::CLIENT).hosting(true), Entity(9));
+        let answered = answers(
+            world().side(Side::CLIENT).hosting(true),
+            Entity::from_engine(9),
+        );
         assert_eq!(answered, [Err(WorldError::Gone); 4]);
     }
 
     #[test]
     fn a_build_without_the_entity_commands_is_missing_them_for_every_entity() {
-        let answered = answers(world().without_entity_commands(), Entity(5));
+        let answered = answers(world().without_entity_commands(), Entity::from_engine(5));
         assert_eq!(answered, [Err(WorldError::Unavailable); 4]);
-        let gone = answers(world(), Entity(9));
+        let gone = answers(world(), Entity::from_engine(9));
         assert_eq!(gone, [Err(WorldError::Gone); 4]);
     }
 }

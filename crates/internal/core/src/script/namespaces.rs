@@ -36,6 +36,7 @@ pub struct Namespace {
 #[derive(Clone, Copy, Debug)]
 struct Request {
     name: &'static str,
+    doc: &'static str,
     signature: &'static Signature,
     open: fn(&mut crate::Load<'_>) -> Result<(Opened, Value), crate::Off>,
 }
@@ -122,11 +123,12 @@ impl Namespace {
     /// [`Namespace::of`] for a handle whose opening switches a loader
     /// feature on: a script opens it with `getter` at start, as a Rust mod
     /// calls the `Load` method of that name in `init`, so a mod that never
-    /// asks pays nothing.
-    const fn on_request<T: Bound + Object>(getter: &'static str) -> Self {
+    /// asks pays nothing; `doc` is that method's.
+    const fn on_request<T: Bound + Object>(getter: &'static str, doc: &'static str) -> Self {
         Self {
             request: Some(Request {
                 name: getter,
+                doc,
                 signature: Getter::<T>::SIGNATURE,
                 open: request::<T>,
             }),
@@ -151,7 +153,7 @@ impl Namespace {
     pub fn request_function(&self) -> Option<Declared> {
         self.request
             .as_ref()
-            .map(|request| Declared::new(0, request.name, self.doc, request.signature))
+            .map(|request| Declared::new(0, request.name, request.doc, request.signature))
     }
 
     /// Opens a namespace a script asks for with

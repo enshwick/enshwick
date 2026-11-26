@@ -4,7 +4,7 @@
 #[cfg(test)]
 mod tests {
     use enshwick::abi::{
-        Header, PROGRESS_ADD_EXPERIENCE, PROGRESS_SET_EXPERIENCE, PROGRESS_SET_LEVEL, PlayerInfo,
+        PROGRESS_ADD_EXPERIENCE, PROGRESS_SET_EXPERIENCE, PROGRESS_SET_LEVEL, PlayerInfo,
     };
     use enshwick::test::FakeHost;
     use enshwick::{Entity, ItemId};
@@ -13,15 +13,14 @@ mod tests {
 
     #[test]
     fn a_script_writes_a_player_s_level_and_experience_and_drops_a_stack() {
-        let player = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let player = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: Entity(7),
+            entity: Entity::from_engine(7),
             key: enshwick::PlayerKey::new(7),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        };
+        });
         let loader = run(
             FakeHost::new()
                 .world()
@@ -43,9 +42,9 @@ mod tests {
         assert_eq!(
             loader.progress_writes(),
             [
-                (Entity(7), PROGRESS_SET_LEVEL, 10),
-                (Entity(7), PROGRESS_SET_EXPERIENCE, 5),
-                (Entity(7), PROGRESS_ADD_EXPERIENCE, 500),
+                (Entity::from_engine(7), PROGRESS_SET_LEVEL, 10),
+                (Entity::from_engine(7), PROGRESS_SET_EXPERIENCE, 5),
+                (Entity::from_engine(7), PROGRESS_ADD_EXPERIENCE, 500),
             ],
             "{:?}",
             loader.logs()
@@ -59,7 +58,7 @@ mod tests {
         assert_eq!(drops.len(), 1, "{:?}", loader.logs());
         let (entity, request) = drops[0];
         assert!(
-            logged(&loader, &format!("dropped {}", entity.0)),
+            logged(&loader, &format!("dropped {}", entity.get())),
             "{:?}",
             loader.logs()
         );
@@ -69,15 +68,14 @@ mod tests {
 
     #[test]
     fn a_script_takes_a_player_s_permission_and_gives_it_back() {
-        let player = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let player = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: Entity(7),
+            entity: Entity::from_engine(7),
             key: enshwick::PlayerKey::new(7),
             permissions: PlayerInfo::CAN_EDIT_WORLD | PlayerInfo::CAN_EDIT_BASE,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        };
+        });
         let loader = run(
             FakeHost::new().world().world_key("world0").player(player),
             r#"
@@ -97,15 +95,14 @@ mod tests {
 
     #[test]
     fn a_script_hears_what_became_of_its_level_write_after_the_next_step() {
-        let player = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let player = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: Entity(7),
+            entity: Entity::from_engine(7),
             key: enshwick::PlayerKey::new(7),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        };
+        });
         let loader = run(
             FakeHost::new().world().player(player),
             r#"

@@ -23,17 +23,15 @@ pub const MAP_SNAPSHOT_FORMAT: u16 = 2;
 /// use enshwick::map::{MapPlayer, MapSnapshot};
 ///
 /// let mut snapshot = MapSnapshot::default();
-/// snapshot.players.push(MapPlayer {
-///     key: enshwick::PlayerKey::new(7),
-///     name: "Bob".to_owned(),
-///     position: Some([10.0, 40.0, -3.5]),
-///     waypoint: None,
-/// });
+/// let mut map_player = MapPlayer::new(enshwick::PlayerKey::new(7), "Bob".to_owned());
+/// map_player.position = Some([10.0, 40.0, -3.5]);
+/// snapshot.players.push(map_player);
 /// let bytes = snapshot.to_bytes()?;
 /// assert_eq!(MapSnapshot::from_bytes(&bytes)?, snapshot);
 /// # Ok::<(), enshwick::map::SnapshotError>(())
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, crate::Script)]
+#[non_exhaustive]
 pub struct MapSnapshot {
     /// The players in the game, by player slot.
     pub players: Vec<MapPlayer>,
@@ -51,6 +49,7 @@ pub struct MapSnapshot {
 ///
 /// See [`MapSnapshot`].
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, crate::Script)]
+#[non_exhaustive]
 pub struct MapPlayer {
     /// The same for the same account in every session, as
     /// [`Player::key`](crate::world::Player::key); a public map may leave
@@ -65,6 +64,23 @@ pub struct MapPlayer {
     pub waypoint: Option<[f64; 3]>,
 }
 
+impl MapPlayer {
+    /// A `MapPlayer` of its parts; `position` and `waypoint` start as `None`.
+    ///
+    /// # Examples
+    ///
+    /// See [`MapPlayer`].
+    #[must_use]
+    pub const fn new(key: crate::PlayerKey, name: String) -> Self {
+        Self {
+            key,
+            name,
+            position: None,
+            waypoint: None,
+        }
+    }
+}
+
 /// A Flame Altar in a [`MapSnapshot`].
 ///
 /// # Examples
@@ -72,15 +88,12 @@ pub struct MapPlayer {
 /// ```
 /// use enshwick::map::MapAltar;
 ///
-/// let altar = MapAltar {
-///     position: [0.0, 30.0, 0.0],
-///     level: 2,
-///     zone: [[-40, 50, -40], [40, 90, 40]],
-///     base: Some(0),
-/// };
+/// let mut altar = MapAltar::new([0.0, 30.0, 0.0], 2, [[-40, 50, -40], [40, 90, 40]]);
+/// altar.base = Some(0);
 /// assert!(altar.zone[0][0] < altar.zone[1][0]);
 /// ```
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, crate::Script)]
+#[non_exhaustive]
 pub struct MapAltar {
     /// Where it stands, in metres.
     pub position: [f64; 3],
@@ -95,6 +108,23 @@ pub struct MapAltar {
     pub base: Option<u32>,
 }
 
+impl MapAltar {
+    /// A `MapAltar` of its parts; `base` starts as `None`.
+    ///
+    /// # Examples
+    ///
+    /// See [`MapAltar`].
+    #[must_use]
+    pub const fn new(position: [f64; 3], level: u8, zone: [[i64; 3]; 2]) -> Self {
+        Self {
+            position,
+            level,
+            zone,
+            base: None,
+        }
+    }
+}
+
 /// A map marker in a [`MapSnapshot`].
 ///
 /// # Examples
@@ -102,10 +132,12 @@ pub struct MapAltar {
 /// ```
 /// use enshwick::map::MapPoint;
 ///
-/// let ruin = MapPoint { position: [512.0, 60.0, 2048.0], marker_type: Some(0x1234_5678), label: None };
+/// let mut ruin = MapPoint::new([512.0, 60.0, 2048.0]);
+/// ruin.marker_type = Some(0x1234_5678);
 /// assert!(ruin.label.is_none());
 /// ```
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, crate::Script)]
+#[non_exhaustive]
 pub struct MapPoint {
     /// Where it is, in metres.
     pub position: [f64; 3],
@@ -114,6 +146,22 @@ pub struct MapPoint {
     /// Its label's text id, [`Guid::fnv1a`](crate::content::Guid::fnv1a) of the
     /// tag.
     pub label: Option<u32>,
+}
+
+impl MapPoint {
+    /// A `MapPoint` of its parts; `marker_type` and `label` start as `None`.
+    ///
+    /// # Examples
+    ///
+    /// See [`MapPoint`].
+    #[must_use]
+    pub const fn new(position: [f64; 3]) -> Self {
+        Self {
+            position,
+            marker_type: None,
+            label: None,
+        }
+    }
 }
 
 /// Why a [`MapSnapshot`] does not encode or read.

@@ -430,6 +430,8 @@ pub fn constant(id: &str, reflection: &Reflection<'_>) -> Option<u64> {
 #[derive(Debug)]
 pub struct Reflected<'r, 'a>(pub &'r Reflection<'a>);
 
+impl enshwick_base::facts::sealed::Sealed for Reflected<'_, '_> {}
+
 impl EngineFacts for Reflected<'_, '_> {
     fn offset(&self, id: &str) -> Result<usize, Off> {
         constant(id, self.0)

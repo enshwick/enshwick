@@ -10,6 +10,10 @@ use crate::raw::read_at;
 
 /// Where an `InventorySetup`'s fields sit on a build, from its reflection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "hidden: only the loader and the fake host name it"
+)]
 pub struct SetupLayout {
     /// Its `linksEntities`, [`LINKS`] `u32`.
     pub links: usize,
@@ -76,7 +80,9 @@ unsafe fn walk_from<B>(
     for i in 0..LINKS {
         // SAFETY: `found` is a live `InventorySetup` (the caller's contract),
         // whose `LINKS` `u32` links start at `layout.links`, and `i < LINKS`.
-        let link = Entity(unsafe { read_at::<u32>(found, layout.links + i * size_of::<u32>()) });
+        let link = Entity::from_engine(unsafe {
+            read_at::<u32>(found, layout.links + i * size_of::<u32>())
+        });
         // The game appends links packed, but its own setup check reads past
         // an empty one (`sys.inventory_setup`, server 26430253), so a gap
         // never hides the links after it.
@@ -132,20 +138,20 @@ mod tests {
         let mut find = |entity: Entity| {
             setups
                 .iter()
-                .find(|(at, _)| *at == entity.0)
+                .find(|(at, _)| *at == entity.get())
                 .map(|(_, bytes)| bytes.as_ptr())
         };
         // SAFETY: every pointer `find` returns is a whole setup of `LAYOUT`,
         // kept by `setups` and not written during the walk.
         let ended = unsafe {
             walk::<()>(
-                Entity(root),
+                Entity::from_engine(root),
                 max_depth,
-                Entity(skip),
+                Entity::from_engine(skip),
                 &LAYOUT,
                 &mut find,
                 &mut |link, category| {
-                    out.push((link.0, category.0));
+                    out.push((link.get(), category.0));
                     ControlFlow::Continue(())
                 },
             )
@@ -204,20 +210,20 @@ mod tests {
         let mut find = |entity: Entity| {
             setups
                 .iter()
-                .find(|(at, _)| *at == entity.0)
+                .find(|(at, _)| *at == entity.get())
                 .map(|(_, bytes)| bytes.as_ptr())
         };
         // SAFETY: as in `walked`.
         let ended = unsafe {
             walk(
-                Entity(1),
+                Entity::from_engine(1),
                 4,
                 Entity::NONE,
                 &LAYOUT,
                 &mut find,
                 &mut |link, _| {
-                    seen.push(link.0);
-                    if link.0 == 20 {
+                    seen.push(link.get());
+                    if link.get() == 20 {
                         ControlFlow::Break(link)
                     } else {
                         ControlFlow::Continue(())
@@ -225,7 +231,7 @@ mod tests {
                 },
             )
         };
-        assert_eq!(ended, ControlFlow::Break(Entity(20)));
+        assert_eq!(ended, ControlFlow::Break(Entity::from_engine(20)));
         assert_eq!(seen, [20]);
     }
 }

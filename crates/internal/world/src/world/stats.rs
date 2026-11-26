@@ -30,6 +30,10 @@ const SKILL_LEVEL_SHIFT: u8 = 5;
 /// assert_eq!(health.fraction(), 0.75);
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a value of fixed parts, which never gains one"
+)]
 pub struct Meter {
     /// The value now.
     pub current: i32,
@@ -251,7 +255,7 @@ impl Stats {
     /// The values in `set`'s slots on `entity`, when its set is initialised
     /// and is the one expected.
     fn read<const N: usize>(&self, world: World, entity: Entity, set: &Set<N>) -> Option<[u32; N]> {
-        let data = world.component(entity, set.ty)?.cast::<u8>();
+        let data = world.component_at(entity, set.ty)?.cast::<u8>();
         // SAFETY: `component` returned the entity's live attribute set, valid
         // until the game thread moves on; the set starts with the u32 id of
         // its first attribute.
@@ -371,7 +375,7 @@ impl Stats {
 
     pub(crate) fn skills(world: World, entity: Entity) -> Option<Vec<Skill>> {
         let &(ty, ids, levels) = SKILLS.get()?;
-        let data = world.component(entity, ty)?.cast::<u8>();
+        let data = world.component_at(entity, ty)?.cast::<u8>();
         Some(
             (0..SKILL_SLOTS)
                 .filter_map(|slot| {

@@ -15,10 +15,10 @@ mod tests {
     use enshwick::world::World;
     use enshwick::{Entity, Load, Mod, Off};
 
-    const WHOLE: Entity = Entity(4096);
-    const CUT: Entity = Entity(4097);
-    const SHORT: Entity = Entity(4098);
-    const EMPTY: Entity = Entity(4099);
+    const WHOLE: Entity = Entity::from_engine(4096);
+    const CUT: Entity = Entity::from_engine(4097);
+    const SHORT: Entity = Entity::from_engine(4098);
+    const EMPTY: Entity = Entity::from_engine(4099);
 
     static RESOLVED: OnceLock<(World, ComponentType<EntityTagContainer>)> = OnceLock::new();
 
@@ -74,7 +74,7 @@ mod tests {
         );
         let empty = tags.read(*world, EMPTY).unwrap().unwrap();
         assert!(empty.tags.is_empty(), "a component of its own size reads");
-        assert_eq!(tags.read(*world, Entity(1)).unwrap(), None);
+        assert_eq!(tags.read(*world, Entity::from_engine(1)).unwrap(), None);
     }
 
     #[test]

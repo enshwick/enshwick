@@ -7,7 +7,7 @@ use std::sync::{Arc, OnceLock};
 use enshwick_core::script::{Class, Error, Handle, Value};
 use mlua::{Lua, Value as LuaValue};
 
-use super::{Interned, LuaArgs, call, expected, failed};
+use super::{Interned, LuaArgs, call, expected, raising, refused};
 use crate::run::Scope;
 
 /// The API value of `value`, an object of `class`.
@@ -151,7 +151,9 @@ impl Object {
         let function = lua.create_function(
             move |lua, (this, args): (mlua::UserDataRef<Self>, LuaArgs)| {
                 if this.ended() {
-                    return Err(failed(&what, "the object was lent to a call that ended"));
+                    let ended =
+                        Error::with_kind(Error::GONE, "the object was lent to a call that ended");
+                    return refused(lua, &what, &ended);
                 }
                 // Not borrowed through the call, which may lend this object again.
                 let handle = this.handle.clone();
@@ -159,16 +161,15 @@ impl Object {
                 // A method indexes its own class's list: `a.m(b)` must not
                 // run b's method at m's place.
                 if handle.class().name() != class.name() {
-                    return Err(failed(
-                        &what,
-                        format_args!("called on a {}", handle.class().name()),
-                    ));
+                    let other = Error::new(format!("called on a {}", handle.class().name()));
+                    return refused(lua, &what, &other);
                 }
                 call(lua, &scope, args, method.signature(), &what, |slots| {
                     handle.call(&method, slots)
                 })
             },
         )?;
+        let function = raising(lua, function)?;
         cached.raw_set(key, &function)?;
         Ok(LuaValue::Function(function))
     }

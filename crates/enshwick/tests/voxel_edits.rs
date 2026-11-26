@@ -5,7 +5,7 @@
 mod tests {
     use std::sync::{Mutex, OnceLock};
 
-    use enshwick::abi::{Header, Status, TerrainMaterialInfo};
+    use enshwick::abi::{Status, TerrainMaterialInfo};
     use enshwick::voxels::{EditSource, Voxel, VoxelChange, VoxelMaterial, VoxelPos, Voxels};
     #[cfg(feature = "unstable")]
     use enshwick::world::World;
@@ -67,15 +67,14 @@ mod tests {
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        loader.set_terrain(&[TerrainMaterialInfo {
-            header: Header::of::<TerrainMaterialInfo>(),
+        loader.set_terrain(&[enshwick::abi::headed!(TerrainMaterialInfo {
             id: 9,
             flags: 0,
             hardness: 3,
             reserved: 0,
             item: enshwick::ItemId::new(21),
             health: 500,
-        }]);
+        })]);
         loader
     }
 

@@ -4,16 +4,15 @@
 #[cfg(test)]
 mod tests {
     use enshwick::Entity;
-    use enshwick::abi::{Header, KnowledgeInfo, KnowledgeInput};
+    use enshwick::abi::{KnowledgeInfo, KnowledgeInput};
     use enshwick::knowledge::KnowledgeId;
     use enshwick::test::FakeHost;
 
     use crate::harness::run;
 
     fn input(value: u32, allowed: bool) -> KnowledgeInput {
-        KnowledgeInput {
-            header: Header::of::<KnowledgeInput>(),
-            character: Entity(2),
+        enshwick::abi::headed!(KnowledgeInput {
+            character: Entity::from_engine(2),
             id: KnowledgeId::new(0x1d),
             kind: KnowledgeInfo::BOOL,
             scope: KnowledgeInfo::PLAYER,
@@ -22,7 +21,7 @@ mod tests {
             refusal: KnowledgeInput::ALLOWED,
             allowed: u8::from(allowed),
             reserved_tail: [0; 3],
-        }
+        })
     }
 
     #[test]
@@ -60,19 +59,20 @@ mod tests {
             end)
             "#,
         );
-        let known = |id, kind, scope| KnowledgeInfo {
-            header: Header::of::<KnowledgeInfo>(),
-            id: KnowledgeId::new(id),
-            kind,
-            scope,
-            reserved: 0,
-            value: 0,
-            flags: 0,
+        let known = |id, kind, scope| {
+            enshwick::abi::headed!(KnowledgeInfo {
+                id: KnowledgeId::new(id),
+                kind,
+                scope,
+                reserved: 0,
+                value: 0,
+                flags: 0,
+            })
         };
         loader.set_knowledge(
             &[
                 (
-                    Some(Entity(2)),
+                    Some(Entity::from_engine(2)),
                     known(0x1d, KnowledgeInfo::FLAGS, KnowledgeInfo::PLAYER),
                 ),
                 (None, known(0x77, KnowledgeInfo::BOOL, KnowledgeInfo::WORLD)),
@@ -84,7 +84,7 @@ mod tests {
             loader.knowledge_sets(),
             [
                 (
-                    Some(Entity(2)),
+                    Some(Entity::from_engine(2)),
                     KnowledgeId::new(0x1d),
                     3,
                     enshwick::abi::KnowledgeChange::QUIET
@@ -102,16 +102,15 @@ mod tests {
     }
 
     fn payment(quest: u32) -> enshwick::abi::QuestPayment {
-        enshwick::abi::QuestPayment {
-            header: Header::of::<enshwick::abi::QuestPayment>(),
-            entity: Entity(2),
+        enshwick::abi::headed!(enshwick::abi::QuestPayment {
+            entity: Entity::from_engine(2),
             quest: KnowledgeId::new(quest),
             count: 1,
             limit: 3,
             allowed: 1,
             reserved: [0; 3],
             experience: [0x77; enshwick::abi::QuestPayment::MAX],
-        }
+        })
     }
 
     #[test]

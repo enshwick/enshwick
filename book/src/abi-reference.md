@@ -81,6 +81,21 @@ enshwick = { git = "https://github.com/enshwick/enshwick", rev = "<commit>" }
 The mod loads while that loader has the commit's major and its minor or
 a newer one.
 
+## How do I write a headed struct in Rust?
+
+A later minor appends fields to a headed struct, so Rust code outside the
+API cannot write one as a struct expression. `enshwick::abi::headed!` writes it
+with the fields it names and the header of this side. Every other field is
+zero, as a writer of an older minor leaves it. `Headed::blank` gives the
+same value to set field by field.
+
+```rust
+use enshwick::abi::TickData;
+
+let tick = enshwick::abi::headed!(TickData { step: 7 });
+assert_eq!(tick.step, 7);
+```
+
 ## How does `enshwick` version its API?
 
 The `enshwick` crate follows [SemVer](https://semver.org) for its Rust API.

@@ -3,7 +3,6 @@
 
 use enshwick_core::__fake::IMAGE_FIELDS;
 use enshwick_core::__fake::ids;
-use enshwick_core::abi::Header;
 use enshwick_core::abi::ItemTypeInfo;
 use enshwick_core::abi::ResourceKey;
 use enshwick_core::abi::Status;
@@ -37,6 +36,8 @@ pub(crate) struct ContentPresets {
     pub(crate) recipe_kinds: rustc_hash::FxHashMap<u32, enshwick_core::abi::RecipeKind>,
     pub(crate) missing_rates: rustc_hash::FxHashSet<enshwick_core::abi::RateId>,
 }
+
+impl enshwick_base::facts::sealed::Sealed for FakeHost {}
 
 /// The facts the builder holds, so a test lays out its blobs by the same
 /// layouts the mod resolves.
@@ -285,15 +286,14 @@ impl FakeHost {
     pub fn item(mut self, item: enshwick_core::ItemId, max_stack: u16, flags: u32) -> Self {
         self.content.items.insert(
             item.get(),
-            ItemTypeInfo {
-                header: Header::of::<ItemTypeInfo>(),
+            enshwick_core::headed!(ItemTypeInfo {
                 id: item,
                 max_stack,
                 category: 0,
                 rarity: 0,
                 flags,
                 placed_entity: Guid::NIL,
-            },
+            }),
         );
         self
     }
@@ -675,8 +675,7 @@ impl Installed {
     /// assert!(loader.live_changes().is_empty());
     /// let api = loader.api();
     /// let declare = |field, select, entry| {
-    ///     let change = DataChange {
-    ///         header: Header::of::<DataChange>(),
+    ///     let change = enshwick::abi::headed!(DataChange {
     ///         entry,
     ///         field,
     ///         op: ChangeOp::TIMES,
@@ -685,7 +684,7 @@ impl Installed {
     ///         item: Guid::NIL,
     ///         select,
     ///         categories: 0,
-    ///     };
+    ///     });
     ///     let mut id = ChangeId(0);
     ///     // SAFETY: the fake's table lives for the process; `change` and
     ///     // `id` are locals alive for the call.

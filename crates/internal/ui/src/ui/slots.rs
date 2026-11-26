@@ -1,9 +1,9 @@
 //! Item slots in the game's style, and the slot of the game's own inventory
 //! screen under the cursor.
 
+use crate::ItemId;
 use crate::abi::UiWidget;
 use crate::inventory::{InventoryCategory, Slot, SlotRef};
-use crate::{Entity, ItemId};
 
 use super::Frame;
 
@@ -60,12 +60,12 @@ impl Frame<'_> {
     /// }
     /// ```
     pub fn item_slot(&mut self, item: ItemId, count: u32) -> SlotInput {
-        let mut widget = UiWidget {
+        let mut widget = enshwick_abi::headed!(UiWidget {
             kind: UiWidget::ITEM_SLOT,
             item,
             count,
             ..UiWidget::EMPTY
-        };
+        });
         let status = (self.host.api().ui_widget)(self.host.handle(), self.token, &raw mut widget);
         if status.is_ok() {
             SlotInput::from_raw(widget.result)
@@ -104,12 +104,14 @@ impl Frame<'_> {
     #[must_use]
     pub fn hovered_slot(&self) -> Option<Slot> {
         let raw = &self.raw;
-        (raw.hovered_slot != 0).then(|| Slot {
-            at: SlotRef(raw.hovered_slot),
-            category: InventoryCategory::INVALID,
-            item: raw.hovered_item,
-            count: raw.hovered_count,
-            pide: (raw.hovered_pide != Entity(0)).then_some(raw.hovered_pide),
+        (raw.hovered_slot != 0).then(|| {
+            Slot::new(
+                SlotRef(raw.hovered_slot),
+                InventoryCategory::INVALID,
+                raw.hovered_item,
+                raw.hovered_count,
+                (!raw.hovered_pide.is_none()).then_some(raw.hovered_pide),
+            )
         })
     }
 }

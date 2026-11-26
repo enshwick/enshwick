@@ -16,16 +16,16 @@
 //! # Examples
 //!
 //! ```
-//! use enshwick::vetoes::BuildVerdict;
+//! use enshwick::vetoes::Verdict;
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     const FORBIDDEN_RECIPE: enshwick::RecipeId = enshwick::RecipeId::new(0x51);
 //!     load.on_craft(|craft| craft.recipe_id != FORBIDDEN_RECIPE)?;
 //!     load.on_build(|placement| {
 //!         if placement.position[1] >= 0.0 {
-//!             BuildVerdict::Allow
+//!             Verdict::Pass
 //!         } else {
-//!             BuildVerdict::refuse_because("build.below_sea")
+//!             Verdict::refuse_because("build.below_sea")
 //!         }
 //!     })
 //! }
@@ -38,8 +38,9 @@ use std::borrow::Cow;
 use crate::Off;
 use crate::abi::{BuildCheck, CraftCheck, Str};
 use crate::game_events::CraftRecipeEvent;
-use crate::script::{Answer, Error, Ty, Value};
 use crate::{Entity, ItemId, PlayerKey};
+
+pub use enshwick_base::vetoes::Verdict;
 
 pub(crate) mod script;
 
@@ -70,7 +71,7 @@ pub struct Placement {
 
 unsafe extern "system" fn run_craft<F>(call: *const CraftCheck, user: *mut c_void) -> u8
 where
-    F: Fn(&CraftRecipeEvent) -> bool,
+    F: Fn(&CraftRecipeEvent) -> Verdict,
 {
     // SAFETY: the loader passes a valid call for the duration of this one.
     let Some(call) = (unsafe { call.as_ref() }) else {
@@ -78,71 +79,20 @@ where
     };
     let request = enshwick_base::__internal::craft_recipe_event(
         call.crafting_operator_id,
-        Entity::from_raw(call.crafting_station_id.0),
+        Entity::from_raw(call.crafting_station_id.get()),
         call.recipe_id,
         call.recipe_amount,
     );
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let filter = unsafe { &*user.cast::<F>() };
-    crate::host::verdict(crate::host::guard(
-        "panic in a craft filter",
-        || true,
-        || filter(&request),
-    ))
-}
-
-/// What a build filter answers for a placement, from [`Load::on_build`](../struct.Load.html#method.on_build).
-///
-/// From Luau a filter answers `false` to refuse, a string to refuse with
-/// that reason, and nil or `true` to allow; any other value refuses, and a
-/// script error allows. The name is enshwick's.
-///
-/// # Examples
-///
-/// See the [module](self).
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum BuildVerdict {
-    /// The placement goes on as the game's check decided.
-    Allow,
-    /// The placement is refused, as one without building permission.
-    Refuse,
-    /// The placement is refused, and the builder reads why: a key of the
-    /// mod's texts, shown in the player's language, or plain words, at most
-    /// 120 bytes.
-    RefuseBecause(Cow<'static, str>),
-}
-
-impl BuildVerdict {
-    /// A refusal the builder reads `reason` for; a `&'static str` costs no
-    /// allocation, as the cursor check needs.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
-    #[must_use]
-    pub fn refuse_because(reason: impl Into<Cow<'static, str>>) -> Self {
-        Self::RefuseBecause(reason.into())
-    }
-}
-
-impl From<bool> for BuildVerdict {
-    fn from(allowed: bool) -> Self {
-        if allowed { Self::Allow } else { Self::Refuse }
-    }
-}
-
-impl Answer for BuildVerdict {
-    const TY: &'static Ty = &Ty::Data;
-
-    fn from_answer(answer: Result<Value, Error>) -> Self {
-        match answer {
-            Ok(Value::Nil | Value::Bool(true)) | Err(_) => Self::Allow,
-            Ok(Value::String(reason)) => Self::RefuseBecause(reason.into()),
-            // A mistyped answer refuses, so the author sees it at once.
-            Ok(_) => Self::Refuse,
-        }
-    }
+    crate::host::verdict(
+        crate::host::guard(
+            "panic in a craft filter",
+            || Verdict::Pass,
+            || filter(&request),
+        )
+        .passes(),
+    )
 }
 
 thread_local! {
@@ -153,7 +103,7 @@ thread_local! {
 
 unsafe extern "system" fn run_build<F>(call: *const BuildCheck, user: *mut c_void) -> u8
 where
-    F: Fn(&Placement) -> BuildVerdict,
+    F: Fn(&Placement) -> Verdict,
 {
     // SAFETY: the loader passes a valid call for the duration of this one.
     let Some(call) = (unsafe { call.as_ref() }) else {
@@ -170,13 +120,11 @@ where
     let filter = unsafe { &*user.cast::<F>() };
     let verdict = crate::host::guard(
         "panic in a build filter",
-        || BuildVerdict::Allow,
+        || Verdict::Pass,
         || filter(&placement),
     );
-    let reason = match verdict {
-        BuildVerdict::Allow => return crate::abi::FILTER_PASS,
-        BuildVerdict::Refuse => return crate::abi::FILTER_REFUSE,
-        BuildVerdict::RefuseBecause(reason) => reason,
+    let Verdict::RefuseBecause(reason) = verdict else {
+        return crate::host::verdict(verdict.passes());
     };
     if call.reason.is_null() {
         return crate::abi::FILTER_REFUSE;
@@ -198,45 +146,56 @@ where
 pub trait LoadMethods {
     /// As `Load::on_craft`.
     #[doc(hidden)]
-    fn on_craft<F>(&mut self, filter: F) -> Result<(), Off>
+    fn on_craft<F, V>(&mut self, filter: F) -> Result<(), Off>
     where
-        F: Fn(&CraftRecipeEvent) -> bool + Send + Sync + 'static;
+        F: Fn(&CraftRecipeEvent) -> V + Send + Sync + 'static,
+        V: Into<Verdict>;
 
     /// As `Load::on_build`.
     #[doc(hidden)]
     fn on_build<F, V>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&Placement) -> V + Send + Sync + 'static,
-        V: Into<BuildVerdict>;
+        V: Into<Verdict>;
 }
 
 impl LoadMethods for crate::BaseLoad {
-    fn on_craft<F>(&mut self, filter: F) -> Result<(), Off>
+    fn on_craft<F, V>(&mut self, filter: F) -> Result<(), Off>
     where
-        F: Fn(&CraftRecipeEvent) -> bool + Send + Sync + 'static,
+        F: Fn(&CraftRecipeEvent) -> V + Send + Sync + 'static,
+        V: Into<Verdict>,
     {
-        let host = self.host();
-        crate::load::hand_over(
-            filter,
-            |user| (host.api().craft_filter)(host.handle(), Some(run_craft::<F>), user),
-            "craft filter",
-        )
+        craft_filter(self, move |request| filter(request).into())
     }
 
     fn on_build<F, V>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&Placement) -> V + Send + Sync + 'static,
-        V: Into<BuildVerdict>,
+        V: Into<Verdict>,
     {
         build_filter(self, move |placement| filter(placement).into())
     }
+}
+
+/// Hands `filter` to the loader's craft check, for `Load::on_craft` and its
+/// script form.
+pub(crate) fn craft_filter<F>(load: &crate::BaseLoad, filter: F) -> Result<(), Off>
+where
+    F: Fn(&CraftRecipeEvent) -> Verdict + Send + Sync + 'static,
+{
+    let host = load.host();
+    crate::load::hand_over(
+        filter,
+        |user| (host.api().craft_filter)(host.handle(), Some(run_craft::<F>), user),
+        "craft filter",
+    )
 }
 
 /// Hands `filter` to the loader's build check, for `Load::on_build` and its
 /// script form.
 pub(crate) fn build_filter<F>(load: &crate::BaseLoad, filter: F) -> Result<(), Off>
 where
-    F: Fn(&Placement) -> BuildVerdict + Send + Sync + 'static,
+    F: Fn(&Placement) -> Verdict + Send + Sync + 'static,
 {
     let host = load.host();
     crate::load::hand_over(
@@ -244,23 +203,4 @@ where
         |user| (host.api().build_filter)(host.handle(), Some(run_build::<F>), user),
         "build filter",
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_script_s_mistyped_answer_refuses_and_its_error_allows() {
-        let answer = BuildVerdict::from_answer;
-        assert_eq!(answer(Ok(Value::Nil)), BuildVerdict::Allow);
-        assert_eq!(answer(Ok(Value::Bool(true))), BuildVerdict::Allow);
-        assert_eq!(answer(Ok(Value::Bool(false))), BuildVerdict::Refuse);
-        assert_eq!(
-            answer(Ok(Value::String("build.below_sea".to_owned()))),
-            BuildVerdict::refuse_because("build.below_sea")
-        );
-        assert_eq!(answer(Ok(Value::Number(1.0))), BuildVerdict::Refuse);
-        assert_eq!(answer(Err(Error::new("boom"))), BuildVerdict::Allow);
-    }
 }

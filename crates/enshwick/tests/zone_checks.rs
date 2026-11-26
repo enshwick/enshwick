@@ -94,12 +94,6 @@ mod tests {
         let loader = started();
         assert_eq!(grouping(), None);
         loader.set_grouping(17, 16);
-        assert_eq!(
-            grouping(),
-            Some(Grouping {
-                zones: 17,
-                bases: 16
-            })
-        );
+        assert_eq!(grouping(), Some(Grouping::new(17, 16)));
     }
 }

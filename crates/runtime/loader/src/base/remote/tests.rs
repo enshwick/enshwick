@@ -28,11 +28,11 @@ fn a_run_s_object_with_unknown_flags_or_an_endless_position_reads_as_none() {
             id: "you.safes".into(),
             action: "switch".into(),
             args: String::new(),
-            target: Some(ActionTarget {
+            target: Some(enshwick_abi::headed!(ActionTarget {
                 flags,
                 position: [x, 0.0, 0.0],
                 ..ActionTarget::NONE
-            }),
+            })),
         };
         match Message::read(message.kind(), &message.body()) {
             Some(Message::ActionRun { target, .. }) => target,
@@ -59,11 +59,11 @@ fn an_entity_only_run_with_junk_position_bytes_writes_back_to_its_own_message() 
         id: "a".into(),
         action: "b".into(),
         args: String::new(),
-        target: Some(ActionTarget {
+        target: Some(enshwick_abi::headed!(ActionTarget {
             flags: ActionTarget::ENTITY,
-            entity: enshwick_core::Entity(7),
+            entity: enshwick_core::Entity::from_engine(7),
             ..ActionTarget::NONE
-        }),
+        })),
     }
     .body();
     let at = body.len() - 24;
@@ -137,12 +137,12 @@ fn messages_round_trip() {
             id: "you.safes".into(),
             action: "switch".into(),
             args: String::new(),
-            target: Some(ActionTarget {
+            target: Some(enshwick_abi::headed!(ActionTarget {
                 flags: ActionTarget::ENTITY | ActionTarget::POSITION,
-                entity: enshwick_core::Entity(4096),
+                entity: enshwick_core::Entity::from_engine(4096),
                 position: [10.5, -2.0, 7.25],
                 ..ActionTarget::NONE
-            }),
+            })),
         },
     ] {
         assert_eq!(

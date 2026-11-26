@@ -9,7 +9,7 @@ mod tests {
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
 
-    use enshwick::abi::{Header, PlayerData, PlayerInfo, Status, TickData};
+    use enshwick::abi::{PlayerData, PlayerInfo, Status, TickData};
     use enshwick::config::{Field, Schema};
     use enshwick::events::{PlayerJoined, SettingsChanged, SettingsReplaced, Ticked, WorldSaved};
     use enshwick::test::{FakeHost, Installed};
@@ -41,15 +41,14 @@ mod tests {
     fn player(entity: u32, key: u64, name: &str) -> PlayerInfo {
         let mut bytes = [0u8; PlayerInfo::NAME_MAX];
         bytes[..name.len()].copy_from_slice(name.as_bytes());
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick::abi::headed!(PlayerInfo {
             slot: entity,
-            entity: enshwick::Entity(entity),
+            entity: enshwick::Entity::from_engine(entity),
             key: enshwick::PlayerKey::new(key),
             permissions: 0,
             name_len: u32::try_from(name.len()).unwrap(),
             name: bytes,
-        }
+        })
     }
 
     fn run_with(main: &str, limits: Limits, scripts: Scripts) -> (Installed, Status) {
@@ -90,12 +89,11 @@ mod tests {
     }
 
     fn joined(entity: u32, key: u64) -> PlayerData {
-        PlayerData {
-            header: Header::of::<PlayerData>(),
+        enshwick::abi::headed!(PlayerData {
             slot: 0,
-            entity: enshwick::Entity(entity),
+            entity: enshwick::Entity::from_engine(entity),
             key: enshwick::PlayerKey::new(key),
-        }
+        })
     }
 
     fn tick(loader: &Installed) {
@@ -480,8 +478,8 @@ mod tests {
         let key = enshwick::PlayerKey::new(7);
         let (loader, status) = run_full(
             r#"enshwick.on("WorldSaved", function()
-                enshwick.map.uncover("7", {100, -50}, 25)
-                local ok = pcall(enshwick.map.uncover, "7", {0, 0}, 0)
+                enshwick.map.uncover("7", vector.create(100, 0, -50), 25)
+                local ok = pcall(enshwick.map.uncover, "7", vector.create(0, 0, 0), 0)
                 enshwick.log.info(`zero radius {ok}`)
                 local id = enshwick.content.content_id("05050505-0505-0505-0505-050505050505")
                 local name = enshwick.content.item_name("05050505-0505-0505-0505-050505050505")

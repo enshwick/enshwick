@@ -108,7 +108,7 @@ impl Play {
             Place::On(entity) => (SoundPlay::ON, entity, [0.0; 3]),
             Place::Music => (SoundPlay::MUSIC, Entity::NONE, [0.0; 3]),
         };
-        SoundPlay {
+        enshwick_abi::headed!(SoundPlay {
             container: self.container.guid(),
             place,
             entity,
@@ -116,7 +116,7 @@ impl Play {
             volume: self.volume.unwrap_or(1.0),
             fade_in_ms: millis(self.fade_in),
             ..SoundPlay::EMPTY
-        }
+        })
     }
 }
 
@@ -246,11 +246,11 @@ impl SoundHandle {
     /// See [`SoundHandle`].
     #[script]
     pub fn stop(self, fade: Duration) -> Result<(), Off> {
-        self.steer(SoundSteer {
+        self.steer(enshwick_abi::headed!(SoundSteer {
             kind: SoundSteer::STOP,
             fade_ms: millis(fade),
             ..SoundSteer::EMPTY
-        })
+        }))
     }
 
     /// Changes the sound's volume to `volume`, 0 to 1, over `fade`.
@@ -265,12 +265,12 @@ impl SoundHandle {
     /// See [`SoundHandle`].
     #[script]
     pub fn set_volume(self, volume: f32, fade: Duration) -> Result<(), Off> {
-        self.steer(SoundSteer {
+        self.steer(enshwick_abi::headed!(SoundSteer {
             kind: SoundSteer::VOLUME,
             volume,
             fade_ms: millis(fade),
             ..SoundSteer::EMPTY
-        })
+        }))
     }
 
     /// Moves a sound in the world to `at`, in metres; a sound that followed
@@ -291,11 +291,11 @@ impl SoundHandle {
     /// ```
     #[script]
     pub fn set_position(self, at: [f64; 3]) -> Result<(), Off> {
-        self.steer(SoundSteer {
+        self.steer(enshwick_abi::headed!(SoundSteer {
             kind: SoundSteer::POSITION,
             at,
             ..SoundSteer::EMPTY
-        })
+        }))
     }
 
     /// Whether the sound is queued or playing.
@@ -320,10 +320,10 @@ impl SoundHandle {
         let Some(host) = crate::host() else {
             return SoundState::Ended;
         };
-        let mut raw = SoundInfo {
+        let mut raw = enshwick_abi::headed!(SoundInfo {
             state: SoundInfo::ENDED,
             ..SoundInfo::EMPTY
-        };
+        });
         let status = (host.api().sound_state)(host.handle(), self.0, &raw mut raw);
         if status == Status::OK {
             SoundState::from_raw(raw)
@@ -408,11 +408,11 @@ pub fn play(play: Play) -> Result<SoundHandle, Off> {
 pub fn stop_all(fade: Duration) -> Result<(), Off> {
     steer_raw(
         0,
-        SoundSteer {
+        enshwick_abi::headed!(SoundSteer {
             kind: SoundSteer::STOP_ALL,
             fade_ms: millis(fade),
             ..SoundSteer::EMPTY
-        },
+        }),
     )
 }
 
@@ -498,8 +498,11 @@ mod tests {
             (at.place, at.at, at.entity),
             (SoundPlay::AT, [1.0, 2.0, 3.0], Entity::NONE)
         );
-        let on = Play::new(BELL, Place::On(Entity(9))).raw();
-        assert_eq!((on.place, on.entity), (SoundPlay::ON, Entity(9)));
+        let on = Play::new(BELL, Place::On(Entity::from_engine(9))).raw();
+        assert_eq!(
+            (on.place, on.entity),
+            (SoundPlay::ON, Entity::from_engine(9))
+        );
         assert_eq!(Play::new(BELL, Place::Music).raw().place, SoundPlay::MUSIC);
         assert_eq!(Play::new(BELL, Place::Screen).raw().volume, 1.0);
     }
@@ -512,10 +515,12 @@ mod tests {
 
     #[test]
     fn every_failure_reason_reads_back_as_its_state() {
-        let failed = |reason| SoundInfo {
-            state: SoundInfo::FAILED,
-            reason,
-            ..SoundInfo::EMPTY
+        let failed = |reason| {
+            enshwick_abi::headed!(SoundInfo {
+                state: SoundInfo::FAILED,
+                reason,
+                ..SoundInfo::EMPTY
+            })
         };
         assert_eq!(
             SoundState::from_raw(failed(SoundInfo::NO_SCENE)),
@@ -529,10 +534,10 @@ mod tests {
             SoundState::from_raw(failed(SoundInfo::FOLLOW_FULL)),
             SoundState::Failed(PlayFailure::FollowFull)
         );
-        let unknown = SoundInfo {
+        let unknown = enshwick_abi::headed!(SoundInfo {
             state: 9,
             ..SoundInfo::EMPTY
-        };
+        });
         assert_eq!(SoundState::from_raw(unknown), SoundState::Ended);
     }
 }

@@ -42,13 +42,14 @@ mod tests {
             ))?;
             let odd =
                 load.add_experience(NewExperience::new(ODD, ExperienceSourceType::Other(7), 7))?;
-            load.add_knowledge(NewKnowledge {
-                experience: Some(shrine),
-                ..NewKnowledge::new(
+            load.add_knowledge({
+                let mut value = NewKnowledge::new(
                     Id::new("you.lore:shrine"),
                     Scope::Player,
                     KnowledgeType::Bool,
-                )
+                );
+                value.experience = Some(shrine);
+                value
             })?;
             let again =
                 load.add_experience(NewExperience::new(SHRINE, ExperienceSourceType::Quest, 300))?;
@@ -142,21 +143,21 @@ mod tests {
         assert_eq!(
             vanilla,
             [
-                ExperienceBalanceValue {
-                    value: ExperienceValue::new(VANILLA_EXPERIENCE),
-                    source: ExperienceSourceType::Mining,
-                    gain: 5,
-                },
-                ExperienceBalanceValue {
-                    value: ExperienceValue::new(VANILLA_QUEST_EXPERIENCE),
-                    source: ExperienceSourceType::Quest,
-                    gain: 600,
-                },
-                ExperienceBalanceValue {
-                    value: ExperienceValue::new(VANILLA_UNNAMED_EXPERIENCE),
-                    source: ExperienceSourceType::Other(9),
-                    gain: 2,
-                },
+                ExperienceBalanceValue::new(
+                    ExperienceValue::new(VANILLA_EXPERIENCE),
+                    ExperienceSourceType::Mining,
+                    5
+                ),
+                ExperienceBalanceValue::new(
+                    ExperienceValue::new(VANILLA_QUEST_EXPERIENCE),
+                    ExperienceSourceType::Quest,
+                    600
+                ),
+                ExperienceBalanceValue::new(
+                    ExperienceValue::new(VANILLA_UNNAMED_EXPERIENCE),
+                    ExperienceSourceType::Other(9),
+                    2
+                ),
             ]
         );
 

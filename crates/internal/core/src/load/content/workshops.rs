@@ -36,10 +36,9 @@ impl Load<'_> {
     /// const BENCH: Id = id!("bench");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let bench = load.add_workshop(NewWorkshop {
-    ///         recipe_cost: Some(1),
-    ///         ..NewWorkshop::new(BENCH, stations::WORKBENCH)
-    ///     })?;
+    ///     let mut workshop_2 = NewWorkshop::new(BENCH, stations::WORKBENCH);
+    ///     workshop_2.recipe_cost = Some(1);
+    ///     let bench = load.add_workshop(workshop_2)?;
     ///     assert_eq!(bench.guid(), BENCH.part("workshop").guid());
     ///     Ok(())
     /// }

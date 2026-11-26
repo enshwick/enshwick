@@ -178,7 +178,7 @@ impl Targets {
         // a quiet moment, so no system writes it now; `resolve` checked that
         // the u32 at `entity_at` lies inside the type's size.
         let entity = unsafe { crate::raw::read_at::<u32>(out.cast(), self.0.entity_at) };
-        Ok((entity != 0).then_some(Entity(entity)))
+        Ok((entity != 0).then_some(Entity::from_engine(entity)))
     }
 }
 
@@ -385,8 +385,7 @@ impl ObjectPrompt {
 
     /// The ABI form for objects placed from `item`.
     fn raw(self, item: ItemId) -> crate::abi::InteractionPrompt {
-        crate::abi::InteractionPrompt {
-            header: crate::abi::Header::of::<crate::abi::InteractionPrompt>(),
+        enshwick_abi::headed!(crate::abi::InteractionPrompt {
             item,
             verb: self.verb.map_or(0, Verb::id),
             text: self.text.map_or(0, crate::content::Guid::fnv1a),
@@ -395,7 +394,7 @@ impl ObjectPrompt {
             } else {
                 0
             },
-        }
+        })
     }
 }
 
@@ -519,7 +518,7 @@ impl Interaction {
     ///     i.item != Some(LOCKED_CHEST)
     /// }
     ///
-    /// let open = Interaction::new(Kind::Open, Entity(4096), Entity(5000));
+    /// let open = Interaction::new(Kind::Open, Entity::from_engine(4096), Entity::from_engine(5000));
     /// assert!(allowed(&open));
     /// assert!(!allowed(&open.with_item(LOCKED_CHEST).with_position([1.0, 2.0, 3.0])));
     /// ```

@@ -80,7 +80,7 @@ entries! {
             _ => return Err(Status::BAD_ARGS.into()),
         };
         let (id, kind, value) = (change.id.get(), u32::from(change.kind), change.value);
-        match (change.account.get(), change.entity.0) {
+        match (change.account.get(), change.entity.get()) {
             (0, entity) if revoke => crate::knowledge::store::changes::revoke(loader, entity, id, kind, value)?,
             (0, entity) => crate::knowledge::store::grant(loader, entity, id, kind, value)?,
             (account, 0) => crate::knowledge::store::changes::for_account(loader, account, id, kind, value, revoke)?,
@@ -96,7 +96,7 @@ entries! {
             api_frame::KnowledgeChange::SHOWN => Notice::Shown,
             _ => return Err(Status::BAD_ARGS.into()),
         };
-        set(loader, entity.0, id.get(), value, notice)?;
+        set(loader, entity.get(), id.get(), value, notice)?;
         Ok(())
     }
 
@@ -109,7 +109,7 @@ entries! {
     }
 
     fn progress_write(me as Mod, entity: Entity, what: u32, value: u32) -> Status {
-        crate::knowledge::progress::write(me.loader, me.index, entity.0, what, value)?;
+        crate::knowledge::progress::write(me.loader, me.index, entity.get(), what, value)?;
         Ok(())
     }
 }

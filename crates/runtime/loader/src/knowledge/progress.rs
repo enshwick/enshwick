@@ -8,8 +8,8 @@ use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
 
 use enshwick_core::abi::{
-    Comfort, ComfortFilterFn, ExperienceFilterFn, ExperiencePass, ExperienceRow, Header, HookFlags,
-    Side, SkillCheck, SkillCheckFn,
+    Comfort, ComfortFilterFn, ExperienceFilterFn, ExperiencePass, ExperienceRow, HookFlags, Side,
+    SkillCheck, SkillCheckFn,
 };
 
 use crate::engine::chains::{Next, Onward};
@@ -338,13 +338,12 @@ unsafe fn override_skill(onward: &Onward<u8, impl Fn() -> u8>, node: u32) -> u8 
         }
     });
     let vanilla = onward.call();
-    let check = SkillCheck {
-        header: Header::of::<SkillCheck>(),
+    let check = enshwick_abi::headed!(SkillCheck {
         node: enshwick_core::abi::SkillNode::new(node),
         gate,
         unlocked: u8::from(vanilla != 0),
         reserved: [0; 3],
-    };
+    });
     let Some(skills) = SKILLS.sealed() else {
         return vanilla;
     };
@@ -384,12 +383,11 @@ unsafe extern "system" fn register(
         };
         let mut value = comfort;
         COMFORT.each(|callback, user| {
-            let call = Comfort {
-                header: Header::of::<Comfort>(),
+            let call = enshwick_abi::headed!(Comfort {
                 category,
                 value,
                 position: at.map(f64::from),
-            };
+            });
             // SAFETY: the filter's mod runs, so its DLL that holds the
             // callback stays loaded; it gets the user pointer its mod
             // registered, and `call` lives on this stack for the call.
@@ -549,14 +547,13 @@ unsafe fn experience(loader: &Loader, engine: &Engine, ctx: *mut u64) {
             // while it runs.
             let level_cap = unsafe { (levels.level_cap)(balancing) };
             EXPERIENCE_FILTERS.each(|callback, user| {
-                let mut pass = ExperiencePass {
-                    header: Header::of::<ExperiencePass>(),
+                let mut pass = enshwick_abi::headed!(ExperiencePass {
                     rows: rows.as_mut_ptr(),
                     row_count: u32::try_from(rows.len()).unwrap_or(u32::MAX),
                     level_cap,
                     need_for: Some(need_for),
                     token: (&raw mut token).cast(),
-                };
+                });
                 // SAFETY: the filter's mod runs, so its DLL that holds the
                 // callback stays loaded; it gets the user pointer its mod
                 // registered; `pass`, the rows and `token` live on this thread
@@ -582,7 +579,7 @@ unsafe fn experience(loader: &Loader, engine: &Engine, ctx: *mut u64) {
                 let Some((row, old)) = rows
                     .iter()
                     .zip(before.iter())
-                    .find(|(r, _)| r.entity == enshwick_core::Entity(entity))
+                    .find(|(r, _)| r.entity == enshwick_core::Entity::from_engine(entity))
                 else {
                     continue;
                 };
@@ -653,7 +650,7 @@ unsafe fn read_row(
     Some(ExperienceRow {
         // SAFETY: `ctx` is the live query context of `player_level`, used on
         // its thread while it runs (the caller's contract).
-        entity: enshwick_core::Entity(unsafe { engine.entity(ctx) }),
+        entity: enshwick_core::Entity::from_engine(unsafe { engine.entity(ctx) }),
         level,
         progress,
         need,

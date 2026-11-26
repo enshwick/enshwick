@@ -98,6 +98,7 @@ fn is_pe(bytes: &[u8]) -> bool {
 ///
 /// See the [module](self).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[non_exhaustive]
 pub enum Peer {
     /// The server, as a client sees it.
     Server,
@@ -395,6 +396,10 @@ impl Channel<Data> {
 /// The free functions of [`net`](self) as a script's namespace `net`.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a unit marker, which never gains a field"
+)]
 pub struct NetFns;
 
 impl crate::script::Bound for NetFns {

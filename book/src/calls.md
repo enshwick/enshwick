@@ -5,9 +5,6 @@ description: One mod declares a typed call, another serves it, and any mod calls
 
 # Calls between mods
 
-Unstable: everything in this chapter needs the `unstable` feature and may
-change in any release ([Stability](stability.md)).
-
 A **call** is a described service: one function from an input struct to an
 answer, served by one mod and called by others.
 
@@ -115,13 +112,13 @@ then gives a `Caller`. It is `Copy` and runs the call from any thread:
 #     pub item: u32,
 #     pub count: u32,
 # }
-use enshwick::services::CallError;
+use enshwick::services::CallServiceError;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let price_of = load.caller::<PriceOf>()?;
     load.on::<enshwick::events::WorldLoaded>(move |_| match price_of.call(&PriceOf { item: 7, count: 1 }) {
         Ok(coins) => enshwick::info!("item 7 sells for {coins}"),
-        Err(CallError::Unmatched) => enshwick::info!("no trading post here"),
+        Err(CallServiceError::Unmatched) => enshwick::info!("no trading post here"),
         Err(other) => enshwick::warn!("the trading post: {other}"),
     })
 }
@@ -130,9 +127,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 The loader matches the caller with the server by name and major, once every
 mod is initialised. The input and the answer must agree field by field and in
 size. Without a match it logs the reason, such as a server that serves another
-major, and every call answers `CallError::Unmatched`. A call to a server
-switched off later answers `CallError::Off`, and a failed handler
-`CallError::Failed`. Declare the server with `after`, or `requires` when
+major, and every call answers `CallServiceError::Unmatched`. A call to a server
+switched off later answers `CallServiceError::Off`, and a failed handler
+`CallServiceError::Failed`. Declare the server with `after`, or `requires` when
 the mod is pointless without it.
 
 A required server initialises first, so the loader matches a call to it at
@@ -187,7 +184,7 @@ The [fake loader](testing.md) serves another mod's call with
 # }
 let loader = enshwick::test::FakeHost::new().install();
 loader.serve_call(|input: &PriceOf| input.item * 10);
-assert_eq!(loader.call(&PriceOf { item: 1 }), Err(enshwick::services::CallError::Unmatched));
+assert_eq!(loader.call(&PriceOf { item: 1 }), Err(enshwick::services::CallServiceError::Unmatched));
 ```
 
 ## From Luau

@@ -12,8 +12,7 @@ use crate::abi::{Header, ManifestFlags, Side, Str};
 /// ```
 /// use enshwick::abi::{Header, ManifestFlags, ModInfo, Side, Str};
 ///
-/// let post = ModInfo {
-///     header: Header::of::<ModInfo>(),
+/// let post = enshwick::abi::headed!(ModInfo {
 ///     id: Str::new("you.trading-post"),
 ///     version: Str::new("0.1.0"),
 ///     side: Side::BOTH,
@@ -26,11 +25,12 @@ use crate::abi::{Header, ManifestFlags, Side, Str};
 ///     author_count: 0,
 ///     license: Str::new("MIT"),
 ///     homepage: Str::EMPTY,
-/// };
+/// });
 /// assert_eq!(post.off, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct ModInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -74,7 +74,7 @@ impl ModInfo {
     /// ```
     /// use enshwick::abi::{ModInfo, Str};
     ///
-    /// let post = ModInfo { id: Str::new("you.trading-post"), ..ModInfo::EMPTY };
+    /// let post = enshwick::abi::headed!(ModInfo { id: Str::new("you.trading-post"), ..ModInfo::EMPTY });
     /// assert!(post.version.is_empty());
     /// ```
     pub const EMPTY: Self = Self {
@@ -115,11 +115,12 @@ unsafe impl Sync for ModInfo {}
 /// ```
 /// use enshwick::abi::{Header, LoaderOff};
 ///
-/// let off = LoaderOff { header: Header::of::<LoaderOff>(), ..LoaderOff::EMPTY };
+/// let off = enshwick::abi::headed!(LoaderOff { ..LoaderOff::EMPTY });
 /// assert_eq!(off.at, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct LoaderOff {
     /// Size and version of this struct.
     pub header: Header,
@@ -163,6 +164,10 @@ unsafe impl Sync for LoaderOff {}
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct ModHandle(pub usize);
 
 impl ModHandle {

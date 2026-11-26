@@ -2,7 +2,7 @@
 //! core nor the facade re-exports it.
 
 use crate::__load::*;
-use crate::abi::{Header, ItemTypeInfo, StatSpec};
+use crate::abi::{ItemTypeInfo, StatSpec};
 use crate::content::items::StatFormat;
 #[cfg(feature = "typed")]
 use crate::content::knowledge::{KnowledgeQuery, KnowledgeTest};
@@ -136,15 +136,14 @@ pub const fn stat_format(format: StatFormat) -> u8 {
 /// item, or while no world runs. Any thread.
 #[must_use]
 pub fn item_data(host: &Host, item: ItemId) -> Option<ItemTypeInfo> {
-    let mut out = ItemTypeInfo {
-        header: Header::of::<ItemTypeInfo>(),
+    let mut out = enshwick_abi::headed!(ItemTypeInfo {
         id: ItemId::new(0),
         max_stack: 0,
         category: 0,
         rarity: 0,
         flags: 0,
         placed_entity: Guid::NIL,
-    };
+    });
     let status = (host.api().item_info)(host.handle(), item, &raw mut out);
     status.is_ok().then_some(out)
 }

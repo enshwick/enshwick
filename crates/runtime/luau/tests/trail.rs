@@ -75,25 +75,25 @@ mod tests {
     #[test]
     fn the_trail_gives_its_torch_once_per_player_when_its_quest_completes_and_no_other() {
         use enshwick::abi::{
-            Header, InventoryOpResult, InventoryRequest, InventoryResult, PlayerInfo, QuestData,
+            InventoryOpResult, InventoryRequest, InventoryResult, PlayerInfo, QuestData,
         };
         use enshwick::events::{QuestCompleted, WorldLoaded};
         use enshwick::knowledge::KnowledgeId;
         use enshwick::{Entity, PlayerKey};
+        const ANN: Entity = Entity::from_engine(2);
 
         let data = std::env::temp_dir().join(format!("enshwick-trail-{}", std::process::id()));
         let _gone = std::fs::remove_dir_all(&data);
         let mut name = [0u8; PlayerInfo::NAME_MAX];
         name[..3].copy_from_slice(b"Ann");
-        let ann = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let ann = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: Entity(2),
+            entity: ANN,
             key: PlayerKey::new(7),
             permissions: 0,
             name_len: 3,
             name,
-        };
+        });
         let loader = FakeHost::new()
             .progression()
             .items()
@@ -107,11 +107,7 @@ mod tests {
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
-        let completed = |quest| QuestData {
-            header: Header::of::<QuestData>(),
-            entity: Entity(2),
-            quest,
-        };
+        let completed = |quest| enshwick::abi::headed!(QuestData { entity: ANN, quest });
         let trail = KnowledgeId::from_guid(Id::new("you.trail:trail").guid());
         let logged = |text: &str| loader.logs().iter().any(|(_, line)| line.contains(text));
 
@@ -137,7 +133,7 @@ mod tests {
                 requests[0].ops[0].item,
                 requests[0].ops[0].count
             ),
-            (Entity(2), enshwick::ItemId::from_guid(torch), 1)
+            (ANN, enshwick::ItemId::from_guid(torch), 1)
         );
         assert!(loader.finish_inventory(InventoryResult::TIMED_OUT, &[]));
         assert!(logged("torch not given: TimedOut"), "{:?}", loader.logs());

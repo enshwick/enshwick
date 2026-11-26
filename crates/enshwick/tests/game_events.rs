@@ -74,7 +74,7 @@ mod tests {
         died[8..12].copy_from_slice(&4096u32.to_le_bytes());
         assert_eq!(loader.raise_game_event(DIED, &died), 2);
         assert_eq!(loader.raise_game_event(HIT, &[0; 248]), 1);
-        assert_eq!(*DEAD.lock().unwrap(), [Entity(4096)]);
+        assert_eq!(*DEAD.lock().unwrap(), [Entity::from_engine(4096)]);
         assert_eq!(*EVERY.lock().unwrap(), [DIED, HIT]);
     }
 }

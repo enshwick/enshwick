@@ -36,7 +36,7 @@ pub enum Kind {
 
 impl Kind {
     /// Every kind, in order.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: &'static [Self] = &[
         Self::Point,
         Self::Event,
         Self::Call,
@@ -104,7 +104,7 @@ impl Kind {
     /// ```
     #[must_use]
     pub fn of_word(word: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|kind| kind.word() == word)
+        Self::ALL.iter().copied().find(|kind| kind.word() == word)
     }
 
     /// The kind and local name of `export`, `<kind>:<local name>`; `None`
@@ -135,12 +135,20 @@ impl Kind {
     /// ```
     #[must_use]
     pub fn words() -> String {
-        Self::ALL.map(Self::word).join(", ")
+        Self::ALL
+            .iter()
+            .map(|kind| kind.word())
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 }
 
 /// One exported declaration in the section.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "hidden: the loader and cargo-enshwick read it from a mod's section"
+)]
 pub struct Entry<'a> {
     /// What it declares.
     pub kind: Kind,
@@ -194,6 +202,10 @@ impl<'a> Entry<'a> {
 /// # Ok::<(), enshwick::schema_section::ReadSectionError>(())
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "hidden: the loader and cargo-enshwick read it from a mod's section"
+)]
 pub struct Head<'a> {
     /// Its text, the start of the mod's schema text.
     pub text: &'a str,
@@ -398,8 +410,11 @@ mod tests {
     #[test]
     fn the_macros_know_every_export_kind_and_no_other() {
         assert_eq!(
-            enshwick_macros::__export_kinds!(),
-            super::Kind::ALL.map(super::Kind::word)
+            enshwick_macros::__export_kinds!()[..],
+            super::Kind::ALL
+                .iter()
+                .map(|kind| kind.word())
+                .collect::<Vec<_>>()[..]
         );
     }
 

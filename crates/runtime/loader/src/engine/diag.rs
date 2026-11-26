@@ -210,11 +210,13 @@ pub(crate) fn parts_off_listed() -> Vec<enshwick_core::abi::LoaderOff> {
     with_parts_off(|parts| {
         parts
             .iter()
-            .map(|off| LoaderOff {
-                name: Str::new(&off.part),
-                reason: Str::new(&off.reason),
-                at: off.at,
-                ..LoaderOff::EMPTY
+            .map(|off| {
+                enshwick_abi::headed!(LoaderOff {
+                    name: Str::new(&off.part),
+                    reason: Str::new(&off.reason),
+                    at: off.at,
+                    ..LoaderOff::EMPTY
+                })
             })
             .collect()
     })

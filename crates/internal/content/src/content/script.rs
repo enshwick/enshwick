@@ -202,6 +202,10 @@ fn guid_of(id: &str) -> Result<Guid, Off> {
 /// `content`: vanilla lookups, recipe rules and helpers.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a unit marker, which never gains a field"
+)]
 pub struct Content;
 
 impl crate::script::Bound for Content {
@@ -616,6 +620,7 @@ fn game() -> Result<&'static Vanilla, Off> {
 /// A [`RecipeRule`] a script gives, owning its names.
 #[doc(hidden)]
 #[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub enum Rule {
     /// One recipe, by its name.
     Recipe(String),

@@ -68,11 +68,10 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
         ("chest.name", CHEST_NAME),
         ("chest.description", CHEST_DESCRIPTION),
     ])?;
-    load.add_item(NewItem {
-        name: Some(CHEST_NAME.guid()),
-        description: Some(CHEST_DESCRIPTION.guid()),
-        ..NewItem::new(CHEST, vanilla::item("Prop_Storage_24_T1_Box")?)
-    })
+    let mut item_2 = NewItem::new(CHEST, vanilla::item("Prop_Storage_24_T1_Box")?);
+    item_2.name = Some(CHEST_NAME.guid());
+    item_2.description = Some(CHEST_DESCRIPTION.guid());
+    load.add_item(item_2)
 }
 ```
 
@@ -107,14 +106,7 @@ use enshwick::content::{Id, id, vanilla};
 const CHEST: Id = id!("chest");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    load.add_recipe(NewRecipe {
-        id: CHEST.part("recipe"),
-        like: vanilla::item("Prop_Storage_24_T1_Box")?,
-        output: CHEST.guid(),
-        output_count: 1,
-        cost: 2,
-        workshop: None,
-    })
+    load.add_recipe(NewRecipe::new(CHEST.part("recipe"), vanilla::item("Prop_Storage_24_T1_Box")?, CHEST.guid(), 1, 2))
 }
 ```
 
@@ -184,19 +176,11 @@ impl Mod for TravelChest {
             ("chest.name", CHEST_NAME),
             ("chest.description", CHEST_DESCRIPTION),
         ])?;
-        load.add_item(NewItem {
-            name: Some(CHEST_NAME.guid()),
-            description: Some(CHEST_DESCRIPTION.guid()),
-            ..NewItem::new(CHEST, storage_box)
-        })?;
-        load.add_recipe_with(move || NewRecipe {
-            id: CHEST.part("recipe"),
-            like: storage_box,
-            output: CHEST.guid(),
-            output_count: 1,
-            cost: COST.load(Ordering::Relaxed),
-            workshop: None,
-        })?;
+        let mut item_2 = NewItem::new(CHEST, storage_box);
+        item_2.name = Some(CHEST_NAME.guid());
+        item_2.description = Some(CHEST_DESCRIPTION.guid());
+        load.add_item(item_2)?;
+        load.add_recipe_with(move || NewRecipe::new(CHEST.part("recipe"), storage_box, CHEST.guid(), 1, COST.load(Ordering::Relaxed)))?;
         load.on_settings(|settings: &Settings| {
             COST.store(settings.cost, Ordering::Relaxed);
             if let Err(off) = rebuild_recipes() {

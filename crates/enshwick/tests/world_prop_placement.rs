@@ -45,7 +45,7 @@ mod tests {
                 .item(ItemId::new(32), 1, 0)
                 .item_places(ItemId::new(32), TEMPLATE)
                 .item_not_a_prop(ItemId::new(32))
-                .prop(Entity(40), ITEM, [100.0; 3]);
+                .prop(Entity::from_engine(40), ITEM, [100.0; 3]);
             let (host, world) = start(host);
             let before = host.props();
             let read = world.prop_placement_info(ITEM).unwrap();

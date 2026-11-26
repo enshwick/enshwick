@@ -22,7 +22,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
 use std::thread::LocalKey;
 
-use enshwick_core::abi::{GameEventData, GameEventFn, Header, HookFlags, Side};
+use enshwick_core::abi::{GameEventData, GameEventFn, HookFlags, Side};
 use rustc_hash::FxHashSet;
 
 use crate::engine::chains::Onward;
@@ -735,12 +735,11 @@ fn deliver<S: Scope>(loader: &Loader) {
             continue;
         };
         S::follow(sealed, event.type_hash, payload);
-        let data = GameEventData {
-            header: Header::of::<GameEventData>(),
+        let data = enshwick_abi::headed!(GameEventData {
             type_hash: event.type_hash,
             size: event.size,
             data: payload.as_ptr(),
-        };
+        });
         for subscriber in S::wanted(sealed).subscribers.iter().filter(|s| {
             (s.type_hash == 0 || s.type_hash == event.type_hash)
                 && loader

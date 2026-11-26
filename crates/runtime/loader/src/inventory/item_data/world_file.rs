@@ -62,7 +62,7 @@ pub(super) fn write_file(server: &Server) -> Vec<u8> {
     let values = sorted.into_iter().filter_map(|(&(kind, entity), record)| {
         Some(Saved {
             id: server.kind_id(kind)?,
-            anchor: record.anchor.unwrap_or(Anchor::Session(entity.0)),
+            anchor: record.anchor.unwrap_or(Anchor::Session(entity.get())),
             check: record.item,
             value: &record.value,
             aside: false,
@@ -178,7 +178,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
 fn keep_carried_anchor(held: game::Held, old: Option<Anchor>, slots: &[u32]) -> Option<Anchor> {
     held.anchor.or_else(|| {
         old.filter(|anchor| {
-            matches!(anchor, Anchor::Carried { .. }) && slots.contains(&held.root.0)
+            matches!(anchor, Anchor::Carried { .. }) && slots.contains(&held.root.get())
         })
     })
 }
@@ -197,7 +197,7 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
     // and then no entity value counts as gone.
     let placed: Option<FxHashSet<u32>> = game::transform_type(loader)
         .and_then(|ty| crate::world::entities::with_component(loader, ty).ok())
-        .map(|places| places.iter().map(|p| p.entity.0).collect());
+        .map(|places| places.iter().map(|p| p.entity.get()).collect());
     let characters = crate::engine::world::characters(loader);
     let character_of = |root| crate::engine::world::character_in(&characters, root);
     let slots = crate::engine::world::character_entities(loader).unwrap_or_default();
@@ -214,9 +214,12 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
                 )
             })),
             Some(Scope::Entity) => match &placed {
-                Some(placed) if !placed.contains(&entity.0) => Some(None),
+                Some(placed) if !placed.contains(&entity.get()) => Some(None),
                 Some(_) => template_id(entity).map(|template| {
-                    Some((template, game::placed(loader, entity.0).map(Anchor::Placed)))
+                    Some((
+                        template,
+                        game::placed(loader, entity.get()).map(Anchor::Placed),
+                    ))
                 }),
                 None => None,
             },
@@ -227,7 +230,7 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
             Some(None) => {
                 gone.push(Pending {
                     kind,
-                    anchor: record.anchor.unwrap_or(Anchor::Session(entity.0)),
+                    anchor: record.anchor.unwrap_or(Anchor::Session(entity.get())),
                     check: record.item,
                     value: core::mem::take(&mut record.value),
                     aside: true,

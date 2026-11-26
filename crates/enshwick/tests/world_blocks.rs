@@ -5,7 +5,7 @@ mod tests {
     use std::sync::OnceLock;
 
     use enshwick::Entity;
-    use enshwick::abi::{Header, PlayerInfo, Status, TerrainMaterialInfo, TransactionInfo};
+    use enshwick::abi::{PlayerInfo, Status, TerrainMaterialInfo, TransactionInfo};
     use enshwick::test::FakeChange;
     use enshwick::voxels::{Voxel, VoxelBox, VoxelMaterial, VoxelPos};
     use enshwick::world::{
@@ -39,19 +39,22 @@ mod tests {
     const GUEST: u32 = 4;
 
     fn info(entity: u32, permissions: u32) -> PlayerInfo {
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick::abi::headed!(PlayerInfo {
             slot: entity,
-            entity: Entity(entity),
+            entity: Entity::from_engine(entity),
             key: enshwick::PlayerKey::new(u64::from(entity)),
             permissions,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        }
+        })
     }
 
     fn player(entity: u32) -> Player {
-        WORLD.get().unwrap().player(Entity(entity)).unwrap()
+        WORLD
+            .get()
+            .unwrap()
+            .player(Entity::from_engine(entity))
+            .unwrap()
     }
 
     fn started() -> (enshwick::test::Installed, World) {
@@ -67,15 +70,14 @@ mod tests {
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        loader.set_terrain(&[TerrainMaterialInfo {
-            header: Header::of::<TerrainMaterialInfo>(),
+        loader.set_terrain(&[enshwick::abi::headed!(TerrainMaterialInfo {
             id: 9,
             flags: 0,
             hardness: 3,
             reserved: 0,
             item: DIRT,
             health: 500,
-        }]);
+        })]);
         (loader, *WORLD.get().unwrap())
     }
 
@@ -164,9 +166,10 @@ mod tests {
                 "{shape:?} of {material:?}"
             );
         }
-        let skewed = WorldTransform {
-            orientation: [f32::NAN, 0.0, 0.0, 1.0],
-            ..at
+        let skewed = {
+            let mut value = at;
+            value.orientation = [f32::NAN, 0.0, 0.0, 1.0];
+            value
         };
         assert_eq!(
             world
@@ -257,13 +260,12 @@ mod tests {
         };
         let commit = |voxel: Raw| {
             let voxels = [voxel];
-            let write = VoxelWrite {
-                header: Header::of::<VoxelWrite>(),
+            let write = enshwick::abi::headed!(VoxelWrite {
                 min: [200, 80, 200],
                 size: [1, 1, 1],
                 voxels: voxels.as_ptr(),
                 count: 1,
-            };
+            });
             let op = TransactionOp {
                 kind: TransactionOp::VOXELS,
                 reserved: 0,
@@ -272,7 +274,7 @@ mod tests {
             let mut id = 0u64;
             (api.transaction_commit)(
                 enshwick::abi::ModHandle(1),
-                Entity(0),
+                Entity::from_engine(0),
                 &raw const op,
                 1,
                 &raw mut id,

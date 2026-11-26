@@ -25,10 +25,10 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     load.on::<EntityDiedEvent>(move |died| {
         if let Some(player) = died.killer_player.and_then(|p| world.player(p)) {
-            enshwick::info!("{} killed entity {}", player.name, died.dead_entity_id.0);
+            enshwick::info!("{} killed entity {}", player.name, died.dead_entity_id);
         }
     })?;
-    load.on::<LevelUpEvent>(|up| enshwick::info!("entity {} reached level {}", up.player_entity_id.0, up.level))
+    load.on::<LevelUpEvent>(|up| enshwick::info!("entity {} reached level {}", up.player_entity_id, up.level))
 }
 ```
 
@@ -100,7 +100,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let target = pushed.field::<Entity>(load, "targetId")?;
     load.on_raw_game_event(pushed, move |event| {
         if let Some(target) = event.get(target) {
-            enshwick::debug!("entity {} pushed back", target.0);
+            enshwick::debug!("entity {} pushed back", target);
         }
     })
 }

@@ -113,7 +113,7 @@ pub(super) fn kind(loader: &Loader, spec: &Spec) -> Result<Kind, CommandError> {
             Kind::Press(bit, spec.hold_ms, interacts)
         }),
         Spec::CRAFT => Ok(Kind::Act(Act::Craft {
-            station: spec.entity.0,
+            station: spec.entity.get(),
             recipe: spec.recipe.0,
             count: amount(spec.amount)?,
         })),
@@ -123,12 +123,12 @@ pub(super) fn kind(loader: &Loader, spec: &Spec) -> Result<Kind, CommandError> {
             count: amount(spec.amount)?,
         })),
         Spec::TAKE_ALL => Ok(Kind::Act(Act::MoveAll {
-            from: spec.entity.0,
+            from: spec.entity.get(),
             to: 0,
         })),
         Spec::DEPOSIT_ALL => Ok(Kind::Act(Act::MoveAll {
             from: 0,
-            to: spec.entity.0,
+            to: spec.entity.get(),
         })),
         Spec::EQUIP => equipment_slot(loader, target).map(|equipment| {
             Kind::Act(Act::Equip {

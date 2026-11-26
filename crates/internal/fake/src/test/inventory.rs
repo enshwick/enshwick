@@ -3,7 +3,6 @@
 
 use enshwick_core::__fake::ids;
 use enshwick_core::Entity;
-use enshwick_core::abi::Header;
 use enshwick_core::abi::InventoryOp;
 use enshwick_core::abi::InventoryOpResult;
 use enshwick_core::abi::InventoryResult;
@@ -215,8 +214,8 @@ impl FakeHost {
     /// let setup = host.hash(facts::INVENTORY_SETUP.id())?;
     /// let loot = host.hash(facts::LOOT_FILL.id())?;
     /// let loader = host
-    ///     .placed(setup, enshwick::Entity(9), [0.0; 3])
-    ///     .component(enshwick::Entity(9), loot, &[])
+    ///     .placed(setup, enshwick::Entity::from_engine(9), [0.0; 3])
+    ///     .component(enshwick::Entity::from_engine(9), loot, &[])
     ///     .install();
     /// # let _ = loader;
     /// # Ok::<(), enshwick::Off>(())
@@ -343,12 +342,11 @@ impl Installed {
         let Some(open) = open else {
             return false;
         };
-        let result = InventoryResult {
-            header: Header::of::<InventoryResult>(),
+        let result = enshwick_core::headed!(InventoryResult {
             outcome,
             op_count: u32::try_from(ops.len()).unwrap_or(0),
             ops: ops.as_ptr(),
-        };
+        });
         // SAFETY: the mod's callback with its pointer, handed back once; the
         // result lives for the call.
         open.done
@@ -367,16 +365,15 @@ impl Installed {
     /// use enshwick::abi::{DamageCheck, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let fall = DamageCheck {
-    ///     header: Header::of::<DamageCheck>(),
+    /// let fall = enshwick::abi::headed!(DamageCheck {
     ///     cause: DamageCheck::FALL_DAMAGE,
-    ///     target: enshwick::Entity(2),
-    ///     source: enshwick::Entity(0),
-    ///     attacker: enshwick::Entity(0),
+    ///     target: enshwick::Entity::from_engine(2),
+    ///     source: enshwick::Entity::from_engine(0),
+    ///     attacker: enshwick::Entity::from_engine(0),
     ///     total: 40.0,
     ///     amount_count: 0,
     ///     amounts: core::ptr::null_mut(),
-    /// };
+    /// });
     /// assert_eq!(loader.damage(fall, &mut []), fall, "no filters, no change");
     /// ```
     #[must_use]
@@ -415,14 +412,14 @@ impl Installed {
     /// use enshwick::inventory::ItemInstance;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// loader.wear(Entity(2), ItemInstance { pide: Entity(900), item: enshwick::ItemId::new(0x5e01) });
+    /// loader.wear(Entity::from_engine(2), ItemInstance { pide: Entity::from_engine(900), item: enshwick::ItemId::new(0x5e01) });
     /// ```
     pub fn wear(&self, entity: Entity, item: enshwick_core::inventory::ItemInstance) {
         table::with((), |s| {
             s.inventory
                 .stats
                 .worn
-                .entry(entity.0)
+                .entry(entity.get())
                 .or_default()
                 .push(item);
         });

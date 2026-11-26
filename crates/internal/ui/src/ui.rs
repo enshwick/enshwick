@@ -122,7 +122,7 @@ pub struct Ui {
     host: Host,
 }
 
-/// Why a dialog did not show.
+/// Why a dialog did not show or a frame's sound did not play.
 ///
 /// # Examples
 ///
@@ -145,9 +145,14 @@ pub enum UiError {
     /// never draw the dialog it waits for.
     #[error("waited for on the thread that draws the interface")]
     WrongThread,
-    /// The loader refused the dialog, such as one without buttons.
-    #[error("the loader refused the dialog")]
+    /// The loader refused the request, such as a dialog without buttons or
+    /// a marker past the limit.
+    #[error("the loader refused it")]
     Refused,
+    /// The request names something that is not there, such as a sound
+    /// container neither the game's archive nor a mod holds.
+    #[error("nothing goes by that name")]
+    Missing,
 }
 
 crate::load::off_from!(UiError);

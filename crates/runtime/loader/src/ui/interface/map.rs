@@ -632,12 +632,13 @@ mod tests {
     #[test]
     fn markers_with_one_past_the_fixed_point_are_refused() {
         let feature = Fuse::new("test markers range");
-        let at = |position| UiMarker {
-            header: enshwick_core::abi::Header::of::<UiMarker>(),
-            position,
-            label: enshwick_core::abi::Str::new("far"),
-            color: UiMarker::YELLOW,
-            marker_type: 0,
+        let at = |position| {
+            enshwick_abi::headed!(UiMarker {
+                position,
+                label: enshwick_core::abi::Str::new("far"),
+                color: UiMarker::YELLOW,
+                marker_type: 0,
+            })
         };
         let loader = ModIndex::LOADER;
         for far in [
@@ -656,12 +657,13 @@ mod tests {
     #[test]
     fn the_carried_windows_markers_and_the_loader_s_own_keep_apart() {
         let feature = Fuse::new("test markers apart");
-        let marker = |label| UiMarker {
-            header: enshwick_core::abi::Header::of::<UiMarker>(),
-            position: [0.0; 3],
-            label: enshwick_core::abi::Str::new(label),
-            color: UiMarker::YELLOW,
-            marker_type: 0,
+        let marker = |label| {
+            enshwick_abi::headed!(UiMarker {
+                position: [0.0; 3],
+                label: enshwick_core::abi::Str::new(label),
+                color: UiMarker::YELLOW,
+                marker_type: 0,
+            })
         };
         let loader = ModIndex::LOADER;
         assert_eq!(
@@ -742,13 +744,12 @@ mod tests {
 
     #[test]
     fn a_marker_label_shows_each_backslash_as_written() {
-        let marker = UiMarker {
-            header: enshwick_core::abi::Header::of::<UiMarker>(),
+        let marker = enshwick_abi::headed!(UiMarker {
             position: [0.0; 3],
             label: enshwick_core::abi::Str::new(r"C:\new\owners"),
             color: UiMarker::GREEN,
             marker_type: 0,
-        };
+        });
         assert_eq!(&*label(&marker), br"C:\\new\\owners");
     }
 

@@ -22,7 +22,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{Header, NetMessage, NetMessageFn};
+use enshwick_core::abi::{NetMessage, NetMessageFn};
 use enshwick_core::i18n::Language;
 use rustc_hash::FxHashMap;
 
@@ -349,15 +349,14 @@ fn deliver(channel: u32, peer: u64, data: &[u8]) {
     if !target.handler.live() {
         return;
     }
-    let message = NetMessage {
-        header: Header::of::<NetMessage>(),
+    let message = enshwick_abi::headed!(NetMessage {
         channel,
         reserved: 0,
         peer: enshwick_core::PlayerKey::new(peer),
         data: data.as_ptr(),
         size: u32::try_from(data.len()).unwrap_or(0),
         reserved_tail: 0,
-    };
+    });
     // SAFETY: the handler lives in the mod's DLL, which stays loaded, and
     // takes the pointer it registered and a message that lives for the call;
     // by the callback contract of `HostApi` it does not unwind into the loader.
@@ -397,7 +396,7 @@ pub(crate) enum NetError {
 /// Sends the client of the player with account key `key` a notice for the
 /// player's entity `entity`; the client shows `text`.
 pub(crate) fn notice(key: u64, entity: Entity, text: &str) -> Result<(), NetError> {
-    let data = crate::base::wire::notice(entity.0, text);
+    let data = crate::base::wire::notice(entity.get(), text);
     if data.len() > MAX_CONTROL {
         return Err(NetError::TooLong);
     }
@@ -567,7 +566,7 @@ pub(crate) fn client_carried(channel: u32, data: &[u8]) {
     } else if let Some(rest) = data.strip_prefix(control(NOTICE).as_slice())
         && let Some((entity, text)) = read_notice(rest)
     {
-        crate::base::notices::queue(Entity(entity), text);
+        crate::base::notices::queue(Entity::from_engine(entity), text);
     } else if let Some(rest) = data.strip_prefix(control(UI_DEMO).as_slice()) {
         if crate::engine::loader::loader().is_some_and(|loader| loader.developer_tools) {
             take(UI_DEMO, rest);

@@ -146,6 +146,10 @@ impl Host {
 /// assert_eq!(Language::UK_UA.code(), "uk");
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct Language(pub u32);
 
 macro_rules! languages {

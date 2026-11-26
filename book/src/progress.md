@@ -15,9 +15,9 @@ platform names; the loader finds its node on the running game build.
 The handler gets a `SkillCheck` with the `SkillGate` that asks and the game's
 own answer. It returns one of three answers for that check:
 
-- `Some(true)` unlocks the skill;
-- `Some(false)` locks it;
-- `None` keeps the game's answer.
+- `Verdict::Allow` or `Some(true)` unlocks the skill;
+- `Verdict::Refuse` or `Some(false)` locks it;
+- `Verdict::Pass` or `None` keeps the game's answer.
 
 The platform names the gates it knows, such as `SkillGate::FlyMode`, so a mod
 can open one feature without touching the skill tree. It runs on both sides.

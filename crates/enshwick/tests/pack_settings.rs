@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{Header, PlayerData, PlayerInfo, Status, TickData};
+    use enshwick::abi::{PlayerData, PlayerInfo, Status, TickData};
     use enshwick::events::{PlayerJoined, SettingsReplaced, Ticked, WorldLoaded};
     use enshwick::packs::{Pack, PackFiles};
     use enshwick::progress::Experience;
@@ -33,29 +33,27 @@ mod tests {
     );
 
     fn player(entity: u32) -> PlayerInfo {
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: Entity(entity),
+            entity: Entity::from_engine(entity),
             key: PlayerKey::new(u64::from(entity)),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        }
+        })
     }
 
     /// The experience a join of `entity` gives in the running world.
     fn joined(loader: &Installed, entity: u32) -> u32 {
-        let data = PlayerData {
-            header: Header::of::<PlayerData>(),
+        let data = enshwick::abi::headed!(PlayerData {
             slot: 0,
-            entity: Entity(entity),
+            entity: Entity::from_engine(entity),
             key: PlayerKey::new(u64::from(entity)),
-        };
+        });
         let _heard = loader.raise::<PlayerJoined>(&data);
         let _ran = loader.raise::<Ticked>(&TickData::new(1));
         let mut rows = [Experience {
-            entity: Entity(entity),
+            entity: Entity::from_engine(entity),
             level: 1,
             progress: 0,
             need: 1000,

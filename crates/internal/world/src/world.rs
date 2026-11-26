@@ -16,6 +16,7 @@ mod entities;
 pub(crate) mod fields;
 mod geometry;
 pub(crate) mod join;
+mod player_ref;
 mod players;
 #[cfg(feature = "unstable")]
 mod prop_state;
@@ -48,6 +49,7 @@ pub use capture::{CAPTURE_TILES, Capture};
 pub use containers::ContainerKinds;
 pub use geometry::near;
 pub use join::Join;
+pub use player_ref::PlayerRef;
 #[cfg(feature = "unstable")]
 pub use players::{PlayerSpawnType, RespawnPoint};
 #[cfg(feature = "unstable")]
@@ -111,8 +113,8 @@ impl WritableType {
     /// # Examples
     ///
     /// ```
-    /// fn readable(world: &enshwick::world::World, flags: enshwick::world::WritableType, entity: enshwick::Entity) -> bool {
-    ///     world.component(entity, flags.ty()).is_some()
+    /// fn same(a: enshwick::world::WritableType, b: enshwick::world::WritableType) -> bool {
+    ///     a.ty() == b.ty()
     /// }
     /// ```
     #[must_use]
@@ -182,6 +184,7 @@ impl WritableType {
 ///
 /// See [`World`].
 #[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct Player {
     /// The player character's entity.
     pub entity: Entity,
@@ -194,6 +197,30 @@ pub struct Player {
     pub permissions: u32,
     /// The name the client sent; untrusted, may repeat between players.
     pub name: String,
+}
+
+impl Player {
+    /// A `Player` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`Player`].
+    #[must_use]
+    pub const fn new(
+        entity: Entity,
+        slot: u32,
+        key: PlayerKey,
+        permissions: u32,
+        name: String,
+    ) -> Self {
+        Self {
+            entity,
+            slot,
+            key,
+            permissions,
+            name,
+        }
+    }
 }
 
 impl Player {
@@ -216,7 +243,7 @@ impl Player {
     /// use enshwick::Entity;
     /// use enshwick::world::Player;
     ///
-    /// let player = Player { entity: Entity(2), slot: 0, key: enshwick::PlayerKey::new(7), permissions: 0, name: "Émile".into() };
+    /// let player = Player::new(Entity::from_engine(2), 0, enshwick::PlayerKey::new(7), 0, "Émile".into());
     /// assert!(player.is_named("éMILE"));
     /// assert!(!player.is_named("Emile"));
     /// ```
@@ -247,7 +274,7 @@ impl Player {
     /// use enshwick::abi::PlayerInfo;
     /// use enshwick::world::{Player, PlayerPermissions};
     ///
-    /// let friend = Player { entity: Entity(2), slot: 0, key: enshwick::PlayerKey::new(7), permissions: PlayerInfo::CAN_EDIT_BASE, name: "Ann".into() };
+    /// let friend = Player::new(Entity::from_engine(2), 0, enshwick::PlayerKey::new(7), PlayerInfo::CAN_EDIT_BASE, "Ann".into());
     /// assert!(friend.has(PlayerPermissions::CanEditBase));
     /// assert!(!friend.has(PlayerPermissions::CanKickBan));
     /// ```
@@ -265,11 +292,24 @@ impl Player {
 ///
 /// See [`World::near`].
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct Placed {
     /// The entity.
     pub entity: Entity,
     /// Where it is, in metres.
     pub position: [f64; 3],
+}
+
+impl Placed {
+    /// A `Placed` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`Placed`].
+    #[must_use]
+    pub const fn new(entity: Entity, position: [f64; 3]) -> Self {
+        Self { entity, position }
+    }
 }
 
 impl Placed {
@@ -288,7 +328,7 @@ impl Placed {
     /// use enshwick::Entity;
     /// use enshwick::world::Placed;
     ///
-    /// let chest = Placed { entity: Entity(7), position: [3.0, 0.0, 4.0] };
+    /// let chest = Placed::new(Entity::from_engine(7), [3.0, 0.0, 4.0]);
     /// assert_eq!(chest.distance([0.0, 0.0, 0.0]), 5.0);
     /// ```
     #[must_use]
@@ -501,9 +541,19 @@ impl World {
     ///
     /// # Examples
     ///
-    /// See [`World`].
+    /// ```
+    /// fn has(world: enshwick::world::World, entity: enshwick::Entity, ty: enshwick::ecs::ComponentType) -> bool {
+    ///     world.component(entity, ty).is_some()
+    /// }
+    /// ```
+    #[cfg(feature = "unstable")]
     #[must_use]
     pub fn component(self, entity: Entity, ty: ComponentType) -> Option<*const c_void> {
+        self.component_at(entity, ty)
+    }
+
+    /// The pointer [`World::component`] gives, for this crate's own reads.
+    pub(crate) fn component_at(self, entity: Entity, ty: ComponentType) -> Option<*const c_void> {
         enshwick_base::__internal::component(ty, self.0.host, entity)
     }
 
@@ -582,7 +632,7 @@ impl World {
     /// See [`World::set`].
     #[must_use]
     pub fn get<T: Scalar>(&self, entity: Entity, field: Field<T>) -> Option<T> {
-        let data = self.component(entity, ComponentType::from_hash(field.type_hash()))?;
+        let data = self.component_at(entity, ComponentType::from_hash(field.type_hash()))?;
         let at = usize::try_from(field.offset()).ok()?;
         let mut bytes = [0u8; 8];
         let len = size_of::<T>().min(bytes.len());
@@ -687,7 +737,7 @@ impl World {
     #[must_use]
     #[script]
     pub fn used_item(&self, entity: Entity) -> Option<ItemId> {
-        let data = self.component(entity, self.0.used_item)?;
+        let data = self.component_at(entity, self.0.used_item)?;
         // SAFETY: `component` returned the entity's live UsedItem, valid until
         // the game thread moves on; the component is the u32 item id alone.
         Some(unsafe { crate::raw::read_at::<ItemId>(data.cast(), 0) })
@@ -709,7 +759,7 @@ impl World {
     #[script]
     pub fn has_label(&self, entity: Entity) -> Option<bool> {
         let label = self.0.label?;
-        let Some(data) = self.component(entity, label) else {
+        let Some(data) = self.component_at(entity, label) else {
             return Some(false);
         };
         // SAFETY: `component` returned the entity's live CustomPlayerString,

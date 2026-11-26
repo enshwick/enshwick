@@ -38,6 +38,7 @@ use crate::content::types::TEMPLATE_RESOURCE;
 use crate::content::vanilla::Vanilla;
 use crate::inventory::SlotRef;
 use crate::{Entity, ItemId};
+use enshwick_base::vetoes::Verdict;
 use enshwick_content::__load::*;
 
 /// The most slots a container holds: every link of its inventory setup
@@ -132,14 +133,21 @@ pub trait LoadMethods {
 
     /// As `Load::container_rule`.
     #[doc(hidden)]
-    fn container_rule<F>(&mut self, item: ItemId, rule: F) -> Result<(), Off>
+    fn container_rule<F, V>(&mut self, item: ItemId, rule: F) -> Result<(), Off>
     where
-        F: Fn(&Put) -> bool + Send + Sync + 'static;
+        F: Fn(&Put) -> V + Send + Sync + 'static,
+        V: Into<Verdict>;
+
+    /// As `Load::put_filter`.
+    #[doc(hidden)]
+    fn put_filter<F>(&mut self, item: ItemId, rule: F) -> Result<(), Off>
+    where
+        F: Fn(&Put) -> Verdict + Send + Sync + 'static;
 }
 
 unsafe extern "system" fn run_rule<F>(put: *const ContainerPut, user: *mut c_void) -> u8
 where
-    F: Fn(&Put) -> bool,
+    F: Fn(&Put) -> Verdict,
 {
     // SAFETY: the loader passes a valid put for the duration of this call.
     let Some(put) = (unsafe { put.as_ref() }) else {
@@ -154,11 +162,9 @@ where
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let rule = unsafe { &*user.cast::<F>() };
-    crate::host::verdict(crate::host::guard(
-        "panic in a container rule",
-        || true,
-        || rule(&put),
-    ))
+    crate::host::verdict(
+        crate::host::guard("panic in a container rule", || Verdict::Pass, || rule(&put)).passes(),
+    )
 }
 
 impl LoadMethods for crate::BaseLoad {
@@ -185,9 +191,17 @@ impl LoadMethods for crate::BaseLoad {
         Ok(prop)
     }
 
-    fn container_rule<F>(&mut self, item: ItemId, rule: F) -> Result<(), Off>
+    fn container_rule<F, V>(&mut self, item: ItemId, rule: F) -> Result<(), Off>
     where
-        F: Fn(&Put) -> bool + Send + Sync + 'static,
+        F: Fn(&Put) -> V + Send + Sync + 'static,
+        V: Into<Verdict>,
+    {
+        self.put_filter(item, move |put| rule(put).into())
+    }
+
+    fn put_filter<F>(&mut self, item: ItemId, rule: F) -> Result<(), Off>
+    where
+        F: Fn(&Put) -> Verdict + Send + Sync + 'static,
     {
         let host = self.host();
         crate::load::hand_over(

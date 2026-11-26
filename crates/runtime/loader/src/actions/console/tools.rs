@@ -18,7 +18,7 @@ pub(crate) fn name(player: &PlayerInfo) -> String {
 }
 
 fn position(loader: &Loader, entity: u32) -> Option<[f64; 3]> {
-    crate::engine::world::fixed_position(loader, Entity(entity)).map(answers::metres)
+    crate::engine::world::fixed_position(loader, Entity::from_engine(entity)).map(answers::metres)
 }
 
 /// `enshwick world`: the players online.
@@ -30,10 +30,10 @@ pub(crate) fn world(loader: &Loader) -> String {
                 .map(|p| Online {
                     name: name(p),
                     slot: p.slot,
-                    entity: p.entity.0,
+                    entity: p.entity.get(),
                     key: p.key.get(),
                     admin: p.is_admin(),
-                    position: position(loader, p.entity.0),
+                    position: position(loader, p.entity.get()),
                 })
                 .collect::<Vec<_>>(),
         ),
@@ -54,14 +54,14 @@ pub(crate) fn entity(loader: &Loader, args: &str) -> String {
         .and_then(|players| {
             players
                 .iter()
-                .find(|p| p.entity == Entity(entity))
+                .find(|p| p.entity == Entity::from_engine(entity))
                 .map(name)
         });
     answers::entity(
         &Seen {
             entity,
-            template: crate::engine::world::template(loader, Entity(entity)).ok(),
-            item: crate::engine::world::used_item(loader, Entity(entity)),
+            template: crate::engine::world::template(loader, Entity::from_engine(entity)).ok(),
+            item: crate::engine::world::used_item(loader, Entity::from_engine(entity)),
             position: position(loader, entity),
             player,
         },

@@ -2,8 +2,7 @@ use crate::abi::Str;
 use crate::i18n::Language;
 use crate::{Entity, PlayerKey};
 
-use super::{Notice, Player, World, blank_info, online};
-#[cfg(feature = "unstable")]
+use super::{Notice, Player, PlayerRef, World, blank_info, online};
 use crate::WorldError;
 
 /// Where a player respawns, from [`World::respawn_point`].
@@ -119,8 +118,13 @@ impl World {
 
     /// Gives `entity` the name `text`, as a player's rename does: the game
     /// shows it on hover, sends it to every client and saves it with the
-    /// world. The game keeps 255 bytes; an empty text removes the name. On
-    /// the game thread only; `false` elsewhere or when the entity is gone.
+    /// world. The game keeps 255 bytes; an empty text removes the name.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Gone`] for an entity not in the world,
+    /// [`WorldError::WrongThread`] off the game thread and
+    /// [`WorldError::Unavailable`] where no server runs.
     ///
     /// # Examples
     ///
@@ -137,10 +141,10 @@ impl World {
     ///     })
     /// }
     /// ```
-    #[must_use]
     #[script]
-    pub fn set_label(self, entity: Entity, text: &str) -> bool {
-        (self.0.host.api().set_label)(self.0.host.handle(), entity, Str::new(text)).is_ok()
+    pub fn set_label(self, entity: Entity, text: &str) -> Result<(), WorldError> {
+        let status = (self.0.host.api().set_label)(self.0.host.handle(), entity, Str::new(text));
+        WorldError::check(status, WorldError::Gone)
     }
 
     /// Sends `text` to every player's chat, after the next step; callable
@@ -187,9 +191,12 @@ impl World {
     }
 
     /// Sends `text` to `player`'s chat alone, after the next step; callable
-    /// from any thread. The console and a remote caller have no account, so
-    /// a line for them goes to no player, with a log line: answer them in
-    /// the action's outcome.
+    /// from any thread for a player named by account. A player named by
+    /// character alone is found on the game thread only. The console and a
+    /// remote caller have no account, so a line for them goes to no player,
+    /// with a log line: answer them in the action's outcome. So does a line
+    /// for a character no connected player has, or one named off the game
+    /// thread.
     ///
     /// # Examples
     ///
@@ -199,20 +206,23 @@ impl World {
     /// }
     /// ```
     #[script]
-    pub fn tell(self, player: &Player, text: &str) {
-        if player.key.get() == 0 {
-            crate::warn_once!(
-                "a chat line for the console or a remote caller goes to no player: they have no account, so answer them in the action's outcome"
-            );
-            return;
+    pub fn tell(self, player: impl Into<PlayerRef>, text: &str) {
+        match player.into().key_in(self.0.host) {
+            Ok(key) => self.chat(key, text),
+            Err(WorldError::WrongThread) => crate::warn_once!(
+                "a chat line for a player named by character alone goes to no player off the game thread: a character is found only on the game thread, so name the player by account"
+            ),
+            Err(_) => crate::warn_once!(
+                "a chat line for the console, a remote caller or a player who left goes to no player: answer the console and remote callers in the action's outcome"
+            ),
         }
-        self.chat(player.key, text);
     }
 
     /// Shows `text` on `player`'s screen, as the game shows its own "can't
     /// do that" messages, or tells it in chat when the player's client lacks
     /// Enshwick to show it; says which. The game shows 255 bytes; keep it to
-    /// a line. On the game thread; elsewhere it goes to chat. A notice for
+    /// a line. On the game thread; elsewhere it goes to chat, and to no
+    /// player when the player is named by character alone. A notice for
     /// the console or a remote caller goes to no player, as with
     /// [`tell`](World::tell), and answers [`Notice::Nobody`].
     ///
@@ -227,20 +237,17 @@ impl World {
     ///     }
     /// }
     /// ```
-    #[expect(
-        clippy::must_use_candidate,
-        reason = "shown is the point; how is for the curious"
-    )]
     #[script]
-    pub fn notify(self, player: &Player, text: &str) -> Notice {
-        if player.key.get() == 0 {
+    pub fn notify(self, player: impl Into<PlayerRef>, text: &str) -> Notice {
+        let player = player.into();
+        let Ok(key) = player.key_in(self.0.host) else {
             self.tell(player, text);
             return Notice::Nobody;
-        }
-        if (self.0.host.api().notify)(self.0.host.handle(), player.key, Str::new(text)).is_ok() {
+        };
+        if (self.0.host.api().notify)(self.0.host.handle(), key, Str::new(text)).is_ok() {
             return Notice::OnScreen;
         }
-        self.tell(player, text);
+        self.chat(key, text);
         Notice::Chat
     }
 
@@ -291,16 +298,21 @@ impl World {
     /// ```
     #[script]
     #[cfg(feature = "unstable")]
-    pub fn respawn_point(self, player: &Player) -> Result<Option<RespawnPoint>, WorldError> {
-        let mut info = crate::abi::RespawnPointInfo {
-            header: crate::abi::Header::of::<crate::abi::RespawnPointInfo>(),
-            entity: Entity(0),
+    pub fn respawn_point(
+        self,
+        player: impl Into<PlayerRef>,
+    ) -> Result<Option<RespawnPoint>, WorldError> {
+        let player = match player.into().entity_in(self.0.host) {
+            Err(WorldError::Gone) => return Ok(None),
+            found => found?,
+        };
+        let mut info = enshwick_abi::headed!(crate::abi::RespawnPointInfo {
+            entity: Entity::from_engine(0),
             kind: crate::abi::RespawnPointInfo::OTHER,
             position: [0.0; 3],
             orientation: [0.0; 4],
-        };
-        let status =
-            (self.0.host.api().respawn_point)(self.0.host.handle(), player.entity, &raw mut info);
+        });
+        let status = (self.0.host.api().respawn_point)(self.0.host.handle(), player, &raw mut info);
         if status == crate::abi::Status::MISSING {
             return Ok(None);
         }
@@ -346,9 +358,14 @@ impl World {
     /// ```
     #[script]
     #[cfg(feature = "unstable")]
-    pub fn set_respawn_point(self, player: &Player, spawn_point: Entity) -> Result<(), WorldError> {
+    pub fn set_respawn_point(
+        self,
+        player: impl Into<PlayerRef>,
+        spawn_point: Entity,
+    ) -> Result<(), WorldError> {
+        let player = player.into().entity_in(self.0.host)?;
         let status =
-            (self.0.host.api().set_respawn_point)(self.0.host.handle(), player.entity, spawn_point);
+            (self.0.host.api().set_respawn_point)(self.0.host.handle(), player, spawn_point);
         if status == crate::abi::Status::BAD_ARGS {
             return Err(WorldError::NotASpawnPoint);
         }

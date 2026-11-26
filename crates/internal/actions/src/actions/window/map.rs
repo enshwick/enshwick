@@ -180,6 +180,7 @@ impl WindowMap {
 /// assert_eq!(map.run_at([500.0, 0.0, 0.0]).map(|(action, _)| action), Some("place"));
 /// ```
 #[derive(Clone, Debug, Default, PartialEq)]
+#[non_exhaustive]
 pub struct MapView {
     /// The action a waypoint on a marker runs.
     pub on_marker: Option<String>,
@@ -195,6 +196,7 @@ pub struct MapView {
 ///
 /// See [`MapView`].
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct MarkerView {
     /// Where, in metres.
     pub position: [f64; 3],
@@ -202,6 +204,22 @@ pub struct MarkerView {
     pub label: String,
     /// The values the run of a waypoint on it gives.
     pub args: Vec<Value>,
+}
+
+impl MarkerView {
+    /// A `MarkerView` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`MarkerView`].
+    #[must_use]
+    pub const fn new(position: [f64; 3], label: String, args: Vec<Value>) -> Self {
+        Self {
+            position,
+            label,
+            args,
+        }
+    }
 }
 
 impl MapView {

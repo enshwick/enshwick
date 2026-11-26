@@ -1,6 +1,6 @@
 //! What the player has uncovered of the map, on the client.
 
-use crate::abi::{FogInfo, Header, Status};
+use crate::abi::{FogInfo, Status};
 use crate::{BaseLoad, Host, Off};
 
 /// The client's fog of war: how much of each part of the map the player
@@ -54,6 +54,7 @@ impl crate::script::Object for FogOfWar {
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct FogState {
     /// The image's width in pixels.
     pub width: u32,
@@ -69,6 +70,32 @@ pub struct FogState {
     /// Changes with each world the client enters; the copy of a world is
     /// gone once the client leaves it.
     pub session: u64,
+}
+
+impl FogState {
+    /// A `FogState` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`FogState`].
+    #[must_use]
+    pub const fn new(
+        width: u32,
+        height: u32,
+        metres_per_pixel: f64,
+        size_z: f64,
+        version: u64,
+        session: u64,
+    ) -> Self {
+        Self {
+            width,
+            height,
+            metres_per_pixel,
+            size_z,
+            version,
+            session,
+        }
+    }
 }
 
 impl FogState {
@@ -92,14 +119,7 @@ impl FogState {
     /// ```
     /// use enshwick::map::FogState;
     ///
-    /// let state = FogState {
-    ///     width: 1280,
-    ///     height: 1280,
-    ///     metres_per_pixel: 8.0,
-    ///     size_z: 10_240.0,
-    ///     version: 0,
-    ///     session: 1,
-    /// };
+    /// let state = FogState::new(1280, 1280, 8.0, 10_240.0, 0, 1);
     /// assert_eq!(state.pixel_of([12.0, 50.0, 10_230.0]), Some([1, 1]));
     /// assert_eq!(state.pixel_of([-1.0, 0.0, 0.0]), None);
     /// ```
@@ -316,10 +336,7 @@ impl FogOfWar {
             .ok_or(FogError::Outside)?;
         let capacity = u32::try_from(len).map_err(|_| FogError::Outside)?;
         let mut coverage = vec![0u8; len];
-        let mut info = FogInfo {
-            header: Header::of::<FogInfo>(),
-            ..FogInfo::EMPTY
-        };
+        let mut info = enshwick_abi::headed!(FogInfo { ..FogInfo::EMPTY });
         let status = (self.host.api().fog_read)(
             self.host.handle(),
             &raw mut info,

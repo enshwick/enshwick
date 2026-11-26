@@ -57,6 +57,7 @@ pub const RECIPE_REGISTRY: Guid = Guid::parse("5e57de0f-280c-4559-8191-f02c1ba65
 ///
 /// See `Load::add_recipe`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct NewRecipe {
     /// The new recipe's id; its game id is [`RecipeId::from_guid`](crate::RecipeId::from_guid) of its GUID.
     pub id: Id,
@@ -73,13 +74,36 @@ pub struct NewRecipe {
     pub workshop: Option<WorkshopId>,
 }
 
+impl NewRecipe {
+    /// A `NewRecipe` of its parts; `workshop` starts as `None`.
+    ///
+    /// # Examples
+    ///
+    /// See [`NewRecipe`].
+    #[must_use]
+    pub const fn new(id: Id, like: Guid, output: Guid, output_count: u32, cost: u32) -> Self {
+        Self {
+            id,
+            like,
+            output,
+            output_count,
+            cost,
+            workshop: None,
+        }
+    }
+}
+
 /// Where the fields a recipe edit touches sit on the running build,
 /// resolved by the loader.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Examples
 ///
 /// See [`RecipeLayout::resolve`] and [`add_recipe_to`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
+#[non_exhaustive]
 pub struct RecipeLayout {
     /// The registry's list of recipes.
     pub recipes: usize,
@@ -166,6 +190,8 @@ pub(super) fn fnv1a(bytes: &[u8]) -> u32 {
 /// Builds in `out` the recipe registry with `recipe` after the others, unless
 /// its workshop already holds `limit` recipes.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// `Load::add_recipe` serves it with [`workshop_limit`]; call it from a
 /// [`Load::serve`](../../struct.Load.html#method.serve) builder of your own to combine it with other edits.
 ///
@@ -189,6 +215,7 @@ pub(super) fn fnv1a(bytes: &[u8]) -> u32 {
 /// }
 /// ```
 #[must_use]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
 pub fn add_recipe_to(
     layout: &RecipeLayout,
     registry: &[u8],

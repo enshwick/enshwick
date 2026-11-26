@@ -61,8 +61,8 @@ pub(super) fn send_due(
     let mut due = core::mem::take(&mut state.values_owed);
     for change in changes {
         let index = usize::try_from(change.stat.index).unwrap_or(usize::MAX);
-        if !due.contains(&change.entity.0) && shown(sealed, index) {
-            due.push(change.entity.0);
+        if !due.contains(&change.entity.get()) && shown(sealed, index) {
+            due.push(change.entity.get());
         }
     }
     for entity in due {

@@ -2,7 +2,7 @@
 //! the newest held window with a map, the one whose waypoints the server
 //! runs.
 
-use enshwick_core::abi::{Header, Str, UiMarker};
+use enshwick_core::abi::{Str, UiMarker};
 use enshwick_core::actions::window::{ItemView, MapView};
 
 use super::{Held, STATE};
@@ -42,12 +42,13 @@ fn markers_of(map: Option<&MapView>) -> Vec<UiMarker> {
         .flat_map(|map| &map.markers)
         .filter(|marker| enshwick_core::abi::in_fixed_range(marker.position))
         .take(super::super::map::MAX_MARKERS)
-        .map(|marker| UiMarker {
-            header: Header::of::<UiMarker>(),
-            position: marker.position,
-            label: Str::new(&marker.label),
-            color: UiMarker::YELLOW,
-            marker_type: 0,
+        .map(|marker| {
+            enshwick_abi::headed!(UiMarker {
+                position: marker.position,
+                label: Str::new(&marker.label),
+                color: UiMarker::YELLOW,
+                marker_type: 0,
+            })
         })
         .collect()
 }
@@ -60,21 +61,19 @@ mod tests {
 
     fn window(id: &str, x: Option<f64>) -> Held {
         let map = x.map(|x| {
-            ItemView::Map(MapView {
-                markers: vec![MarkerView {
-                    position: [x, 0.0, 0.0],
-                    label: "m".into(),
-                    args: Vec::new(),
-                }],
-                ..MapView::default()
+            ItemView::Map({
+                let mut value = MapView::default();
+                value.markers = vec![MarkerView::new([x, 0.0, 0.0], "m".into(), Vec::new())];
+                value
             })
         });
         Held {
             mod_id: "you.admin".into(),
             window: id.into(),
-            view: View {
-                items: map.into_iter().collect(),
-                ..View::default()
+            view: {
+                let mut value = View::default();
+                value.items = map.into_iter().collect();
+                value
             },
         }
     }
@@ -95,16 +94,13 @@ mod tests {
 
     #[test]
     fn a_marker_past_the_fixed_point_is_left_off_and_the_others_stay() {
-        let map = |xs: &[f64]| MapView {
-            markers: xs
+        let map = |xs: &[f64]| {
+            let mut value = MapView::default();
+            value.markers = xs
                 .iter()
-                .map(|&x| MarkerView {
-                    position: [x, 0.0, 100.0],
-                    label: "m".into(),
-                    args: Vec::new(),
-                })
-                .collect(),
-            ..MapView::default()
+                .map(|&x| MarkerView::new([x, 0.0, 100.0], "m".into(), Vec::new()))
+                .collect();
+            value
         };
         let kept = |view: &MapView| -> Vec<f64> {
             markers_of(Some(view))

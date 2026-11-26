@@ -6,7 +6,7 @@
 
 use core::num::NonZeroU32;
 
-use enshwick_core::abi::{Header, MapMarkerTypeInfo, MarkerTypeSorting};
+use enshwick_core::abi::{MapMarkerTypeInfo, MarkerTypeSorting};
 
 use crate::world::scene_markers::array;
 
@@ -153,8 +153,7 @@ pub fn types(
                 .find(|&&(value, _)| value == raw)
                 .map_or(MarkerTypeSorting::UNKNOWN, |&(_, sorting)| sorting);
             let flag = |field: usize| u8::from(byte(field) != 0);
-            Ok(MapMarkerTypeInfo {
-                header: Header::of::<MapMarkerTypeInfo>(),
+            Ok(enshwick_abi::headed!(MapMarkerTypeInfo {
                 type_name: enshwick_core::content::Guid(type_name),
                 marker_id: u32::from_le_bytes(marker_id),
                 sorting_category,
@@ -163,7 +162,7 @@ pub fn types(
                 show_above_fog_of_war: flag(layout.show_above_fog_of_war),
                 show_label: flag(layout.show_label),
                 reserved: [0; 3],
-            })
+            }))
         })
         .collect()
 }

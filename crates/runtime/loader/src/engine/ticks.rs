@@ -316,12 +316,12 @@ impl Ticks {
             }
             tick.last_step.store(step, Ordering::Relaxed);
             tick.last_nanos.store(now, Ordering::Relaxed);
-            let data = TickData {
+            let data = enshwick_abi::headed!(TickData {
                 elapsed_steps: if last_step == 0 { 1 } else { step - last_step },
                 elapsed_ns: last.map_or(time.elapsed, |last| now.saturating_sub(last)),
                 step_ns: time.average,
                 ..TickData::new(step)
-            };
+            });
             call(tick, data);
             ran += 1;
         }

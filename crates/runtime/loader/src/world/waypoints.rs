@@ -326,7 +326,11 @@ mod tests {
             changed: |_, _| panic!("a map run that fails"),
             fuse: &MAP_RUNS,
         };
-        let change = waypoints::data(PlayerKey::new(7), Entity(40), Some([1.0, 0.0, 1.0]));
+        let change = waypoints::data(
+            PlayerKey::new(7),
+            Entity::from_engine(40),
+            Some([1.0, 0.0, 1.0]),
+        );
         hand_on(&loader, &[change, change], false, Some(&maps));
         assert!(MAP_RUNS.is_off(), "the maps' own fuse took the panic");
         assert!(!maps.wanted(), "the watcher stops running the maps");

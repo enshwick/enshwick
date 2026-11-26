@@ -11,6 +11,8 @@ impl Load<'_> {
     /// The vanilla nodes of the skill tree, to link a mod's nodes from and
     /// place them beside.
     ///
+    /// Unstable: needs the `typed` feature and may change in any release.
+    ///
     /// # Errors
     ///
     /// [`Off`] when the tree does not read on this build.
@@ -33,6 +35,8 @@ impl Load<'_> {
     /// shows as the mod's feature `skill node <id>` in the status summary
     /// and on the Mods screen, with the reason when it is refused.
     ///
+    /// Unstable: needs the `typed` feature and may change in any release.
+    ///
     /// # Errors
     ///
     /// [`Off`] when the tree holds as many nodes as a save keeps, `like` is
@@ -53,6 +57,8 @@ impl Load<'_> {
     /// perk [`NewPerk::like`] under the mod's content id, with its own name
     /// and description, on the server and the client alike.
     ///
+    /// Unstable: needs the `typed` feature and may change in any release.
+    ///
     /// # Errors
     ///
     /// [`Off`] when `like` is no vanilla perk or the loader refuses the id
@@ -65,12 +71,7 @@ impl Load<'_> {
     /// use enshwick::content::skills::NewPerk;
     ///
     /// fn init(load: &mut enshwick::Load<'_>, leech: Guid) -> Result<(), enshwick::Off> {
-    ///     let perk = load.add_perk(NewPerk {
-    ///         id: id!("thirst"),
-    ///         like: leech,
-    ///         name: id!("thirst.name").guid(),
-    ///         description: id!("thirst.text").guid(),
-    ///     })?;
+    ///     let perk = load.add_perk(NewPerk::new(id!("thirst"), leech, id!("thirst.name").guid(), id!("thirst.text").guid()))?;
     ///     enshwick::info!("perk {perk}");
     ///     Ok(())
     /// }

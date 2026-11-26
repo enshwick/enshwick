@@ -15,7 +15,7 @@
 use std::sync::OnceLock;
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{DamageCheck, Event, Header, HookFlags, PlayerDeathData};
+use enshwick_core::abi::{DamageCheck, Event, HookFlags, PlayerDeathData};
 
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
@@ -258,9 +258,8 @@ fn data(layout: &Record, bytes: &[u8; 64], entity_of: impl Fn(u64) -> u32) -> Pl
                 .unwrap_or([0; 4]),
         )
     };
-    PlayerDeathData {
-        header: Header::of::<PlayerDeathData>(),
-        entity: Entity(entity_of(key)),
+    enshwick_abi::headed!(PlayerDeathData {
+        entity: Entity::from_engine(entity_of(key)),
         cause: cause(
             layout,
             field::<1>(bytes, layout.cause)[0],
@@ -269,9 +268,9 @@ fn data(layout: &Record, bytes: &[u8; 64], entity_of: impl Fn(u64) -> u32) -> Pl
         key: enshwick_core::PlayerKey::new(key),
         position: [coordinate(0), coordinate(1), coordinate(2)].map(f64::from),
         cause_guid: enshwick_core::content::Guid(field(bytes, layout.cause_guid)),
-        killer_entity: Entity(0),
+        killer_entity: Entity::from_engine(0),
         reserved_tail: 0,
-    }
+    })
 }
 
 /// Raises the deaths of the last step, on the game thread after it.
@@ -290,13 +289,13 @@ pub(crate) fn after_step(loader: &Loader) {
             players
                 .iter()
                 .find(|p| p.key == enshwick_core::PlayerKey::new(key))
-                .map_or(0, |p| p.entity.0)
+                .map_or(0, |p| p.entity.get())
         });
         if death.cause == DamageCheck::IMPACT
-            && death.entity != Entity(0)
+            && death.entity != Entity::from_engine(0)
             && let Some(history) = history
         {
-            death.killer_entity = Entity(history.killer(loader, death.entity));
+            death.killer_entity = Entity::from_engine(history.killer(loader, death.entity));
         }
         loader.emit(Event::PLAYER_DIED, None, (&raw const death).cast());
     }
@@ -331,7 +330,7 @@ mod tests {
         bytes[16..20].copy_from_slice(&1.5f32.to_le_bytes());
         bytes[28] = 0xab;
         let death = data(&layout, &bytes, |key| if key == 7 { 2 } else { 0 });
-        assert_eq!(death.entity, Entity(2));
+        assert_eq!(death.entity, Entity::from_engine(2));
         assert_eq!(death.key, enshwick_core::PlayerKey::new(7));
         assert_eq!(death.cause, DamageCheck::SUFFOCATED);
         assert!((death.position[0] - 1.5).abs() < f64::EPSILON);

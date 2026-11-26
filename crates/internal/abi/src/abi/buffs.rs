@@ -11,18 +11,18 @@ use crate::content::Guid;
 /// ```
 /// use enshwick::abi::{BuffTypeInfo, Header};
 ///
-/// let rested = BuffTypeInfo {
-///     header: Header::of::<BuffTypeInfo>(),
+/// let rested = enshwick::abi::headed!(BuffTypeInfo {
 ///     id: enshwick::buffs::BuffTypeId::new(0xcdbe_3e80),
 ///     slot: BuffTypeInfo::RESTED,
 ///     flags: BuffTypeInfo::SAVED,
 ///     name: 1_237_250_642,
 ///     duration_ns: 5_000_000_000,
-/// };
+/// });
 /// assert_eq!(rested.slot, BuffTypeInfo::RESTED);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct BuffTypeInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -66,19 +66,19 @@ impl BuffTypeInfo {
 /// ```
 /// use enshwick::abi::{ActiveBuff, Header};
 ///
-/// let fed = ActiveBuff {
-///     header: Header::of::<ActiveBuff>(),
+/// let fed = enshwick::abi::headed!(ActiveBuff {
 ///     id: enshwick::buffs::BuffTypeId::new(7),
-///     entity: enshwick::Entity(4100),
+///     entity: enshwick::Entity::from_engine(4100),
 ///     slot: 0,
 ///     level: 0,
 ///     duration_ns: 600_000_000_000,
 ///     remaining_ns: 120_000_000_000,
-/// };
+/// });
 /// assert!(fed.remaining_ns < fed.duration_ns);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct ActiveBuff {
     /// Size and version of this struct.
     pub header: Header,
@@ -105,18 +105,18 @@ impl_headed!(ActiveBuff);
 /// ```
 /// use enshwick::abi::{BuffRequest, Header};
 ///
-/// let request = BuffRequest {
-///     header: Header::of::<BuffRequest>(),
-///     entity: enshwick::Entity(2),
+/// let request = enshwick::abi::headed!(BuffRequest {
+///     entity: enshwick::Entity::from_engine(2),
 ///     id: enshwick::buffs::BuffTypeId::new(7),
 ///     level: 0,
 ///     reserved: 0,
 ///     duration_ns: 0,
-/// };
+/// });
 /// assert_eq!(request.duration_ns, 0, "the type's own duration");
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct BuffRequest {
     /// Size and version of this struct.
     pub header: Header,
@@ -144,8 +144,7 @@ impl_headed!(BuffRequest);
 /// use enshwick::abi::{BuffTypeAdd, Header};
 /// use enshwick::content::{Guid, Id};
 ///
-/// let lucky = BuffTypeAdd {
-///     header: Header::of::<BuffTypeAdd>(),
+/// let lucky = enshwick::abi::headed!(BuffTypeAdd {
 ///     guid: Id::new("you.lucky:lucky").guid(),
 ///     name: Guid::NIL,
 ///     description: Guid::NIL,
@@ -155,11 +154,12 @@ impl_headed!(BuffRequest);
 ///     changes: BuffTypeAdd::LIFE_TIME,
 ///     slot: 0,
 ///     flags: BuffTypeAdd::PLAIN,
-/// };
+/// });
 /// assert_eq!(lucky.changes & BuffTypeAdd::NAME, 0, "the vanilla name stays");
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct BuffTypeAdd {
     /// Size and version of this struct.
     pub header: Header,

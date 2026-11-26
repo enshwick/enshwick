@@ -109,10 +109,8 @@ impl Load<'_> {
     /// use enshwick::sound::{NewVoiceover, VoiceLine};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let welcome = NewVoiceover {
-    ///         fallback: Some("english".into()),
-    ///         ..NewVoiceover::new(id!("welcome"), vec![VoiceLine::new("english", "voice/en/welcome.ogg")])
-    ///     };
+    ///     let mut welcome = NewVoiceover::new(id!("welcome"), vec![VoiceLine::new("english", "voice/en/welcome.ogg")]);
+    ///     welcome.fallback = Some("english".into());
     ///     let _line = load.feature("welcome", |load| load.add_voiceover(welcome));
     ///     Ok(())
     /// }
@@ -179,11 +177,9 @@ impl Load<'_> {
     /// use enshwick::sound::NewMusic;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let desert = NewMusic {
-    ///         environment: Some("Desert".into()),
-    ///         in_battle: Some(false),
-    ///         ..NewMusic::new(id!("desert"), vec!["music/desert.ogg".into()])
-    ///     };
+    ///     let mut desert = NewMusic::new(id!("desert"), vec!["music/desert.ogg".into()]);
+    ///     desert.environment = Some("Desert".into());
+    ///     desert.in_battle = Some(false);
     ///     let _music = load.feature("desert", |load| load.add_music(desert));
     ///     Ok(())
     /// }

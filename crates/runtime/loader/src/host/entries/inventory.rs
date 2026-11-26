@@ -19,7 +19,7 @@ entries! {
     fn drop_items(loader as Caller, request as Headed<DropRequest>, out as Out<Entity>) -> Status {
         // `out` is checked before the drop: after it, a mod told BAD_ARGS
         // would drop again.
-        out.put(Entity(crate::inventory::drops::drop_items(loader, &request)?))
+        out.put(Entity::from_engine(crate::inventory::drops::drop_items(loader, &request)?))
     }
 
     fn survivor_lookup(
@@ -148,7 +148,7 @@ entries! {
         item: enshwick_core::ItemId,
         [out, capacity, count] as ListOut<api_frame::ItemLine>,
     ) -> Status {
-        out.put(&crate::inventory::stats::item_lines(pide.0, item.get())?)
+        out.put(&crate::inventory::stats::item_lines(pide.get(), item.get())?)
     }
 
     fn affix_info(_loader as Caller, affix: u32, text as Out<Str>, rarity as Out<u8>) -> Status {
@@ -272,7 +272,7 @@ entries! {
         item: enshwick_core::ItemId,
         [out, capacity, len] as BytesOut,
     ) -> Status {
-        out.put(&crate::inventory::item_data::get(kind, pide.0, item.get())?)
+        out.put(&crate::inventory::item_data::get(kind, pide.get(), item.get())?)
     }
 
     fn set_item_data(
@@ -282,7 +282,7 @@ entries! {
         item: enshwick_core::ItemId,
         [data, len] as List<u8>,
     ) -> Status {
-        crate::inventory::item_data::set(kind, pide.0, item.get(), data)?;
+        crate::inventory::item_data::set(kind, pide.get(), item.get(), data)?;
         Ok(())
     }
 

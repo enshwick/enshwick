@@ -6,7 +6,7 @@ mod tests {
 
     use enshwick::Entity;
     use enshwick::WorldError;
-    use enshwick::abi::{Header, PlayerInfo, Status};
+    use enshwick::abi::{PlayerInfo, Status};
     use enshwick::content::EngineFacts;
     use enshwick::ecs::ComponentType;
     use enshwick::events::{ShutdownStarted, WorldLoaded, WorldSaved};
@@ -58,21 +58,20 @@ mod tests {
     fn queries_destroys_saves_and_stores_follow_the_world() {
         let data = std::env::temp_dir().join(format!("enshwick-queries-{}", std::process::id()));
         let _gone = std::fs::remove_dir_all(&data);
-        let player = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let player = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: Entity(2),
+            entity: Entity::from_engine(2),
             key: enshwick::PlayerKey::new(7),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        };
+        });
         let loader = FakeHost::new()
             .world()
             .type_hash("keen::ecs::NpcBed", BED)
-            .placed(BED, Entity(10), [0.0, 0.0, 30.0])
-            .placed(BED, Entity(11), [3.0, 0.0, 4.0])
-            .placed(transform(), Entity(2), [0.0, 0.0, 0.0])
+            .placed(BED, Entity::from_engine(10), [0.0, 0.0, 30.0])
+            .placed(BED, Entity::from_engine(11), [3.0, 0.0, 4.0])
+            .placed(transform(), Entity::from_engine(2), [0.0, 0.0, 0.0])
             .player(player)
             .data_dir(data.to_str().unwrap())
             .world_key("world0")
@@ -85,17 +84,24 @@ mod tests {
         let store = STORE.get().unwrap();
 
         let beds = *BEDS.get().unwrap();
-        assert_eq!(world.entities(beds).len(), 2);
+        assert_eq!(world.entities(beds).unwrap().len(), 2);
         let near: Vec<Entity> = world
             .near([0.0; 3], 10.0, beds)
+            .unwrap()
             .iter()
             .map(|p| p.entity)
             .collect();
-        assert_eq!(near, [Entity(11)]);
+        assert_eq!(near, [Entity::from_engine(11)]);
 
-        assert_eq!(world.destroy(Entity(11)), Ok(()));
-        assert_eq!(world.destroy(Entity(2)), Err(WorldError::Refused));
-        assert_eq!(world.destroy(Entity(99)), Err(WorldError::Gone));
+        assert_eq!(world.destroy(Entity::from_engine(11)), Ok(()));
+        assert_eq!(
+            world.destroy(Entity::from_engine(2)),
+            Err(WorldError::Refused)
+        );
+        assert_eq!(
+            world.destroy(Entity::from_engine(99)),
+            Err(WorldError::Gone)
+        );
         assert_eq!(loader.destroyed(), [11]);
         assert_eq!(world.save(), Ok(()));
         assert_eq!(loader.saves(), 1);

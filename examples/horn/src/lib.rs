@@ -83,7 +83,7 @@ enshwick::declare_mod!(Horn);
 mod tests {
     use std::time::Duration;
 
-    use enshwick::abi::{Header, PlayerInfo, Status};
+    use enshwick::abi::{PlayerInfo, Status};
     use enshwick::controls::{GameAction, Key};
 
     use super::*;
@@ -126,15 +126,14 @@ mod tests {
     #[test]
     fn interacting_is_logged_on_the_server_for_the_player() {
         let loader = start(enshwick::test::FakeHost::new().side(Side::SERVER));
-        let mut ann = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let mut ann = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: enshwick::Entity(2),
+            entity: enshwick::Entity::from_engine(2),
             key: enshwick::PlayerKey::new(7),
             permissions: 0,
             name_len: 3,
             name: [0; PlayerInfo::NAME_MAX],
-        };
+        });
         ann.name[..3].copy_from_slice(b"Ann");
         let interact = [GameAction::ContextualAction];
         assert_eq!(

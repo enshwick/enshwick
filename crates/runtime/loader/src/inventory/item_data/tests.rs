@@ -8,12 +8,12 @@ use crate::inventory::item_records::anchor::{CharacterId, Index};
 
 /// The values key of kind `kind` on entity `pide`.
 const fn key(kind: u32, pide: u32) -> (KindIndex, Entity) {
-    (KindIndex(kind), Entity(pide))
+    (KindIndex(kind), Entity::from_engine(pide))
 }
 
 /// The item entity `pide` holding `item`, as a slot reads.
 const fn holding(pide: u32, item: u32) -> (Entity, ItemId) {
-    (Entity(pide), ItemId(item))
+    (Entity::from_engine(pide), ItemId(item))
 }
 use crate::inventory::item_records::file::{self, Saved};
 
@@ -53,8 +53,8 @@ fn a_destroyed_entity_loses_its_records_and_an_unloaded_one_keeps_them() {
     values.insert(key(0, 900), record(7));
     values.insert(key(1, 900), record(0));
     values.insert(key(0, 901), record(7));
-    requests.note(Entity(900));
-    requests.note(Entity(0));
+    requests.note(Entity::from_engine(900));
+    requests.note(Entity::from_engine(0));
     let (destroyed, overflowed) = requests.take();
     assert!(!overflowed);
     assert!(requests.take().0.is_empty(), "each request is taken once");
@@ -67,21 +67,21 @@ fn a_destroyed_entity_loses_its_records_and_an_unloaded_one_keeps_them() {
     // Past the cap in one step, the requests that fit are taken and the
     // overflow says the step's end checks every record against the world.
     for entity in 1..=u32::try_from(DESTROYED_CAP).unwrap() + 10 {
-        requests.note(Entity(entity));
+        requests.note(Entity::from_engine(entity));
     }
     let (destroyed, overflowed) = requests.take();
     assert!(overflowed);
     assert_eq!(destroyed.len(), DESTROYED_CAP);
     assert!(!destroyed.contains(&(u32::try_from(DESTROYED_CAP).unwrap() + 1)));
-    requests.note(Entity(3));
+    requests.note(Entity::from_engine(3));
     assert!(!requests.take().1, "the next step starts below the cap");
     // A request filled after its round was taken never reaches a later
     // one, where its slot is still being filled.
-    requests.note(Entity(1));
+    requests.note(Entity::from_engine(1));
     let late = requests.reserve();
     assert_eq!(requests.take().0.into_iter().collect::<Vec<_>>(), [1]);
-    requests.fill(late, Entity(5));
-    requests.note(Entity(2));
+    requests.fill(late, Entity::from_engine(5));
+    requests.note(Entity::from_engine(2));
     let _filling = requests.reserve();
     assert_eq!(requests.take().0.into_iter().collect::<Vec<_>>(), [2]);
 }
@@ -253,7 +253,7 @@ fn a_leaving_player_s_item_values_go_aside_and_no_other_value_moves() {
         .values
         .insert(key(1, ANN), value(9, Some(Anchor::Placed(chest(2))), 5));
     let held = |pide: Entity| {
-        let (root, item) = match pide.0 {
+        let (root, item) = match pide.get() {
             2001 => (ANN, 77),
             2002 => (ANN, 78),
             2003 => (BEN, 77),
@@ -263,10 +263,10 @@ fn a_leaving_player_s_item_values_go_aside_and_no_other_value_moves() {
         Some(game::Held {
             anchor: None,
             item: ItemId(item),
-            root: Entity(root),
+            root: Entity::from_engine(root),
         })
     };
-    let kept = keep_carried(&mut world, Entity(ANN), held);
+    let kept = keep_carried(&mut world, Entity::from_engine(ANN), held);
     assert_eq!((kept.waiting, kept.aside), (0, 2));
     let mut kept: Vec<_> = world.values.keys().copied().collect();
     kept.sort_unstable();
@@ -308,7 +308,7 @@ fn a_leaving_character_s_items_wait_for_its_join_and_come_back_in_their_slots() 
     world.values.insert(key(0, 2002), value(78, 2));
     world.values.insert(key(0, 2003), value(79, 3));
     let left = |pide: Entity| {
-        let (anchor, item) = match pide.0 {
+        let (anchor, item) = match pide.get() {
             2001 => (Some((0, 1)), 77),
             2002 => (Some((0, 2)), 78),
             2003 => (None, 79),
@@ -321,10 +321,10 @@ fn a_leaving_character_s_items_wait_for_its_join_and_come_back_in_their_slots() 
                 slot,
             }),
             item: ItemId(item),
-            root: Entity(ANN),
+            root: Entity::from_engine(ANN),
         })
     };
-    let kept = keep_carried(&mut world, Entity(ANN), left);
+    let kept = keep_carried(&mut world, Entity::from_engine(ANN), left);
     assert_eq!((kept.waiting, kept.aside), (2, 1));
     assert!(world.values.is_empty());
     assert!(world.changed);
@@ -368,14 +368,14 @@ fn a_second_leave_keeps_one_waiting_record_per_slot_with_the_newer_value() {
     kinds();
     let mut world = server(Vec::new(), Vec::new());
     let in_slot = |pide: Entity| {
-        (pide.0 == 2001 || pide.0 == 3001).then_some(game::Held {
+        (pide.get() == 2001 || pide.get() == 3001).then_some(game::Held {
             anchor: Some(Anchor::Carried {
                 character: ANN_GUID,
                 link: 0,
                 slot: 1,
             }),
             item: ItemId(77),
-            root: Entity(ANN),
+            root: Entity::from_engine(ANN),
         })
     };
     let value = |byte| Record {
@@ -384,11 +384,11 @@ fn a_second_leave_keeps_one_waiting_record_per_slot_with_the_newer_value() {
         value: Box::new([byte]),
     };
     world.values.insert(key(0, 2001), value(1));
-    let kept = keep_carried(&mut world, Entity(ANN), in_slot);
+    let kept = keep_carried(&mut world, Entity::from_engine(ANN), in_slot);
     assert_eq!((kept.waiting, kept.aside), (1, 0));
     // Rejoined, nothing taken back in time, a new value set, left again.
     world.values.insert(key(0, 3001), value(2));
-    let kept = keep_carried(&mut world, Entity(ANN), in_slot);
+    let kept = keep_carried(&mut world, Entity::from_engine(ANN), in_slot);
     assert_eq!((kept.waiting, kept.aside), (1, 0));
     let pending: Vec<(u8, bool)> = world
         .pending
@@ -434,7 +434,7 @@ fn a_value_set_on_a_slot_an_older_record_waits_on_sets_that_record_aside() {
 
 #[test]
 fn a_value_cleared_where_its_slot_does_not_read_never_comes_back_at_the_next_look() {
-    const ANN: Entity = Entity(7);
+    const ANN: Entity = Entity::from_engine(7);
     const ANN_GUID: CharacterId = CharacterId([0xa1; 16]);
     kinds();
     let slot = Anchor::Carried {
@@ -453,7 +453,13 @@ fn a_value_cleared_where_its_slot_does_not_read_never_comes_back_at_the_next_loo
         Vec::new(),
     );
     // Ann just joined; off the game thread her item's slot does not read.
-    forget_carried(&mut world, KindIndex(0), Entity(3001), ItemId(77), None);
+    forget_carried(
+        &mut world,
+        KindIndex(0),
+        Entity::from_engine(3001),
+        ItemId(77),
+        None,
+    );
     let mut joining = Joining::new(ANN);
     let mut found = Vec::new();
     let _look = look(
@@ -471,7 +477,7 @@ fn a_value_cleared_where_its_slot_does_not_read_never_comes_back_at_the_next_loo
 
 #[test]
 fn a_slow_join_counts_its_looks_from_when_its_inventories_fill() {
-    const ANN: Entity = Entity(7);
+    const ANN: Entity = Entity::from_engine(7);
     const ANN_GUID: CharacterId = CharacterId([0xa1; 16]);
     kinds();
     let mut world = server(
@@ -527,7 +533,7 @@ fn a_slow_join_counts_its_looks_from_when_its_inventories_fill() {
 
 #[test]
 fn a_join_that_never_fills_stops_at_the_cap_and_its_records_keep_waiting() {
-    const ANN: Entity = Entity(7);
+    const ANN: Entity = Entity::from_engine(7);
     const ANN_GUID: CharacterId = CharacterId([0xa1; 16]);
     kinds();
     let record = Pending {
@@ -603,7 +609,13 @@ fn records_batch_into_messages_no_longer_than_the_limit_in_their_order() {
     let mut messages = Vec::new();
     let mut whole = Vec::new();
     for pide in 0..100 {
-        push_encoded(&mut messages, "a:charges", Entity(pide), 7, &[3; 20]);
+        push_encoded(
+            &mut messages,
+            "a:charges",
+            Entity::from_engine(pide),
+            7,
+            &[3; 20],
+        );
         encode(&mut whole, "a:charges", pide, 7, &[3; 20]);
     }
     assert!(messages.len() > 1);
@@ -619,7 +631,10 @@ fn records_batch_into_messages_no_longer_than_the_limit_in_their_order() {
 fn a_taken_back_item_stats_value_makes_the_wearers_look_again() {
     kinds();
     let stats = kind_of(enshwick_core::stats::ITEM_KIND).unwrap();
-    assert!(touches_item_stats(&[key(0, 3001), (stats, Entity(3002))]));
+    assert!(touches_item_stats(&[
+        key(0, 3001),
+        (stats, Entity::from_engine(3002))
+    ]));
     assert!(!touches_item_stats(&[key(0, 3001)]));
 }
 
@@ -814,7 +829,7 @@ fn a_hosted_game_s_end_forgets_the_server_s_records_so_the_next_world_starts_cle
     state.kept.store(true, Ordering::Relaxed);
     state.finding.store(true, Ordering::Relaxed);
     state.unread.store(true, Ordering::Relaxed);
-    state.destroyed.note(Entity(900));
+    state.destroyed.note(Entity::from_engine(900));
     let (last, finding) = state.forget_server().unwrap();
     assert_eq!(last.unopened, ["old:kind"], "handed on for its last write");
     assert!(finding, "its records still waited for the first step");
@@ -835,7 +850,7 @@ fn a_hosted_game_s_end_forgets_the_server_s_records_so_the_next_world_starts_cle
 fn the_inventory_parts_forget_the_item_data_server_at_a_hosted_game_s_end() {
     STATE.kept.store(true, Ordering::Relaxed);
     STATE.unread.store(true, Ordering::Relaxed);
-    STATE.destroyed.note(Entity(901));
+    STATE.destroyed.note(Entity::from_engine(901));
     let loader: &'static Loader = Box::leak(Box::new(crate::start::tests::bare_loader()));
     crate::engine::parts::Part::forget_in(crate::inventory::PARTS, "item_data", loader);
     assert!(!STATE.kept.load(Ordering::Relaxed));
@@ -848,7 +863,7 @@ fn a_loaded_world_starts_its_records_from_its_own_file_alone() {
     let state = State::new();
     state.kept.store(true, Ordering::Relaxed);
     state.unread.store(true, Ordering::Relaxed);
-    state.destroyed.note(Entity(900));
+    state.destroyed.note(Entity::from_engine(900));
     let waiting = Pending {
         kind: KindIndex(0),
         anchor: Anchor::Session(5),

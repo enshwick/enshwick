@@ -15,7 +15,7 @@ use core::ffi::c_void;
 use core::ops::ControlFlow;
 use std::sync::OnceLock;
 
-use enshwick_core::abi::{ContainerPut, ContainerRuleFn, FILTER_REFUSE, Header, HookFlags};
+use enshwick_core::abi::{ContainerPut, ContainerRuleFn, FILTER_REFUSE, HookFlags};
 use enshwick_core::raw::{read_at, read_ptr_at, write_at};
 use enshwick_core::{Entity, ItemId};
 
@@ -293,16 +293,15 @@ unsafe fn asked(
     // reflection sizes at 4 bytes, its u32 item id alone (checked by
     // `layout`).
     let container_item = ItemId::new(unsafe { read_at(used, 0) });
-    Some(ContainerPut {
-        header: Header::of::<ContainerPut>(),
-        container: Entity(container),
+    Some(enshwick_abi::headed!(ContainerPut {
+        container: Entity::from_engine(container),
         container_item,
         // SAFETY: `info` is the put's non-null item info, which starts with
         // the u32 item id the put writes into the slot (server 26430253).
         item: ItemId::new(unsafe { read_at(info.cast::<u8>(), 0) }),
         count,
         slot: crate::inventory::stacks::slot_id(slot),
-    })
+    }))
 }
 
 /// Raises a pickup of `count` of `item` by `character`'s player on the
@@ -323,7 +322,7 @@ pub(crate) fn show_pickup(
     let layout = crate::inventory::item_actions::pickup_event(loader).ok_or(EmitError::Unread)?;
     let count_at = layout.count.ok_or(EmitError::Unread)?;
     let players = crate::engine::world::player_entities(loader).map_err(EmitError::World)?;
-    if !players.contains(&character.0) {
+    if !players.contains(&character.get()) {
         return Err(EmitError::NoEntity);
     }
     let shown = count.min(MOST_SHOWN);
@@ -331,13 +330,13 @@ pub(crate) fn show_pickup(
     for (at, value) in [
         (layout.item, item.get()),
         (count_at, shown),
-        (layout.player, character.0),
+        (layout.player, character.get()),
     ] {
         let field = bytes.get_mut(at..at + 4).ok_or(EmitError::BadSize)?;
         field.copy_from_slice(&value.to_le_bytes());
     }
     crate::base::emits::push(loader, layout.hash, &bytes)?;
-    crate::inventory::item_actions::own_pickup(character.0, item.get(), shown);
+    crate::inventory::item_actions::own_pickup(character.get(), item.get(), shown);
     Ok(())
 }
 
@@ -418,13 +417,14 @@ mod tests {
             )
         };
         let rules = [rule(0x5e01, refuse_ore), rule(0x5e02, count_asks)];
-        let put = |container_item: u32, item: u32| ContainerPut {
-            header: Header::of::<ContainerPut>(),
-            container: Entity(9),
-            container_item: ItemId::new(container_item),
-            item: ItemId::new(item),
-            count: 1,
-            slot: 10,
+        let put = |container_item: u32, item: u32| {
+            enshwick_abi::headed!(ContainerPut {
+                container: Entity::from_engine(9),
+                container_item: ItemId::new(container_item),
+                item: ItemId::new(item),
+                count: 1,
+                slot: 10,
+            })
         };
         assert!(refused_by(&rules, &put(0x5e01, 7)));
         assert!(!refused_by(&rules, &put(0x5e01, 8)));

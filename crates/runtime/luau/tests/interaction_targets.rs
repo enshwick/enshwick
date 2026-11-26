@@ -20,7 +20,7 @@ mod tests {
         let mut bytes = vec![0u8; fake.size(facts::SELECTED_TARGETS.id()).unwrap()];
         bytes[at..][..4].copy_from_slice(&512u32.to_le_bytes());
         let loader = run(
-            fake.component(Entity(40), ty, &bytes),
+            fake.component(Entity::from_engine(40), ty, &bytes),
             r"
             enshwick.on_tick(0.1, function()
                 local target = enshwick.interactions.target(40)

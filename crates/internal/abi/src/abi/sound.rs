@@ -15,16 +15,17 @@ use crate::content::Guid;
 /// use enshwick::abi::{Entity, Header, SoundPlay};
 /// use enshwick::content::Guid;
 ///
-/// let play = SoundPlay {
+/// let play = enshwick::abi::headed!(SoundPlay {
 ///     container: Guid::named("you.bells:bell"),
 ///     place: SoundPlay::AT,
 ///     at: [10.0, 0.0, 0.0],
 ///     ..SoundPlay::EMPTY
-/// };
+/// });
 /// assert_eq!((play.volume, play.entity), (1.0, Entity::NONE));
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct SoundPlay {
     /// Size and version of this struct.
     pub header: Header,
@@ -80,8 +81,8 @@ impl SoundPlay {
     /// use enshwick::abi::SoundPlay;
     ///
     /// assert!(SoundPlay::EMPTY.in_bounds());
-    /// assert!(!SoundPlay { volume: 1.5, ..SoundPlay::EMPTY }.in_bounds());
-    /// assert!(!SoundPlay { place: SoundPlay::ON, ..SoundPlay::EMPTY }.in_bounds());
+    /// assert!(!enshwick::abi::headed!(SoundPlay { volume: 1.5, ..SoundPlay::EMPTY }).in_bounds());
+    /// assert!(!enshwick::abi::headed!(SoundPlay { place: SoundPlay::ON, ..SoundPlay::EMPTY }).in_bounds());
     /// ```
     #[must_use]
     pub fn in_bounds(&self) -> bool {
@@ -105,11 +106,12 @@ impl SoundPlay {
 /// ```
 /// use enshwick::abi::SoundSteer;
 ///
-/// let fade_out = SoundSteer { kind: SoundSteer::STOP, fade_ms: 500, ..SoundSteer::EMPTY };
+/// let fade_out = enshwick::abi::headed!(SoundSteer { kind: SoundSteer::STOP, fade_ms: 500, ..SoundSteer::EMPTY });
 /// assert_eq!(fade_out.volume, 0.0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct SoundSteer {
     /// Size and version of this struct.
     pub header: Header,
@@ -161,7 +163,7 @@ impl SoundSteer {
     /// use enshwick::abi::SoundSteer;
     ///
     /// assert!(SoundSteer::EMPTY.in_bounds());
-    /// assert!(!SoundSteer { kind: SoundSteer::POSITION, at: [f64::NAN; 3], ..SoundSteer::EMPTY }.in_bounds());
+    /// assert!(!enshwick::abi::headed!(SoundSteer { kind: SoundSteer::POSITION, at: [f64::NAN; 3], ..SoundSteer::EMPTY }).in_bounds());
     /// ```
     #[must_use]
     pub fn in_bounds(&self) -> bool {
@@ -185,11 +187,12 @@ impl SoundSteer {
 /// ```
 /// use enshwick::abi::SoundAudience;
 ///
-/// let near = SoundAudience { kind: SoundAudience::NEAR, at: [5.0, 0.0, 5.0], radius: 40.0, ..SoundAudience::EMPTY };
+/// let near = enshwick::abi::headed!(SoundAudience { kind: SoundAudience::NEAR, at: [5.0, 0.0, 5.0], radius: 40.0, ..SoundAudience::EMPTY });
 /// assert!(near.in_bounds());
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct SoundAudience {
     /// Size and version of this struct.
     pub header: Header,
@@ -238,8 +241,8 @@ impl SoundAudience {
     /// use enshwick::abi::SoundAudience;
     ///
     /// assert!(SoundAudience::EMPTY.in_bounds());
-    /// assert!(!SoundAudience { kind: SoundAudience::PLAYER, ..SoundAudience::EMPTY }.in_bounds());
-    /// assert!(!SoundAudience { kind: SoundAudience::NEAR, radius: 900.0, ..SoundAudience::EMPTY }.in_bounds());
+    /// assert!(!enshwick::abi::headed!(SoundAudience { kind: SoundAudience::PLAYER, ..SoundAudience::EMPTY }).in_bounds());
+    /// assert!(!enshwick::abi::headed!(SoundAudience { kind: SoundAudience::NEAR, radius: 900.0, ..SoundAudience::EMPTY }).in_bounds());
     /// ```
     #[must_use]
     pub fn in_bounds(&self) -> bool {
@@ -263,7 +266,7 @@ impl SoundAudience {
     /// use enshwick::PlayerKey;
     /// use enshwick::abi::SoundAudience;
     ///
-    /// let near = SoundAudience { kind: SoundAudience::NEAR, radius: 10.0, ..SoundAudience::EMPTY };
+    /// let near = enshwick::abi::headed!(SoundAudience { kind: SoundAudience::NEAR, radius: 10.0, ..SoundAudience::EMPTY });
     /// assert!(near.hears(PlayerKey::new(7), Some([6.0, 0.0, 8.0])));
     /// assert!(!near.hears(PlayerKey::new(7), Some([6.0, 0.0, 8.1])));
     /// assert!(!near.hears(PlayerKey::new(7), None));
@@ -297,6 +300,7 @@ impl SoundAudience {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct SoundInfo {
     /// Size and version of this struct.
     pub header: Header,

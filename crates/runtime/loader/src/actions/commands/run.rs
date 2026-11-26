@@ -3,7 +3,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-use enshwick_core::abi::{CommandInfo, Header, Str};
+use enshwick_core::abi::{CommandInfo, Str};
 
 use enshwick_base::Relock;
 use enshwick_core::command_names::{FEATURE, alias_asked, check};
@@ -348,11 +348,12 @@ pub(crate) fn listed(record: &ModRecord) -> bool {
 pub(crate) fn list(loader: &'static Loader) -> Vec<CommandInfo> {
     running(loader)
         .into_iter()
-        .map(|(n, id)| CommandInfo {
-            header: Header::of::<CommandInfo>(),
-            name: Str::new(&n.name),
-            alias: n.alias.as_deref().map_or(Str::EMPTY, Str::new),
-            mod_id: Str::new(id),
+        .map(|(n, id)| {
+            enshwick_abi::headed!(CommandInfo {
+                name: Str::new(&n.name),
+                alias: n.alias.as_deref().map_or(Str::EMPTY, Str::new),
+                mod_id: Str::new(id),
+            })
         })
         .collect()
 }

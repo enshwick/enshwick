@@ -36,14 +36,7 @@ const LOCKER: Id = id!("locker");
 const LOCKER_RECIPE: Id = LOCKER.part("recipe");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    load.add_recipe(NewRecipe {
-        id: LOCKER_RECIPE,
-        like: vanilla::item("Prop_Storage_24_T1_Box")?,
-        output: LOCKER.guid(),
-        output_count: 1,
-        cost: 2,
-        workshop: None,
-    })
+    load.add_recipe(NewRecipe::new(LOCKER_RECIPE, vanilla::item("Prop_Storage_24_T1_Box")?, LOCKER.guid(), 1, 2))
 }
 ```
 
@@ -100,7 +93,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
         recipe
             .debug_name()
             .starts_with("Block_")
-            .then_some(Derived { output: 2, cost: 1, workshop: None })
+            .then_some(Derived::new(2, 1))
     })
 }
 ```

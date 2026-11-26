@@ -16,6 +16,7 @@ mod controls;
 mod damage;
 mod daytime;
 mod deps;
+mod errors;
 mod every_call;
 mod harness;
 mod i18n;

@@ -4,7 +4,7 @@ use std::sync::Mutex;
 
 use crate::__load::*;
 use crate::Off;
-use crate::abi::{Header, Str, UiExtension};
+use crate::abi::{Str, UiExtension};
 
 use super::client_only;
 use super::frame::{Drawer, draw_frame};
@@ -289,8 +289,7 @@ impl LoadMethods for crate::BaseLoad {
                     UiExtension::MAX_HOSTS
                 ))
             })?;
-        let spec = UiExtension {
-            header: Header::of::<UiExtension>(),
+        let spec = enshwick_abi::headed!(UiExtension {
             screen: Str::new(screen.name()),
             edge: place.edge.to_raw(),
             reserved: 0,
@@ -301,7 +300,7 @@ impl LoadMethods for crate::BaseLoad {
             shift: place.shift,
             inset: place.inset,
             reserved_place: 0,
-        };
+        });
         crate::load::hand_over(
             Drawer {
                 host,

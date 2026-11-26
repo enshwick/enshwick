@@ -44,7 +44,7 @@ fn read(s: &State, entity: Entity) -> Result<Option<Metres>, Status> {
     if !waypoints::fields_inside(size, enabled, position) {
         return Err(Status::UNAVAILABLE);
     }
-    let Some(&(address, len)) = base.components.get(&(entity.0, hash)) else {
+    let Some(&(address, len)) = base.components.get(&(entity.get(), hash)) else {
         return Ok(None);
     };
     if len < size {

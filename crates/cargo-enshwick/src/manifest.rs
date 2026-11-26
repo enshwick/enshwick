@@ -247,14 +247,13 @@ fn query(_dll: &Path) -> Result<Manifest, String> {
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{Dependency, Header, ManifestFlags, Relation, Side, Str};
+    use enshwick::abi::{Dependency, ManifestFlags, Relation, Side, Str};
 
     use super::*;
 
     /// A manifest of `id` and `version` and nothing else, as a DLL holds it.
     fn plain(id: &'static str, version: &'static str) -> Manifest {
-        Manifest {
-            header: Header::of::<Manifest>(),
+        enshwick_abi::headed!(Manifest {
             id: Str::new(id),
             version: Str::new(version),
             side: Side::SERVER,
@@ -272,7 +271,7 @@ mod tests {
             points: Str::EMPTY,
             exports: core::ptr::null(),
             export_count: 0,
-        }
+        })
     }
 
     #[test]
@@ -337,7 +336,7 @@ mod tests {
             relation("you.lanterns", "", Relation::AFTER),
             relation("you.old-stalls", "<0.3", Relation::BREAKS),
         ];
-        let manifest = Manifest {
+        let manifest = enshwick_abi::headed!(Manifest {
             side: Side::BOTH,
             flags: ManifestFlags::NONE,
             dependencies: dependencies.as_ptr(),
@@ -351,7 +350,7 @@ mod tests {
             exports: EXPORTS.as_ptr(),
             export_count: u32::try_from(EXPORTS.len()).unwrap(),
             ..plain("you.market-stalls", "0.2.0")
-        };
+        });
         assert_eq!(
             // SAFETY: every string and list of `manifest` is a static or a
             // local that outlives the call, never written.

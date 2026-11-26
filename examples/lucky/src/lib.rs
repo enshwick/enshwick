@@ -59,14 +59,11 @@ impl Mod for Lucky {
             ],
         )?;
         let luck = load.define_stat(id!("luck"), &StatDef::additive().range(0.0, 1.0))?;
-        let icon = Icon {
-            id: LUCKY_ICON,
-            like: FOOD_ICON,
-            pixels: Pixels::Tint(Tint {
-                colour: [60, 200, 90],
-                amount: 70,
-            }),
-        };
+        let icon = Icon::new(
+            LUCKY_ICON,
+            FOOD_ICON,
+            Pixels::Tint(Tint::new([60, 200, 90], 70)),
+        );
         let lucky = load.add_buff(
             NewBuff::new(LUCKY, FOOD)
                 .name(LUCKY_NAME.guid())
@@ -108,7 +105,14 @@ impl Mod for Lucky {
 
         // Says at each world load whether the game knows the type.
         load.on::<WorldLoaded>(move |()| {
-            match buffs.types().iter().find(|ty| ty.buff_type_id == lucky) {
+            let types = match buffs.types() {
+                Ok(types) => types,
+                Err(why) => {
+                    enshwick::warn!("the buff types are not readable: {why}");
+                    return;
+                }
+            };
+            match types.iter().find(|ty| ty.buff_type_id == lucky) {
                 Some(ty) => enshwick::info!(
                     "buff type {lucky:?} is in the game: {:?}, {:?}",
                     ty.slot,
@@ -162,7 +166,7 @@ mod tests {
 
     #[test]
     fn each_world_load_says_whether_the_game_knows_the_type() {
-        use enshwick::abi::{BuffTypeInfo, Header};
+        use enshwick::abi::BuffTypeInfo;
         use enshwick::events::WorldLoaded;
 
         let loader = start(enshwick::test::FakeHost::new().buffs(&[FOOD]));
@@ -176,14 +180,13 @@ mod tests {
         assert_eq!(loader.raise::<WorldLoaded>(&()), 1);
         assert_eq!(found(&loader, "is not in the game"), 1);
         let lucky = BuffTypeId::from_guid(LUCKY.guid());
-        let ty = BuffTypeInfo {
-            header: Header::of::<BuffTypeInfo>(),
+        let ty = enshwick::abi::headed!(BuffTypeInfo {
             id: lucky,
             slot: BuffTypeInfo::BUFF,
             flags: 0,
             name: 0,
             duration_ns: 300_000_000_000,
-        };
+        });
         loader.set_buffs(&[ty], &[]);
         assert_eq!(loader.raise::<WorldLoaded>(&()), 1);
         assert_eq!(

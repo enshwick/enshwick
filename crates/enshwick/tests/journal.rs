@@ -21,7 +21,7 @@ mod tests {
     const TRAIL: Id = Id::new("you.trail:trail");
     const LORE: Id = Id::new("you.trail:lore");
     const TORCH: Guid = Guid::parse("c0ffee00-0000-4000-8000-0000000a7c01");
-    const PLAYER: Entity = Entity(4096);
+    const PLAYER: Entity = Entity::from_engine(4096);
 
     static QUEST: Mutex<Option<KnowledgeId>> = Mutex::new(None);
     static KNOWLEDGE: OnceLock<Knowledge> = OnceLock::new();
@@ -52,9 +52,8 @@ mod tests {
                 KnowledgeType::Counter,
             ))?;
             let is = |id| KnowledgeQuery::is_set(id, Scope::Player);
-            let quest = load.add_quest(NewQuest {
-                rewards: vec![QuestReward::Item(TORCH)],
-                ..NewQuest::new(
+            let quest = load.add_quest({
+                let mut value = NewQuest::new(
                     TRAIL,
                     tag("trail.name"),
                     vec![
@@ -66,67 +65,57 @@ mod tests {
                         ),
                         QuestStep::new(tag("trail.2"), tag("trail.2.text"), is(given), is(given)),
                     ],
-                )
+                );
+                value.rewards = vec![QuestReward::Item(TORCH)];
+                value
             })?;
             *QUEST.lock().unwrap() = Some(quest);
-            load.add_journal_page(NewJournalPage {
-                id: LORE,
-                category: LORE_CATEGORY,
-                name: tag("lore.name"),
-                entries: vec![PageEntry {
-                    name: tag("lore.1"),
-                    text: tag("lore.1.text"),
-                    shown_when: is(given),
-                }],
-            })?;
-            refused(load.add_journal_page(NewJournalPage {
-                id: Id::new("you.trail:own-category"),
-                category: tag("lore.category"),
-                name: tag("lore.name"),
-                entries: vec![PageEntry {
-                    name: tag("lore.1"),
-                    text: tag("lore.1.text"),
-                    shown_when: is(given),
-                }],
-            }));
+            load.add_journal_page(NewJournalPage::new(
+                LORE,
+                LORE_CATEGORY,
+                tag("lore.name"),
+                vec![PageEntry::new(tag("lore.1"), tag("lore.1.text"), is(given))],
+            ))?;
+            refused(load.add_journal_page(NewJournalPage::new(
+                Id::new("you.trail:own-category"),
+                tag("lore.category"),
+                tag("lore.name"),
+                vec![PageEntry::new(tag("lore.1"), tag("lore.1.text"), is(given))],
+            )));
             let vanilla = KnowledgeId::new(VANILLA_QUEST);
-            load.change_quest(
-                vanilla,
-                QuestChange {
-                    rewards: Some(Vec::new()),
-                    for_all_players: Some(true),
-                    ..QuestChange::default()
-                },
-            )?;
-            load.change_quest(
-                vanilla,
-                QuestChange {
-                    add_rewards: vec![QuestReward::Item(TORCH)],
-                    steps: vec![StepEdit::Change(StepChange {
-                        step: 0,
-                        done_when: Some(is(given)),
-                        ..StepChange::default()
-                    })],
-                    ..QuestChange::default()
-                },
-            )?;
+            load.change_quest(vanilla, {
+                let mut value = QuestChange::default();
+                value.rewards = Some(Vec::new());
+                value.for_all_players = Some(true);
+                value
+            })?;
+            load.change_quest(vanilla, {
+                let mut value = QuestChange::default();
+                value.add_rewards = vec![QuestReward::Item(TORCH)];
+                value.steps = vec![StepEdit::Change({
+                    let mut value = StepChange::default();
+                    value.step = 0;
+                    value.done_when = Some(is(given));
+                    value
+                })];
+                value
+            })?;
             refused(load.add_quest(NewQuest::new(
                 Id::new("you.trail:empty"),
                 tag("empty"),
                 Vec::new(),
             )));
             refused(load.change_quest(KnowledgeId::new(1), QuestChange::default()));
-            refused(load.change_quest(
-                vanilla,
-                QuestChange {
-                    steps: vec![StepEdit::Change(StepChange {
-                        step: 4,
-                        shown_when: Some(is(given)),
-                        ..StepChange::default()
-                    })],
-                    ..QuestChange::default()
-                },
-            ));
+            refused(load.change_quest(vanilla, {
+                let mut value = QuestChange::default();
+                value.steps = vec![StepEdit::Change({
+                    let mut value = StepChange::default();
+                    value.step = 4;
+                    value.shown_when = Some(is(given));
+                    value
+                })];
+                value
+            }));
             refused(load.add_quest(NewQuest::new(
                 Id::new("you.trail:zero"),
                 tag("zero"),
@@ -296,7 +285,11 @@ mod tests {
             loader.component_bytes(PLAYER, fnv1a32(PROGRESSION.as_bytes())),
             Some(vec![1, 0, 0, 0, 5, 0, 0, 0])
         );
-        assert_eq!(knowledge.quest_progression(Entity(1)), None);
-        assert!(knowledge.set_quest_progression(Entity(1), true).is_err());
+        assert_eq!(knowledge.quest_progression(Entity::from_engine(1)), None);
+        assert!(
+            knowledge
+                .set_quest_progression(Entity::from_engine(1), true)
+                .is_err()
+        );
     }
 }

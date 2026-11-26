@@ -3,7 +3,7 @@
 mod blocks;
 mod props;
 
-use enshwick_core::abi::{BuildRights, Header, TerrainEdit};
+use enshwick_core::abi::{BuildRights, TerrainEdit};
 
 use super::TransactionError;
 use super::block::Block;
@@ -96,13 +96,12 @@ impl Voxels for Game<'_> {
         min: [f64; 3],
         max: [f64; 3],
     ) -> Result<u32, TransactionError> {
-        let check = BuildRights {
-            header: Header::of::<BuildRights>(),
-            character: enshwick_core::Entity(actor),
+        let check = enshwick_abi::headed!(BuildRights {
+            character: enshwick_core::Entity::from_engine(actor),
             refusal: BuildRights::ALLOWED,
             min,
             max,
-        };
+        });
         crate::world::rights::check(self.loader, &check).map_err(Into::into)
     }
 

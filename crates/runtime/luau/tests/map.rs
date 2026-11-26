@@ -4,35 +4,34 @@
 mod tests {
     use std::time::Duration;
 
-    use enshwick::abi::{Header, MapFrameInfo, PlayerInfo};
+    use enshwick::abi::{MapFrameInfo, PlayerInfo};
     use enshwick::content::EngineFacts;
     use enshwick::test::{FakeHost, facts};
     use enshwick::{Entity, PlayerKey};
 
     use crate::harness::{logged, run};
 
-    const ANN: Entity = Entity(40);
+    const ANN: Entity = Entity::from_engine(40);
 
     fn fake() -> FakeHost {
         FakeHost::new()
             .world()
             .map_waypoints()
             .effect_events()
-            .map_frame(MapFrameInfo {
+            .map_frame(enshwick::abi::headed!(MapFrameInfo {
                 origin: [-1000.0; 2],
                 size: [2000.0; 2],
                 metres_per_cell: 8.0,
                 ..MapFrameInfo::EMPTY
-            })
-            .player(PlayerInfo {
-                header: Header::of::<PlayerInfo>(),
+            }))
+            .player(enshwick::abi::headed!(PlayerInfo {
                 slot: 0,
                 entity: ANN,
                 key: PlayerKey::new(7),
                 permissions: 0,
                 name_len: 0,
                 name: [0; PlayerInfo::NAME_MAX],
-            })
+            }))
     }
 
     #[test]
@@ -68,7 +67,7 @@ mod tests {
             ",
         );
         let mut ping = vec![0u8; ping_size];
-        ping[sender..][..4].copy_from_slice(&ANN.0.to_le_bytes());
+        ping[sender..][..4].copy_from_slice(&ANN.get().to_le_bytes());
         for (axis, value) in enshwick::ecs::fixed([3.0, 2.0, 1.0]).iter().enumerate() {
             ping[ping_at + 8 * axis..][..8].copy_from_slice(&value.to_le_bytes());
         }
@@ -88,17 +87,19 @@ mod tests {
 
     #[test]
     fn a_script_hears_fog_its_player_uncovered() {
-        let fog = |window| enshwick::abi::FogInfo {
-            width: 4,
-            height: 3,
-            metres_per_pixel: 8.0,
-            size_z: 24.0,
-            session: 1,
-            uncovered: window,
-            uncovered_pixels: 2,
-            uncovered_min: [1, 1],
-            uncovered_size: [2, 1],
-            ..enshwick::abi::FogInfo::EMPTY
+        let fog = |window| {
+            enshwick::abi::headed!(enshwick::abi::FogInfo {
+                width: 4,
+                height: 3,
+                metres_per_pixel: 8.0,
+                size_z: 24.0,
+                session: 1,
+                uncovered: window,
+                uncovered_pixels: 2,
+                uncovered_min: [1, 1],
+                uncovered_size: [2, 1],
+                ..enshwick::abi::FogInfo::EMPTY
+            })
         };
         let loader = run(
             FakeHost::new()

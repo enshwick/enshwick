@@ -19,6 +19,10 @@ use crate::abi::{Header, Str};
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct LayoutField {
     /// The field's name.
     pub name: Str,
@@ -39,6 +43,10 @@ pub struct LayoutField {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct Layout {
     /// The fields, in declaration order.
     pub fields: *const LayoutField,
@@ -55,17 +63,17 @@ pub struct Layout {
 /// ```
 /// use enshwick::abi::{Header, Layout, ServiceSpec, Str};
 ///
-/// let spec = ServiceSpec {
-///     header: Header::of::<ServiceSpec>(),
+/// let spec = enshwick::abi::headed!(ServiceSpec {
 ///     name: Str::new("you.trading-post:prices"),
 ///     major: 1,
 ///     layout: Layout { fields: core::ptr::null(), count: 0, size: 0 },
 ///     table: core::ptr::null(),
-/// };
+/// });
 /// assert_eq!(spec.major, 1);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct ServiceSpec {
     /// Size and version of this struct.
     pub header: Header,
@@ -93,6 +101,7 @@ impl_headed!(ServiceSpec);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct ServiceFound {
     /// Size and version of this struct.
     pub header: Header,
@@ -129,15 +138,15 @@ impl ServiceFound {
 /// ```
 /// use enshwick::abi::{EventSpec, Header, Layout, Str};
 ///
-/// let spec = EventSpec {
-///     header: Header::of::<EventSpec>(),
+/// let spec = enshwick::abi::headed!(EventSpec {
 ///     name: Str::new("you.trading-post:sold"),
 ///     layout: Layout { fields: core::ptr::null(), count: 0, size: 0 },
-/// };
+/// });
 /// assert_eq!(spec.layout.size, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct EventSpec {
     /// Size and version of this struct.
     pub header: Header,
@@ -170,17 +179,17 @@ pub type ModEventFn = unsafe extern "system" fn(data: *const c_void, user: *mut 
 /// use enshwick::abi::{CallSpec, Header, Layout, Str};
 ///
 /// let none = Layout { fields: core::ptr::null(), count: 0, size: 0 };
-/// let spec = CallSpec {
-///     header: Header::of::<CallSpec>(),
+/// let spec = enshwick::abi::headed!(CallSpec {
 ///     name: Str::new("you.trading-post:price-of"),
 ///     major: 1,
 ///     input: none,
 ///     output: none,
-/// };
+/// });
 /// assert_eq!(spec.major, 1);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct CallSpec {
     /// Size and version of this struct.
     pub header: Header,

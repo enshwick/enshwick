@@ -376,7 +376,6 @@ mod game {
 
 #[cfg(test)]
 mod tests {
-    use enshwick_core::abi::Header;
 
     use super::*;
 
@@ -508,13 +507,12 @@ mod tests {
     }
 
     fn check(min: [f64; 3], max: [f64; 3]) -> BuildRights {
-        BuildRights {
-            header: Header::of::<BuildRights>(),
-            character: enshwick_core::Entity(2),
+        enshwick_abi::headed!(BuildRights {
+            character: enshwick_core::Entity::from_engine(2),
             refusal: 0,
             min,
             max,
-        }
+        })
     }
 
     #[test]

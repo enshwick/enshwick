@@ -25,25 +25,24 @@ impl Installed {
     /// use enshwick::abi::{Header, ItemAction};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let call = ItemAction {
-    ///     header: Header::of::<ItemAction>(),
+    /// let call = enshwick::abi::headed!(ItemAction {
     ///     kind: ItemAction::CONSUME,
-    ///     character: enshwick::Entity(1),
+    ///     character: enshwick::Entity::from_engine(1),
     ///     item: enshwick::ItemId::new(0x5e01),
     ///     count: 1,
-    ///     inventory: enshwick::Entity(2),
+    ///     inventory: enshwick::Entity::from_engine(2),
     ///     slot: 0,
-    /// };
+    /// });
     /// assert!(loader.item_action(&call));
     /// ```
     #[must_use]
     pub fn item_action(&self, call: &ItemAction) -> bool {
         let allowed = ask(call);
         if allowed && call.kind == ItemAction::CONSUME {
-            let _heard = ask(&ItemAction {
+            let _heard = ask(&enshwick_core::headed!(ItemAction {
                 kind: ItemAction::CONSUMED,
                 ..*call
-            });
+            }));
         }
         allowed
     }
@@ -60,15 +59,14 @@ impl Installed {
     /// use enshwick::abi::{Header, ItemAction};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let call = ItemAction {
-    ///     header: Header::of::<ItemAction>(),
+    /// let call = enshwick::abi::headed!(ItemAction {
     ///     kind: ItemAction::CONSUME,
-    ///     character: enshwick::Entity(1),
+    ///     character: enshwick::Entity::from_engine(1),
     ///     item: enshwick::ItemId::new(0x5e01),
     ///     count: 1,
-    ///     inventory: enshwick::Entity(2),
+    ///     inventory: enshwick::Entity::from_engine(2),
     ///     slot: 0,
-    /// };
+    /// });
     /// assert!(loader.refused_use(&call));
     /// ```
     #[must_use]

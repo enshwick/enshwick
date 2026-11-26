@@ -30,7 +30,7 @@
 use core::time::Duration;
 
 use crate::WorldError;
-use crate::abi::{DaytimeInfo, Header, Status};
+use crate::abi::{DaytimeInfo, Status};
 use crate::{Host, Off};
 
 /// Game nanoseconds in an hour.
@@ -118,8 +118,7 @@ impl Clock {
     #[script]
     #[must_use]
     pub fn now(&self) -> Option<TimeOfDay> {
-        let mut info = DaytimeInfo {
-            header: Header::of::<DaytimeInfo>(),
+        let mut info = enshwick_abi::headed!(DaytimeInfo {
             time_ns: 0,
             day_start_ns: 0,
             day_end_ns: 0,
@@ -127,7 +126,7 @@ impl Clock {
             night_length_ns: 0,
             speed: 0.0,
             flags: 0,
-        };
+        });
         let status = (self.host.api().time_of_day)(self.host.handle(), &raw mut info);
         (status == Status::OK).then(|| TimeOfDay::from_info(&info))
     }

@@ -6,7 +6,7 @@ mod tests {
 
     use enshwick::Entity;
     use enshwick::WorldError;
-    use enshwick::abi::{Header, PlayerInfo, Status, TerrainMaterialInfo};
+    use enshwick::abi::{PlayerInfo, Status, TerrainMaterialInfo};
     use enshwick::world::{HeldState, TransactionStatus, World, WorldTransform};
     use enshwick::{ItemId, Load, Mod, Off};
 
@@ -31,7 +31,7 @@ mod tests {
 
     const CHEST: ItemId = ItemId::new(30);
     const PEBBLE: ItemId = ItemId::new(31);
-    const OLD_CHEST: Entity = Entity(40);
+    const OLD_CHEST: Entity = Entity::from_engine(40);
 
     fn started() -> (enshwick::test::Installed, World) {
         started_with(&[])
@@ -60,15 +60,14 @@ mod tests {
         let status =
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        loader.set_terrain(&[TerrainMaterialInfo {
-            header: Header::of::<TerrainMaterialInfo>(),
+        loader.set_terrain(&[enshwick::abi::headed!(TerrainMaterialInfo {
             id: 9,
             flags: 0,
             hardness: 3,
             reserved: 0,
             item: ItemId::new(77),
             health: 500,
-        }]);
+        })]);
         (loader, *WORLD.get().unwrap())
     }
 
@@ -297,7 +296,7 @@ mod tests {
         let (loader, world) = started();
         let id = world
             .transaction()
-            .remove_prop(Entity(999))
+            .remove_prop(Entity::from_engine(999))
             .commit()
             .unwrap();
         loader.run_transactions();
@@ -353,9 +352,9 @@ mod tests {
     }
 
     const PET: ItemId = ItemId::new(32);
-    const PET_ENTITY: Entity = Entity(41);
+    const PET_ENTITY: Entity = Entity::from_engine(41);
     const SEED: ItemId = ItemId::new(33);
-    const CROP: Entity = Entity(42);
+    const CROP: Entity = Entity::from_engine(42);
 
     #[test]
     fn a_creature_or_an_altar_is_no_prop_to_place_or_remove() {
@@ -468,19 +467,18 @@ mod tests {
         const BUILDER: u32 = 2;
         let host = enshwick::test::FakeHost::new()
             .placement_box(CHEST, [-0.5, 0.0, -5.0], [0.5, 2.0, 5.0])
-            .player(PlayerInfo {
-                header: Header::of::<PlayerInfo>(),
+            .player(enshwick::abi::headed!(PlayerInfo {
                 slot: BUILDER,
-                entity: Entity(BUILDER),
+                entity: Entity::from_engine(BUILDER),
                 key: enshwick::PlayerKey::new(u64::from(BUILDER)),
                 permissions: PlayerInfo::CAN_EDIT_WORLD,
                 name_len: 0,
                 name: [0; PlayerInfo::NAME_MAX],
-            })
+            }))
             .building_area([0.0; 3], [1000.0; 3])
             .no_build_zone([104.0, 0.0, 0.0], [106.0, 1000.0, 1000.0], true);
         let (loader, world) = started_from(host);
-        let builder = world.player(Entity(BUILDER)).unwrap();
+        let builder = world.player(Entity::from_engine(BUILDER)).unwrap();
         let along = world
             .transaction_for(&builder)
             .place_prop(CHEST, here())
@@ -491,10 +489,7 @@ mod tests {
             .transaction_for(&builder)
             .place_prop(
                 CHEST,
-                WorldTransform {
-                    position: [100.0, 40.0, 100.0],
-                    orientation: [0.0, quarter, 0.0, quarter],
-                },
+                WorldTransform::new([100.0, 40.0, 100.0], [0.0, quarter, 0.0, quarter]),
             )
             .commit()
             .unwrap();

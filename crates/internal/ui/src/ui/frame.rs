@@ -4,11 +4,13 @@ use core::ffi::c_void;
 use core::marker::PhantomData;
 use std::sync::Mutex;
 
+use crate::Host;
+#[cfg(feature = "typed")]
+use crate::Off;
 use crate::abi::{Str, UiFrame, UiWidget};
 use crate::locks::Relock;
 use crate::sound::SoundContainerId;
-use crate::ui::{Button, Dropdown, Label, MAX_OPTIONS, Screen, Slider, Sound, Toggle};
-use crate::{Host, Off};
+use crate::ui::{Button, Dropdown, Label, MAX_OPTIONS, Screen, Slider, Sound, Toggle, UiError};
 
 use super::widgets::read_only_flag;
 
@@ -151,7 +153,7 @@ impl Frame<'_> {
     #[cfg(feature = "unstable")]
     #[must_use]
     pub fn screen_host(&self) -> Option<crate::Entity> {
-        (self.raw.screen_host.0 != 0).then_some(self.raw.screen_host)
+        (self.raw.screen_host.get() != 0).then_some(self.raw.screen_host)
     }
 
     /// Unstable: needs the `unstable` feature and may change in any release.
@@ -222,12 +224,12 @@ impl Frame<'_> {
     ///
     /// See the [module](crate::ui).
     pub fn window(&mut self, id: &str, title: &str, body: impl FnOnce(&mut Self)) -> bool {
-        let mut open = UiWidget {
+        let mut open = enshwick_abi::headed!(UiWidget {
             kind: UiWidget::WINDOW,
             text: Str::new(id),
             detail: Str::new(title),
             ..UiWidget::EMPTY
-        };
+        });
         let status = (self.host.api().ui_widget)(self.host.handle(), self.token, &raw mut open);
         if !status.is_ok() {
             return false;
@@ -235,10 +237,10 @@ impl Frame<'_> {
         let outer = core::mem::replace(&mut self.back, open.result != 0);
         body(self);
         self.back = outer;
-        let mut end = UiWidget {
+        let mut end = enshwick_abi::headed!(UiWidget {
             kind: UiWidget::END,
             ..UiWidget::EMPTY
-        };
+        });
         let _closed = (self.host.api().ui_widget)(self.host.handle(), self.token, &raw mut end);
         true
     }
@@ -265,13 +267,13 @@ impl Frame<'_> {
     /// See [`Label`].
     pub fn label<'t>(&mut self, label: impl Into<Label<'t>>) {
         let label = label.into();
-        let _drawn = self.draw(&mut UiWidget {
+        let _drawn = self.draw(&mut enshwick_abi::headed!(UiWidget {
             kind: UiWidget::LABEL,
             flags: label.flags,
             style: label.style.to_raw(),
             text: Str::new(label.text),
             ..UiWidget::EMPTY
-        });
+        }));
     }
 
     /// Draws a button; true in the frame it is clicked.
@@ -281,12 +283,12 @@ impl Frame<'_> {
     /// See [`Button`].
     pub fn button<'t>(&mut self, button: impl Into<Button<'t>>) -> bool {
         let button = button.into();
-        self.draw(&mut UiWidget {
+        self.draw(&mut enshwick_abi::headed!(UiWidget {
             kind: UiWidget::BUTTON,
             flags: read_only_flag(!button.enabled),
             text: Str::new(button.text),
             ..UiWidget::EMPTY
-        })
+        }))
     }
 
     /// Draws a toggle row showing `on`; true in the frame the player changes
@@ -297,13 +299,13 @@ impl Frame<'_> {
     /// See [`Toggle`].
     pub fn toggle<'t>(&mut self, toggle: impl Into<Toggle<'t>>, on: &mut bool) -> bool {
         let toggle = toggle.into();
-        let mut widget = UiWidget {
+        let mut widget = enshwick_abi::headed!(UiWidget {
             kind: UiWidget::TOGGLE,
             flags: read_only_flag(toggle.read_only),
             text: Str::new(toggle.label),
             index: u32::from(*on),
             ..UiWidget::EMPTY
-        };
+        });
         let changed = self.draw(&mut widget);
         if changed {
             *on = widget.index != 0;
@@ -327,7 +329,7 @@ impl Frame<'_> {
             return false;
         }
         let (min, max) = (start.min(end), start.max(end));
-        let mut widget = UiWidget {
+        let mut widget = enshwick_abi::headed!(UiWidget {
             kind: UiWidget::SLIDER,
             flags: read_only_flag(slider.read_only),
             steps: slider.steps,
@@ -340,7 +342,7 @@ impl Frame<'_> {
             min,
             max,
             ..UiWidget::EMPTY
-        };
+        });
         let changed = self.draw(&mut widget) && widget.value.is_finite();
         if changed {
             *value = widget.value.clamp(min, max);
@@ -361,7 +363,7 @@ impl Frame<'_> {
         for (slot, option) in options.iter_mut().zip(dropdown.options) {
             *slot = Str::new(option);
         }
-        let mut widget = UiWidget {
+        let mut widget = enshwick_abi::headed!(UiWidget {
             kind: UiWidget::DROPDOWN,
             flags: read_only_flag(dropdown.read_only),
             text: Str::new(dropdown.label),
@@ -369,7 +371,7 @@ impl Frame<'_> {
             option_count: u32::try_from(count).unwrap_or(0),
             index: u32::try_from(*index).unwrap_or(u32::MAX),
             ..UiWidget::EMPTY
-        };
+        });
         let changed = self.draw(&mut widget);
         let picked = widget.index as usize;
         if changed && picked < count {
@@ -391,7 +393,7 @@ impl Frame<'_> {
     /// }
     /// ```
     pub fn progress(&mut self, fraction: f32) {
-        let _drawn = self.draw(&mut UiWidget {
+        let _drawn = self.draw(&mut enshwick_abi::headed!(UiWidget {
             kind: UiWidget::PROGRESS,
             value: if fraction.is_finite() {
                 fraction.clamp(0.0, 1.0)
@@ -401,7 +403,7 @@ impl Frame<'_> {
             min: 0.0,
             max: 1.0,
             ..UiWidget::EMPTY
-        });
+        }));
     }
 
     /// Plays one of the game's interface sounds.
@@ -410,11 +412,11 @@ impl Frame<'_> {
     ///
     /// See [`Sound`].
     pub fn sound(&mut self, sound: Sound) {
-        let _played = self.draw(&mut UiWidget {
+        let _played = self.draw(&mut enshwick_abi::headed!(UiWidget {
             kind: UiWidget::SOUND,
             style: sound.to_raw(),
             ..UiWidget::EMPTY
-        });
+        }));
     }
 
     /// Plays the sound container `sound`, the game's own or a mod's, as an
@@ -423,19 +425,23 @@ impl Frame<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] for a container neither the game's archive nor a mod holds.
+    /// [`UiError::Missing`] for a container neither the game's archive nor a
+    /// mod holds, and [`UiError::Refused`] when the loader refuses it.
     ///
     /// # Examples
     ///
     /// See the [`sound`](crate::sound) module.
-    pub fn play(&mut self, sound: SoundContainerId) -> Result<(), Off> {
-        let mut widget = UiWidget {
+    pub fn play(&mut self, sound: SoundContainerId) -> Result<(), UiError> {
+        let mut widget = enshwick_abi::headed!(UiWidget {
             kind: UiWidget::SOUND,
             sound: sound.guid(),
             ..UiWidget::EMPTY
-        };
+        });
         let status = (self.host.api().ui_widget)(self.host.handle(), self.token, &raw mut widget);
-        crate::load::ok(status, (), || format!("sound container {}", sound.guid()))
+        if status == crate::abi::Status::MISSING {
+            return Err(UiError::Missing);
+        }
+        enshwick_base::load::outcome(status)
     }
 
     /// Unstable: needs the `typed` feature and may change in any release.
@@ -476,12 +482,12 @@ impl Frame<'_> {
             let unnamed = crate::abi::Status::MISSING;
             return crate::load::ok(unnamed, false, || format!("game action {action:?}"));
         };
-        let mut widget = UiWidget {
+        let mut widget = enshwick_abi::headed!(UiWidget {
             kind: UiWidget::INPUT_HINT,
             text: Str::new(&name),
             detail: Str::new(label),
             ..UiWidget::EMPTY
-        };
+        });
         let status = (self.host.api().ui_widget)(self.host.handle(), self.token, &raw mut widget);
         crate::load::ok(status, widget.result != 0, || format!("game action {name}"))
     }

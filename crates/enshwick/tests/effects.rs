@@ -78,6 +78,7 @@ mod tests {
 
     #[test]
     fn typed_effects_lay_out_their_events_and_teleports_their_requests() {
+        let e = Entity::from_engine;
         let host = FakeHost::new().world().effect_events();
         let at = |fact: Fact| host.offset(fact.id()).unwrap();
         let (position, orientation, scale) = (
@@ -99,7 +100,7 @@ mod tests {
         let npc_event = host.hash(facts::NPC_COMMAND_EVENT.id()).unwrap();
         let npc_size = host.size(facts::NPC_COMMAND_EVENT.id()).unwrap();
         let loader = host
-            .template(Entity(5), enshwick::content::Guid([5; 16]))
+            .template(e(5), enshwick::content::Guid([5; 16]))
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Acting)`.
         let status =
@@ -110,10 +111,10 @@ mod tests {
         effects
             .npc_command(42, NpcCommandType::GoToPosition([1.0, 2.0, -3.0]))
             .unwrap();
-        effects.add_threat(Entity(5), Entity(6), 2.5).unwrap();
-        effects.ping(Entity(6), [0.5, 0.0, 0.0]).unwrap();
+        effects.add_threat(e(5), e(6), 2.5).unwrap();
+        effects.ping(e(6), [0.5, 0.0, 0.0]).unwrap();
         assert_eq!(
-            effects.set_toggle(Entity(5), 9, true),
+            effects.set_toggle(e(5), 9, true),
             Err(WorldError::Unavailable),
             "the toggle event is not on this fake build"
         );
@@ -146,13 +147,13 @@ mod tests {
 
         effects
             .teleport(
-                Entity(5),
+                e(5),
                 [10.0, 20.0, 30.0],
                 Teleport::new().search_best_spawn_position(),
             )
             .unwrap();
         assert_eq!(
-            effects.teleport(Entity(7), [0.0; 3], Teleport::new()),
+            effects.teleport(e(7), [0.0; 3], Teleport::new()),
             Err(WorldError::Gone)
         );
         let spawned = effects
@@ -168,7 +169,7 @@ mod tests {
         );
         let spawns = loader.spawns();
         assert_eq!(spawns.len(), 1);
-        assert_eq!(spawns[0].0, spawned.0);
+        assert_eq!(spawns[0].0, spawned.get());
         assert_eq!(
             (spawns[0].1.template, spawns[0].1.level),
             (enshwick::content::Guid([7; 16]), 4)
@@ -176,7 +177,7 @@ mod tests {
         assert_eq!(spawns[0].1.position, [1.0, 2.0, 3.0]);
         let teleports = loader.teleports();
         assert_eq!(teleports.len(), 1);
-        assert_eq!(teleports[0].entity, Entity(5));
+        assert_eq!(teleports[0].entity, e(5));
         assert_eq!(teleports[0].flags, TeleportRequest::BEST_SPAWN);
         assert_eq!(teleports[0].position, [10.0, 20.0, 30.0]);
     }
@@ -197,7 +198,7 @@ mod tests {
         let loader = FakeHost::new()
             .world()
             .effect_events()
-            .template(Entity(5), enshwick::content::Guid([5; 16]))
+            .template(Entity::from_engine(5), enshwick::content::Guid([5; 16]))
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Acting)`.
         let status =
@@ -212,7 +213,7 @@ mod tests {
                 "spawn {far:?}"
             );
             assert_eq!(
-                effects.teleport(Entity(5), far, Teleport::new()),
+                effects.teleport(Entity::from_engine(5), far, Teleport::new()),
                 Err(WorldError::Refused),
                 "teleport {far:?}"
             );
@@ -222,7 +223,7 @@ mod tests {
                 "order {far:?}"
             );
             assert_eq!(
-                effects.ping(Entity(6), far),
+                effects.ping(Entity::from_engine(6), far),
                 Err(WorldError::Refused),
                 "ping {far:?}"
             );
@@ -232,12 +233,12 @@ mod tests {
 
         effects.spawn(template, AT_THE_BOUND, Spawn::new()).unwrap();
         effects
-            .teleport(Entity(5), AT_THE_BOUND, Teleport::new())
+            .teleport(Entity::from_engine(5), AT_THE_BOUND, Teleport::new())
             .unwrap();
         effects
             .npc_command(42, NpcCommandType::GoToPosition(AT_THE_BOUND))
             .unwrap();
-        effects.ping(Entity(6), AT_THE_BOUND).unwrap();
+        effects.ping(Entity::from_engine(6), AT_THE_BOUND).unwrap();
         assert_eq!(loader.spawns()[0].1.position, AT_THE_BOUND);
         assert_eq!(loader.teleports()[0].position, AT_THE_BOUND);
         assert_eq!(loader.emits().len(), 2);
@@ -248,7 +249,7 @@ mod tests {
         let loader = FakeHost::new()
             .world()
             .without_entity_commands()
-            .template(Entity(5), enshwick::content::Guid([5; 16]))
+            .template(Entity::from_engine(5), enshwick::content::Guid([5; 16]))
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Acting)`.
         let status =
@@ -262,7 +263,7 @@ mod tests {
                 "spawn {far:?}"
             );
             assert_eq!(
-                effects.teleport(Entity(5), far, Teleport::new()),
+                effects.teleport(Entity::from_engine(5), far, Teleport::new()),
                 Err(WorldError::Unavailable),
                 "teleport {far:?}"
             );

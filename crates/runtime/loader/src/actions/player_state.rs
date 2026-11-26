@@ -127,7 +127,7 @@ fn pack_slot(slot: &ClientSlot) -> [u64; 3] {
     [
         slot.slot & 0xff_ffff_ffff | u64::from(slot.category) << 40 | u64::from(slot.flags) << 48,
         u64::from(slot.item) | u64::from(slot.count) << 32,
-        u64::from(slot.pide.0),
+        u64::from(slot.pide.get()),
     ]
 }
 
@@ -136,15 +136,15 @@ fn unpack_slot(words: [u64; 3]) -> ClientSlot {
     let [at, stack, pide] = words;
     let byte = |shift: u32| u8::try_from(at >> shift & 0xff).unwrap_or(0);
     let low = |word: u64| u32::try_from(word & 0xffff_ffff).unwrap_or(0);
-    ClientSlot {
+    enshwick_abi::headed!(ClientSlot {
         slot: at & 0xff_ffff_ffff,
         item: low(stack),
         count: low(stack >> 32),
-        pide: Entity(low(pide)),
+        pide: Entity::from_engine(low(pide)),
         category: byte(40),
         flags: byte(48),
         ..ClientSlot::EMPTY
-    }
+    })
 }
 
 /// The words of the slot copy: the count, the read's time, then three per
@@ -442,14 +442,14 @@ fn read_slots(
     let mut dropped = false;
     walk(component, slots, player, &mut |slot| {
         let inventory = u32::try_from(slot.slot & 0xffff_ffff).unwrap_or(0);
-        let slot = ClientSlot {
+        let slot = enshwick_abi::headed!(ClientSlot {
             flags: if bar.contains(&inventory) {
                 ClientSlot::ACTIONBAR
             } else {
                 0
             },
             ..slot
-        };
+        });
         if count < MAX_SLOTS {
             words[2 + 3 * count..5 + 3 * count].copy_from_slice(&pack_slot(&slot));
             count += 1;
@@ -605,10 +605,10 @@ fn walk(
     root: u32,
     out: &mut dyn FnMut(ClientSlot),
 ) {
-    let mut setup = |entity: Entity| component(entity.0, at.setup);
+    let mut setup = |entity: Entity| component(entity.get(), at.setup);
     let mut visit = |link: Entity, category: InventoryCategory| {
         if category != InventoryCategory::VIRTUAL {
-            stacks(component, at, link.0, category.0, out);
+            stacks(component, at, link.get(), category.0, out);
         }
         core::ops::ControlFlow::<()>::Continue(())
     };
@@ -617,7 +617,7 @@ fn walk(
     // and the setup's layout is the build's reflected one.
     let _walked = unsafe {
         inventory_links::walk(
-            Entity(root),
+            Entity::from_engine(root),
             MAX_DEPTH,
             Entity::NONE,
             &at.links,
@@ -649,14 +649,14 @@ fn stacks(
             unsafe { enshwick_core::raw::read_at::<u32>(stacks, base + offset) }
         };
         let (item, count, pide) = (field(0), field(at.stack_count), field(at.stack_pide));
-        out(ClientSlot {
+        out(enshwick_abi::headed!(ClientSlot {
             slot: u64::from(link) | u64::from(index) << 32,
             item,
             count,
-            pide: Entity(pide),
+            pide: Entity::from_engine(pide),
             category,
             ..ClientSlot::EMPTY
-        });
+        }));
     }
 }
 
@@ -678,15 +678,15 @@ mod tests {
 
     #[test]
     fn a_slot_comes_back_whole_from_its_words() {
-        let slot = ClientSlot {
+        let slot = enshwick_abi::headed!(ClientSlot {
             slot: 0x41 | 7 << 32,
             item: 0xdead_beef,
             count: 65_535,
-            pide: Entity(9000),
+            pide: Entity::from_engine(9000),
             category: 4,
             flags: ClientSlot::ACTIONBAR,
             ..ClientSlot::EMPTY
-        };
+        });
         let back = unpack_slot(pack_slot(&slot));
         assert_eq!(
             (

@@ -1,7 +1,6 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
 use crate::services::Service;
-#[cfg(feature = "unstable")]
 use crate::services::{
     Call, Caller, DescribedCall, DescribedCaller, DescribedEmitter, DescribedEvent,
 };
@@ -92,13 +91,10 @@ impl Load<'_> {
     pub fn optional_service<T: Service>(&self) -> Option<&'static T>;
 }
 
-#[cfg(feature = "unstable")]
 #[enshwick_macros::forward(base)]
 impl Load<'_> {
     /// Serves the call `C` with `handler` for other mods to call, from the
     /// caller's thread. A panic in `handler` fails that call alone.
-    ///
-    /// Unstable: needs the `unstable` feature and may change in any release.
     ///
     /// `C` comes from [`#[call]`](macro@crate::call), named after this mod:
     /// `<id>:<call>`, as [how ids are namespaced](https://github.com/enshwick/enshwick/blob/main/book/src/concepts/ids.md)
@@ -130,11 +126,9 @@ impl Load<'_> {
 
     /// Asks for another mod's call `C`, and returns the handle that runs it.
     ///
-    /// Unstable: needs the `unstable` feature and may change in any release.
-    ///
     /// The loader matches it once every mod is initialised: with no running
     /// mod serving `C` as declared here, it logs why, and every call answers
-    /// [`CallError::Unmatched`](crate::services::CallError::Unmatched). Declare the server in the manifest with
+    /// [`CallServiceError::Unmatched`](crate::services::CallServiceError::Unmatched). Declare the server in the manifest with
     /// `after`, or `requires` when this mod is pointless without it: a
     /// required server initialises first, so the loader matches the call
     /// at once.
@@ -214,7 +208,6 @@ impl Load<'_> {
     -> Result<DescribedCaller, Off>;
 }
 
-#[cfg(feature = "unstable")]
 #[enshwick_macros::forward(base)]
 impl Load<'_> {
     /// Calls `handler` with the data of every described mod event `event`

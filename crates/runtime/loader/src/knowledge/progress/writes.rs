@@ -5,8 +5,8 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick_core::abi::{
-    Event, Header, PROGRESS_ADD_EXPERIENCE, PROGRESS_OPEN, PROGRESS_SET_EXPERIENCE,
-    PROGRESS_SET_LEVEL, ProgressWriteData,
+    Event, PROGRESS_ADD_EXPERIENCE, PROGRESS_OPEN, PROGRESS_SET_EXPERIENCE, PROGRESS_SET_LEVEL,
+    ProgressWriteData,
 };
 
 use super::{
@@ -80,16 +80,15 @@ impl Write {
 
     /// What its mod hears: `outcome`, with what an applied write `left`.
     fn heard(self, outcome: u32, left: Left) -> (ModIndex, ProgressWriteData) {
-        let data = ProgressWriteData {
-            header: Header::of::<ProgressWriteData>(),
-            entity: enshwick_core::Entity(self.entity),
+        let data = enshwick_abi::headed!(ProgressWriteData {
+            entity: enshwick_core::Entity::from_engine(self.entity),
             what: self.what,
             value: self.value,
             outcome,
             level: left.level,
             experience: left.experience,
             gained: left.gained,
-        };
+        });
         (self.owner, data)
     }
 }
@@ -239,7 +238,7 @@ pub(crate) fn write(
     PENDING.push(Write::new(owner, entity, what, value))
 }
 
-/// Whether `what` asks for the writes, which only `Entity(0)` does, rather
+/// Whether `what` asks for the writes, which only entity 0 does, rather
 /// than being one.
 fn asks(entity: u32, what: u32) -> Result<bool, WriteProgressError> {
     match what {
@@ -546,7 +545,7 @@ mod tests {
         assert_eq!(
             (first.entity, first.what, first.value, first.outcome),
             (
-                enshwick_core::Entity(7),
+                enshwick_core::Entity::from_engine(7),
                 PROGRESS_ADD_EXPERIENCE,
                 50,
                 ProgressWriteData::UNREADABLE
@@ -627,7 +626,10 @@ mod tests {
         assert_eq!(heard.len(), 1);
         let (owner, data) = heard[0];
         assert_eq!(owner, ModIndex::new(1));
-        assert_eq!(data.header, Header::of::<ProgressWriteData>());
+        assert_eq!(
+            data.header,
+            enshwick_core::abi::Header::of::<ProgressWriteData>()
+        );
         assert_eq!(
             (data.outcome, data.what, data.value, data.level),
             (ProgressWriteData::APPLIED, PROGRESS_SET_LEVEL, 12, 12)

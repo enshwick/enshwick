@@ -5,6 +5,9 @@
 //! Mods depend on `enshwick`, which re-exports every module here at the
 //! same path; this crate's own paths carry no promise.
 #![cfg_attr(any(docsrs, enshwick_docs), feature(doc_cfg))]
+// The API grows after 1.0 without a major: a public struct or enum is
+// `#[non_exhaustive]`, or closed on purpose with an `#[expect]`.
+#![warn(clippy::exhaustive_enums, clippy::exhaustive_structs)]
 
 /// Fails when rustdoc builds this crate's examples one by one, which it does
 /// without a word when one of them does not merge.
@@ -77,6 +80,7 @@ pub use enshwick_values::shape;
 pub mod state;
 pub mod status;
 pub mod time;
+pub mod vetoes;
 
 #[doc(no_inline)]
 pub use abi::{Entity, ItemId, PlayerKey, RecipeId};

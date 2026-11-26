@@ -32,14 +32,14 @@ const EXPERIENCE_GAIN: &str = "experienceGain";
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let found = load.add_experience(NewExperience::new(id!("shrine-xp"), ExperienceSourceType::Exploration, 250))?;
-///     load.add_knowledge(NewKnowledge {
-///         experience: Some(found),
-///         ..NewKnowledge::new(id!("found-the-shrine"), Scope::Player, KnowledgeType::Bool)
-///     })?;
+///     let mut knowledge_2 = NewKnowledge::new(id!("found-the-shrine"), Scope::Player, KnowledgeType::Bool);
+///     knowledge_2.experience = Some(found);
+///     load.add_knowledge(knowledge_2)?;
 ///     Ok(())
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct NewExperience {
     /// Its content id; its experience value is the FNV-1a of the id's GUID.
     pub id: Id,

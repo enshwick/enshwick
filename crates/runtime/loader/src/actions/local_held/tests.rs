@@ -26,7 +26,7 @@ fn the_walk_finds_the_local_row_after_other_players_from_where_the_system_left_t
     let read = || unsafe { local_player(ctx, &walk, 1, 4) };
     // SAFETY: the double's own context, on this thread.
     let found = unsafe { row_kept(&walk, ctx, read) };
-    assert_eq!(found, Some(Entity(9)));
+    assert_eq!(found, Some(Entity::from_engine(9)));
     assert_eq!(
         double.row(),
         at_end,
@@ -141,14 +141,21 @@ fn a_client_without_player_ui_lists_only_the_shared_link_off() {
 #[test]
 fn the_held_read_takes_the_first_row_whose_entity_is_the_local_player() {
     let rows = |pairs: &[(u32, u32)]| {
-        first_local(pairs.iter().map(|&(id, row)| (Entity(id), Entity(row))))
+        first_local(
+            pairs
+                .iter()
+                .map(|&(id, row)| (Entity::from_engine(id), Entity::from_engine(row))),
+        )
     };
     assert_eq!(
         rows(&[(0, 0)]),
         None,
         "entity 0, as at the system's entry, is never the local player"
     );
-    assert_eq!(rows(&[(7, 3), (7, 7), (9, 9)]), Some(Entity(7)));
+    assert_eq!(
+        rows(&[(7, 3), (7, 7), (9, 9)]),
+        Some(Entity::from_engine(7))
+    );
     assert_eq!(rows(&[(7, 3), (7, 4)]), None, "another player's rows");
     assert_eq!(rows(&[]), None);
 }

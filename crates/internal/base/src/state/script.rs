@@ -1,7 +1,7 @@
 //! A world store as a script keeps it: one table of game data, saved as
 //! TOML beside the world as a Rust mod's store is.
 
-use super::{StoreError, WorldStore};
+use super::{StoreFileError, WorldStore};
 use crate::resources::Value as Data;
 use crate::script::{Class, Error, Function, Object};
 
@@ -97,7 +97,7 @@ impl DataStore {
     ///
     /// As [`WorldStore::flush`].
     #[script(name = "flush")]
-    pub(crate) fn flush_script(&self) -> Result<(), StoreError> {
+    pub(crate) fn flush_script(&self) -> Result<(), StoreFileError> {
         self.0.flush()
     }
 
@@ -138,7 +138,7 @@ impl super::Hold {
         reason: &str,
         key: &str,
         args: &[(String, String)],
-    ) -> Result<(), StoreError> {
+    ) -> Result<(), StoreFileError> {
         let args: Vec<(&str, &str)> = args.iter().map(|(n, v)| (n.as_str(), v.as_str())).collect();
         self.set_text(reason, key, &args)
     }
@@ -147,6 +147,10 @@ impl super::Hold {
 /// The free functions of [`state`](super) as a script's namespace `state`.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a unit marker, which never gains a field"
+)]
 pub struct StateFns;
 
 impl crate::script::Bound for StateFns {

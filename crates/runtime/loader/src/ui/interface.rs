@@ -814,10 +814,10 @@ fn frames(engine: &Engine, context: usize, screen: u32, reads: extensions::Frame
                 hud: false,
                 extension: None,
             }));
-            let frame = UiFrame {
+            let frame = enshwick_abi::headed!(UiFrame {
                 screen,
                 ..reads.frame(token)
-            };
+            });
             // SAFETY: the callback lives in a mod DLL that stays loaded, and
             // it gets a live `UiFrame` and the pointer its mod registered with
             // it; an `extern "system"` function aborts rather than unwinds.

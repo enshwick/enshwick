@@ -354,7 +354,7 @@ entries! {
         out: *mut enshwick_core::abi::Guid as args::Out,
     ) -> Status {
         found(
-            with(None, |s| s.host.content.templates.get(&entity.0).copied()),
+            with(None, |s| s.host.content.templates.get(&entity.get()).copied()),
             out,
         )
     }
@@ -736,7 +736,7 @@ entries! {
         let value = with(None, |s| {
             s.content
                 .item_values
-                .get(&(kind, pide.0))
+                .get(&(kind, pide.get()))
                 .filter(|(held, _)| *held == item.get())
                 .map(|(_, bytes)| bytes.clone())
         });
@@ -770,11 +770,11 @@ entries! {
                 return Status::NOT_KEPT;
             }
             if value.is_empty() {
-                s.content.item_values.remove(&(kind, pide.0));
+                s.content.item_values.remove(&(kind, pide.get()));
             } else {
                 s.content
                     .item_values
-                    .insert((kind, pide.0), (item.get(), value));
+                    .insert((kind, pide.get()), (item.get(), value));
             }
             Status::OK
         })

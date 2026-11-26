@@ -155,7 +155,7 @@ enshwick::declare_mod!(Waypoints);
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{ActionCall, Header, PlayerInfo, Side, Status};
+    use enshwick::abi::{ActionCall, PlayerInfo, Side, Status};
     use enshwick::content::EngineFacts;
     use enshwick::net::{Peer, SendError};
     use enshwick::test::{Drawn, FakeHost, facts};
@@ -166,7 +166,7 @@ mod tests {
     #[test]
     fn the_actions_send_the_mark_and_its_clearing_and_need_a_position() {
         let player = PlayerKey::new(7);
-        let character = Entity(2);
+        let character = Entity::from_engine(2);
         let host = FakeHost::new().world().net_peer(Peer::Player(player));
         let transform = host
             .hash(facts::CURRENT_TRANSFORM.id())
@@ -188,15 +188,14 @@ mod tests {
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert!(loader.draw_hud().is_empty(), "a server draws no HUD");
 
-        let info = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let info = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
             entity: character,
             key: player,
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        };
+        });
         let answer = loader.ask_actions(ActionCall::RUN, &info, 0, "mark", "");
         assert!(
             answer.as_ref().is_some_and(|text| text.contains("Marked.")),
@@ -216,10 +215,10 @@ mod tests {
                 .all(|(name, to, _)| name == "waypoint@1" && *to == player)
         );
 
-        let elsewhere = PlayerInfo {
-            entity: Entity(3),
+        let elsewhere = enshwick::abi::headed!(PlayerInfo {
+            entity: Entity::from_engine(3),
             ..info
-        };
+        });
         let answer = loader.ask_actions(ActionCall::RUN, &elsewhere, 0, "mark", "");
         assert!(
             answer

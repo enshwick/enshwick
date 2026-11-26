@@ -3,23 +3,22 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{DamageCheck, Header};
+    use enshwick::abi::DamageCheck;
     use enshwick::damage::DamageTypeNew;
     use enshwick::test::FakeHost;
 
     use crate::harness::{logged, run};
 
     fn check(cause: u32, total: f32) -> DamageCheck {
-        DamageCheck {
-            header: Header::of::<DamageCheck>(),
+        enshwick::abi::headed!(DamageCheck {
             cause,
-            target: enshwick::Entity(2),
-            source: enshwick::Entity(0),
-            attacker: enshwick::Entity(0),
+            target: enshwick::Entity::from_engine(2),
+            source: enshwick::Entity::from_engine(0),
+            attacker: enshwick::Entity::from_engine(0),
             total,
             amount_count: 0,
             amounts: core::ptr::null_mut(),
-        }
+        })
     }
 
     #[test]

@@ -270,6 +270,7 @@ pub fn template(name: &str) -> Result<Guid, VanillaError> {
 /// See [`enemy`].
 #[cfg(feature = "typed")]
 #[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct Enemy {
     /// The enemy's template.
     pub template: Guid,
@@ -385,6 +386,7 @@ pub struct Vanilla {
 ///
 /// See [`Vanilla::loot_table`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct LootTable {
     /// The table's GUID, a `DefaultInventoryResource`.
     pub table: Guid,

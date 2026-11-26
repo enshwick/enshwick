@@ -1,7 +1,7 @@
 //! Props in the game: resolving a placement, reading what a prop holds, spawning, finding and removing it.
 
 use enshwick_core::Entity;
-use enshwick_core::abi::{Header, PropPlace, SpawnRequest};
+use enshwick_core::abi::{PropPlace, SpawnRequest};
 use enshwick_gamedata::catalogue;
 
 use crate::engine::fuse::Fuse;
@@ -111,13 +111,12 @@ pub(crate) fn placement_info(
     let (min, max, flags) = local_box.map_or(([0.0; 3], [0.0; 3], 0), |(min, max)| {
         (min, max, PropPlacementInfo::HAS_LOCAL_BOX)
     });
-    Ok(PropPlacementInfo {
-        header: Header::of::<PropPlacementInfo>(),
+    Ok(enshwick_abi::headed!(PropPlacementInfo {
         template: enshwick_core::content::Guid(template),
         min,
         max,
         flags,
-    })
+    }))
 }
 
 /// The prop `request` asks to place, checked: its item's template, box
@@ -162,15 +161,14 @@ pub(super) fn spawn(loader: &Loader, prop: &Prop, actor: u32) -> Result<u32, Tra
         .ok_or(TransactionError::Unavailable)?
         .copy_from_slice(&bytes);
     let tag = vec![0u8; type_size(loader, catalogue::ids::DISABLE_RANDOM_LOOT_ON_DESTROY)?];
-    let request = SpawnRequest {
-        header: Header::of::<SpawnRequest>(),
+    let request = enshwick_abi::headed!(SpawnRequest {
         template: enshwick_core::content::Guid(prop.template),
         position: enshwick_core::ecs::metres(prop.position),
         orientation: prop.orientation,
         level: 0,
         lifetime_ns: 0,
         flags: 0,
-    };
+    });
     Ok(crate::world::spawns::spawn_with(
         loader,
         &request,
@@ -278,13 +276,13 @@ impl Facts {
 
 /// Whether `entity` has a component of type `hash`; on the game thread.
 fn has(loader: &Loader, entity: u32, hash: u32) -> bool {
-    crate::engine::world::component(loader, Entity(entity), hash).is_ok()
+    crate::engine::world::component(loader, Entity::from_engine(entity), hash).is_ok()
 }
 
 /// The data of `entity`'s component of type `hash`, as the loader's
 /// component read gives it: `None` when it has none. On the game thread.
 fn inline(loader: &Loader, entity: u32, hash: u32) -> Result<Option<*const u8>, TransactionError> {
-    match crate::engine::world::component(loader, Entity(entity), hash) {
+    match crate::engine::world::component(loader, Entity::from_engine(entity), hash) {
         Ok(data) => Ok(Some(data.cast())),
         Err(WorldError::Absent | WorldError::Unread | WorldError::NoWorld) => Ok(None),
         Err(error) => Err(error.into()),
@@ -302,7 +300,7 @@ fn field<T: enshwick_core::raw::AnyBitPattern>(
     hash: u32,
     at: usize,
 ) -> Result<Option<T>, TransactionError> {
-    match crate::engine::world::field(loader, Entity(entity), hash, at) {
+    match crate::engine::world::field(loader, Entity::from_engine(entity), hash, at) {
         Ok(value) => Ok(Some(value)),
         Err(WorldError::Absent | WorldError::Unread | WorldError::NoWorld) => Ok(None),
         Err(error) => Err(error.into()),
@@ -317,13 +315,13 @@ fn field<T: enshwick_core::raw::AnyBitPattern>(
 /// need. On the game thread.
 pub(super) fn read(loader: &Loader, entity: u32) -> Result<(Prop, u32), TransactionError> {
     let facts = Facts::resolve(loader)?;
-    let template = crate::engine::world::template(loader, Entity(entity))
+    let template = crate::engine::world::template(loader, Entity::from_engine(entity))
         .map_err(|_| TransactionError::Gone)?;
     let not_a_prop = [facts.animal, facts.npc, facts.altar];
     if not_a_prop.into_iter().any(|hash| has(loader, entity, hash)) {
         return Err(TransactionError::NotAProp);
     }
-    let item = crate::engine::world::used_item(loader, Entity(entity))
+    let item = crate::engine::world::used_item(loader, Entity::from_engine(entity))
         .ok_or(TransactionError::NotAProp)?;
     let access = crate::engine::world::access(&"prop read").ok_or(TransactionError::Unavailable)?;
     let (placed, local_box, logic) = match item_prop(loader, &access, item) {
@@ -334,8 +332,8 @@ pub(super) fn read(loader: &Loader, entity: u32) -> Result<(Prop, u32), Transact
     if placed != template {
         return Err(TransactionError::NotAProp);
     }
-    let (position, orientation) =
-        crate::engine::world::pose(loader, Entity(entity)).ok_or(TransactionError::Gone)?;
+    let (position, orientation) = crate::engine::world::pose(loader, Entity::from_engine(entity))
+        .ok_or(TransactionError::Gone)?;
     let prop = Prop {
         template,
         item,
@@ -363,7 +361,7 @@ pub(super) fn stands(loader: &Loader, prop: &Prop) -> Result<bool, TransactionEr
 /// as its tear-down does, without loot; players stay kept from it until
 /// it is gone.
 pub(super) fn remove(loader: &Loader, entity: u32) -> Result<(), TransactionError> {
-    crate::world::entities::destroy(loader, Entity(entity))?;
+    crate::world::entities::destroy(loader, Entity::from_engine(entity))?;
     crate::world::transactions::holds().destroying(entity);
     Ok(())
 }
@@ -528,7 +526,7 @@ fn state(loader: &Loader, facts: &Facts, entity: u32) -> Result<StateReads, Tran
         false
     };
     let unreadable = core::cell::Cell::new(None);
-    let mut setup = |link: Entity| match inline(loader, link.0, facts.setup) {
+    let mut setup = |link: Entity| match inline(loader, link.get(), facts.setup) {
         Ok(found) => found,
         Err(reason) => {
             unreadable.set(Some(reason));
@@ -587,7 +585,8 @@ pub(super) fn start_state(
     entity: u32,
 ) -> Result<Option<Vec<u8>>, TransactionError> {
     let facts = Facts::resolve(loader)?;
-    crate::engine::world::template(loader, Entity(entity)).map_err(|_| TransactionError::Gone)?;
+    crate::engine::world::template(loader, Entity::from_engine(entity))
+        .map_err(|_| TransactionError::Gone)?;
     let trigger = has(loader, entity, facts.trigger) || has(loader, entity, facts.trigger_shape);
     let plant = has(loader, entity, facts.growth);
     if !trigger && !plant {

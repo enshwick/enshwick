@@ -30,14 +30,11 @@ pub const MAX_SIDE: u32 = 2048;
 /// use enshwick::content::{Guid, Id, id};
 /// use enshwick::content::icons::{Icon, Pixels, Tint};
 ///
-/// let ghostly = Icon {
-///     id: id!("ghostly-staff.icon"),
-///     like: Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78"),
-///     pixels: Pixels::Tint(Tint { colour: [120, 170, 255], amount: 60 }),
-/// };
+/// let ghostly = Icon::new(id!("ghostly-staff.icon"), Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78"), Pixels::Tint(Tint::new([120, 170, 255], 60)));
 /// assert!(matches!(ghostly.pixels, Pixels::Tint(_)));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[non_exhaustive]
 pub struct Icon {
     /// The icon's id, the mod's own.
     pub id: Id,
@@ -46,6 +43,18 @@ pub struct Icon {
     pub like: Guid,
     /// Where its pixels come from.
     pub pixels: Pixels,
+}
+
+impl Icon {
+    /// A `Icon` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`Icon`].
+    #[must_use]
+    pub const fn new(id: Id, like: Guid, pixels: Pixels) -> Self {
+        Self { id, like, pixels }
+    }
 }
 
 /// Where an [`Icon`]'s pixels come from.
@@ -73,15 +82,31 @@ pub enum Pixels {
 /// use enshwick::content::icons::{Tint, tint};
 ///
 /// let mut white = [255, 255, 255, 200];
-/// tint(&mut white, Tint { colour: [0, 128, 255], amount: 100 });
+/// tint(&mut white, Tint::new([0, 128, 255], 100));
 /// assert_eq!(white, [0, 128, 255, 200]);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a recolouring of fixed parts: the colour and how far toward it"
+)]
 pub struct Tint {
     /// The colour, red, green and blue.
     pub colour: [u8; 3],
     /// How far each pixel moves toward it, 0 to 100.
     pub amount: u8,
+}
+
+impl Tint {
+    /// A `Tint` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`Tint`].
+    #[must_use]
+    pub const fn new(colour: [u8; 3], amount: u8) -> Self {
+        Self { colour, amount }
+    }
 }
 
 /// Recolours `rgba`, pixels of red, green, blue and alpha, with `tint`.
@@ -267,10 +292,14 @@ pub(crate) const IMAGE_FIELDS: [&str; 6] = [
 /// Where a UI image keeps its fields, from the loader's table for the
 /// running build: the type is not reflected.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// See [`clone_image`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
+#[non_exhaustive]
 pub struct ImageLayout {
     /// The content hash of its pixels, 16 bytes.
     pub content: usize,
@@ -332,18 +361,27 @@ impl ImageLayout {
 /// by `height` of RGBA8 with one mip level. `None` when `base` is too
 /// short.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// ```
 /// use enshwick::content::icons::{ImageLayout, clone_image};
 ///
-/// let layout = ImageLayout { content: 0, width: 0x28, height: 0x2c, flags: 0x30, format: 0x31, levels: 0x32 };
+/// let mut layout = ImageLayout::default();
+/// layout.content = 0;
+/// layout.width = 0x28;
+/// layout.height = 0x2c;
+/// layout.flags = 0x30;
+/// layout.format = 0x31;
+/// layout.levels = 0x32;
 /// let mut image = Vec::new();
 /// clone_image(&layout, &[0; 0x34], [4, 1, 2, 3], 1, 1, &mut image).ok_or("too short")?;
 /// assert_eq!((image[0x31], image[0x32]), (0x25, 1));
 /// # Ok::<(), &str>(())
 /// ```
 #[must_use]
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
 pub fn clone_image(
     layout: &ImageLayout,
     base: &[u8],

@@ -45,77 +45,76 @@ mod tests {
 
     impl Mod for Enemies {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let pack = load.add_arsenal(NewArsenal {
-                id: PACK,
-                like: ENEMY_ARSENAL,
-                change: ArsenalChange {
-                    attacks: Some(vec![HOWL, BITE]),
-                    ..ArsenalChange::default()
-                },
-            })?;
+            let pack = load.add_arsenal(NewArsenal::new(PACK, ENEMY_ARSENAL, {
+                let mut value = ArsenalChange::default();
+                value.attacks = Some(vec![HOWL, BITE]);
+                value
+            }))?;
             *ADDED.lock().unwrap() = Some(pack);
-            load.add_enemy(NewEnemy {
-                level: Some(20),
-                health: Some(2.0),
-                damage: Some(1.5),
-                faction: Some(FactionType::Vukah),
-                arsenal: Some(pack),
-                boss: Some(true),
-                ..NewEnemy::new(ELDER, ENEMY)
+            load.add_enemy({
+                let mut value = NewEnemy::new(ELDER, ENEMY);
+                value.level = Some(20);
+                value.health = Some(2.0);
+                value.damage = Some(1.5);
+                value.faction = Some(FactionType::Vukah);
+                value.arsenal = Some(pack);
+                value.boss = Some(true);
+                value
             })?;
             // Two changes of one vanilla arsenal apply in the order served.
-            load.change_arsenal(
+            load.change_arsenal(ENEMY_ARSENAL, {
+                let mut value = ArsenalChange::default();
+                value.attacks = Some(vec![LUNGE]);
+                value
+            })?;
+            load.change_arsenal(ENEMY_ARSENAL, {
+                let mut value = ArsenalChange::default();
+                value.tune = vec![{
+                    let mut value = AttackChange::new(LUNGE);
+                    value.threat = Some(9.0);
+                    value
+                }];
+                value
+            })?;
+            refused(load.add_arsenal(NewArsenal::new(
+                Id::new("you.enemies:nothing"),
                 ENEMY_ARSENAL,
-                ArsenalChange {
-                    attacks: Some(vec![LUNGE]),
-                    ..ArsenalChange::default()
+                {
+                    let mut value = ArsenalChange::default();
+                    value.attacks = Some(vec![Guid([9; 16])]);
+                    value
                 },
-            )?;
-            load.change_arsenal(
-                ENEMY_ARSENAL,
-                ArsenalChange {
-                    tune: vec![AttackChange {
-                        threat: Some(9.0),
-                        ..AttackChange::new(LUNGE)
-                    }],
-                    ..ArsenalChange::default()
-                },
-            )?;
-            refused(load.add_arsenal(NewArsenal {
-                id: Id::new("you.enemies:nothing"),
-                like: ENEMY_ARSENAL,
-                change: ArsenalChange {
-                    attacks: Some(vec![Guid([9; 16])]),
-                    ..ArsenalChange::default()
-                },
-            }));
+            )));
             refused(load.change_arsenal(Guid([8; 16]), ArsenalChange::default()));
-            refused(load.add_enemy(NewEnemy {
-                level: Some(0),
-                ..NewEnemy::new(Id::new("you.enemies:zero"), ENEMY)
+            refused(load.add_enemy({
+                let mut value = NewEnemy::new(Id::new("you.enemies:zero"), ENEMY);
+                value.level = Some(0);
+                value
             }));
             // A tune of an attack the arsenal does not pick.
-            refused(load.add_arsenal(NewArsenal {
-                id: Id::new("you.enemies:untuned"),
-                like: ENEMY_ARSENAL,
-                change: ArsenalChange {
-                    attacks: Some(vec![HOWL]),
-                    tune: vec![AttackChange::new(BITE)],
-                    ..ArsenalChange::default()
+            refused(load.add_arsenal(NewArsenal::new(
+                Id::new("you.enemies:untuned"),
+                ENEMY_ARSENAL,
+                {
+                    let mut value = ArsenalChange::default();
+                    value.attacks = Some(vec![HOWL]);
+                    value.tune = vec![AttackChange::new(BITE)];
+                    value
                 },
-            }));
+            )));
             // Not a boss already: no change, never a refusal.
-            refused(load.add_enemy(NewEnemy {
-                boss: Some(false),
-                ..NewEnemy::new(Id::new("you.enemies:calm"), ENEMY)
+            refused(load.add_enemy({
+                let mut value = NewEnemy::new(Id::new("you.enemies:calm"), ENEMY);
+                value.boss = Some(false);
+                value
             }));
             let (first, second) = clashing();
             for id in [first, second] {
-                refused(load.add_arsenal(NewArsenal {
+                refused(load.add_arsenal(NewArsenal::new(
                     id,
-                    like: OTHER_ARSENAL,
-                    change: ArsenalChange::default(),
-                }));
+                    OTHER_ARSENAL,
+                    ArsenalChange::default(),
+                )));
             }
             Ok(Self)
         }

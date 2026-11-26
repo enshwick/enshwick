@@ -23,6 +23,10 @@ pub use enshwick_values::abi::ResourceKey;
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct ContentRename {
     /// The GUID the content had.
     pub from: Guid,
@@ -86,6 +90,10 @@ pub type ResourcePatchFn = unsafe extern "system" fn(
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct RecipeRuleKind(pub u32);
 
 impl RecipeRuleKind {
@@ -112,6 +120,10 @@ impl RecipeRuleKind {
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct RecipeKind(pub u32);
 
 impl RecipeKind {
@@ -146,6 +158,10 @@ impl RecipeKind {
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct DataField(pub u32);
 
 impl DataField {
@@ -199,6 +215,10 @@ impl DataField {
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct ChangeOp(pub u32);
 
 impl ChangeOp {
@@ -225,6 +245,10 @@ impl ChangeOp {
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct ChangeId(pub u32);
 
 /// One change of a vanilla value, as
@@ -236,8 +260,7 @@ pub struct ChangeId(pub u32);
 /// ```
 /// use enshwick::abi::{ChangeOp, DataChange, DataField, DataSelect, Header, Str};
 ///
-/// let change = DataChange {
-///     header: Header::of::<DataChange>(),
+/// let change = enshwick::abi::headed!(DataChange {
 ///     entry: enshwick::abi::Guid([0x3a; 16]),
 ///     field: DataField::MAX_STACK,
 ///     op: ChangeOp::SET,
@@ -246,11 +269,12 @@ pub struct ChangeId(pub u32);
 ///     item: enshwick::abi::Guid::NIL,
 ///     select: DataSelect::ENTRY,
 ///     categories: 0,
-/// };
+/// });
 /// assert_eq!(change.value, 999.0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct DataChange {
     /// Size and version of this struct.
     pub header: Header,
@@ -291,6 +315,10 @@ impl_headed!(DataChange);
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct DataSelect(pub u32);
 
 impl DataSelect {
@@ -342,6 +370,10 @@ impl DataSelect {
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct EntityDataFlags(pub u32);
 
 impl EntityDataFlags {
@@ -368,6 +400,10 @@ impl EntityDataFlags {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct TypeAttribute {
     /// The attribute's name.
     pub name: Str,
@@ -392,6 +428,10 @@ pub struct TypeAttribute {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct TypeConstant {
     /// The constant's name, without its type.
     pub name: Str,
@@ -421,6 +461,10 @@ pub struct TypeConstant {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct TypeField {
     /// The field's name.
     pub name: Str,
@@ -452,6 +496,7 @@ pub struct TypeField {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct TypeEntry {
     /// Size and version of this struct.
     pub header: Header,

@@ -17,6 +17,10 @@ use crate::abi::{Header, Layout, Str};
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct PointMode(pub u32);
 
 impl PointMode {
@@ -40,6 +44,10 @@ impl PointMode {
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct PointFlags(pub u32);
 
 impl PointFlags {
@@ -67,18 +75,18 @@ impl PointFlags {
 /// use enshwick::abi::{Header, Layout, PointFlags, PointMode, PointSpec, Str};
 ///
 /// let empty = Layout { fields: core::ptr::null(), count: 0, size: 0 };
-/// let spec = PointSpec {
-///     header: Header::of::<PointSpec>(),
+/// let spec = enshwick::abi::headed!(PointSpec {
 ///     name: Str::new("you.trading-post:price"),
 ///     mode: PointMode::OVERRIDE,
 ///     flags: PointFlags::REFUSE,
 ///     input: empty,
 ///     output: empty,
-/// };
+/// });
 /// assert_eq!(spec.mode, PointMode::OVERRIDE);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct PointSpec {
     /// Size and version of this struct.
     pub header: Header,
@@ -104,19 +112,19 @@ impl_headed!(PointSpec);
 /// ```
 /// use enshwick::abi::{Header, PointLink};
 ///
-/// let link = PointLink {
-///     header: Header::of::<PointLink>(),
+/// let link = enshwick::abi::headed!(PointLink {
 ///     point: core::ptr::null(),
 ///     before: core::ptr::null(),
 ///     after: core::ptr::null(),
 ///     before_count: 0,
 ///     after_count: 0,
 ///     priority: 0,
-/// };
+/// });
 /// assert_eq!(link.priority, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct PointLink {
     /// Size and version of this struct.
     pub header: Header,
@@ -147,6 +155,7 @@ impl_headed!(PointLink);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct PointHandle {
     /// Size and version of this struct.
     pub header: Header,
@@ -180,6 +189,10 @@ impl PointHandle {
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct PointVerdict(pub u32);
 
 impl PointVerdict {

@@ -21,7 +21,7 @@ use core::cell::{Cell, RefCell};
 use core::ops::ControlFlow;
 use std::sync::OnceLock;
 
-use enshwick_core::abi::{Header, HookFlags, UiTooltipFn, UiTooltipItem, UiWidget};
+use enshwick_core::abi::{HookFlags, UiTooltipFn, UiTooltipItem, UiWidget};
 
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Registered, Target};
@@ -314,12 +314,11 @@ fn ask(item: u32, pide: u32) -> Vec<Line> {
                 owner: callback.owner(),
                 count: 0,
             }));
-            let opened = UiTooltipItem {
-                header: Header::of::<UiTooltipItem>(),
+            let opened = enshwick_abi::headed!(UiTooltipItem {
                 token,
                 item: enshwick_core::ItemId::new(item),
-                pide: enshwick_core::Entity(pide),
-            };
+                pide: enshwick_core::Entity::from_engine(pide),
+            });
             // SAFETY: the callback lives in a mod DLL that stays loaded, and it
             // gets a live `UiTooltipItem` and the pointer its mod registered with
             // it; an `extern "system"` function aborts rather than unwinds.
@@ -472,12 +471,12 @@ mod tests {
             count: 0,
         }));
         for flags in [0, UiWidget::WRAP | UiWidget::CENTER, UiWidget::CENTER] {
-            let label = UiWidget {
+            let label = enshwick_abi::headed!(UiWidget {
                 kind: UiWidget::LABEL,
                 flags,
                 text: enshwick_core::abi::Str::new("Legendary"),
                 ..UiWidget::EMPTY
-            };
+            });
             assert_eq!(gather(owner, 9, &label), Some(Ok(())));
         }
         GATHERING.set(None);
@@ -488,10 +487,12 @@ mod tests {
     #[test]
     fn a_handler_s_lines_are_labels_up_to_the_most_and_only_its_own() {
         let owner = ModIndex::new(0);
-        let label = |text: &'static str| UiWidget {
-            kind: UiWidget::LABEL,
-            text: enshwick_core::abi::Str::new(text),
-            ..UiWidget::EMPTY
+        let label = |text: &'static str| {
+            enshwick_abi::headed!(UiWidget {
+                kind: UiWidget::LABEL,
+                text: enshwick_core::abi::Str::new(text),
+                ..UiWidget::EMPTY
+            })
         };
         assert!(gather(owner, 5, &label("x")).is_none(), "nothing gathers");
         GATHERED.with_borrow_mut(Vec::clear);
@@ -501,10 +502,10 @@ mod tests {
             count: 0,
         }));
         assert!(gather(owner, 6, &label("x")).is_none(), "another token");
-        let button = UiWidget {
+        let button = enshwick_abi::headed!(UiWidget {
             kind: UiWidget::BUTTON,
             ..label("b")
-        };
+        });
         assert_eq!(
             gather(owner, 5, &button),
             Some(Err(WidgetError::TooltipRefused))

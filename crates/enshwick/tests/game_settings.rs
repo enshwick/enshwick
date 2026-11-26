@@ -7,7 +7,9 @@ mod tests {
 
     use enshwick::WorldError;
     use enshwick::abi::Status;
-    use enshwick::game_settings::{GameSettings, GameSettingsPreset, WeatherFrequency};
+    use enshwick::game_settings::{
+        GameSettings, GameSettingsPreset, SettingsRead, WeatherFrequency,
+    };
     use enshwick::{Load, Mod, Off};
 
     const TYPE: &str = "game_settings";
@@ -136,9 +138,25 @@ mod tests {
         assert_eq!(status, Status::OK);
         let settings = SETTINGS.get().unwrap();
 
-        assert_eq!(settings.read(), None, "no world runs yet");
+        assert_eq!(
+            settings.read().err(),
+            Some(WorldError::Unavailable),
+            "no world runs yet"
+        );
         loader.set_game_settings(defaults(), 0);
-        let (now, preset) = settings.read().unwrap();
+        let elsewhere = std::thread::spawn(|| SETTINGS.get().unwrap().read().err())
+            .join()
+            .unwrap();
+        assert_eq!(
+            elsewhere,
+            Some(WorldError::WrongThread),
+            "read on the game thread only"
+        );
+        let SettingsRead {
+            settings: now,
+            preset,
+            ..
+        } = settings.read().unwrap();
         assert_eq!(preset, GameSettingsPreset::Default);
         assert!(now.enable_durability);
         assert_eq!(now.weather_frequency, WeatherFrequency::Normal);

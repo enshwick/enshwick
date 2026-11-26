@@ -3,11 +3,11 @@
 
 use crate::Off;
 use crate::abi::ItemTypeInfo;
-use crate::abi::{ChangeOp, DataChange, DataSelect, Header, Str};
+use crate::abi::{ChangeOp, DataChange, DataSelect, Str};
 use crate::content::Guid;
 use crate::content::categories::ItemCategoryMask;
 
-use super::{Change, Field, Value, ValueError, field_and_value};
+use super::{Change, Field, SetFieldError, Value, field_and_value};
 
 /// The vanilla items an [`ItemsChange`] reaches at once.
 ///
@@ -23,7 +23,12 @@ use super::{Change, Field, Value, ValueError, field_and_value};
 /// ```
 /// use enshwick::content::changes::{Field, ItemTraits, Items};
 ///
-/// let wood = ItemTraits { max_stack: 20, category: 9, flags: 0, slots: None, backpack_slots: None };
+/// let mut wood = ItemTraits::default();
+/// wood.max_stack = 20;
+/// wood.category = 9;
+/// wood.flags = 0;
+/// wood.slots = None;
+/// wood.backpack_slots = None;
 /// assert!(Items::Stackable.picks(Field::MaxStackSize, &wood));
 /// assert!(!Items::Containers.picks(Field::Slots, &wood));
 /// ```
@@ -49,6 +54,7 @@ pub enum Items {
 ///
 /// See [`Items`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ItemTraits {
     /// How many of it one slot holds.
     pub max_stack: u16,
@@ -149,6 +155,7 @@ impl Field {
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct ItemsChange {
     /// The items.
     pub items: Items,
@@ -178,7 +185,7 @@ impl ItemsChange {
     ///
     /// # Errors
     ///
-    /// [`ValueError`] saying why not.
+    /// [`SetFieldError`] saying why not.
     ///
     /// # Examples
     ///
@@ -191,9 +198,9 @@ impl ItemsChange {
     ///     "output_count is no field a selection of items changes"
     /// );
     /// ```
-    pub fn check(&self) -> Result<(), ValueError> {
+    pub fn check(&self) -> Result<(), SetFieldError> {
         if !self.field.selectable() {
-            return Err(ValueError::NotSelectable { field: self.field });
+            return Err(SetFieldError::NotSelectable { field: self.field });
         }
         self.field.check(self.value)
     }
@@ -220,7 +227,7 @@ impl ItemsChange {
     ///
     /// # Errors
     ///
-    /// [`ValueError`] for a field or value the selection does not take.
+    /// [`SetFieldError`] for a field or value the selection does not take.
     ///
     /// # Examples
     ///
@@ -228,8 +235,7 @@ impl ItemsChange {
     /// use enshwick::abi::{ChangeOp, DataChange, DataField, DataSelect, Guid, Header, Str};
     /// use enshwick::content::changes::{Items, ItemsChange, Value};
     ///
-    /// let raw = DataChange {
-    ///     header: Header::of::<DataChange>(),
+    /// let raw = enshwick::abi::headed!(DataChange {
     ///     entry: Guid::NIL,
     ///     field: DataField::MAX_STACK,
     ///     op: ChangeOp::TIMES,
@@ -238,12 +244,12 @@ impl ItemsChange {
     ///     item: Guid::NIL,
     ///     select: DataSelect::STACKABLE,
     ///     categories: 0,
-    /// };
+    /// });
     /// let change = ItemsChange::from_abi(&raw)?.ok_or("unknown")?;
     /// assert_eq!((change.items, change.value), (Items::Stackable, Value::Times(4.0)));
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    pub fn from_abi(raw: &DataChange) -> Result<Option<Self>, ValueError> {
+    pub fn from_abi(raw: &DataChange) -> Result<Option<Self>, SetFieldError> {
         let Some(items) = Items::from_abi(raw.select, raw.categories) else {
             return Ok(None);
         };
@@ -262,8 +268,7 @@ impl ItemsChange {
             Value::Times(v) => (ChangeOp::TIMES, v),
         };
         let (select, categories) = self.items.to_abi();
-        DataChange {
-            header: Header::of::<DataChange>(),
+        enshwick_abi::headed!(DataChange {
             entry: Guid::NIL,
             field: self.field.to_abi(),
             op,
@@ -272,7 +277,7 @@ impl ItemsChange {
             item: Guid::NIL,
             select,
             categories,
-        }
+        })
     }
 }
 

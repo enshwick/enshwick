@@ -6,7 +6,7 @@ mod tests {
 
     use enshwick::Entity;
     use enshwick::WorldError;
-    use enshwick::abi::{Header, PlayerInfo, Status};
+    use enshwick::abi::{PlayerInfo, Status};
     use enshwick::world::{BuildRefusal, Player, PlayerPermissions, World};
     use enshwick::{Load, Mod, Off};
 
@@ -34,25 +34,24 @@ mod tests {
     const GUEST: u32 = 4;
 
     fn info(entity: u32, permissions: u32) -> PlayerInfo {
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick::abi::headed!(PlayerInfo {
             slot: entity,
-            entity: Entity(entity),
+            entity: Entity::from_engine(entity),
             key: enshwick::PlayerKey::new(u64::from(entity)),
             permissions,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        }
+        })
     }
 
     fn player(entity: u32) -> Player {
-        Player {
-            entity: Entity(entity),
-            slot: entity,
-            key: enshwick::PlayerKey::new(u64::from(entity)),
-            permissions: 0,
-            name: String::new(),
-        }
+        Player::new(
+            Entity::from_engine(entity),
+            entity,
+            enshwick::PlayerKey::new(u64::from(entity)),
+            0,
+            String::new(),
+        )
     }
 
     /// A base's zone from 0 to 40 m, a world area of 1 km, a strict
@@ -83,7 +82,7 @@ mod tests {
         WORLD
             .get()
             .unwrap()
-            .can_build(&player(entity), [min; 3], [max; 3])
+            .can_build(player(entity), [min; 3], [max; 3])
     }
 
     #[test]
@@ -149,7 +148,7 @@ mod tests {
         let _loader = installed();
         let world = WORLD.get().unwrap();
         assert_eq!(
-            world.can_build(&player(WORLDER), [42.0, 30.0, 42.0], [38.0, 35.0, 38.0]),
+            world.can_build(player(WORLDER), [42.0, 30.0, 42.0], [38.0, 35.0, 38.0]),
             Err(BuildRefusal::NoPermission(PlayerPermissions::CanEditBase))
         );
     }
@@ -164,13 +163,13 @@ mod tests {
             [0.0, 0.0, 2_147_483_648.0],
         ] {
             assert_eq!(
-                world.can_build(&player(BUILDER), far, [1.0; 3]),
+                world.can_build(player(BUILDER), far, [1.0; 3]),
                 Err(BuildRefusal::Unchecked(WorldError::Refused)),
                 "{far:?}"
             );
         }
         assert_ne!(
-            world.can_build(&player(BUILDER), [0.0, 0.0, 2_147_483_647.0], [1.0; 3]),
+            world.can_build(player(BUILDER), [0.0, 0.0, 2_147_483_647.0], [1.0; 3]),
             Err(BuildRefusal::Unchecked(WorldError::Refused)),
             "the last metre the fixed point holds"
         );
@@ -182,13 +181,12 @@ mod tests {
 
         let loader = installed();
         let answers = |min: [f64; 3], max: [f64; 3]| {
-            let mut check = BuildRights {
-                header: Header::of::<BuildRights>(),
-                character: Entity(BUILDER),
+            let mut check = enshwick::abi::headed!(BuildRights {
+                character: Entity::from_engine(BUILDER),
                 refusal: 0,
                 min,
                 max,
-            };
+            });
             let mut kept = 0;
             // SAFETY: the fake's table is a static that outlives the test.
             let api = unsafe { &*loader.api() };
@@ -224,7 +222,7 @@ mod tests {
         let _loader = installed();
         let world = *WORLD.get().unwrap();
         let elsewhere =
-            std::thread::spawn(move || world.can_build(&player(BUILDER), [50.0; 3], [52.0; 3]))
+            std::thread::spawn(move || world.can_build(player(BUILDER), [50.0; 3], [52.0; 3]))
                 .join()
                 .unwrap();
         assert_eq!(

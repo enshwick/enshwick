@@ -21,6 +21,7 @@ use crate::Off;
 use crate::abi::{
     Comfort as RawComfort, ExperiencePass, ExperienceRow, SkillCheck as RawSkillCheck,
 };
+use enshwick_base::vetoes::Verdict;
 
 /// One character's experience before the server applies it, from
 /// [`Load::on_experience`](../struct.Load.html#method.on_experience): a filter may change `gained`.
@@ -31,11 +32,15 @@ use crate::abi::{
 /// use enshwick::Entity;
 /// use enshwick::progress::Experience;
 ///
-/// let row = Experience { entity: Entity(4096), level: 3, progress: 10, need: 100, gained: 5 };
+/// let row = Experience { entity: Entity::from_engine(4096), level: 3, progress: 10, need: 100, gained: 5 };
 /// assert_eq!(row.need - row.progress, 90);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, crate::Script)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "read in place as the loader's experience row, whose fields the ABI fixes"
+)]
 pub struct Experience {
     /// The character.
     pub entity: Entity,
@@ -120,6 +125,7 @@ pub struct SkillCheck {
 ///
 /// See [`Load::on_comfort`](../struct.Load.html#method.on_comfort).
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
+#[non_exhaustive]
 pub struct Comfort {
     /// The comfort category.
     pub category: u32,
@@ -171,7 +177,7 @@ impl Levels {
 
 unsafe extern "system" fn run_skill<F>(check: *const RawSkillCheck, user: *mut c_void) -> u8
 where
-    F: Fn(&SkillCheck) -> Option<bool>,
+    F: Fn(&SkillCheck) -> Verdict,
 {
     // SAFETY: the loader passes a valid check for the duration of the call.
     let Some(check) = (unsafe { check.as_ref() }) else {
@@ -187,8 +193,12 @@ where
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let handler = unsafe { &*user.cast::<F>() };
-    let answer = crate::host::guard("panic in a skill override", || None, || handler(&call));
-    match answer {
+    let answer = crate::host::guard(
+        "panic in a skill override",
+        || Verdict::Pass,
+        || handler(&call),
+    );
+    match answer.decision() {
         None => RawSkillCheck::VANILLA,
         Some(true) => RawSkillCheck::UNLOCKED,
         Some(false) => RawSkillCheck::LOCKED,
@@ -254,9 +264,16 @@ where
 pub trait LoadMethods {
     /// As `Load::on_skill`.
     #[doc(hidden)]
-    fn on_skill<F>(&mut self, skill: Skill, handler: F) -> Result<(), Off>
+    fn on_skill<F, V>(&mut self, skill: Skill, handler: F) -> Result<(), Off>
     where
-        F: Fn(&SkillCheck) -> Option<bool> + Send + Sync + 'static;
+        F: Fn(&SkillCheck) -> V + Send + Sync + 'static,
+        V: Into<Verdict>;
+
+    /// As `Load::skill_filter`.
+    #[doc(hidden)]
+    fn skill_filter<F>(&mut self, skill: Skill, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&SkillCheck) -> Verdict + Send + Sync + 'static;
 
     /// As `Load::on_comfort`.
     #[doc(hidden)]
@@ -272,9 +289,17 @@ pub trait LoadMethods {
 }
 
 impl LoadMethods for crate::BaseLoad {
-    fn on_skill<F>(&mut self, skill: Skill, handler: F) -> Result<(), Off>
+    fn on_skill<F, V>(&mut self, skill: Skill, handler: F) -> Result<(), Off>
     where
-        F: Fn(&SkillCheck) -> Option<bool> + Send + Sync + 'static,
+        F: Fn(&SkillCheck) -> V + Send + Sync + 'static,
+        V: Into<Verdict>,
+    {
+        self.skill_filter(skill, move |check| handler(check).into())
+    }
+
+    fn skill_filter<F>(&mut self, skill: Skill, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&SkillCheck) -> Verdict + Send + Sync + 'static,
     {
         let id = skill.id();
         let node =

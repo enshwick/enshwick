@@ -7,8 +7,8 @@ use core::ffi::c_void;
 use std::collections::{BTreeMap, BTreeSet};
 
 use enshwick_core::abi::{
-    AffixRoll, AffixSpec, Header, ItemLine, StatChange, StatChangeFn, StatModifier, StatModify,
-    StatRef, StatSource, StatSpec, Status, Str,
+    AffixRoll, AffixSpec, ItemLine, StatChange, StatChangeFn, StatModifier, StatModify, StatRef,
+    StatSource, StatSpec, Status, Str,
 };
 use enshwick_core::affixes::{
     AffixDef, AffixKey, Candidate, ItemRarity, RollRules, lines_of, reroll,
@@ -242,7 +242,7 @@ fn sources(s: &mut crate::test::table::State, entity: u32, stat: u32) -> Vec<Sta
                 reserved: 0,
                 stat: line.modifier.stat,
                 value: line.modifier.value,
-                id: item.pide.0,
+                id: item.pide.get(),
                 owner: item.item.get(),
             });
         }
@@ -311,7 +311,7 @@ entries! {
         stat: u32,
         out: *mut f32 as args::Out,
     ) -> Status {
-        match with(None, |s| value(s, entity.0, stat)) {
+        match with(None, |s| value(s, entity.get(), stat)) {
             Some(v) if !out.is_null() => {
                 // SAFETY: the match guard refused null; the safe layer passes an
                 // aligned `f32` it owns.
@@ -340,7 +340,7 @@ entries! {
                 return Status::REFUSED;
             }
             let stats = state_stats(s);
-            let at = (request.entity.0, request.key, request.modifier.stat);
+            let at = (request.entity.get(), request.key, request.modifier.stat);
             if request.flags & StatModify::REMOVE != 0 {
                 stats.modifiers.remove(&at);
             } else {
@@ -349,7 +349,7 @@ entries! {
                     .modifiers
                     .insert(at, (m.op, m.value, request.flags, request.duration_ms));
             }
-            stats.watched.insert(request.entity.0);
+            stats.watched.insert(request.entity.get());
             Status::OK
         })
     }
@@ -399,7 +399,7 @@ entries! {
         stat: u32,
         [out: *mut StatSource, capacity: u32, count: *mut u32] as args::ListOut,
     ) -> Status {
-        let list = with(Vec::new(), |s| sources(s, entity.0, stat));
+        let list = with(Vec::new(), |s| sources(s, entity.get(), stat));
         crate::test::table::put_list(&list, out, capacity, count)
     }
 
@@ -411,14 +411,14 @@ entries! {
         with(Status::MISSING, |s| {
             // As the loader: nothing to watch before the stats are sealed
             // or for no entity, and only a game's server watches.
-            if !s.base.closed() || entity.0 == 0 {
+            if !s.base.closed() || entity.get() == 0 {
                 return Status::BAD_ARGS;
             }
             if !s.host.base.serving() {
                 return Status::UNAVAILABLE;
             }
             let stats = state_stats(s);
-            let ask = (entity.0, me.0);
+            let ask = (entity.get(), me.0);
             if watch == 0 {
                 stats.asked.remove(&ask);
             } else {
@@ -438,7 +438,7 @@ pub(crate) fn settle() -> usize {
         let mut entities: BTreeSet<u32> = stats.watched.clone();
         entities.extend(stats.asked.iter().map(|&(entity, _)| entity));
         entities.extend(stats.worn.keys());
-        entities.extend(s.host.base.players.iter().map(|p| p.entity.0));
+        entities.extend(s.host.base.players.iter().map(|p| p.entity.get()));
         let kinds = u32::try_from(s.inventory.stats.kinds.len()).unwrap_or(0);
         let mut changes = Vec::new();
         for entity in entities {
@@ -460,14 +460,13 @@ pub(crate) fn settle() -> usize {
                 if old.to_bits() != new.to_bits() {
                     s.inventory.stats.settled.insert((entity, stat), new);
                     let key = key_of(&s.inventory.stats.kinds[stat as usize].id).0;
-                    changes.push(StatChange {
-                        header: Header::of::<StatChange>(),
-                        entity: enshwick_core::Entity(entity),
+                    changes.push(enshwick_core::headed!(StatChange {
+                        entity: enshwick_core::Entity::from_engine(entity),
                         stat: StatRef { index: stat, key },
                         old,
                         new,
                         reserved: 0,
-                    });
+                    }));
                 }
             }
         }
@@ -507,7 +506,7 @@ fn record(s: &crate::test::table::State, item: ItemInstance) -> ItemStats {
         .and_then(|kind| {
             s.content
                 .item_values
-                .get(&(u32::try_from(kind).ok()?, item.pide.0))
+                .get(&(u32::try_from(kind).ok()?, item.pide.get()))
         })
         .filter(|(held, _)| *held == item.item.get())
         .and_then(|(_, bytes)| postcard::from_bytes::<ItemStats>(bytes).ok())
@@ -518,10 +517,7 @@ fn pool(stats: &FakeStats) -> Vec<Candidate<'_>> {
     stats
         .affixes
         .iter()
-        .map(|(id, def, _)| Candidate {
-            key: AffixKey::of(id),
-            def,
-        })
+        .map(|(id, def, _)| Candidate::new(AffixKey::of(id), def))
         .collect()
 }
 
@@ -644,7 +640,7 @@ entries! {
                     s.content.item_kinds.len() - 1
                 });
             s.content.item_values.insert(
-                (u32::try_from(at).ok()?, roll.pide.0),
+                (u32::try_from(at).ok()?, roll.pide.get()),
                 (roll.item.get(), bytes),
             );
             Some(())

@@ -68,7 +68,7 @@ impl Players {
     ///
     /// let follow = Follow { index: 0, bit: 3, hold_ms: 500, fires: ControlSpec::PRESS };
     /// let mut players = Players::new();
-    /// players.step(&[follow], &[enshwick_core::Entity(7)], 0, |_| Some(1 << 3));
+    /// players.step(&[follow], &[enshwick_core::Entity::from_engine(7)], 0, |_| Some(1 << 3));
     /// assert!(players.waiting());
     /// ```
     pub fn step(
@@ -118,9 +118,9 @@ impl Players {
     ///
     /// let follow = Follow { index: 0, bit: 0, hold_ms: 500, fires: ControlSpec::PRESS };
     /// let mut players = Players::new();
-    /// players.step(&[follow], &[enshwick_core::Entity(7)], 0, |_| Some(1));
+    /// players.step(&[follow], &[enshwick_core::Entity::from_engine(7)], 0, |_| Some(1));
     /// let ready = players.settle(|entity| Some(entity));
-    /// assert_eq!(ready[0].1, enshwick_core::Entity(7));
+    /// assert_eq!(ready[0].1, enshwick_core::Entity::from_engine(7));
     /// ```
     pub fn settle<P>(&mut self, find: impl Fn(Entity) -> Option<P>) -> Vec<(Firing, P)> {
         let mut ready = Vec::with_capacity(self.waiting.len());
@@ -149,8 +149,8 @@ mod tests {
     use super::*;
 
     const ALL: u32 = ControlSpec::PRESS | ControlSpec::RELEASE | ControlSpec::HOLD;
-    const ANN: Entity = Entity(7);
-    const BOB: Entity = Entity(8);
+    const ANN: Entity = Entity::from_engine(7);
+    const BOB: Entity = Entity::from_engine(8);
 
     fn follow(bit: u8) -> Follow {
         Follow {

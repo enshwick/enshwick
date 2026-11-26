@@ -231,15 +231,17 @@ mod tests {
 
     #[test]
     fn only_a_new_window_of_the_same_session_raises_uncovered_fog() {
-        let info = |session, window, min, size, pixels| crate::abi::FogInfo {
-            metres_per_pixel: 8.0,
-            size_z: 1024.0,
-            session,
-            uncovered: window,
-            uncovered_pixels: pixels,
-            uncovered_min: min,
-            uncovered_size: size,
-            ..crate::abi::FogInfo::EMPTY
+        let info = |session, window, min, size, pixels| {
+            enshwick_abi::headed!(crate::abi::FogInfo {
+                metres_per_pixel: 8.0,
+                size_z: 1024.0,
+                session,
+                uncovered: window,
+                uncovered_pixels: pixels,
+                uncovered_min: min,
+                uncovered_size: size,
+                ..crate::abi::FogInfo::EMPTY
+            })
         };
         let mut seen = None;
         assert_eq!(
@@ -284,11 +286,23 @@ mod tests {
     fn a_sender_is_heard_once_a_tenth_of_a_second_and_quiet_senders_are_forgotten() {
         let mut last = FxHashMap::default();
         let start = Instant::now();
-        assert!(heard(&mut last, Entity(1), start));
-        assert!(!heard(&mut last, Entity(1), start + PING_GAP / 2));
-        assert!(heard(&mut last, Entity(2), start + PING_GAP / 2));
-        assert!(heard(&mut last, Entity(1), start + PING_GAP));
-        assert!(heard(&mut last, Entity(3), start + PING_GAP * 3));
+        assert!(heard(&mut last, Entity::from_engine(1), start));
+        assert!(!heard(
+            &mut last,
+            Entity::from_engine(1),
+            start + PING_GAP / 2
+        ));
+        assert!(heard(
+            &mut last,
+            Entity::from_engine(2),
+            start + PING_GAP / 2
+        ));
+        assert!(heard(&mut last, Entity::from_engine(1), start + PING_GAP));
+        assert!(heard(
+            &mut last,
+            Entity::from_engine(3),
+            start + PING_GAP * 3
+        ));
         assert_eq!(last.len(), 1, "only the sender heard last stays");
     }
 }

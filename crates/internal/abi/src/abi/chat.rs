@@ -19,24 +19,24 @@ use crate::abi::{Entity, Header, PlayerKey, Str};
 /// ```
 /// use enshwick::abi::{ChatLine, Header, Str};
 ///
-/// let line = ChatLine {
-///     header: Header::of::<ChatLine>(),
+/// let line = enshwick::abi::headed!(ChatLine {
 ///     account: enshwick::PlayerKey::new(7),
-///     entity: enshwick::Entity(2),
+///     entity: enshwick::Entity::from_engine(2),
 ///     kind: ChatLine::PLAYER,
 ///     loca: [0; 2],
 ///     text: Str::new("hello"),
-/// };
+/// });
 /// assert_eq!(line.text.len(), 5);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct ChatLine {
     /// Size and version of this struct.
     pub header: Header,
     /// The sender's account key; zero when the game names none.
     pub account: PlayerKey,
-    /// The sender's character, `Entity(0)` when it has none in the world.
+    /// The sender's character, entity 0 when it has none in the world.
     pub entity: Entity,
     /// [`ChatLine::PLAYER`], [`ChatLine::EMOTE`] or [`ChatLine::NOTICE`].
     pub kind: u32,
@@ -76,16 +76,16 @@ impl ChatLine {
 /// use enshwick::abi::{ChatRewrite, Header};
 ///
 /// let mut bytes = [0u8; 16];
-/// let rewrite = ChatRewrite {
-///     header: Header::of::<ChatRewrite>(),
+/// let rewrite = enshwick::abi::headed!(ChatRewrite {
 ///     buffer: bytes.as_mut_ptr(),
 ///     capacity: 16,
 ///     len: 0,
-/// };
+/// });
 /// assert_eq!(rewrite.len, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct ChatRewrite {
     /// Size and version of this struct.
     pub header: Header,

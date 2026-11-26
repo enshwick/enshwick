@@ -80,10 +80,10 @@ impl crate::test::Installed {
     /// ```
     /// use enshwick::abi::PlayerInfo;
     ///
-    /// let ann = PlayerInfo::with_name(enshwick::Entity(2), enshwick::PlayerKey::new(7), 0, "Ann");
+    /// let ann = PlayerInfo::with_name(enshwick::Entity::from_engine(2), enshwick::PlayerKey::new(7), 0, "Ann");
     /// let loader = enshwick::test::FakeHost::new().player(ann).install();
-    /// assert!(loader.respawn(enshwick::PlayerKey::new(7), enshwick::Entity(3)));
-    /// assert!(!loader.respawn(enshwick::PlayerKey::new(8), enshwick::Entity(4)));
+    /// assert!(loader.respawn(enshwick::PlayerKey::new(7), enshwick::Entity::from_engine(3)));
+    /// assert!(!loader.respawn(enshwick::PlayerKey::new(8), enshwick::Entity::from_engine(4)));
     /// ```
     #[must_use]
     pub fn respawn(&self, key: PlayerKey, entity: Entity) -> bool {

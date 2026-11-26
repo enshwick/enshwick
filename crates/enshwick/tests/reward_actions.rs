@@ -4,7 +4,7 @@
 #[cfg(test)]
 mod tests {
     use enshwick::__private::ids;
-    use enshwick::abi::{Header, ItemAction, PlayerInfo, Status, TickData};
+    use enshwick::abi::{ItemAction, PlayerInfo, Status, TickData};
     use enshwick::events::{QuestCompleted, Ticked, WorldLoaded};
     use enshwick::items::Kind;
     use enshwick::knowledge::KnowledgeId;
@@ -41,7 +41,9 @@ mod tests {
                 load.add_reward(Reward::new(name, on).with(Give::Experience(amount)))?;
             }
             // A filter after the reward's own refuses player 4's drinks.
-            load.on_item(tonic(), Kind::Consume, |used| used.player != Entity(4))?;
+            load.on_item(tonic(), Kind::Consume, |used| {
+                used.player != Entity::from_engine(4)
+            })?;
             let rewards = load.rewards()?;
             let _set = REWARDS.set(rewards);
             // A filter may grant another reward while it decides.
@@ -64,15 +66,14 @@ mod tests {
     );
 
     fn player(entity: u32, key: u64) -> PlayerInfo {
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: Entity(entity),
+            entity: Entity::from_engine(entity),
             key: PlayerKey::new(key),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        }
+        })
     }
 
     /// A 24-byte event with each `u32` at its offset.
@@ -97,7 +98,7 @@ mod tests {
     fn gained(loader: &Installed, entity: u32) -> u32 {
         step(loader);
         let mut rows = [Experience {
-            entity: Entity(entity),
+            entity: Entity::from_engine(entity),
             level: 1,
             progress: 0,
             need: 10_000,
@@ -157,10 +158,11 @@ mod tests {
     fn a_reward_of_one_quest_follows_only_that_quest() {
         let data = std::env::temp_dir().join(format!("enshwick-one-quest-{}", std::process::id()));
         let loader = installed(&data);
-        let completed = |quest| enshwick::abi::QuestData {
-            header: Header::of::<enshwick::abi::QuestData>(),
-            entity: Entity(2),
-            quest,
+        let completed = |quest| {
+            enshwick::abi::headed!(enshwick::abi::QuestData {
+                entity: Entity::from_engine(2),
+                quest,
+            })
         };
         let _heard = loader.raise::<QuestCompleted>(&completed(KnowledgeId::new(0x52)));
         assert_eq!(gained(&loader, 2), 0, "another quest");
@@ -260,15 +262,21 @@ mod tests {
         assert_eq!(gained(&loader, 2), 0, "only the looter");
 
         let rewards = *REWARDS.get().unwrap();
-        rewards.give(Entity(2), &[Give::Experience(7), Give::Experience(5)]);
+        rewards.give(
+            Entity::from_engine(2),
+            &[Give::Experience(7), Give::Experience(5)],
+        );
         assert_eq!(
             gained(&loader, 2),
             12,
             "every gift of a give, with no reward"
         );
-        assert!(rewards.grant(Entity(4), "looter"));
-        assert!(!rewards.grant(Entity(4), "unknown"));
-        assert!(!rewards.grant(Entity(99), "looter"), "no such player");
+        assert!(rewards.grant(Entity::from_engine(4), "looter"));
+        assert!(!rewards.grant(Entity::from_engine(4), "unknown"));
+        assert!(
+            !rewards.grant(Entity::from_engine(99), "looter"),
+            "no such player"
+        );
         assert_eq!(gained(&loader, 4), 1001);
         let _gone = std::fs::remove_dir_all(&data);
     }
@@ -277,14 +285,15 @@ mod tests {
     fn a_use_a_later_filter_refuses_gives_no_use_reward() {
         let data = std::env::temp_dir().join(format!("enshwick-drinker-{}", std::process::id()));
         let loader = installed(&data);
-        let drink = |player: u32| ItemAction {
-            header: Header::of::<ItemAction>(),
-            kind: ItemAction::CONSUME,
-            character: Entity(player),
-            item: tonic(),
-            count: 1,
-            inventory: Entity(100),
-            slot: 0,
+        let drink = |player: u32| {
+            enshwick::abi::headed!(ItemAction {
+                kind: ItemAction::CONSUME,
+                character: Entity::from_engine(player),
+                item: tonic(),
+                count: 1,
+                inventory: Entity::from_engine(100),
+                slot: 0,
+            })
         };
         assert!(loader.item_action(&drink(2)));
         assert_eq!(gained(&loader, 2), 3, "a use that goes through rewards");

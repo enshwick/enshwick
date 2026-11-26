@@ -51,18 +51,9 @@ mod tests {
         assert_eq!((limit.vanilla_zones, limit.vanilla_bases), (16, 16));
         assert_eq!((limit.max_zones, limit.max_bases), (255, 179));
         assert_eq!(loader.altar_limit(11, 16), 128, "the zones cap the chain");
-        assert!(!limit.past_vanilla(Grouping {
-            zones: 16,
-            bases: 16
-        }));
-        assert!(limit.past_vanilla(Grouping {
-            zones: 17,
-            bases: 4
-        }));
-        assert!(limit.past_vanilla(Grouping {
-            zones: 16,
-            bases: 17
-        }));
+        assert!(!limit.past_vanilla(Grouping::new(16, 16)));
+        assert!(limit.past_vanilla(Grouping::new(17, 4)));
+        assert!(limit.past_vanilla(Grouping::new(16, 17)));
     }
 }
 

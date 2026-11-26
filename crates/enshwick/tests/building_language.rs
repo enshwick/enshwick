@@ -5,7 +5,7 @@
 mod tests {
     use std::sync::Mutex;
 
-    use enshwick::abi::{BuildingData, Header, PlayerInfo, Side, Status};
+    use enshwick::abi::{BuildingData, PlayerInfo, Side, Status};
     use enshwick::events::{BuildingPlaced, BuildingRemoved};
     use enshwick::i18n::{Language, language};
     use enshwick::{Entity, ItemId, Load, Mod, Off, PlayerKey};
@@ -32,28 +32,26 @@ mod tests {
     );
 
     fn character(entity: u32, key: u64) -> PlayerInfo {
-        PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: Entity(entity),
+            entity: Entity::from_engine(entity),
             key: PlayerKey::new(key),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        }
+        })
     }
 
     fn built(player: u32, kind: u8) -> BuildingData {
-        BuildingData {
-            header: Header::of::<BuildingData>(),
-            entity: Entity(4096),
-            character: Entity(player),
+        enshwick::abi::headed!(BuildingData {
+            entity: Entity::from_engine(4096),
+            character: Entity::from_engine(player),
             item: ItemId::new(1_302_084_846),
             kind,
             replay: 0,
             template: enshwick::content::Guid([0; 16]),
             position: [1.0, 2.0, 3.0],
-        }
+        })
     }
 
     #[test]

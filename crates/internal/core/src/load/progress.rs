@@ -1,6 +1,7 @@
 //! `Load`'s methods of a module below core, forwarded to the base handle.
 
 use crate::progress::{Comfort, Experience, Levels, Skill, SkillCheck};
+use crate::vetoes::Verdict;
 use crate::{Load, Off};
 use enshwick_knowledge::__load::*;
 
@@ -9,8 +10,9 @@ mod script;
 #[enshwick_macros::forward(base)]
 #[crate::script(progress)]
 impl Load<'_> {
-    /// Answers the game's checks of `skill`: `Some(true)` unlocks it for
-    /// that check, `Some(false)` locks it, `None` keeps the game's answer. It
+    /// Answers the game's checks of `skill`: [`Verdict::Allow`] (or
+    /// `Some(true)`) unlocks it for that check, a refusal (or `Some(false)`)
+    /// locks it, [`Verdict::Pass`] (or `None`) keeps the game's answer. It
     /// runs on both sides, on the checking thread, and only for `skill`.
     ///
     /// # Errors
@@ -21,10 +23,23 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](crate::progress).
-    #[script]
-    pub fn on_skill<F>(&mut self, skill: Skill, handler: F) -> Result<(), Off>
+    pub fn on_skill<F, V>(&mut self, skill: Skill, handler: F) -> Result<(), Off>
     where
-        F: Fn(&SkillCheck) -> Option<bool> + Send + Sync + 'static;
+        F: Fn(&SkillCheck) -> V + Send + Sync + 'static,
+        V: Into<Verdict>;
+
+    /// Answers the game's checks of `skill`: `true` unlocks it for that
+    /// check, `false` or a string locks it, nil keeps the game's answer, and
+    /// any other value locks. It runs on both sides, on the checking thread,
+    /// and only for `skill`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Load::on_skill`].
+    #[script(name = "on_skill")]
+    pub(crate) fn skill_filter<F>(&mut self, skill: Skill, handler: F) -> Result<(), Off>
+    where
+        F: Fn(&SkillCheck) -> Verdict + Send + Sync + 'static;
 
     /// Changes the comfort each provider registers in a base: `filter`
     /// returns the value to register. Server's worker threads, on the hot

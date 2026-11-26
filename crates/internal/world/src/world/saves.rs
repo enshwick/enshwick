@@ -5,7 +5,7 @@
 use core::time::Duration;
 
 use super::World;
-use crate::abi::{Header, SaveInfo as RawSaveInfo, Status};
+use crate::abi::{SaveInfo as RawSaveInfo, Status};
 use crate::content::Guid;
 use crate::{Entity, WorldError};
 
@@ -16,6 +16,10 @@ use crate::{Entity, WorldError};
 ///
 /// See [`SaveInfo`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, crate::Script)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct WorldGuid(pub [u8; 16]);
 
 /// The save of the world the server runs, from [`World::save_info`].
@@ -54,14 +58,13 @@ impl World {
     #[must_use]
     #[script]
     pub fn save_info(self) -> Option<SaveInfo> {
-        let mut out = RawSaveInfo {
-            header: Header::of::<RawSaveInfo>(),
+        let mut out = enshwick_abi::headed!(RawSaveInfo {
             world: Guid::NIL,
             saved_at: 0,
             size: 0,
             backups: 0,
             reserved: 0,
-        };
+        });
         let status = (self.0.host.api().save_info)(self.0.host.handle(), &raw mut out);
         (status == Status::OK).then(|| SaveInfo {
             world: WorldGuid(out.world.0),

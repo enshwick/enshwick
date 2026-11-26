@@ -99,13 +99,12 @@ pub(super) fn chain_limit<'a>(
     zones: u32,
     filters: impl IntoIterator<Item = &'a LimitFilter>,
 ) -> u8 {
-    let vanilla_limit = AltarLimit {
-        header: enshwick_core::abi::Header::of::<AltarLimit>(),
+    let vanilla_limit = enshwick_abi::headed!(AltarLimit {
         flame_level,
         vanilla: u32::from(vanilla),
         allowed: u32::from(vanilla),
         reserved: 0,
-    };
+    });
     let mut limit = vanilla_limit;
     let _none: Option<(_, ())> =
         crate::engine::filters::ask(filters, crate::engine::profile::Feature::Altars, |filter| {
@@ -114,10 +113,10 @@ pub(super) fn chain_limit<'a>(
             // registered and a limit valid for the call, and by the callback
             // contract of `HostApi` it does not unwind into the loader.
             filter.call(|filter, user| unsafe { filter(&raw mut limit, user) });
-            limit = AltarLimit {
+            limit = enshwick_abi::headed!(AltarLimit {
                 allowed: limit.allowed,
                 ..vanilla_limit
-            };
+            });
             core::ops::ControlFlow::Continue(())
         });
     u8::try_from(limit.allowed.min(zones)).unwrap_or(u8::MAX)

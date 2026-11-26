@@ -34,10 +34,9 @@ impl Load<'_> {
     /// const MORTAR: Guid = Guid::parse("61575880-3db5-4ce8-b9bc-1291402a9fb4");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let mortar = load.add_prop(NewProp {
-    ///         crafting_prop: Some(CraftingPropSetup::default()),
-    ///         ..NewProp::new(NewItem::new(id!("mortar"), MORTAR))
-    ///     })?;
+    ///     let mut prop_2 = NewProp::new(NewItem::new(id!("mortar"), MORTAR));
+    ///     prop_2.crafting_prop = Some(CraftingPropSetup::default());
+    ///     let mortar = load.add_prop(prop_2)?;
     ///     assert_eq!(mortar.crafting_prop, Some(id!("mortar").part("crafting-prop").guid()));
     ///     Ok(())
     /// }

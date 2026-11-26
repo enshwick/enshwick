@@ -289,7 +289,7 @@ mod tests {
 
     fn seen(text: &str, at_ms: u64) -> Seen {
         Seen {
-            player: Entity(7),
+            player: Entity::from_engine(7),
             reason: Reason::new(ModIndex::new(1), text),
             at_ms,
         }
@@ -297,7 +297,7 @@ mod tests {
 
     fn told(text: &str, sent_ms: Option<u64>, seen_ms: u64) -> Told {
         Told {
-            player: Entity(7),
+            player: Entity::from_engine(7),
             reason: Reason::new(ModIndex::new(1), text),
             sent_ms,
             seen_ms,
@@ -335,14 +335,19 @@ mod tests {
             0,
             "an idle HUD frame skips"
         );
-        refused(ModIndex::new(1), Entity(40), "far player", true);
+        refused(
+            ModIndex::new(1),
+            Entity::from_engine(40),
+            "far player",
+            true,
+        );
         assert!(
             STATE.local.relock().is_none(),
             "the server world's check is not the HUD's"
         );
         assert_eq!(STATE.seen.relock().iter().flatten().count(), 1);
         assert!(STATE.any.load(Ordering::Acquire), "the step looks");
-        refused(ModIndex::new(1), Entity(40), "nearer", true);
+        refused(ModIndex::new(1), Entity::from_engine(40), "nearer", true);
         let kept: Vec<_> = STATE
             .seen
             .relock()
@@ -355,13 +360,21 @@ mod tests {
             ["nearer"],
             "a player's later refusal takes their slot"
         );
-        refused(ModIndex::new(1), Entity(3), "own cursor", false);
+        refused(
+            ModIndex::new(1),
+            Entity::from_engine(3),
+            "own cursor",
+            false,
+        );
         assert_ne!(STATE.local_at.load(Ordering::Acquire), 0, "the HUD looks");
         let local = STATE
             .local
             .relock()
             .map(|s| (s.player, s.reason.text().to_owned()));
-        assert_eq!(local, Some((Entity(3), "own cursor".to_owned())));
+        assert_eq!(
+            local,
+            Some((Entity::from_engine(3), "own cursor".to_owned()))
+        );
         assert_eq!(
             STATE.seen.relock().iter().flatten().count(),
             1,
@@ -374,7 +387,7 @@ mod tests {
         let state = State::new();
         let reason = Reason::new(ModIndex::new(1), "low");
         let seen = Seen {
-            player: Entity(40),
+            player: Entity::from_engine(40),
             reason,
             at_ms: 5000,
         };

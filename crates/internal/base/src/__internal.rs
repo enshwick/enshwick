@@ -95,13 +95,28 @@ pub fn report_poison_to(sink: fn(&std::panic::Location<'_>)) {
 
 /// A pointer to `entity`'s component of type `ty` on the server's game
 /// thread, valid until the game thread returns to the game; `None` when the
-/// entity has none.
+/// entity has none or the loader cannot read it now.
 #[must_use]
 pub fn component(
     ty: ComponentType,
     host: Host,
     entity: Entity,
 ) -> Option<*const core::ffi::c_void> {
+    ty.read(host, entity).ok().flatten()
+}
+
+/// [`component`], with the loader's status when it cannot read now (off the
+/// game thread, no world), for reads that answer it as an error.
+///
+/// # Errors
+///
+/// The loader's status, never [`Status::OK`](crate::abi::Status::OK) or
+/// [`Status::MISSING`](crate::abi::Status::MISSING), which is `Ok(None)`.
+pub fn component_status(
+    ty: ComponentType,
+    host: Host,
+    entity: Entity,
+) -> Result<Option<*const core::ffi::c_void>, crate::abi::Status> {
     ty.read(host, entity)
 }
 

@@ -25,7 +25,7 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 use std::time::Instant;
 
-use enshwick_core::abi::{Header, HookFlags, ItemAction, ItemFilterFn, Side};
+use enshwick_core::abi::{HookFlags, ItemAction, ItemFilterFn, Side};
 use enshwick_core::raw::{read_at, write_at};
 
 use crate::engine::ecs::{Components, Engine};
@@ -453,14 +453,14 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
             // SAFETY: the caller guarantees the system's live context, at its
             // entry on its thread.
             let consumed =
-                unsafe { components.component(ctx, call.character.0, layout.consumed_input) }?;
+                unsafe { components.component(ctx, call.character.get(), layout.consumed_input) }?;
             let slot = u8::try_from(call.slot).ok()?;
             // SAFETY: the caller guarantees the system's live context, at its
             // entry on its thread.
             let stack = unsafe {
                 layout
                     .stacks
-                    .holding(components, ctx, call.inventory.0, slot)
+                    .holding(components, ctx, call.inventory.get(), slot)
             }?;
             // SAFETY: `consumed` is the player's live
             // `ServerConsumedPlayerInput` component.
@@ -509,19 +509,18 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
         let Some((item, count)) = held.filter(|&(item, count)| item != 0 && count != 0) else {
             continue;
         };
-        let call = ItemAction {
-            header: Header::of::<ItemAction>(),
+        let call = enshwick_abi::headed!(ItemAction {
             kind,
-            character: enshwick_core::Entity(player),
+            character: enshwick_core::Entity::from_engine(player),
             item: enshwick_core::ItemId::new(item),
             count: if kind == ItemAction::CONSUME {
                 1
             } else {
                 count
             },
-            inventory: enshwick_core::Entity(inventory),
+            inventory: enshwick_core::Entity::from_engine(inventory),
             slot: u32::from(index),
-        };
+        });
         if !ask(&call, true) {
             // SAFETY: `consumed` is the player's live, server-only consumed
             // record, written at the system's entry on its thread before the
@@ -534,10 +533,10 @@ unsafe fn screen_pending(ctx: *mut u64, equipment: bool) {
             );
         } else if kind == ItemAction::CONSUME {
             USES.watch(
-                ItemAction {
+                enshwick_abi::headed!(ItemAction {
                     kind: ItemAction::CONSUMED,
                     ..call
-                },
+                }),
                 version,
                 item,
                 count,
@@ -650,15 +649,14 @@ fn follow(type_hash: u32, event: &[u8]) {
         {
             return;
         }
-        let call = ItemAction {
-            header: Header::of::<ItemAction>(),
+        let call = enshwick_abi::headed!(ItemAction {
             kind: heard.kind,
-            character: enshwick_core::Entity(player),
+            character: enshwick_core::Entity::from_engine(player),
             item: enshwick_core::ItemId::new(item),
             count,
-            inventory: enshwick_core::Entity(0),
+            inventory: enshwick_core::Entity::from_engine(0),
             slot: 0,
-        };
+        });
         let _heard = ask(&call, false);
     });
 }

@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{DAMAGE_TYPES, DamageCheck, Header, Status};
+    use enshwick::abi::{DAMAGE_TYPES, DamageCheck, Status};
     use enshwick::damage::{DamageCause, DamageTypeNew};
     use enshwick::{Load, Mod, Off};
 
@@ -41,16 +41,15 @@ mod tests {
     );
 
     fn check(cause: u32, target: u32, source: u32) -> DamageCheck {
-        DamageCheck {
-            header: Header::of::<DamageCheck>(),
+        enshwick::abi::headed!(DamageCheck {
             cause,
-            target: enshwick::Entity(target),
-            source: enshwick::Entity(source),
-            attacker: enshwick::Entity(0),
+            target: enshwick::Entity::from_engine(target),
+            source: enshwick::Entity::from_engine(source),
+            attacker: enshwick::Entity::from_engine(0),
             total: 0.0,
             amount_count: 0,
             amounts: core::ptr::null_mut(),
-        }
+        })
     }
 
     fn started() -> enshwick::test::Installed {

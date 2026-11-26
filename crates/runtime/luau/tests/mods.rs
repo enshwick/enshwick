@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::{Header, PlayerData, PlayerInfo, Status};
+    use enshwick::abi::{PlayerData, PlayerInfo, Status};
     use enshwick::config::{Field, Schema};
     use enshwick::events::{PlayerJoined, SettingsReplaced};
     use enshwick::rates::{ExperienceGroup, Rate};
@@ -64,15 +64,14 @@ mod tests {
             .settings_schema();
         let mut name = [0u8; PlayerInfo::NAME_MAX];
         name[..3].copy_from_slice(b"Ann");
-        let ann = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let ann = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
-            entity: enshwick::Entity(10),
+            entity: enshwick::Entity::from_engine(10),
             key: enshwick::PlayerKey::new(7),
             permissions: 0,
             name_len: 3,
             name,
-        };
+        });
         let host = FakeHost::new()
             .type_hash("current_transform", 1)
             .type_hash("used_item", 2)
@@ -90,12 +89,11 @@ mod tests {
             "{:?}",
             loader.logs()
         );
-        let joined = PlayerData {
-            header: Header::of::<PlayerData>(),
+        let joined = enshwick::abi::headed!(PlayerData {
             slot: 0,
-            entity: enshwick::Entity(10),
+            entity: enshwick::Entity::from_engine(10),
             key: enshwick::PlayerKey::new(7),
-        };
+        });
         assert_eq!(loader.raise::<PlayerJoined>(&joined), 1);
         assert!(
             loader
@@ -115,10 +113,10 @@ mod tests {
                 .is_some_and(|reply| reply.starts_with('0')),
             "{refused:?}"
         );
-        let admin = PlayerInfo {
+        let admin = enshwick::abi::headed!(PlayerInfo {
             permissions: PlayerInfo::CAN_KICK_BAN,
             ..ann
-        };
+        });
         let done = loader.ask_actions(run, &admin, 0, "count", "");
         assert_eq!(done.as_deref(), Some("11 player online"));
     }
@@ -384,20 +382,22 @@ mod tests {
             .enemies()
             .props()
             .upgrade_recipes(&[(Guid([0xc0; 16]), altar, 0), (upgrade, altar, 1)])
-            .template(enshwick::Entity(10), kind);
+            .template(enshwick::Entity::from_engine(10), kind);
         let (loader, status) = start_with(host, &main, Scripts::new(), None);
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         let line = format!("altars of {kind}");
         assert!(logged(&loader, &line), "{line}: {:?}", loader.logs());
-        assert_eq!(loader.altar_zone(enshwick::Entity(10), 1, 30), (4, 20));
-        let craft = enshwick::abi::CraftCheck {
-            header: Header::of::<enshwick::abi::CraftCheck>(),
-            crafting_operator_id: enshwick::Entity(2),
-            crafting_station_id: enshwick::Entity(10),
+        assert_eq!(
+            loader.altar_zone(enshwick::Entity::from_engine(10), 1, 30),
+            (4, 20)
+        );
+        let craft = enshwick::abi::headed!(enshwick::abi::CraftCheck {
+            crafting_operator_id: enshwick::Entity::from_engine(2),
+            crafting_station_id: enshwick::Entity::from_engine(10),
             recipe_id: enshwick::RecipeId(upgrade.fnv1a()),
             recipe_amount: 1,
             reserved: 0,
-        };
+        });
         assert!(!loader.craft(&craft), "an upgrade past the kind's maximum");
     }
 
@@ -429,11 +429,11 @@ mod tests {
     #[test]
     fn the_export_folder_sits_beside_mods_named_by_the_mod_id() {
         let script = EXPORT;
-        let listed = enshwick::abi::ModInfo {
+        let listed = enshwick::abi::headed!(enshwick::abi::ModInfo {
             id: enshwick::abi::Str::new("you.export"),
             file: enshwick::abi::Str::new("mods/Export Pack/pack.toml"),
             ..enshwick::abi::ModInfo::EMPTY
-        };
+        });
         let (installed, status) = start_with(
             FakeHost::new()
                 .mod_dir("game/mods/Export Pack")

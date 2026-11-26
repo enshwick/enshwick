@@ -8,8 +8,7 @@ mod tests {
     use std::sync::Mutex;
 
     use enshwick::abi::{
-        Header, InventoryOp, InventoryOpResult, InventoryRequest, InventoryResult, QuestData,
-        Status,
+        InventoryOp, InventoryOpResult, InventoryRequest, InventoryResult, QuestData, Status,
     };
     use enshwick::content::journal::{NewQuest, QuestReward, QuestStep};
     use enshwick::content::knowledge::{ExperienceValue, KnowledgeQuery, NewKnowledge};
@@ -21,7 +20,7 @@ mod tests {
     use enshwick::{Entity, ItemId, Load, Mod, Off};
 
     const TORCH: Guid = Guid::parse("224097e5-ed0d-49d2-9d23-43256a6682b3");
-    const PLAYER: Entity = Entity(2);
+    const PLAYER: Entity = Entity::from_engine(2);
 
     static QUEST: Mutex<Option<KnowledgeId>> = Mutex::new(None);
     static LEFT: Mutex<Vec<(u32, Done)>> = Mutex::new(Vec::new());
@@ -38,12 +37,8 @@ mod tests {
             ))?;
             let is_given = KnowledgeQuery::is_set(given, Scope::Player);
             let tag = |name: &str| Guid::named(&format!("you.trail:{name}"));
-            let trail = load.add_quest(NewQuest {
-                rewards: vec![
-                    QuestReward::Experience(ExperienceValue::new(VANILLA_QUEST_EXPERIENCE)),
-                    QuestReward::Item(TORCH),
-                ],
-                ..NewQuest::new(
+            let trail = load.add_quest({
+                let mut value = NewQuest::new(
                     Id::new("you.trail:trail"),
                     tag("trail.name"),
                     vec![QuestStep::new(
@@ -52,7 +47,12 @@ mod tests {
                         is_given,
                         is_given,
                     )],
-                )
+                );
+                value.rewards = vec![
+                    QuestReward::Experience(ExperienceValue::new(VANILLA_QUEST_EXPERIENCE)),
+                    QuestReward::Item(TORCH),
+                ];
+                value
             })?;
             *QUEST.lock().unwrap() = Some(trail);
             let _set = REWARDS.set(load.rewards()?);
@@ -89,11 +89,10 @@ mod tests {
     );
 
     fn completed(quest: KnowledgeId) -> QuestData {
-        QuestData {
-            header: Header::of::<QuestData>(),
+        enshwick::abi::headed!(QuestData {
             entity: PLAYER,
             quest,
-        }
+        })
     }
 
     fn start(name: &str) -> enshwick::test::Installed {

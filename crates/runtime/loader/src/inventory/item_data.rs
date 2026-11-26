@@ -276,7 +276,7 @@ impl Destroyed {
 
     fn fill(&self, (at, round): (usize, u64), entity: Entity) {
         if let Some(slot) = self.slots.get(at) {
-            slot.store(round << 32 | u64::from(entity.0), Ordering::Release);
+            slot.store(round << 32 | u64::from(entity.get()), Ordering::Release);
         }
     }
 
@@ -513,7 +513,7 @@ crate::engine::chains::chain_detour! {
     |onward| {
         let queued = onward.call();
         if queued != 0 && entity != 0 && STATE.kept.load(Ordering::Relaxed) {
-            STATE.destroyed.note(Entity(entity));
+            STATE.destroyed.note(Entity::from_engine(entity));
         }
         queued
     }
@@ -524,7 +524,7 @@ crate::engine::chains::chain_detour! {
 fn prune_destroyed(values: &mut Values, destroyed: &FxHashSet<u32>) -> Vec<(KindIndex, Entity)> {
     let gone: Vec<(KindIndex, Entity)> = values
         .keys()
-        .filter(|(_, pide)| destroyed.contains(&pide.0))
+        .filter(|(_, pide)| destroyed.contains(&pide.get()))
         .copied()
         .collect();
     for key in &gone {
@@ -561,7 +561,7 @@ pub(crate) fn after_step(loader: &Loader) {
         let mut gone = prune_destroyed(&mut server.values, &destroyed);
         server
             .cleared
-            .retain(|(_, pide, _)| !destroyed.contains(&pide.0));
+            .retain(|(_, pide, _)| !destroyed.contains(&pide.get()));
         server.changed |= !gone.is_empty();
         if sweep && !STATE.finding() {
             gone.extend(world_file::sweep(loader, server));
@@ -591,7 +591,7 @@ fn push_encoded(messages: &mut Vec<Vec<u8>>, id: &str, pide: Entity, item: u32, 
     }
     let last = messages.len() - 1;
     let start = messages[last].len();
-    encode(&mut messages[last], id, pide.0, item, value);
+    encode(&mut messages[last], id, pide.get(), item, value);
     if start > 0 && messages[last].len() > MESSAGE_BYTES {
         let record = messages[last].split_off(start);
         messages.push(record);
@@ -675,7 +675,7 @@ fn serves() -> bool {
 /// entity kind on the entity `pide` (`item` 0). On the server's game thread
 /// an entity whose template changed loses its value.
 pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, UseItemDataError> {
-    let (kind, pide) = (KindIndex(kind), Entity(pide));
+    let (kind, pide) = (KindIndex(kind), Entity::from_engine(pide));
     let scope = self::kind(kind).ok_or(UseItemDataError::UnknownKind)?.scope;
     if serves() {
         let mut server = STATE.server.relock();
@@ -716,10 +716,10 @@ pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, UseItemD
 /// server only, once its world has loaded. An entity kind's value needs an
 /// entity the next load finds again: [`UseItemDataError::NotKept`] otherwise.
 pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), UseItemDataError> {
-    let (kind, pide) = (KindIndex(kind), Entity(pide));
+    let (kind, pide) = (KindIndex(kind), Entity::from_engine(pide));
     let spec = self::kind(kind).ok_or(UseItemDataError::UnknownKind)?;
     let id = spec.id.as_str();
-    if pide.0 == 0 {
+    if pide.get() == 0 {
         return Err(UseItemDataError::NoHolder);
     }
     if value.len() > MAX_VALUE {
@@ -755,7 +755,7 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), U
             } else {
                 let template = template_id(pide).ok_or(UseItemDataError::NoHolder)?;
                 let placed = loader
-                    .and_then(|loader| game::placed(loader, pide.0))
+                    .and_then(|loader| game::placed(loader, pide.get()))
                     .ok_or(UseItemDataError::NotKept)?;
                 (template, Some(Anchor::Placed(placed)))
             }
@@ -787,7 +787,7 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), U
         return Ok(());
     }
     let mut message = Vec::new();
-    encode(&mut message, id, pide.0, item, value);
+    encode(&mut message, id, pide.get(), item, value);
     crate::base::net::item_data(0, &message);
     Ok(())
 }
@@ -837,7 +837,7 @@ fn keep(values: &mut Values, bytes: &[u8]) -> bool {
         let Some(kind) = kind_of(id) else {
             continue;
         };
-        let pide = Entity(pide);
+        let pide = Entity::from_engine(pide);
         if value.is_empty() {
             values.remove(&(kind, pide));
             continue;

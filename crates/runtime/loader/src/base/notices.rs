@@ -201,7 +201,7 @@ pub(crate) fn queue(entity: Entity, text: &str) {
     let pushed = {
         let mut guard = STATE.waiting.relock();
         let (waiting, dropping) = &mut *guard;
-        push(waiting, dropping, entity.0, text)
+        push(waiting, dropping, entity.get(), text)
     };
     if pushed == Pushed::FirstDrop {
         crate::log!(

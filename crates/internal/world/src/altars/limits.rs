@@ -17,7 +17,6 @@ pub trait LoadMethods {
 
     /// As `Load::request_base_limits`.
     #[doc(hidden)]
-    #[cfg(feature = "unstable")]
     fn request_base_limits(&mut self, zones: u32, bases: u32) -> Result<bool, Off>;
 }
 
@@ -31,7 +30,6 @@ impl LoadMethods for crate::BaseLoad {
         ))
     }
 
-    #[cfg(feature = "unstable")]
     fn request_base_limits(&mut self, zones: u32, bases: u32) -> Result<bool, Off> {
         let host = self.host();
         armed((host.api().request_base_limits)(

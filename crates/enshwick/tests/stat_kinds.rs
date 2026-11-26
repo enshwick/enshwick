@@ -7,7 +7,7 @@ mod tests {
     use std::sync::{Mutex, OnceLock};
 
     use enshwick::Entity;
-    use enshwick::abi::{BuffTypeInfo, Header, Status};
+    use enshwick::abi::{BuffTypeInfo, Status};
     use enshwick::buffs::{Apply, BuffTypeId, Buffs};
     use enshwick::content::{Id, id};
     use enshwick::i18n::{Language, Texts};
@@ -94,7 +94,7 @@ mod tests {
             fire,
         } = KIT.get().unwrap();
         let (buffs, stats, luck, fire) = (*buffs, *stats, *luck, *fire);
-        let player = Entity(2);
+        let player = Entity::from_engine(2);
 
         assert!(close(stats.value(player, luck), 0.0));
         let info = stats.info(fire).unwrap();
@@ -127,32 +127,29 @@ mod tests {
             "the same key replaces"
         );
 
-        let blessed = BuffTypeInfo {
-            header: Header::of::<BuffTypeInfo>(),
+        let blessed = enshwick::abi::headed!(BuffTypeInfo {
             id: BLESSED,
             slot: BuffTypeInfo::BUFF,
             flags: 0,
             name: 0,
             duration_ns: 60_000_000_000,
-        };
+        });
         loader.set_buffs(&[blessed], &[player]);
         buffs.apply(player, BLESSED, Apply::new()).unwrap();
         let ring = ItemInstance {
-            pide: Entity(900),
+            pide: Entity::from_engine(900),
             item: enshwick::ItemId::new(0x5e01),
         };
-        loader.wear(Entity(player.0), ring);
+        loader.wear(Entity::from_engine(player.get()), ring);
         stats
-            .set_item(
-                ring,
-                &ItemStats {
-                    modifiers: vec![
-                        Modifier::new(luck, Op::Multiply, 2.0).to_item(),
-                        Modifier::new(fire, Op::Add, 0.3).to_item(),
-                    ],
-                    ..ItemStats::default()
-                },
-            )
+            .set_item(ring, &{
+                let mut value = ItemStats::default();
+                value.modifiers = vec![
+                    Modifier::new(luck, Op::Multiply, 2.0).to_item(),
+                    Modifier::new(fire, Op::Add, 0.3).to_item(),
+                ];
+                value
+            })
             .unwrap();
         // (0.25 + 0.2) * 2, kept within the range.
         assert!(close(stats.value(player, luck), 0.9));

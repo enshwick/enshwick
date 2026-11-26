@@ -11,18 +11,18 @@ use crate::abi::{Entity, Header, ItemId};
 /// ```
 /// use enshwick::abi::{DropRequest, Header};
 ///
-/// let logs = DropRequest {
-///     header: Header::of::<DropRequest>(),
+/// let logs = enshwick::abi::headed!(DropRequest {
 ///     item: enshwick::ItemId(0x2a),
 ///     count: 5,
 ///     position: [100.0, 40.0, 0.0],
 ///     level: 0,
 ///     rarity: 0,
-/// };
+/// });
 /// assert_eq!(logs.count, 5);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct DropRequest {
     /// Size and version of this struct.
     pub header: Header,
@@ -63,20 +63,20 @@ pub const PROGRESS_ADD_EXPERIENCE: u32 = 3;
 /// ```
 /// use enshwick::abi::{Header, PROGRESS_SET_LEVEL, ProgressWriteData};
 ///
-/// let written = ProgressWriteData {
-///     header: Header::of::<ProgressWriteData>(),
-///     entity: enshwick::Entity(2),
+/// let written = enshwick::abi::headed!(ProgressWriteData {
+///     entity: enshwick::Entity::from_engine(2),
 ///     what: PROGRESS_SET_LEVEL,
 ///     value: 12,
 ///     outcome: ProgressWriteData::APPLIED,
 ///     level: 12,
 ///     experience: 0,
 ///     gained: 0,
-/// };
+/// });
 /// assert_eq!(written.outcome, ProgressWriteData::APPLIED);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, crate::Script)]
+#[non_exhaustive]
 pub struct ProgressWriteData {
     /// Size and version of this struct.
     pub header: Header,

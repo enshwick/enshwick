@@ -1,7 +1,6 @@
 //! The world's players: who is in it, the world's key, the accounts that
 //! join, and the chat lines, notices and renames the mod sends them.
 
-use enshwick_core::abi::Header;
 use enshwick_core::abi::JoinCall;
 use enshwick_core::abi::PlayerInfo;
 use enshwick_core::abi::RenameCall;
@@ -33,15 +32,14 @@ impl FakeHost {
     /// ```
     /// use enshwick::abi::{Header, PlayerInfo};
     ///
-    /// let player = PlayerInfo {
-    ///     header: Header::of::<PlayerInfo>(),
+    /// let player = enshwick::abi::headed!(PlayerInfo {
     ///     slot: 0,
-    ///     entity: enshwick::Entity(2),
+    ///     entity: enshwick::Entity::from_engine(2),
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: PlayerInfo::CAN_KICK_BAN,
     ///     name_len: 0,
     ///     name: [0; 128],
-    /// };
+    /// });
     /// let loader = enshwick::test::FakeHost::new().player(player).install();
     /// # let _ = loader;
     /// ```
@@ -93,7 +91,7 @@ impl Installed {
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert!(loader.rename(enshwick::Entity(4096), None, "Tools"));
+    /// assert!(loader.rename(enshwick::Entity::from_engine(4096), None, "Tools"));
     /// ```
     #[must_use]
     pub fn rename(
@@ -103,12 +101,11 @@ impl Installed {
         text: &str,
     ) -> bool {
         let filters = table::with(Vec::new(), |s| s.world.rename_filters.clone());
-        let call = RenameCall {
-            header: Header::of::<RenameCall>(),
-            entity: enshwick_core::Entity(entity.0),
+        let call = enshwick_core::headed!(RenameCall {
+            entity: enshwick_core::Entity::from_engine(entity.get()),
             player: player.map_or(core::ptr::null(), core::ptr::from_ref),
             text: Str::new(text),
-        };
+        });
         filters.iter().all(|filter| {
             // SAFETY: a valid call; `user` is the pointer the mod registered with.
             filter.run(|callback, user| unsafe { callback(&raw const call, user) })
@@ -129,10 +126,9 @@ impl Installed {
     #[must_use]
     pub fn join(&self, player: Option<enshwick_core::PlayerKey>) -> bool {
         let rules = table::with(Vec::new(), |s| s.world.join_rules.clone());
-        let call = JoinCall {
-            header: Header::of::<JoinCall>(),
+        let call = enshwick_core::headed!(JoinCall {
             account: player.unwrap_or(enshwick_core::PlayerKey::new(0)),
-        };
+        });
         rules.iter().all(|rule| {
             // SAFETY: a valid call; `user` is the pointer the mod registered with.
             rule.run(|callback, user| unsafe { callback(&raw const call, user) })

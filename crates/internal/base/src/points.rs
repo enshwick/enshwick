@@ -18,7 +18,6 @@
 //! their schemas into the manifest; another mod writes its definitions of
 //! the owner's points from there with `cargo enshwick deps <alias>`.
 
-#[cfg(feature = "unstable")]
 mod described;
 
 use core::ffi::c_void;
@@ -29,7 +28,6 @@ use crate::abi::{LayoutField, PointFlags, PointMode, PointVerdict, Status, Str};
 use crate::load::{hand_over, ok};
 use crate::{BaseLoad, Host, Off};
 
-#[cfg(feature = "unstable")]
 pub use described::{DescribedField, DescribedOwnedPoint, DescribedPoint, DescribedVerdict};
 
 /// How links act on a point's answer, as the owning mod chooses.
@@ -461,8 +459,7 @@ static NONE_LIVE: AtomicU32 = AtomicU32::new(0);
 
 /// The ABI description of the point `P`.
 pub(crate) fn spec<P: Point>() -> crate::abi::PointSpec {
-    crate::abi::PointSpec {
-        header: crate::abi::Header::of::<crate::abi::PointSpec>(),
+    enshwick_abi::headed!(crate::abi::PointSpec {
         name: Str::new(P::NAME),
         mode: P::MODE.to_abi(),
         flags: if P::REFUSE {
@@ -472,7 +469,7 @@ pub(crate) fn spec<P: Point>() -> crate::abi::PointSpec {
         },
         input: crate::services::layout(P::LAYOUT, size_of::<P>()),
         output: crate::services::layout(P::OUTPUT, size_of::<P::Output>()),
-    }
+    })
 }
 
 impl BaseLoad {
@@ -543,15 +540,14 @@ fn attach<P: Point, F: Fn(&P, &P::Output) -> Verdict<P::Output> + Send + Sync + 
     let before: Vec<Str> = order.before.iter().map(|id| Str::new(id)).collect();
     let after: Vec<Str> = order.after.iter().map(|id| Str::new(id)).collect();
     let count = |ids: &[Str]| u32::try_from(ids.len()).unwrap_or(0);
-    let raw = crate::abi::PointLink {
-        header: crate::abi::Header::of::<crate::abi::PointLink>(),
+    let raw = enshwick_abi::headed!(crate::abi::PointLink {
         point: &raw const spec,
         before: before.as_ptr(),
         after: after.as_ptr(),
         before_count: count(&before),
         after_count: count(&after),
         priority: order.priority,
-    };
+    });
     hand_over(
         link,
         |user| {
@@ -713,6 +709,10 @@ fn reachable(edges: &[Vec<usize>], placed: &[bool]) -> Vec<Vec<bool>> {
 /// See [`order`].
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "hidden: only the loader and the fake host name it"
+)]
 pub struct LinkPlace<'a> {
     /// The linking mod's id.
     pub id: &'a str,

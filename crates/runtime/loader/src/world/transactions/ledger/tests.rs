@@ -1,4 +1,4 @@
-use enshwick_core::abi::{Header, TerrainEdit, TransactionInfo};
+use enshwick_core::abi::{TerrainEdit, TransactionInfo};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{BRICK_VOXELS, Brick, Change, Image, Ledger, Limits, Voxels};
@@ -267,8 +267,7 @@ fn dig(at: f32) -> Change {
 
 /// The edit of [`dig`].
 fn terrain(at: f32) -> TerrainEdit {
-    TerrainEdit {
-        header: Header::of::<TerrainEdit>(),
+    enshwick_abi::headed!(TerrainEdit {
         kind: TerrainEdit::DIG,
         shape: TerrainEdit::ROUND,
         flags: 0,
@@ -277,7 +276,7 @@ fn terrain(at: f32) -> TerrainEdit {
         radius: 4.0,
         height: 0.0,
         protect: [0; 16],
-    }
+    })
 }
 
 fn state(ledger: &Ledger, id: u64) -> (u32, Option<TransactionError>) {

@@ -33,19 +33,21 @@ const COPIED: Guid = Guid::parse("5afe5afe-0000-4000-8000-000000000003");
 /// The item a build lists.
 const ITEM: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
 /// A registry's reference array at 0 and its names, none, at 8.
-const LAYOUT: ItemLayout = ItemLayout {
-    id: 0,
-    object: 4,
-    name: 0x48,
-    description: 0x68,
-    flags: 0x70,
-    pid_entity: 0x78,
-    ui_values: 0x88,
-    icon_image: 0x58,
-    ui_value: [0x28, 0, 4, 8, 0x24],
-    refs: 0,
-    names: 8,
-};
+fn layout() -> ItemLayout {
+    let mut value = ItemLayout::default();
+    value.id = 0;
+    value.object = 4;
+    value.name = 0x48;
+    value.description = 0x68;
+    value.flags = 0x70;
+    value.pid_entity = 0x78;
+    value.ui_values = 0x88;
+    value.icon_image = 0x58;
+    value.ui_value = [0x28, 0, 4, 8, 0x24];
+    value.refs = 0;
+    value.names = 8;
+    value
+}
 
 /// An item registry of `LARGE_LEN` bytes of references after its headers.
 fn registry() -> Vec<u8> {
@@ -85,14 +87,15 @@ impl Mod for Bench {
                 .encode_into(TABLE_TYPE, &value, Some(base), out)
                 .ok()
         })?;
+        let item_layout = layout();
         let listed = LISTED.key_by_hash(7);
-        load.serve(listed, listed, |base, out| {
-            list_item(&LAYOUT, base, ITEM, "Item", out)
+        load.serve(listed, listed, move |base, out| {
+            list_item(&item_layout, base, ITEM, "Item", out)
         })?;
         let copied = COPIED.key_by_hash(7);
-        load.serve(copied, copied, |base, out| {
+        load.serve(copied, copied, move |base, out| {
             let mut bytes = Vec::new();
-            list_item(&LAYOUT, base, ITEM, "Item", &mut bytes)?;
+            list_item(&item_layout, base, ITEM, "Item", &mut bytes)?;
             out.copy_from(&bytes)
         })?;
         Ok(Self)

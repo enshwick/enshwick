@@ -25,10 +25,13 @@ use crate::PlayerKey;
 /// ```
 /// use enshwick::actions::sheet::{Entry, decode, encode};
 ///
-/// let entry = Entry { id: "list".into(), label: "Who may use it".into(), ..Entry::default() };
+/// let mut entry = Entry::default();
+/// entry.id = "list".into();
+/// entry.label = "Who may use it".into();
 /// assert_eq!(decode(&encode(&[entry.clone()])), [entry]);
 /// ```
 #[derive(Clone, Debug, Default, PartialEq)]
+#[non_exhaustive]
 pub struct Entry {
     /// The action's id.
     pub id: String,
@@ -58,6 +61,7 @@ pub struct Entry {
 ///
 /// See [`Entry`].
 #[derive(Clone, Debug, Default, PartialEq)]
+#[non_exhaustive]
 pub struct ArgView {
     /// What it is: [`ArgView::PLAYER`], [`ArgView::CHOICE`],
     /// [`ArgView::NUMBER`], [`ArgView::TOGGLE`], [`ArgView::TEXT`],

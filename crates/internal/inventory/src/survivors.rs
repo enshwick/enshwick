@@ -180,6 +180,7 @@ pub enum Answer {
 ///
 /// See [`Load::on_survivor_bed_check`](../struct.Load.html#method.on_survivor_bed_check).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct BedCheck {
     /// The survivor, as the game's active NPC state names it.
     pub npc_id: NpcId,
@@ -231,7 +232,7 @@ impl Summon {
             template: raw.template,
             target: raw.target,
             slot: SlotRef(raw.slot),
-            pide: Entity::from_raw(raw.pide.0),
+            pide: Entity::from_raw(raw.pide.get()),
             meter: (max != 0).then_some(Bar { current, max }),
             consumed: raw.consumed != 0,
         }
@@ -561,21 +562,19 @@ impl LoadHelpers for crate::BaseLoad {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::abi::Header;
 
     fn raw(pide: u32, meter: [u16; 2]) -> RawSummon {
-        RawSummon {
-            header: Header::of::<RawSummon>(),
+        enshwick_abi::headed!(RawSummon {
             item: ItemId::new(7),
             ammo: ItemId::new(0),
             template: Guid([1; 16]),
             target: [1, 2, 3],
             slot: 0x3_0000_0041,
-            pide: Entity(pide),
+            pide: Entity::from_engine(pide),
             meter,
             consumed: 1,
             reserved: [0; 3],
-        }
+        })
     }
 
     #[test]
@@ -583,9 +582,9 @@ mod tests {
         let use_ = Summon::from_raw(&raw(900, [2, 3]));
         assert_eq!(
             (use_.slot.inventory(), use_.slot.index()),
-            (Entity(0x41), 3)
+            (Entity::from_engine(0x41), 3)
         );
-        assert_eq!(use_.pide, Some(Entity(900)));
+        assert_eq!(use_.pide, Some(Entity::from_engine(900)));
         assert_eq!(use_.meter, Some(Bar { current: 2, max: 3 }));
         assert!(use_.consumed);
         assert_eq!(Summon::from_raw(&raw(0, [0; 2])).meter, None);

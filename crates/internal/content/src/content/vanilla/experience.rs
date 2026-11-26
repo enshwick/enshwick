@@ -17,6 +17,7 @@ use super::VanillaError;
 ///
 /// See [`experience_values`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
+#[non_exhaustive]
 pub struct ExperienceBalanceValue {
     /// The value, as a knowledge entry or a quest reward names it.
     pub value: ExperienceValue,
@@ -24,6 +25,22 @@ pub struct ExperienceBalanceValue {
     pub source: ExperienceSourceType,
     /// The experience it gives.
     pub gain: u32,
+}
+
+impl ExperienceBalanceValue {
+    /// A `ExperienceBalanceValue` of its parts.
+    ///
+    /// # Examples
+    ///
+    /// See [`ExperienceBalanceValue`].
+    #[must_use]
+    pub const fn new(value: ExperienceValue, source: ExperienceSourceType, gain: u32) -> Self {
+        Self {
+            value,
+            source,
+            gain,
+        }
+    }
 }
 
 /// The running game's vanilla experience values, in the balancing table's

@@ -10,7 +10,7 @@ use crate::abi::{ChangeOp, DataChange};
 #[cfg(feature = "fake")]
 use crate::content::Guid;
 
-use super::{Field, MAX_FACTOR, Value, ValueError};
+use super::{Field, MAX_FACTOR, SetFieldError, Value};
 
 /// What a field's values must be.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -164,25 +164,25 @@ pub(crate) enum Refusal {
 
 impl Refusal {
     /// The error of `field`, whose rules refused the value.
-    pub(crate) const fn of(self, field: Field) -> ValueError {
+    pub(crate) const fn of(self, field: Field) -> SetFieldError {
         let rules = field.rules();
         match self {
-            Self::OutOfRange(value) => ValueError::OutOfRange {
+            Self::OutOfRange(value) => SetFieldError::OutOfRange {
                 field,
                 value,
                 low: rules.low,
                 high: rules.high,
             },
-            Self::FactorOnly => ValueError::FactorOnly { field },
-            Self::NotInSteps(value) => ValueError::NotInSteps {
+            Self::FactorOnly => SetFieldError::FactorOnly { field },
+            Self::NotInSteps(value) => SetFieldError::NotInSteps {
                 field,
                 value,
                 step: rules.step,
             },
-            Self::NotWhole(value) => ValueError::NotWhole { field, value },
-            Self::SetOnly => ValueError::SetOnly { field },
-            Self::Shrinks => ValueError::Shrinks { field },
-            Self::BadFactor(factor) => ValueError::BadFactor { factor },
+            Self::NotWhole(value) => SetFieldError::NotWhole { field, value },
+            Self::SetOnly => SetFieldError::SetOnly { field },
+            Self::Shrinks => SetFieldError::Shrinks { field },
+            Self::BadFactor(factor) => SetFieldError::BadFactor { factor },
         }
     }
 }
@@ -219,16 +219,17 @@ mod tests {
     #[test]
     #[cfg(feature = "fake")]
     fn a_raw_change_is_taken_for_an_item_entry_or_a_selection_with_a_value_in_range() {
-        let raw = |select, item, op, value| DataChange {
-            header: crate::abi::Header::of::<DataChange>(),
-            entry: Guid::NIL,
-            field: DataField::CONTAINER_SLOTS,
-            op,
-            value,
-            source: crate::abi::Str::EMPTY,
-            item,
-            select,
-            categories: 0,
+        let raw = |select, item, op, value| {
+            enshwick_abi::headed!(DataChange {
+                entry: Guid::NIL,
+                field: DataField::CONTAINER_SLOTS,
+                op,
+                value,
+                source: crate::abi::Str::EMPTY,
+                item,
+                select,
+                categories: 0,
+            })
         };
         let set = ChangeOp::SET;
         assert!(SLOTS.takes(&raw(DataSelect::CONTAINERS, Guid::NIL, set, 48.0)));

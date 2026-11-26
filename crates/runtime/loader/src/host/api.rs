@@ -8,7 +8,7 @@
     )
 )]
 
-use enshwick_core::abi::{Header, HostApi, Str};
+use enshwick_core::abi::{HostApi, Str};
 
 use super::entries::actions::{commands::*, *};
 use super::entries::base::{
@@ -21,8 +21,8 @@ use super::entries::ui::*;
 use super::entries::world::{altars::*, buffs::*, environment::*, saves::*, transactions::*, *};
 
 /// The table handed to every mod.
-pub(crate) static API: HostApi = HostApi {
-    header: Header::of::<HostApi>(),
+pub(crate) static API: HostApi = enshwick_abi::host_api! {
+
     host_version: Str::new(crate::base::releases::STATED),
     build,
     symbol,

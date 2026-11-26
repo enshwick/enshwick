@@ -17,6 +17,8 @@ impl Load<'_> {
     /// save made without the mod drops them, so they read 0 when the mod
     /// comes back (server 399, read on a server copy).
     ///
+    /// Unstable: needs the `typed` feature and may change in any release.
+    ///
     /// # Errors
     ///
     /// [`Off`] for flags without bits or bits on another kind, skill points
@@ -47,6 +49,8 @@ impl Load<'_> {
     /// Adding the same id again replaces its source and gain. One patch of
     /// the balancing table serves all of a mod's values; it adds none when
     /// another mod's value there has the id of one of them.
+    ///
+    /// Unstable: needs the `typed` feature and may change in any release.
     ///
     /// # Errors
     ///
@@ -83,6 +87,8 @@ impl Load<'_> {
     /// mod's holds, or whose part names a query the database lacks when the
     /// game first reads it, is logged and left out.
     ///
+    /// Unstable: needs the `typed` feature and may change in any release.
+    ///
     /// # Errors
     ///
     /// [`Off`] for a query without parts, one of other than two parts, a
@@ -102,6 +108,8 @@ impl Load<'_> {
     /// The game's named query `name`, as its database names it, for a mod
     /// to ask where the game asks it: `ItemSetCompleted_Grassland` is the
     /// query of a full Grassland collection (server 26430253).
+    ///
+    /// Unstable: needs the `typed` feature and may change in any release.
     ///
     /// # Errors
     ///

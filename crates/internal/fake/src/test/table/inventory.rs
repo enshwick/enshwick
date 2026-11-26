@@ -98,11 +98,11 @@ entries! {
             let entity = crate::test::table::world::FIRST_SPAWNED
                 + 0x1_0000
                 + u32::try_from(s.world.drops.len()).unwrap_or(0);
-            s.world.drops.push((enshwick_core::Entity(entity), request));
+            s.world.drops.push((enshwick_core::Entity::from_engine(entity), request));
             Some(Ok(entity))
         });
         match entity {
-            Some(Ok(entity)) => crate::test::table::put(out, enshwick_core::Entity(entity)),
+            Some(Ok(entity)) => crate::test::table::put(out, enshwick_core::Entity::from_engine(entity)),
             Some(Err(status)) => status,
             None => Status::MISSING,
         }
@@ -152,7 +152,7 @@ entries! {
             if !enshwick_core::abi::in_fixed_range(request.position) {
                 return Status::BAD_ARGS;
             }
-            if !s.host.content.templates.contains_key(&request.entity.0)
+            if !s.host.content.templates.contains_key(&request.entity.get())
                 && !s
                     .host
                     .world
@@ -191,7 +191,7 @@ entries! {
             Ok(entity)
         });
         match entity {
-            Ok(entity) => crate::test::table::put(out, enshwick_core::Entity(entity)),
+            Ok(entity) => crate::test::table::put(out, enshwick_core::Entity::from_engine(entity)),
             Err(status) => status,
         }
     }
@@ -408,7 +408,7 @@ entries! {
                 request: SubmittedRequest {
                     ops: ops.to_vec(),
                     flags: request.flags,
-                    actor: request.actor.0,
+                    actor: request.actor.get(),
                 },
                 done: Registered::new(done, user, me),
             });
@@ -422,8 +422,8 @@ mod tests {
     use core::ffi::c_void;
 
     use enshwick_core::abi::{
-        DamageCheck, Header, InventoryOp, InventoryRequest, InventoryResult, ModHandle, Side,
-        StatSpec, Status, Str,
+        DamageCheck, InventoryOp, InventoryRequest, InventoryResult, ModHandle, Side, StatSpec,
+        Status, Str,
     };
 
     use crate::test::FakeHost;
@@ -436,7 +436,7 @@ mod tests {
         InventoryOp {
             kind: InventoryOp::GIVE,
 
-            target: enshwick_core::Entity(7),
+            target: enshwick_core::Entity::from_engine(7),
 
             item: enshwick_core::ItemId::new(3),
             count,
@@ -445,14 +445,13 @@ mod tests {
     }
 
     fn submit(ops: &[InventoryOp]) -> Status {
-        let request = InventoryRequest {
-            header: Header::of::<InventoryRequest>(),
+        let request = enshwick_abi::headed!(InventoryRequest {
             flags: 0,
-            actor: enshwick_core::Entity(0),
+            actor: enshwick_core::Entity::from_engine(0),
             ops: ops.as_ptr(),
             op_count: u32::try_from(ops.len()).unwrap_or(u32::MAX),
             reserved: 0,
-        };
+        });
         super::inventory_submit(
             ModHandle(1),
             &raw const request,
@@ -505,10 +504,9 @@ mod tests {
 
     /// Reads a stat kind that does not exist, which still loads the stats.
     fn use_stats() {
-        let mut def = StatSpec {
-            header: Header::of::<StatSpec>(),
+        let mut def = enshwick_abi::headed!(StatSpec {
             ..bytemuck::Zeroable::zeroed()
-        };
+        });
         let mut id = Str::EMPTY;
         let status = crate::test::inventory::stats::stat_info(
             ModHandle(1),
@@ -578,14 +576,13 @@ mod tests {
     #[test]
     fn the_fake_checks_the_side_before_the_ops_as_the_loader_does() {
         let _loader = FakeHost::new().side(Side::CLIENT).install();
-        let request = InventoryRequest {
-            header: Header::of::<InventoryRequest>(),
+        let request = enshwick_abi::headed!(InventoryRequest {
             flags: 0,
-            actor: enshwick_core::Entity(0),
+            actor: enshwick_core::Entity::from_engine(0),
             ops: core::ptr::null(),
             op_count: 3,
             reserved: 0,
-        };
+        });
         let status = super::inventory_submit(
             ModHandle(1),
             &raw const request,

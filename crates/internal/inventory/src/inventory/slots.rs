@@ -10,11 +10,15 @@ use crate::{Entity, ItemId};
 /// use enshwick::Entity;
 /// use enshwick::inventory::SlotRef;
 ///
-/// let slot = SlotRef::new(Entity(0x41), 3);
+/// let slot = SlotRef::new(Entity::from_engine(0x41), 3);
 /// assert_eq!(slot.0, 0x3_0000_0041);
-/// assert_eq!((slot.inventory(), slot.index()), (Entity(0x41), 3));
+/// assert_eq!((slot.inventory(), slot.index()), (Entity::from_engine(0x41), 3));
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord, crate::Script)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct SlotRef(pub u64);
 
 impl SlotRef {
@@ -25,7 +29,7 @@ impl SlotRef {
     /// See [`SlotRef`].
     #[must_use]
     pub const fn new(inventory: Entity, index: u8) -> Self {
-        Self(inventory.0 as u64 | (index as u64) << 32)
+        Self(inventory.get() as u64 | (index as u64) << 32)
     }
 
     /// The sub-inventory entity.
@@ -36,7 +40,7 @@ impl SlotRef {
     #[must_use]
     #[expect(clippy::cast_possible_truncation, reason = "the low half")]
     pub const fn inventory(self) -> Entity {
-        Entity(self.0 as u32)
+        Entity::from_engine(self.0 as u32)
     }
 
     /// The slot index, 0 to 7.
@@ -61,6 +65,10 @@ impl SlotRef {
 /// assert_ne!(InventoryCategory::GENERIC, InventoryCategory::EQUIPMENT);
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct InventoryCategory(pub u8);
 
 impl InventoryCategory {
@@ -86,10 +94,11 @@ impl InventoryCategory {
 /// use enshwick::Entity;
 /// use enshwick::inventory::{InventoryCategory, Slot, SlotRef};
 ///
-/// let slot = Slot { at: SlotRef::new(Entity(9), 0), category: InventoryCategory::GENERIC, item: enshwick::ItemId::new(0), count: 0, pide: None };
+/// let slot = Slot::new(SlotRef::new(Entity::from_engine(9), 0), InventoryCategory::GENERIC, enshwick::ItemId::new(0), 0, None);
 /// assert!(slot.is_empty());
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[non_exhaustive]
 pub struct Slot {
     /// Where the slot is.
     pub at: SlotRef,
@@ -104,6 +113,29 @@ pub struct Slot {
 }
 
 impl Slot {
+    /// A `Slot` of its parts, as the interface reads the hovered one or a
+    /// test sets one up.
+    ///
+    /// # Examples
+    ///
+    /// See [`Slot`].
+    #[must_use]
+    pub const fn new(
+        at: SlotRef,
+        category: InventoryCategory,
+        item: ItemId,
+        count: u32,
+        pide: Option<Entity>,
+    ) -> Self {
+        Self {
+            at,
+            category,
+            item,
+            count,
+            pide,
+        }
+    }
+
     /// Whether the slot holds nothing.
     ///
     /// # Examples
@@ -125,6 +157,7 @@ impl Slot {
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[non_exhaustive]
 pub struct ItemInfo {
     /// The item id.
     pub id: ItemId,
@@ -189,6 +222,10 @@ impl ItemInfo {
 /// assert!(worn.current < worn.max);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a value of fixed parts, which never gains one"
+)]
 pub struct Bar {
     /// What is left.
     pub current: u16,
@@ -210,6 +247,10 @@ pub struct Bar {
 /// assert_eq!(Fill::of(7, 5), Fill::FULL);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, crate::Script)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct Fill(pub u16);
 
 impl Fill {
@@ -253,10 +294,14 @@ impl Fill {
 /// use enshwick::Entity;
 /// use enshwick::inventory::{InventoryCategory, ItemInstance, Slot, SlotRef};
 ///
-/// let slot = Slot { at: SlotRef::new(Entity(41), 0), category: InventoryCategory::GENERIC, item: enshwick::ItemId::new(0x5e01), count: 1, pide: Some(Entity(900)) };
-/// assert_eq!(ItemInstance::of(&slot), Some(ItemInstance { pide: Entity(900), item: enshwick::ItemId::new(0x5e01) }));
+/// let slot = Slot::new(SlotRef::new(Entity::from_engine(41), 0), InventoryCategory::GENERIC, enshwick::ItemId::new(0x5e01), 1, Some(Entity::from_engine(900)));
+/// assert_eq!(ItemInstance::of(&slot), Some(ItemInstance { pide: Entity::from_engine(900), item: enshwick::ItemId::new(0x5e01) }));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, crate::Script)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an item's identity, its entity and its id, which never gains a part"
+)]
 pub struct ItemInstance {
     /// The item's own entity.
     pub pide: Entity,

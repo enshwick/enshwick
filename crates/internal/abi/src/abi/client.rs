@@ -8,6 +8,7 @@ use crate::abi::{Entity, Header, RecipeId, Str};
 /// Reading this does not request sampling.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct LocalInputInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -71,12 +72,13 @@ impl LocalInputInfo {
 /// ```
 /// use enshwick::abi::{ClientSnapshot, Header};
 ///
-/// let snapshot = ClientSnapshot { header: Header::of::<ClientSnapshot>(), ..ClientSnapshot::EMPTY };
+/// let snapshot = enshwick::abi::headed!(ClientSnapshot { ..ClientSnapshot::EMPTY });
 /// assert_eq!(snapshot.state, ClientSnapshot::NEVER);
 /// assert_eq!(snapshot.available & ClientSnapshot::SCREENS, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct ClientSnapshot {
     /// Size and version of this struct.
     pub header: Header,
@@ -259,8 +261,8 @@ impl ClientSnapshot {
         return_screen: Str::EMPTY,
         menu_tab: Str::EMPTY,
         held: 0,
-        player: Entity(0),
-        host: Entity(0),
+        player: Entity::from_engine(0),
+        host: Entity::from_engine(0),
         highlighted_recipe: RecipeId(0),
         reserved: 0,
         server: Str::EMPTY,
@@ -270,7 +272,7 @@ impl ClientSnapshot {
         dialog_mod: Str::EMPTY,
         dialog_buttons: 0,
         dialog: 0,
-        prompt_target: Entity(0),
+        prompt_target: Entity::from_engine(0),
         prompt_verb: 0,
         character: Self::NO_CHARACTER,
         reserved3: 0,
@@ -299,17 +301,18 @@ impl ClientSnapshot {
 /// ```
 /// use enshwick::abi::{ClientCommand, Str};
 ///
-/// let open = ClientCommand {
+/// let open = enshwick::abi::headed!(ClientCommand {
 ///     kind: ClientCommand::OPEN_SCREEN,
 ///     session: 1,
 ///     expected_screen: Str::new("InGame"),
 ///     target: Str::new("Backpack"),
 ///     ..ClientCommand::EMPTY
-/// };
+/// });
 /// assert_eq!(open.hold_ms, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct ClientCommand {
     /// Size and version of this struct.
     pub header: Header,
@@ -517,7 +520,7 @@ impl ClientCommand {
         dialog: 0,
         slot: 0,
         target_slot: 0,
-        entity: Entity(0),
+        entity: Entity::from_engine(0),
         amount: 0,
     };
 
@@ -539,9 +542,9 @@ impl ClientCommand {
     /// ```
     /// use enshwick::abi::ClientCommand;
     ///
-    /// let walk = ClientCommand { kind: ClientCommand::MOVE, direction: [0.0, 1.0], hold_ms: 250, ..ClientCommand::EMPTY };
+    /// let walk = enshwick::abi::headed!(ClientCommand { kind: ClientCommand::MOVE, direction: [0.0, 1.0], hold_ms: 250, ..ClientCommand::EMPTY });
     /// assert!(walk.in_bounds());
-    /// assert!(!ClientCommand { hold_ms: 251, ..walk }.in_bounds());
+    /// assert!(!enshwick::abi::headed!(ClientCommand { hold_ms: 251, ..walk }).in_bounds());
     /// ```
     #[must_use]
     pub fn in_bounds(&self) -> bool {
@@ -585,7 +588,7 @@ impl ClientCommand {
                     && self.slot != self.target_slot
                     && self.amount <= Self::MAX_AMOUNT
             }
-            Self::TAKE_ALL | Self::DEPOSIT_ALL => self.entity.0 != 0,
+            Self::TAKE_ALL | Self::DEPOSIT_ALL => !self.entity.is_none(),
             Self::EQUIP | Self::TRASH => self.slot != 0,
             Self::CHAT => (1..=Self::MAX_CHAT).contains(&self.text.len()),
             _ => true,
@@ -610,11 +613,12 @@ impl ClientCommand {
 /// ```
 /// use enshwick::abi::{ClientCommandStatus, Header};
 ///
-/// let status = ClientCommandStatus { header: Header::of::<ClientCommandStatus>(), ..ClientCommandStatus::EMPTY };
+/// let status = enshwick::abi::headed!(ClientCommandStatus { ..ClientCommandStatus::EMPTY });
 /// assert_eq!(status.state, ClientCommandStatus::PENDING);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct ClientCommandStatus {
     /// Size and version of this struct.
     pub header: Header,
@@ -737,6 +741,7 @@ impl ClientCommandStatus {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct ClientWindowItem {
     /// Size and version of this struct.
     pub header: Header,
@@ -778,6 +783,7 @@ impl_headed!(ClientWindowItem);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct ClientSlot {
     /// Size and version of this struct.
     pub header: Header,
@@ -810,7 +816,7 @@ impl ClientSlot {
         slot: 0,
         item: 0,
         count: 0,
-        pide: Entity(0),
+        pide: Entity::from_engine(0),
         category: 0,
         flags: 0,
         reserved: 0,

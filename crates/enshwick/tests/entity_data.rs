@@ -7,7 +7,7 @@ mod tests {
 
     use enshwick::Entity;
     use enshwick::abi::Status;
-    use enshwick::entity_data::{EntityData, Replication, SetError};
+    use enshwick::entity_data::{EntityData, Replication, SetItemDataError};
     use enshwick::{Load, Mod, Off};
 
     #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -46,7 +46,7 @@ mod tests {
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let (owners, nicknames) = (OWNERS.get().unwrap(), NICKNAMES.get().unwrap());
-        let chest = Entity(4_200);
+        let chest = Entity::from_engine(4_200);
         assert_eq!(owners.get(chest), None);
         let ann = Owner {
             player: 7,
@@ -54,15 +54,20 @@ mod tests {
         };
         owners.set(chest, &ann).unwrap();
         assert_eq!(owners.get(chest), Some(ann));
-        assert_eq!(owners.get(Entity(4_201)), None);
-        nicknames.set(Entity(77), &"Old Tom".to_owned()).unwrap();
-        assert_eq!(nicknames.get(Entity(77)).as_deref(), Some("Old Tom"));
+        assert_eq!(owners.get(Entity::from_engine(4_201)), None);
+        nicknames
+            .set(Entity::from_engine(77), &"Old Tom".to_owned())
+            .unwrap();
+        assert_eq!(
+            nicknames.get(Entity::from_engine(77)).as_deref(),
+            Some("Old Tom")
+        );
         let kinds: Vec<String> = loader.item_data().into_iter().map(|v| v.0).collect();
         assert_eq!(kinds, ["test.fake:owner", "you.market-stalls:nickname"]);
         let long = "x".repeat(600);
         assert_eq!(
-            nicknames.set(Entity(77), &long),
-            Err(SetError::TooLarge(602))
+            nicknames.set(Entity::from_engine(77), &long),
+            Err(SetItemDataError::TooLarge(602))
         );
         owners.remove(chest).unwrap();
         assert_eq!(owners.get(chest), None);
@@ -70,18 +75,17 @@ mod tests {
 
     #[test]
     fn a_player_s_character_takes_no_value_since_no_load_finds_it_again() {
-        use enshwick::abi::{Header, PlayerInfo};
+        use enshwick::abi::PlayerInfo;
 
-        let ann = Entity(2);
-        let player = PlayerInfo {
-            header: Header::of::<PlayerInfo>(),
+        let ann = Entity::from_engine(2);
+        let player = enshwick::abi::headed!(PlayerInfo {
             slot: 0,
             entity: ann,
             key: enshwick::PlayerKey::new(7),
             permissions: 0,
             name_len: 0,
             name: [0; PlayerInfo::NAME_MAX],
-        };
+        });
         let loader = enshwick::test::FakeHost::new().player(player).install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Chests)`.
         let status =
@@ -92,7 +96,7 @@ mod tests {
             player: 7,
             name: "Ann".into(),
         };
-        assert_eq!(owners.set(ann, &owner), Err(SetError::NotKept));
+        assert_eq!(owners.set(ann, &owner), Err(SetItemDataError::NotKept));
         assert_eq!(owners.get(ann), None);
         assert_eq!(owners.remove(ann), Ok(()), "nothing to remove is no error");
     }

@@ -19,14 +19,18 @@ use crate::content::Guid;
 /// // Everything from a chest (entity 40) to a player (entity 2).
 /// let op = InventoryOp {
 ///     kind: InventoryOp::MOVE_ALL,
-///     target: Entity(40),
-///     other: Entity(2),
+///     target: Entity::from_engine(40),
+///     other: Entity::from_engine(2),
 ///     ..InventoryOp::default()
 /// };
 /// assert_eq!(op.kind, 5);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct InventoryOp {
     /// What to do: one of the constants on this type.
     pub kind: u32,
@@ -48,6 +52,13 @@ pub struct InventoryOp {
     /// How many to give or take; for a slot move, how many to move, 0 for the
     /// whole stack.
     pub count: u32,
+}
+
+// Entity 0, the ABI's "none", in the fields an op of this kind leaves unread.
+impl Default for InventoryOp {
+    fn default() -> Self {
+        bytemuck::Zeroable::zeroed()
+    }
 }
 
 impl InventoryOp {
@@ -82,19 +93,19 @@ impl InventoryOp {
 /// ```
 /// use enshwick::abi::{Header, InventoryOp, InventoryRequest};
 ///
-/// let ops = [InventoryOp { kind: InventoryOp::GIVE, target: enshwick::Entity(2), item: enshwick::ItemId::new(0x1234), count: 5, ..Default::default() }];
-/// let request = InventoryRequest {
-///     header: Header::of::<InventoryRequest>(),
+/// let ops = [InventoryOp { kind: InventoryOp::GIVE, target: enshwick::Entity::from_engine(2), item: enshwick::ItemId::new(0x1234), count: 5, ..Default::default() }];
+/// let request = enshwick::abi::headed!(InventoryRequest {
 ///     flags: InventoryRequest::NOTIFY,
-///     actor: enshwick::Entity(2),
+///     actor: enshwick::Entity::from_engine(2),
 ///     ops: ops.as_ptr(),
 ///     op_count: 1,
 ///     reserved: 0,
-/// };
+/// });
 /// assert_eq!(request.op_count, 1);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct InventoryRequest {
     /// Size and version of this struct.
     pub header: Header,
@@ -135,6 +146,10 @@ impl InventoryRequest {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "an ABI row without a header: a field of its own is a new ABI major"
+)]
 pub struct InventoryOpResult {
     /// The game's error code, 0 for none, or [`InventoryOpResult::NOT_RUN`].
     pub error: u32,
@@ -159,6 +174,7 @@ impl InventoryOpResult {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct InventoryResult {
     /// Size and version of this struct.
     pub header: Header,
@@ -207,19 +223,19 @@ pub type InventoryResultFn =
 /// ```
 /// use enshwick::abi::{Header, ItemTypeInfo};
 ///
-/// let sword = ItemTypeInfo {
-///     header: Header::of::<ItemTypeInfo>(),
+/// let sword = enshwick::abi::headed!(ItemTypeInfo {
 ///     id: enshwick::ItemId::new(7),
 ///     max_stack: 1,
 ///     category: 2,
 ///     rarity: 0,
 ///     flags: ItemTypeInfo::HAS_PIDE,
 ///     placed_entity: enshwick::abi::Guid::NIL,
-/// };
+/// });
 /// assert_ne!(sword.flags & ItemTypeInfo::HAS_PIDE, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct ItemTypeInfo {
     /// Size and version of this struct.
     pub header: Header,

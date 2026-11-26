@@ -16,12 +16,17 @@ pub(crate) mod derive;
 mod kind;
 mod rules;
 
-pub use add::{
-    NewRecipe, RECIPE_REGISTRY, RESERVED_FOR_SINGLE, RecipeLayout, WORKSHOP_RECIPES, add_recipe_to,
-    workshop_limit,
-};
-pub use change::{RecipeChanges, change_recipes_in, recipe_workshops};
-pub use derive::{Derived, RecipeView, derive_recipes_in, derived_guid};
+pub use add::{NewRecipe, RECIPE_REGISTRY, RESERVED_FOR_SINGLE, WORKSHOP_RECIPES, workshop_limit};
+// The engine layout and the helpers that build with it are unstable, as
+// their definitions say; hidden here the same way.
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
+pub use add::{RecipeLayout, add_recipe_to};
+pub use change::RecipeChanges;
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
+pub use change::{change_recipes_in, recipe_workshops};
+#[cfg_attr(not(feature = "unstable"), doc(hidden))]
+pub use derive::derive_recipes_in;
+pub use derive::{Derived, RecipeView, derived_guid};
 pub use kind::RecipeKind;
 pub use rules::{Name, RecipeRule, disable, enable, is_disabled};
 

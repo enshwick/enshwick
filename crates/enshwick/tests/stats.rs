@@ -69,12 +69,12 @@ mod tests {
             .type_hash("attribute_set.fuel", 6)
             .constant("attribute.fuel", 60)
             .constant("attribute.fuel_max_slot", 1)
-            .component(Entity(900), 6, &fuel)
-            .component(Entity(7), 1, &health)
-            .component(Entity(7), 2, &stamina)
-            .component(Entity(7), 4, &level)
-            .component(Entity(7), 5, &experience)
-            .component(Entity(8), 1, &wrong)
+            .component(Entity::from_engine(900), 6, &fuel)
+            .component(Entity::from_engine(7), 1, &health)
+            .component(Entity::from_engine(7), 2, &stamina)
+            .component(Entity::from_engine(7), 4, &level)
+            .component(Entity::from_engine(7), 5, &experience)
+            .component(Entity::from_engine(8), 1, &wrong)
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Stats)`.
         let status =
@@ -82,7 +82,7 @@ mod tests {
         assert_eq!(status, Status::OK);
         let world = WORLD.get().unwrap();
 
-        let vitals = world.vitals(Entity(7)).unwrap();
+        let vitals = world.vitals(Entity::from_engine(7)).unwrap();
         assert_eq!(
             vitals.health,
             Meter {
@@ -98,7 +98,7 @@ mod tests {
             })
         );
         assert_eq!(vitals.mana, None);
-        let progress = world.progress(Entity(7)).unwrap();
+        let progress = world.progress(Entity::from_engine(7)).unwrap();
         assert_eq!(
             (
                 progress.level,
@@ -107,23 +107,30 @@ mod tests {
             ),
             (12, 300, 900)
         );
-        assert!(world.vitals(Entity(8)).is_none());
-        assert!(world.vitals(Entity(9)).is_none());
+        assert!(world.vitals(Entity::from_engine(8)).is_none());
+        assert!(world.vitals(Entity::from_engine(9)).is_none());
 
         let charges = |current| Meter { current, max: 3 };
-        assert_eq!(world.item_meter(Entity(900)), Some(charges(2)));
-        assert_eq!(world.item_meter(Entity(7)), None);
+        assert_eq!(world.item_meter(Entity::from_engine(900)), Some(charges(2)));
+        assert_eq!(world.item_meter(Entity::from_engine(7)), None);
         assert_eq!(
-            world.change_item_meter(Entity(900), |c| c - 1),
+            world.change_item_meter(Entity::from_engine(900), |c| c - 1),
             Ok(charges(1))
         );
         assert_eq!(
-            world.change_item_meter(Entity(900), |c| c - 5),
+            world.change_item_meter(Entity::from_engine(900), |c| c - 5),
             Ok(charges(0))
         );
-        assert_eq!(world.change_item_meter(Entity(900), |_| 9), Ok(charges(3)));
-        assert_eq!(world.item_meter(Entity(900)), Some(charges(3)));
-        assert!(world.change_item_meter(Entity(7), |c| c).is_err());
+        assert_eq!(
+            world.change_item_meter(Entity::from_engine(900), |_| 9),
+            Ok(charges(3))
+        );
+        assert_eq!(world.item_meter(Entity::from_engine(900)), Some(charges(3)));
+        assert!(
+            world
+                .change_item_meter(Entity::from_engine(7), |c| c)
+                .is_err()
+        );
         assert_eq!(loader.writes(), [(900, 6), (900, 6), (900, 6)]);
     }
 }

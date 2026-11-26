@@ -1,7 +1,6 @@
 //! Events: the mod's subscriptions, raised loader and game events, mod events.
 
 use enshwick_core::abi::Event;
-use enshwick_core::abi::Header;
 use enshwick_core::events::LoaderEvent;
 
 use crate::test::table;
@@ -268,12 +267,11 @@ fn raise_in(kept: fn(&table::State) -> &GameEventHandlers, type_hash: u32, bytes
             .map(|g| g.1)
             .collect()
     });
-    let data = enshwick_core::abi::GameEventData {
-        header: Header::of::<enshwick_core::abi::GameEventData>(),
+    let data = enshwick_core::headed!(enshwick_core::abi::GameEventData {
         type_hash,
         size: u32::try_from(bytes.len()).unwrap_or(u32::MAX),
         data: bytes.as_ptr(),
-    };
+    });
     for handler in &handlers {
         // SAFETY: `data` and the bytes it points at live for the call, and
         // `user` is the pointer the mod registered the handler with.

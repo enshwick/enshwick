@@ -15,27 +15,27 @@ use crate::content::Guid;
 /// ```
 /// use enshwick::abi::{Header, Str, UiFrame};
 ///
-/// let frame = UiFrame {
-///     header: Header::of::<UiFrame>(),
+/// let frame = enshwick::abi::headed!(UiFrame {
 ///     token: 7,
 ///     screen: UiFrame::IN_GAME,
 ///     reserved: 0,
 ///     hud_screen: Str::new("StorageChest"),
 ///     prompt_title: Str::EMPTY,
 ///     prompt_verb: 0,
-///     screen_host: enshwick::Entity(512),
+///     screen_host: enshwick::Entity::from_engine(512),
 ///     screen_host_template: enshwick::abi::Guid::NIL,
 ///     screen_host_position: [0.0; 3],
 ///     hovered_slot: 0,
 ///     hovered_item: enshwick::ItemId::new(0),
 ///     hovered_count: 0,
-///     hovered_pide: enshwick::Entity(0),
+///     hovered_pide: enshwick::Entity::from_engine(0),
 ///     reserved_hovered: 0,
-/// };
+/// });
 /// assert_eq!(frame.screen, UiFrame::IN_GAME);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct UiFrame {
     /// Size and version of this struct.
     pub header: Header,
@@ -124,8 +124,7 @@ pub type UiFrameFn = unsafe extern "system" fn(frame: *const UiFrame, user: *mut
 /// ```
 /// use enshwick::abi::{Header, Str, UiExtension};
 ///
-/// let spec = UiExtension {
-///     header: Header::of::<UiExtension>(),
+/// let spec = enshwick::abi::headed!(UiExtension {
 ///     screen: Str::new("StorageChest"),
 ///     edge: UiExtension::RIGHT,
 ///     reserved: 0,
@@ -136,11 +135,12 @@ pub type UiFrameFn = unsafe extern "system" fn(frame: *const UiFrame, user: *mut
 ///     shift: 200.0,
 ///     inset: 0.0,
 ///     reserved_place: 0,
-/// };
+/// });
 /// assert_eq!(spec.edge, UiExtension::RIGHT);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct UiExtension {
     /// Size and version of this struct.
     pub header: Header,
@@ -211,8 +211,7 @@ impl UiExtension {
     /// ```
     /// use enshwick::abi::{Header, Str, UiExtension};
     ///
-    /// let mut spec = UiExtension {
-    ///     header: Header::of::<UiExtension>(),
+    /// let mut spec = enshwick::abi::headed!(UiExtension {
     ///     screen: Str::new("Backpack"),
     ///     edge: UiExtension::LEFT,
     ///     reserved: 0,
@@ -223,7 +222,7 @@ impl UiExtension {
     ///     shift: 362.0,
     ///     inset: 125.0,
     ///     reserved_place: 0,
-    /// };
+    /// });
     /// assert!(spec.placement_holds());
     /// spec.inset = -1.0;
     /// assert!(!spec.placement_holds());
@@ -257,8 +256,7 @@ impl UiExtension {
     /// use enshwick::content::Guid;
     ///
     /// let ours = [Guid([7; 16])];
-    /// let mut spec = UiExtension {
-    ///     header: Header::of::<UiExtension>(),
+    /// let mut spec = enshwick::abi::headed!(UiExtension {
     ///     screen: Str::new("StorageChest"),
     ///     edge: UiExtension::RIGHT,
     ///     reserved: 0,
@@ -269,7 +267,7 @@ impl UiExtension {
     ///     shift: 0.0,
     ///     inset: 0.0,
     ///     reserved_place: 0,
-    /// };
+    /// });
     /// // SAFETY: `hosts` points at `ours`, one GUID, alive below.
     /// assert_eq!(unsafe { spec.host_list() }, Some(&ours[..]));
     /// spec.hosts = core::ptr::null();
@@ -299,15 +297,16 @@ impl UiExtension {
 /// ```
 /// use enshwick::abi::{Header, Str, UiWidget};
 ///
-/// let button = UiWidget {
+/// let button = enshwick::abi::headed!(UiWidget {
 ///     kind: UiWidget::BUTTON,
 ///     text: Str::new("Close"),
 ///     ..UiWidget::EMPTY
-/// };
+/// });
 /// assert_eq!(button.header, Header::of::<UiWidget>());
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct UiWidget {
     /// Size and version of this struct.
     pub header: Header,
@@ -493,16 +492,16 @@ impl UiWidget {
 /// ```
 /// use enshwick::abi::{Header, UiTooltipItem};
 ///
-/// let item = UiTooltipItem {
-///     header: Header::of::<UiTooltipItem>(),
+/// let item = enshwick::abi::headed!(UiTooltipItem {
 ///     token: 7,
 ///     item: enshwick::ItemId::new(0x5e01),
-///     pide: enshwick::Entity(900),
-/// };
-/// assert_eq!(item.pide, enshwick::Entity(900));
+///     pide: enshwick::Entity::from_engine(900),
+/// });
+/// assert_eq!(item.pide, enshwick::Entity::from_engine(900));
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct UiTooltipItem {
     /// Size and version of this struct.
     pub header: Header,
@@ -546,17 +545,17 @@ pub type UiTooltipFn = unsafe extern "system" fn(item: *const UiTooltipItem, use
 /// ```
 /// use enshwick::abi::{Header, Str, UiMarker};
 ///
-/// let marker = UiMarker {
-///     header: Header::of::<UiMarker>(),
+/// let marker = enshwick::abi::headed!(UiMarker {
 ///     position: [100.0, 40.0, -20.0],
 ///     label: Str::new("Locker of Bob"),
 ///     color: UiMarker::GREEN,
 ///     marker_type: 0,
-/// };
+/// });
 /// assert_eq!(marker.color, 2);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct UiMarker {
     /// Size and version of this struct.
     pub header: Header,
@@ -607,6 +606,10 @@ impl UiMarker {
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+#[expect(
+    clippy::exhaustive_structs,
+    reason = "a newtype over one value, which never gains a field"
+)]
 pub struct MarkerTypeSorting(pub u8);
 
 impl MarkerTypeSorting {
@@ -637,6 +640,7 @@ impl MarkerTypeSorting {
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct MapMarkerTypeInfo {
     /// Size and version of this struct.
     pub header: Header,
@@ -684,18 +688,18 @@ impl MapMarkerTypeInfo {
 /// ```
 /// use enshwick::abi::{Header, Str, UiDialog};
 ///
-/// let dialog = UiDialog {
-///     header: Header::of::<UiDialog>(),
+/// let dialog = enshwick::abi::headed!(UiDialog {
 ///     title: Str::new("Enshwick"),
 ///     message: Str::new("Open every locker in the world?"),
 ///     detail: Str::EMPTY,
 ///     buttons: 1 << UiDialog::OK | 1 << UiDialog::CANCEL,
 ///     flags: 0,
-/// };
+/// });
 /// assert_eq!(dialog.buttons, 0xc0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct UiDialog {
     /// Size and version of this struct.
     pub header: Header,
@@ -790,11 +794,12 @@ pub type ConfigCheckFn =
 /// ```
 /// use enshwick::abi::{FogInfo, Header};
 ///
-/// let info = FogInfo { header: Header::of::<FogInfo>(), ..FogInfo::EMPTY };
+/// let info = enshwick::abi::headed!(FogInfo { ..FogInfo::EMPTY });
 /// assert_eq!(info.width, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+#[non_exhaustive]
 pub struct FogInfo {
     /// Size and version of this struct.
     pub header: Header,

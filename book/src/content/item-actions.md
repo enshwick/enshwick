@@ -34,7 +34,7 @@ const TONIC: Id = id!("tonic");
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let tonic = enshwick::ItemId::from_guid(TONIC.guid());
     load.on_item(tonic, Kind::Consume, |used| {
-        enshwick::info!("player {} drank a tonic", used.player.0);
+        enshwick::info!("player {} drank a tonic", used.player);
         true
     })?;
     // Nobody throws a tonic away.

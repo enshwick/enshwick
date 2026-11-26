@@ -4,7 +4,7 @@ use std::sync::atomic::Ordering;
 
 use enshwick_base::Relock;
 use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{Header, Level, ManifestFlags, ModInfo, Side, Status, Str};
+use enshwick_core::abi::{Level, ManifestFlags, ModInfo, Side, Status, Str};
 use enshwick_core::mods::LOADER_FILE;
 
 use crate::engine::loader::{ModRecord, loader};
@@ -14,8 +14,7 @@ use crate::host::memory::text;
 
 /// The listing entry of the loader itself.
 pub(crate) fn loader_info() -> ModInfo {
-    ModInfo {
-        header: Header::of::<ModInfo>(),
+    enshwick_abi::headed!(ModInfo {
         id: Str::new(crate::engine::settings::LOADER_ID),
         version: Str::new(crate::base::releases::STATED),
         side: Side::BOTH,
@@ -28,7 +27,7 @@ pub(crate) fn loader_info() -> ModInfo {
         author_count: u32::try_from(LOADER_AUTHORS.len()).unwrap_or(u32::MAX),
         license: Str::new(env!("CARGO_PKG_LICENSE")),
         homepage: Str::new(env!("CARGO_PKG_REPOSITORY")),
-    }
+    })
 }
 
 /// The loader's authors, as its listing names them.
@@ -36,8 +35,7 @@ pub(crate) static LOADER_AUTHORS: [Str; 1] = [Str::new("themaiby")];
 
 /// The listing entry of a loaded mod; its strings live as long as the loader.
 pub(crate) fn mod_info(record: &'static ModRecord) -> ModInfo {
-    ModInfo {
-        header: Header::of::<ModInfo>(),
+    enshwick_abi::headed!(ModInfo {
         id: Str::new(&record.id),
         version: Str::new(&record.version),
         side: record.manifest.side,
@@ -50,7 +48,7 @@ pub(crate) fn mod_info(record: &'static ModRecord) -> ModInfo {
         author_count: record.manifest.author_count,
         license: record.manifest.license,
         homepage: record.manifest.homepage,
-    }
+    })
 }
 
 entries! {
@@ -94,15 +92,14 @@ entries! {
         let held = crate::base::join::client::join_missing();
         let infos: Vec<ModInfo> = held
             .iter()
-            .map(|missing| ModInfo {
-                header: Header::of::<ModInfo>(),
+            .map(|missing| enshwick_abi::headed!(ModInfo {
                 id: Str::new(missing.id),
                 version: Str::new(missing.version),
                 side: Side::BOTH,
                 off: 1,
                 file: Str::new(missing.file),
                 ..ModInfo::EMPTY
-            })
+            }))
             .collect();
         out.put(&infos)
     }
