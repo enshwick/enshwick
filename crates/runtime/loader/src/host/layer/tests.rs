@@ -1,3 +1,4 @@
+use enshwick_abi::contract::CallerKind;
 use enshwick_core::abi::{ModHandle, Status, Str};
 
 use super::*;
@@ -120,6 +121,19 @@ entries! {
         out.fill(1);
         Ok(())
     }
+
+    fn oil_asked(_me as Asker) -> Status {
+        Ok(())
+    }
+}
+
+#[test]
+fn an_entry_records_the_kind_of_caller_its_handle_admits() {
+    assert_eq!(
+        (Callers::oil, Callers::oil_asked),
+        (CallerKind::Mod, CallerKind::Caller)
+    );
+    assert_eq!(oil_asked(ModHandle(77)), Status::BAD_ARGS);
 }
 
 #[test]

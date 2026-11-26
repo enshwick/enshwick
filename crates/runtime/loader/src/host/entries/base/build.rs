@@ -1,11 +1,10 @@
 //! Host functions for the game build: symbols, systems, layouts and constants.
 
 use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{BuildInfo, Header, Level, ModHandle, Status, Str};
+use enshwick_core::abi::{BuildInfo, Header, Level, Status, Str};
 
-use super::mods::writer;
 use crate::engine::kept_text::keep;
-use crate::host::layer::{AnyMod, Caller, HeadedOut, Out, Text, entries, loaded};
+use crate::host::layer::{AnyMod, Caller, HeadedOut, Out, Text, Writer, entries, loaded};
 
 entries! {
     fn build(loader as Caller, out as HeadedOut<BuildInfo>) -> Status {
@@ -21,9 +20,9 @@ entries! {
         })
     }
 
-    fn symbol(me: ModHandle, name as Text, out as Out<u64>) -> Status {
+    fn symbol(me as Writer, name as Text, out as Out<u64>) -> Status {
         let loader = loaded()?;
-        let index = loader.rows_of(me).ok_or(Status::BAD_ARGS)?;
+        let index = loader.rows_of(me.handle).ok_or(Status::BAD_ARGS)?;
         let address = loader
             .resolve_symbol(index.get(), name)
             .ok_or(Status::MISSING)?;
@@ -63,9 +62,9 @@ entries! {
         out.put((loader.caller_frame)())
     }
 
-    fn constant(me: ModHandle, name as Text, out as Out<u64>) -> Status {
+    fn constant(me as Writer, name as Text, out as Out<u64>) -> Status {
         let loader = loaded()?;
-        let index = loader.rows_of(me).ok_or(Status::BAD_ARGS)?;
+        let index = loader.rows_of(me.handle).ok_or(Status::BAD_ARGS)?;
         out.put(
             loader
                 .resolve_constant(index.get(), name)
@@ -87,8 +86,8 @@ entries! {
         out.put(Str::new(keep(&dir.to_string_lossy())))
     }
 
-    fn log_level(me: ModHandle, out as Out<Level>) -> Status {
-        out.put(crate::engine::log::level(writer(me)?))
+    fn log_level(me as Writer, out as Out<Level>) -> Status {
+        out.put(crate::engine::log::level(me.id))
     }
 
     fn type_hash(loader as Caller, type_name as Text, out as Out<u32>) -> Status {
@@ -101,6 +100,8 @@ entries! {
 
 #[cfg(test)]
 mod tests {
+    use enshwick_core::abi::ModHandle;
+
     use super::*;
 
     #[test]

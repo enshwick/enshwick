@@ -25,9 +25,14 @@ mod refusals;
 pub(crate) use args::{
     AnyMod, Arg, Arg2, Arg3, Arg4, Asker, Buffer, BytesOut, BytesSlot, Callback, Caller, Headed,
     HeadedInOut, HeadedList, HeadedOut, HeadedSince, In, List, ListOut, MaybeBuffer, MaybeHeaded,
-    MaybeOut, Mod, Out, SizedListOut, Slot, Text, UnalignedList, Values, YesNo,
+    MaybeOut, Mod, Out, SizedListOut, Slot, Text, UnalignedList, Values, Writer, YesNo,
 };
 pub(crate) use refusals::{Rule, RuleOff};
+
+/// The caller kind of every entry, as a constant named after the entry that
+/// [`entries!`] writes beside it, for the contract test.
+#[cfg(test)]
+pub(crate) struct Callers;
 
 /// How the loader answers a domain error besides its status.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -300,8 +305,10 @@ pub(crate) fn loaded() -> Result<&'static Loader, Refused> {
 /// }
 /// ```
 ///
-/// A parameter is `name: Type`, passed on as the mod gave it; `name as
-/// Kind`, read through [`Arg`]; or `[a, b, ..] as Kind`, two to four of the
+/// The first parameter is the caller's handle read as its kind ([`Mod`],
+/// [`AnyMod`], [`Caller`], [`Asker`] or [`Writer`]), which a test build
+/// records in [`Callers`]. A later parameter is `name: Type`, passed on as
+/// the mod gave it; `name as Kind`, read through [`Arg`]; or `[a, b, ..] as Kind`, two to four of the
 /// ABI's parameters read through [`Arg2`] to [`Arg4`] and bound to the first
 /// name. Each kind's `# Safety` is what the ABI promises for a parameter of
 /// that kind, so an entry names the kind its `HostApi` field documents. The
@@ -316,10 +323,36 @@ macro_rules! entries {
     ) => {
         $(
             $crate::host::layer::entries!(
-                @param call [$(#[$attr])*] $name [$($ret)?] $body [] []
-                $($params)*
+                @entry [$(#[$attr])*] $name [$($ret)?] $body $($params)*
             );
         )*
+    };
+    (@entry $attrs:tt $name:ident $ret:tt $body:block $me:ident as $kind:ident $($rest:tt)*) => {
+        $crate::host::layer::entries!(@caller $attrs $name $kind);
+        $crate::host::layer::entries!(
+            @param call $attrs $name $ret $body [] [] $me as $kind $($rest)*
+        );
+    };
+    (@entry $attrs:tt $name:ident $ret:tt $body:block $($params:tt)*) => {
+        $crate::host::layer::entries!(@param call $attrs $name $ret $body [] [] $($params)*);
+    };
+    // The caller kind each handle kind admits; `Asker` admits what `Caller`
+    // admits and hands the body the handle too.
+    (@caller $attrs:tt $name:ident Mod) => { $crate::host::layer::entries!(@record $attrs $name Mod); };
+    (@caller $attrs:tt $name:ident AnyMod) => { $crate::host::layer::entries!(@record $attrs $name AnyMod); };
+    (@caller $attrs:tt $name:ident Caller) => { $crate::host::layer::entries!(@record $attrs $name Caller); };
+    (@caller $attrs:tt $name:ident Asker) => { $crate::host::layer::entries!(@record $attrs $name Caller); };
+    (@caller $attrs:tt $name:ident Writer) => { $crate::host::layer::entries!(@record $attrs $name Writer); };
+    (@caller $attrs:tt $name:ident $other:ident) => {};
+    // The entry's own attributes, such as a `cfg`, hold for its record too.
+    (@record [$(#[$attr:meta])*] $name:ident $kind:ident) => {
+        #[cfg(test)]
+        impl $crate::host::layer::Callers {
+            $(#[$attr])*
+            #[expect(non_upper_case_globals, reason = "named after its entry, as the contract test lists it")]
+            pub(crate) const $name: enshwick_abi::contract::CallerKind =
+                enshwick_abi::contract::CallerKind::$kind;
+        }
     };
     (@param $call:ident $attrs:tt $name:ident $ret:tt $body:block
         [$($raw:tt)*] [$($read:tt)*]

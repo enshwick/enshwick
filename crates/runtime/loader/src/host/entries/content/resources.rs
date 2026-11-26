@@ -2,12 +2,12 @@
 //! resources, and the archive's keys, hashes and types.
 
 use enshwick_core::abi as api_frame;
-use enshwick_core::abi::{ModHandle, ResourceKey, Status};
+use enshwick_core::abi::{ResourceKey, Status};
 
 use crate::host::layer::guards::{declared_resource, open};
 use crate::host::layer::{
     BytesOut, BytesSlot, Callback, Caller, In, List, ListOut, Mod, Out, Refused, SizedListOut,
-    entries,
+    Writer, entries,
 };
 
 entries! {
@@ -70,14 +70,9 @@ entries! {
         })
     }
 
-    fn resource_buffer(me: ModHandle, len: u32, out as Out<*mut u8>) -> Status {
-        // A mod that is off still gets one: a rebuild runs the patches of
-        // the mods that built what the game holds.
-        let known = me == crate::host::LOADER_HANDLE
-            || crate::engine::loader::loader().is_some_and(|loader| loader.record(me).is_some());
-        if !known {
-            return Err(Status::BAD_ARGS.into());
-        }
+    // A mod that is off still gets one: a rebuild runs the patches of the
+    // mods that built what the game holds.
+    fn resource_buffer(_me as Writer, len: u32, out as Out<*mut u8>) -> Status {
         let len = usize::try_from(len).map_err(|_| Status::BAD_ARGS)?;
         out.put(crate::content::served::lend(len).ok_or(Status::REFUSED)?)
     }

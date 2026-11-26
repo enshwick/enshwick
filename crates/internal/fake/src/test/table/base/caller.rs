@@ -48,8 +48,15 @@ pub(crate) fn refusal(kind: Kind, me: ModHandle) -> Option<Status> {
     crate::test::table::with(Some(Status::MISSING), |s| kind.refusal(s, me))
 }
 
+/// The caller kind of every entry, as a constant named after the entry that
+/// [`entries!`] writes beside it, for the contract test.
+#[cfg(test)]
+pub(crate) struct Callers;
+
 /// Writes the fake's `HostApi` entries, each answering its caller and its
-/// parameters as the loader's `entries!` does before its body runs.
+/// parameters as the loader's `entries!` does before its body runs, and in
+/// a test build records each one's [`Kind`], as the contract names it, in
+/// [`Callers`].
 ///
 /// ```ignore
 /// entries! {
@@ -76,6 +83,14 @@ macro_rules! entries {
         )*
     ) => {
         $(
+            #[cfg(test)]
+            impl $crate::test::table::base::caller::Callers {
+                $(#[$attr])*
+                #[expect(non_upper_case_globals, reason = "named after its entry, as the contract test lists it")]
+                pub(crate) const $name: enshwick_abi::contract::CallerKind =
+                    enshwick_abi::contract::CallerKind::$kind;
+            }
+
             $crate::test::table::base::caller::entries!(
                 @param [$(#[$attr])*] [$vis] $name $me $kind $body [] []
                 $($($params)*)?

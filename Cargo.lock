@@ -724,6 +724,7 @@ version = "1.0.0-alpha.17"
 dependencies = [
  "bytemuck",
  "enshwick",
+ "enshwick-abi",
  "enshwick-base",
  "enshwick-core",
  "enshwick-macros",

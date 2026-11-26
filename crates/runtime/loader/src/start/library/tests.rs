@@ -85,7 +85,7 @@ pub extern "system" fn enshwick_mod_abi() -> u16 {
 "#;
 
 /// The major a mod built for an older Enshwick returns.
-const OLDER_ABI: u16 = enshwick_core::abi::ABI_MAJOR - 1;
+const OLDER_ABI: u16 = enshwick::abi::ABI_MAJOR - 1;
 
 /// All four exports; `{abi}` is the version it says and `{query}` its
 /// manifest.

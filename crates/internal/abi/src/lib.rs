@@ -24,6 +24,9 @@ struct MergedExamples;
 extern crate self as enshwick;
 
 pub mod abi;
+#[cfg(any(test, feature = "test"))]
+#[doc(hidden)]
+pub mod contract;
 pub mod raw;
 
 // The ids the API crate has at its root, where the examples here name them.

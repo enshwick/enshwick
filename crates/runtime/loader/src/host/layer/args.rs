@@ -249,6 +249,38 @@ impl Arg for Asker {
     }
 }
 
+/// A loaded mod, on or off, or the loader's own copy: for the entries whose
+/// answer goes under the caller's id, such as its log and its lookups. It
+/// needs no running loader for the loader's own copy.
+#[derive(Clone, Copy)]
+pub(crate) struct Writer {
+    pub(crate) handle: ModHandle,
+    /// The id its lines and lookups go under: the loader's own for its copy.
+    pub(crate) id: &'static str,
+}
+
+impl Arg for Writer {
+    type Raw = ModHandle;
+    type Value<'call>
+        = Self
+    where
+        Self: 'call;
+
+    unsafe fn from_abi(raw: ModHandle, call: &Call) -> Result<Self, Refused> {
+        if raw == crate::host::LOADER_HANDLE {
+            return Ok(Self {
+                handle: raw,
+                id: crate::engine::settings::LOADER_ID,
+            });
+        }
+        let found = Mod::loaded(raw, call)?;
+        Ok(Self {
+            handle: raw,
+            id: &found.record.id,
+        })
+    }
+}
+
 /// A borrowed string: [`Status::BAD_ARGS`] when it is not UTF-8.
 ///
 /// The ABI promises its bytes readable and unchanged for the call.

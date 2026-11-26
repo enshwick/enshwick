@@ -27,6 +27,14 @@ pub(crate) const fn life() -> u64 {
     1
 }
 
+/// Whether a fake host was installed in this process: each install starts
+/// a life past the first, as does only this crate's own test of a renewal
+/// besides.
+#[cfg(feature = "fake")]
+pub(crate) fn fake_installed() -> bool {
+    life() > 1
+}
+
 /// Starts the next mod life: every `Fresh` cell reads empty again.
 #[cfg(feature = "fake")]
 pub fn renew() {

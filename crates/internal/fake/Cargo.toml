@@ -11,6 +11,8 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 publish = true
+# The loader's contract table, which only this crate's own test reads.
+exclude = ["contract/"]
 
 [dependencies]
 enshwick-macros = { path = "../macros", version = "=1.0.0-alpha.17" }
@@ -23,10 +25,12 @@ serde.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 
-# The examples name the API as a mod does, through the facade; cargo drops
-# a dev-dependency without a version when it publishes.
+# The examples name the API as a mod does, through the facade, and the
+# contract test reads the table in `contract/`, which is not published;
+# cargo drops a dev-dependency without a version when it publishes.
 [dev-dependencies]
 enshwick = { path = "../../enshwick", features = ["test"] }
+enshwick-abi = { path = "../abi", features = ["test"] }
 
 # The features of `enshwick`, which turns each of them on here.
 [features]
