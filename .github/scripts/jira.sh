@@ -134,8 +134,10 @@ fi
 
 if [[ $GITHUB_EVENT_NAME == pull_request && $ACTION == closed && $MERGED == true ]]; then
   close_delivered
-  # A branch ticket the pull request labelled was handled with the others.
-  if [[ -n $key && " ${labelled[*]} " != *" $key "* ]]; then
+  # Labels name what the pull request delivered; the branch's ticket closes
+  # only for a pull request that labelled none, since a batch's branch keeps
+  # its first ticket's key even when that ticket is not delivered.
+  if [[ -n $key && ${#labelled[@]} == 0 ]]; then
     close "$key" || failed=1
   fi
   exit "$failed"

@@ -4,7 +4,9 @@ set -euo pipefail
 
 script="$(dirname "$0")/jira.sh"
 search=$(mktemp)
-trap 'rm -f "$search"' EXIT
+none=$(mktemp)
+trap 'rm -f "$search" "$none"' EXIT
+echo '{"issues": [], "isLast": true}' > "$none"
 
 # What Jira answers for labels = "pr-enshwick-7".
 cat > "$search" << 'EOF'
@@ -43,10 +45,13 @@ unlabel TEST-5 pr-enshwick-7
 unlabel TEST-6 pr-enshwick-7
 TEST-6 waits on another pull request'
 
-expect "a merge closes each delivered ticket no other pull request holds, then the branch's ticket" 0 \
-"$delivered
-move TEST-1 to Done" \
+expect "a merge closes each delivered ticket no other pull request holds and leaves the branch's ticket open" 0 \
+"$delivered" \
   ACTION=closed MERGED=true HEAD_REF=feat/TEST-1-thing
+
+expect "a merge that labelled no ticket closes the branch's ticket" 0 \
+'move TEST-1 to Done' \
+  ACTION=closed MERGED=true HEAD_REF=feat/TEST-1-thing JIRA_DRY_RUN="$none"
 
 expect "a merge of a branch without a key still closes the delivered tickets" 0 \
 "$delivered" \
@@ -66,8 +71,7 @@ TEST-4 waits on another pull request
 move TEST-5 to Done
 unlabel TEST-5 pr-enshwick-7
 unlabel TEST-6 pr-enshwick-7
-TEST-6 waits on another pull request
-move TEST-1 to Done' \
+TEST-6 waits on another pull request' \
   ACTION=closed MERGED=true HEAD_REF=feat/TEST-1-thing JIRA_DRY_FAIL=TEST-2
 
 expect "a pull request marked ready moves only the branch's ticket" 0 \
