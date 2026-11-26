@@ -210,7 +210,8 @@ pub enum CommandAction {
     /// Equips the item in `slot` into the equipment slot `equipment`, a
     /// member of the game's `EquipmentSlot` such as `RangedWeapon`, through
     /// the game's own equipment request. Observed once the client's copy of
-    /// the slot's inventory changes.
+    /// the slot's inventory changes; the server refuses an item of another
+    /// kind than the equipment slot, so that one ends timed out.
     Equip {
         /// The slot that holds the item.
         slot: SlotRef,
