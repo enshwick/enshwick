@@ -19,7 +19,7 @@ pub(crate) mod tags;
 pub(crate) mod transactions;
 pub(crate) mod voxel_edits;
 
-pub(crate) use presets::{BaseCode, WorldPresets};
+pub(crate) use presets::{BaseCode, GAME_WORLD_BOX, WorldPresets};
 
 impl FakeHost {
     /// The world's own component types and where a placed thing keeps its

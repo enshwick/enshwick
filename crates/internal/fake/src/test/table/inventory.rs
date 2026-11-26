@@ -167,7 +167,7 @@ entries! {
                 .host
                 .world
                 .world_box
-                .unwrap_or(crate::test::world::presets::GAME_WORLD_BOX);
+                .unwrap_or(crate::test::world::GAME_WORLD_BOX);
             if (0..3).any(|axis| !(min[axis]..=max[axis]).contains(&request.position[axis])) {
                 return Status::OUTSIDE_WORLD;
             }
