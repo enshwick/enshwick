@@ -58,12 +58,8 @@ version alone. Mods have versions
 of their own too, released apart from the platform and from each other.
 
 Which loader a mod runs under is not read from that version but from the ABI
-version `enshwick` was built with (see
-[ABI reference](abi-reference.md#versions)). A mod loads only under a loader
-of the same ABI version. Pin `enshwick` with `=`. Release a new build of
-the mod for each Enshwick release that changes the ABI. A loader of another
-version does not start the mod and logs
-`rebuild it for Enshwick <version>`.
+version `enshwick` was built with. Which loaders load a mod, and when it
+needs a rebuild, is in the [ABI reference](abi-reference.md#versions).
 
 A mod's version is [SemVer](https://semver.org). The manifest takes the
 crate's version from `Cargo.toml` (`CARGO_PKG_VERSION`), so the version you

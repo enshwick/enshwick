@@ -205,17 +205,19 @@ fn crate_name(id: &str) -> anyhow::Result<&str> {
 
 /// The `enshwick` line of `[workspace.dependencies]` for a tool of
 /// `version`: `commit` from git when given, else an alpha's tag from git,
-/// since alphas are not on crates.io, else the crates.io release.
+/// since alphas are not on crates.io, else the crates.io releases of its
+/// major from its minor on, as a mod loads under every loader of its major.
 fn dependency(version: &str, commit: Option<&Commit>) -> String {
-    match commit {
-        Some(commit) => format!(
+    let parsed = semver::Version::parse(version);
+    match (commit, parsed) {
+        (Some(commit), _) => format!(
             "# The platform from git, at a commit of its main branch.\nenshwick = {{ git = \"{PLATFORM_GIT}\", rev = \"{}\" }}\n",
             commit.0
         ),
-        None if semver::Version::parse(version).is_ok_and(|v| !v.pre.is_empty()) => format!(
+        (None, Ok(v)) if v.pre.is_empty() => format!("enshwick = \"{}.{}\"\n", v.major, v.minor),
+        (None, _) => format!(
             "# The platform's alpha from git: alphas are not on crates.io.\nenshwick = {{ git = \"{PLATFORM_GIT}\", tag = \"v{version}\" }}\n"
         ),
-        None => format!("enshwick = \"={version}\"\n"),
     }
 }
 
@@ -520,9 +522,9 @@ mod tests {
         assert_eq!(alpha["tag"].as_str(), Some("v1.0.0-alpha.12"));
         assert!(alpha.get("version").is_none());
         let release = read(dependency("1.2.0", None));
-        assert_eq!(release.as_str(), Some("=1.2.0"));
-        let metadata = read(dependency("1.2.0+win-x64", None));
-        assert_eq!(metadata.as_str(), Some("=1.2.0+win-x64"));
+        assert_eq!(release.as_str(), Some("1.2"));
+        let metadata = read(dependency("1.2.3+win-x64", None));
+        assert_eq!(metadata.as_str(), Some("1.2"));
         let commit: Commit = COMMIT.parse().unwrap();
         let pinned = read(dependency("1.0.0-alpha.12", Some(&commit)));
         assert_eq!(pinned["rev"].as_str(), Some(COMMIT));
