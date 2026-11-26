@@ -5,7 +5,7 @@ use crate::abi::{Entity, Header, RecipeId, Str};
 
 /// Cached diagnostics of the client's local gameplay-input sampler.
 /// Flags and age are weakly consistent observations, not world or session identity.
-/// Reading this does not request sampling. ABI 12.1.
+/// Reading this does not request sampling.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct LocalInputInfo {
@@ -123,71 +123,67 @@ pub struct ClientSnapshot {
     /// The server a [`ClientCommand::JOIN`] of this loader joins or joined,
     /// as `host:query_port`, while the client is on its way there or in its
     /// world; empty in the menu and in a world the client hosts or joined
-    /// another way. ABI 12.11.
+    /// another way.
     pub server: Str,
     /// The mod whose page of the loader's own screen shows, by its id, empty
-    /// for none; group [`ClientSnapshot::LOADER_SCREEN`]. ABI 12.23.
+    /// for none; group [`ClientSnapshot::LOADER_SCREEN`].
     pub loader_screen_mod: Str,
     /// The page of the loader's own Mods screen that shows:
     /// [`ClientSnapshot::NO_LOADER_SCREEN`] to
     /// [`ClientSnapshot::MOD_MISMATCH`]; group
-    /// [`ClientSnapshot::LOADER_SCREEN`]. ABI 12.23.
+    /// [`ClientSnapshot::LOADER_SCREEN`].
     pub loader_screen: u32,
     /// Zero.
     pub reserved2: u32,
     /// The mod whose dialog shows, by its id, empty for the loader's own;
-    /// group [`ClientSnapshot::DIALOG`]. ABI 12.25.
+    /// group [`ClientSnapshot::DIALOG`].
     pub dialog_mod: Str,
     /// The buttons of the dialog that shows, a bit per answer as
     /// [`UiDialog::buttons`](super::UiDialog::buttons) holds them, 0 while
-    /// none shows; group [`ClientSnapshot::DIALOG`]. ABI 12.25.
+    /// none shows; group [`ClientSnapshot::DIALOG`].
     pub dialog_buttons: u32,
     /// The number of the dialog that shows, 1 to 65,535 counted round as
     /// dialogs show, 0 while none shows; an answer names it in
-    /// [`ClientCommand::dialog`]. Group [`ClientSnapshot::DIALOG`]. ABI 12.25.
+    /// [`ClientCommand::dialog`]. Group [`ClientSnapshot::DIALOG`].
     pub dialog: u32,
     /// The entity the interaction prompt that shows targets, in the
     /// client's world, such as the chest it opens; 0 while none shows. Group
-    /// [`ClientSnapshot::PROMPT`]. ABI 12.26.
+    /// [`ClientSnapshot::PROMPT`].
     pub prompt_target: Entity,
     /// The `LocaTagId` of that prompt's verb, as the object offers it before
     /// a mod's text takes its place; 0 while none shows. Group
-    /// [`ClientSnapshot::PROMPT`]. ABI 12.26.
+    /// [`ClientSnapshot::PROMPT`].
     pub prompt_verb: u32,
     /// The character the main menu has selected, by its place in the menu's
     /// list from 0, as [`ClientCommand::character`] takes it;
     /// [`ClientSnapshot::NO_CHARACTER`] while none is and outside the main
-    /// menu. Group [`ClientSnapshot::CHARACTER`]. ABI 12.26.
+    /// menu. Group [`ClientSnapshot::CHARACTER`].
     pub character: u32,
     /// Zero.
     pub reserved3: u32,
     /// Where the local player stands, x, y and z in metres, as the
     /// client's world holds it; group [`ClientSnapshot::POSITION`].
-    /// ABI 12.28.
     pub position: [f64; 3],
     /// Where the local player's camera looks, a unit quaternion x, y, z, w
-    /// in the world's axes; group [`ClientSnapshot::LOOK`]. ABI 12.28.
+    /// in the world's axes; group [`ClientSnapshot::LOOK`].
     pub look: [f32; 4],
     /// The local player's health; group [`ClientSnapshot::VITALS`].
-    /// ABI 12.28.
     pub health: u32,
     /// The local player's maximum health; group [`ClientSnapshot::VITALS`].
-    /// ABI 12.28.
     pub health_max: u32,
     /// The local player's stamina; group [`ClientSnapshot::VITALS`].
-    /// ABI 12.28.
     pub stamina: u32,
     /// The local player's maximum stamina; group
-    /// [`ClientSnapshot::VITALS`]. ABI 12.28.
+    /// [`ClientSnapshot::VITALS`].
     pub stamina_max: u32,
     /// The action bar's selected slot, from 0; group
-    /// [`ClientSnapshot::ACTIONBAR`]. ABI 12.28.
+    /// [`ClientSnapshot::ACTIONBAR`].
     pub actionbar_slot: u32,
     /// Zero.
     pub reserved4: u32,
 }
 
-impl_headed!(ClientSnapshot, born = 120);
+impl_headed!(ClientSnapshot);
 
 impl ClientSnapshot {
     /// No interface read yet.
@@ -210,50 +206,46 @@ impl ClientSnapshot {
     /// [`highlighted_recipe`](Self::highlighted_recipe).
     pub const RECIPE: u32 = 16;
     /// [`loader_screen`](Self::loader_screen) and
-    /// [`loader_screen_mod`](Self::loader_screen_mod). ABI 12.23.
+    /// [`loader_screen_mod`](Self::loader_screen_mod).
     pub const LOADER_SCREEN: u32 = 32;
     /// [`dialog_mod`](Self::dialog_mod) and
     /// [`dialog_buttons`](Self::dialog_buttons): the loader's dialogs show
-    /// in game on this build. ABI 12.25.
+    /// in game on this build.
     pub const DIALOG: u32 = 64;
     /// [`prompt_target`](Self::prompt_target) and
     /// [`prompt_verb`](Self::prompt_verb): the prompt reads on this build.
-    /// ABI 12.26.
     pub const PROMPT: u32 = 128;
     /// [`character`](Self::character): the main menu's selected character
-    /// reads on this build. ABI 12.26.
+    /// reads on this build.
     pub const CHARACTER: u32 = 256;
     /// [`position`](Self::position), read in the client's last step.
-    /// ABI 12.28.
     pub const POSITION: u32 = 512;
-    /// [`look`](Self::look), read in the client's last step. ABI 12.28.
+    /// [`look`](Self::look), read in the client's last step.
     pub const LOOK: u32 = 1024;
     /// [`health`](Self::health), [`health_max`](Self::health_max),
     /// [`stamina`](Self::stamina) and [`stamina_max`](Self::stamina_max),
-    /// read in the client's last step. ABI 12.28.
+    /// read in the client's last step.
     pub const VITALS: u32 = 2048;
     /// [`actionbar_slot`](Self::actionbar_slot), read in the client's last
-    /// step. ABI 12.28.
+    /// step.
     pub const ACTIONBAR: u32 = 4096;
     /// [`character`](Self::character) while no character is selected or no
-    /// main menu shows. ABI 12.26.
+    /// main menu shows.
     pub const NO_CHARACTER: u32 = u32::MAX;
-    /// The loader's Mods screen does not show. ABI 12.23.
+    /// The loader's Mods screen does not show.
     pub const NO_LOADER_SCREEN: u32 = 0;
-    /// The list of mods shows. ABI 12.23.
+    /// The list of mods shows.
     pub const MOD_LIST: u32 = 1;
     /// A mod's page shows, with its settings this world gives it.
-    /// ABI 12.23.
     pub const MOD_PAGE: u32 = 2;
-    /// The joined server's settings of a mod show. ABI 12.23.
+    /// The joined server's settings of a mod show.
     pub const MOD_SERVER_SETTINGS: u32 = 3;
-    /// The joined server's list of mods with settings shows. ABI 12.23.
+    /// The joined server's list of mods with settings shows.
     pub const SERVER_MOD_LIST: u32 = 4;
     /// The key bindings of a mod the joined server runs and this client
-    /// lacks show. ABI 12.23.
+    /// lacks show.
     pub const MOD_BINDINGS: u32 = 5;
     /// The mods that differ from a server that refused this client show.
-    /// ABI 12.23.
     pub const MOD_MISMATCH: u32 = 6;
     /// Nothing read, its header set.
     pub const EMPTY: Self = Self {
@@ -356,61 +348,58 @@ pub struct ClientCommand {
     /// The server's password for [`ClientCommand::JOIN`], at most
     /// [`ClientCommand::MAX_PASSWORD`] bytes, empty for none; borrowed for
     /// the call. The loader hands it to the game's own join and never
-    /// keeps, logs or returns it. ABI 12.11.
+    /// keeps, logs or returns it.
     pub password: Str,
     /// The world position, x, y and z in metres, that
     /// [`ClientCommand::SET_WAYPOINT`] and [`ClientCommand::PING`] mark.
-    /// ABI 12.23.
     pub position: [f64; 3],
     /// The world [`ClientCommand::HOST`] plays: its place in the main
     /// menu's list of worlds, from 0, below [`ClientCommand::MAX_SLOTS`].
-    /// ABI 12.23.
     pub world: u16,
     /// The character [`ClientCommand::HOST`] plays as: its place in the
     /// main menu's list of characters, from 0, below
-    /// [`ClientCommand::MAX_SLOTS`]. ABI 12.23.
+    /// [`ClientCommand::MAX_SLOTS`].
     pub character: u16,
     /// 1 when [`ClientCommand::HOST`] opens the world to other players
-    /// online, 0 to play it offline. ABI 12.23.
+    /// online, 0 to play it offline.
     pub online: u32,
     /// The item of the carried window `target` (`mod:window`) that
     /// [`ClientCommand::WINDOW_PRESS`], [`ClientCommand::WINDOW_PICK`] and
     /// [`ClientCommand::WINDOW_TEXT`] act on, by the id
     /// [`HostApi::client_windows`](super::HostApi::client_windows) lists;
-    /// borrowed for the call. ABI 12.24.
+    /// borrowed for the call.
     pub item: Str,
     /// The option [`ClientCommand::WINDOW_PICK`] picks, by the name the
     /// window shows, the text [`ClientCommand::WINDOW_TEXT`] sets, at
     /// most [`ClientCommand::MAX_TEXT`] bytes, or the line
     /// [`ClientCommand::CHAT`] sends, 1 to [`ClientCommand::MAX_CHAT`]
-    /// bytes (ABI 12.29); borrowed for the call. ABI 12.24.
+    /// bytes; borrowed for the call.
     pub text: Str,
     /// The answer [`ClientCommand::ANSWER_DIALOG`] gives, such as
     /// [`UiDialog::OK`](super::UiDialog::OK): a button of the dialog that
-    /// shows. ABI 12.25.
+    /// shows.
     pub answer: u32,
     /// The dialog [`ClientCommand::ANSWER_DIALOG`] answers, by the number
     /// [`ClientSnapshot::dialog`] gives it; a command for a dialog that no
-    /// longer shows ends unavailable. ABI 12.25.
+    /// longer shows ends unavailable.
     pub dialog: u32,
     /// The slot an item command acts on, packed as the game packs one: the
     /// inventory entity, then its index shifted left by 32; the source of
-    /// [`ClientCommand::MOVE_ITEM`]. ABI 12.28.
+    /// [`ClientCommand::MOVE_ITEM`].
     pub slot: u64,
     /// The slot [`ClientCommand::MOVE_ITEM`] moves into, packed as `slot`.
-    /// ABI 12.28.
     pub target_slot: u64,
     /// The station [`ClientCommand::CRAFT`] crafts at, 0 to craft by hand;
     /// the inventory [`ClientCommand::TAKE_ALL`] takes from or
-    /// [`ClientCommand::DEPOSIT_ALL`] deposits into. ABI 12.28.
+    /// [`ClientCommand::DEPOSIT_ALL`] deposits into.
     pub entity: Entity,
     /// How many: crafts of [`ClientCommand::CRAFT`], 1 to
     /// [`ClientCommand::MAX_AMOUNT`]; items [`ClientCommand::MOVE_ITEM`]
-    /// moves, 0 for the whole stack. ABI 12.28.
+    /// moves, 0 for the whole stack.
     pub amount: u32,
 }
 
-impl_headed!(ClientCommand, born = 88);
+impl_headed!(ClientCommand);
 
 impl ClientCommand {
     /// Opens `target`, one of the screens the game opens from a key in the
@@ -430,80 +419,77 @@ impl ClientCommand {
     pub const HIGHLIGHT_RECIPE: u32 = 7;
     /// Joins the dedicated server `target`, `host:query_port`, with
     /// `password` from the main menu with a character selected; `session`
-    /// is 0. Refused while a join or a world runs. ABI 12.11.
+    /// is 0. Refused while a join or a world runs.
     pub const JOIN: u32 = 8;
-    /// Leaves the world back to the main menu. ABI 12.11.
+    /// Leaves the world back to the main menu.
     pub const LEAVE: u32 = 9;
     /// Holds the game action `target` in the local player's input for
-    /// `hold_ms`, as its key would. ABI 12.21.
+    /// `hold_ms`, as its key would.
     pub const PRESS: u32 = 10;
     /// Sets the local player's waypoint at `position`, or moves it there.
-    /// ABI 12.23.
     pub const SET_WAYPOINT: u32 = 11;
-    /// Clears the local player's waypoint. ABI 12.23.
+    /// Clears the local player's waypoint.
     pub const CLEAR_WAYPOINT: u32 = 12;
-    /// Pings `position` for the players of the world. ABI 12.23.
+    /// Pings `position` for the players of the world.
     pub const PING: u32 = 13;
     /// Hosts `world` with `character` from the main menu, offline or
     /// `online`; `session` is 0. Refused while a join, a host or a world
-    /// runs. ABI 12.23.
+    /// runs.
     pub const HOST: u32 = 14;
     /// Opens the loader's Mods screen over the main menu or the pause menu,
-    /// whichever shows, at its list of mods. ABI 12.23.
+    /// whichever shows, at its list of mods.
     pub const OPEN_MODS: u32 = 15;
     /// Opens mod `target`'s page on the Mods screen, by its id, opening
-    /// the screen first. ABI 12.23.
+    /// the screen first.
     pub const OPEN_MOD: u32 = 16;
     /// Presses mod `target`'s settings gear on the Mods screen, by its id,
-    /// opening the screen first. ABI 12.23.
+    /// opening the screen first.
     pub const OPEN_MOD_SETTINGS: u32 = 17;
     /// Presses `item` of the carried window `target`, as a click would: a
-    /// button, a list's switch or an on-or-off field. ABI 12.24.
+    /// button, a list's switch or an on-or-off field.
     pub const WINDOW_PRESS: u32 = 18;
     /// Picks the option named `text` in the list of `item` of the carried
-    /// window `target`. ABI 12.24.
+    /// window `target`.
     pub const WINDOW_PICK: u32 = 19;
     /// Sets the text of `item`'s text field in the carried window `target`
-    /// to `text`, as typing would. ABI 12.24.
+    /// to `text`, as typing would.
     pub const WINDOW_TEXT: u32 = 20;
     /// Answers the loader's dialog that shows with `answer`, as its button
-    /// would. ABI 12.25.
+    /// would.
     pub const ANSWER_DIALOG: u32 = 21;
     /// Crafts `recipe` `amount` times at `entity` or by hand, through the
-    /// game's own crafting request; the server checks it. ABI 12.28.
+    /// game's own crafting request; the server checks it.
     pub const CRAFT: u32 = 22;
     /// Moves `amount` items, or the whole stack, from `slot` to
-    /// `target_slot`, through the game's own item transfer. ABI 12.28.
+    /// `target_slot`, through the game's own item transfer.
     pub const MOVE_ITEM: u32 = 23;
     /// Equips the item in `slot` into the equipment slot `target` names, a
     /// member of the game's `EquipmentSlot` such as `RangedWeapon`.
-    /// ABI 12.28.
     pub const EQUIP: u32 = 24;
     /// Takes every stack from the inventory `entity` into the player's, as
-    /// a storage window's take all does. ABI 12.28.
+    /// a storage window's take all does.
     pub const TAKE_ALL: u32 = 25;
     /// Moves every stack of the player's into the inventory `entity`, as a
-    /// storage window's deposit all does. ABI 12.28.
+    /// storage window's deposit all does.
     pub const DEPOSIT_ALL: u32 = 26;
-    /// Destroys the stack in `slot`, as the game's trash does. ABI 12.28.
+    /// Destroys the stack in `slot`, as the game's trash does.
     pub const TRASH: u32 = 27;
     /// Sends `text` to the world's chat as the local player's own line, as
-    /// the chat window's Enter does, in a world. ABI 12.29.
+    /// the chat window's Enter does, in a world.
     pub const CHAT: u32 = 28;
-    /// The most crafts or items one command asks for. ABI 12.28.
+    /// The most crafts or items one command asks for.
     pub const MAX_AMOUNT: u32 = 0xffff;
-    /// The longest text, in bytes, a window's field takes. ABI 12.24.
+    /// The longest text, in bytes, a window's field takes.
     pub const MAX_TEXT: usize = 255;
-    /// The longest chat line, in bytes, the game's chat takes. ABI 12.29.
+    /// The longest chat line, in bytes, the game's chat takes.
     pub const MAX_CHAT: usize = 0x400;
     /// How many worlds and characters the main menu lists at most.
-    /// ABI 12.23.
     pub const MAX_SLOTS: u16 = 16;
     /// The longest password, in bytes, the game's join takes.
     pub const MAX_PASSWORD: usize = 0x400;
     /// The longest move.
     pub const MAX_HOLD_MS: u32 = 250;
-    /// The longest press. ABI 12.21.
+    /// The longest press.
     pub const MAX_PRESS_MS: u32 = 2000;
     /// The largest turn of one look, in radians, a quarter turn.
     pub const MAX_LOOK: f32 = 1.570_796_4;
@@ -645,15 +631,15 @@ pub struct ClientCommandStatus {
     pub age_ms: u64,
     /// Where the client stands on a [`ClientCommand::JOIN`],
     /// [`ClientCommand::HOST`] or [`ClientCommand::LEAVE`]: [`ClientCommandStatus::PHASE_QUEUED`] to
-    /// [`ClientCommandStatus::PHASE_LEFT`]; 0 for other kinds. ABI 12.11.
+    /// [`ClientCommandStatus::PHASE_LEFT`]; 0 for other kinds.
     pub phase: u32,
     /// Why a [`ClientCommandStatus::FAILED`] join failed, as far as the
     /// client can tell: [`ClientCommandStatus::WRONG_PASSWORD`] to
-    /// [`ClientCommandStatus::UNKNOWN`]; 0 otherwise. ABI 12.11.
+    /// [`ClientCommandStatus::UNKNOWN`]; 0 otherwise.
     pub failure: u32,
 }
 
-impl_headed!(ClientCommandStatus, born = 32);
+impl_headed!(ClientCommandStatus);
 
 impl ClientCommandStatus {
     /// Queued; the game has not taken it yet.
@@ -686,11 +672,10 @@ impl ClientCommandStatus {
     pub const MOD_OFF: u32 = 7;
     /// The window shows the item off, as a Run button while a field is
     /// empty or an action the player may not run now, or the item has no
-    /// option of that name or takes no such text. ABI 12.24.
+    /// option of that name or takes no such text.
     pub const ITEM_OFF: u32 = 8;
     /// The game ended a join or a host without reaching the world, for
     /// `failure`.
-    /// ABI 12.11.
     pub const FAILED: u32 = 5;
     /// Waiting to start: the loader asks the server for its address.
     pub const PHASE_QUEUED: u32 = 1;
@@ -740,7 +725,7 @@ impl ClientCommandStatus {
 ///
 /// A [`ClientCommand::WINDOW_PRESS`], [`ClientCommand::WINDOW_PICK`] or
 /// [`ClientCommand::WINDOW_TEXT`] names it by `window` and `item`. The
-/// strings are borrowed for the call. ABI 12.24.
+/// strings are borrowed for the call.
 ///
 /// # Examples
 ///
@@ -782,7 +767,6 @@ impl_headed!(ClientWindowItem);
 
 /// One slot of the local player's inventory as the client's world holds
 /// it, which [`HostApi::client_slots`](super::HostApi::client_slots) lists.
-/// ABI 12.28.
 ///
 /// # Examples
 ///

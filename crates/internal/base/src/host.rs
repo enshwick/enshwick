@@ -496,18 +496,22 @@ mod tests {
     }
 
     #[test]
-    fn an_older_or_truncated_table_is_rejected_before_reading_appended_slots() {
-        for (minor, size) in [
-            (
-                crate::abi::ABI_MINOR - 1,
-                size_of::<HostApi>() - size_of::<usize>(),
-            ),
-            (crate::abi::ABI_MINOR, size_of::<Header>()),
-        ] {
+    fn an_older_other_or_truncated_table_is_rejected_before_reading_appended_slots() {
+        let minor = crate::abi::ABI_MINOR;
+        let short = size_of::<HostApi>() - size_of::<usize>();
+        let older = minor.checked_sub(1).map(|older| (ABI_MAJOR, older, short));
+        for (major, minor, size) in [
+            (ABI_MAJOR + 1, minor, size_of::<HostApi>()),
+            (ABI_MAJOR, minor, short),
+            (ABI_MAJOR, minor, size_of::<Header>()),
+        ]
+        .into_iter()
+        .chain(older)
+        {
             let words = Box::leak(vec![0u64; size.div_ceil(8)].into_boxed_slice());
             let header = Header {
                 size: u32::try_from(size).unwrap(),
-                abi_major: ABI_MAJOR,
+                abi_major: major,
                 abi_minor: minor,
             };
             let api = words.as_mut_ptr().cast::<HostApi>();

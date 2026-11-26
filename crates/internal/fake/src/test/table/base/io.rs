@@ -67,7 +67,7 @@ pub(crate) fn get_headed_list<T: Headed>(raw: *const T, count: u32) -> Option<Ve
 
 /// Copies up to `capacity` of `items` to `out`, `entry_size` bytes apart, and
 /// writes how many there are, as the loader does.
-pub(crate) fn list<T: Copy>(
+pub(crate) fn list<T: Headed>(
     items: &[T],
     out: *mut T,
     entry_size: u32,
@@ -77,5 +77,5 @@ pub(crate) fn list<T: Copy>(
     // SAFETY: the safe layer passes `out` null or room for `capacity`
     // entries of `entry_size` bytes and `count` null or a writable, aligned
     // `u32`, untouched by others during the call.
-    unsafe { copy::put_sized_list(items, out, entry_size, capacity, count) }
+    unsafe { copy::put_sized_list(items, out, entry_size, capacity, count, T::BORN) }
 }

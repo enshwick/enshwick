@@ -137,7 +137,8 @@ mod tests {
         );
         assert!(unloadable(Some(126)).shown().contains("Visual C++"));
         assert!(unloadable(Some(5)).shown().ends_with("denied"));
-        let why = enshwick_core::abi::check_abi(1, 0).unwrap_err();
+        let why =
+            enshwick_core::abi::check_abi(*enshwick_core::abi::ALPHA_MAJORS.end(), 0).unwrap_err();
         let abi = Skip::OtherAbi(why).shown();
         assert!(abi.contains("older Enshwick. Update the mod"), "{abi}");
         assert_eq!(Skip::Manifest(ManifestError::OtherAbi(why)).shown(), abi);
@@ -187,7 +188,8 @@ mod tests {
 
     #[test]
     fn a_mod_of_another_abi_names_what_to_do_with_its_code() {
-        let why = enshwick_core::abi::check_abi(1, 0).unwrap_err();
+        let why =
+            enshwick_core::abi::check_abi(*enshwick_core::abi::ALPHA_MAJORS.end(), 0).unwrap_err();
         let line = Skip::OtherAbi(why).line("old.dll");
         assert_eq!(
             line,

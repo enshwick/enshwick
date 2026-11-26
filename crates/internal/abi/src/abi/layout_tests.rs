@@ -283,7 +283,7 @@ shapes! {
         TypeConstant { name, value },
         TypeField { name, type_name, offset, attribute_count, attributes },
         TypeEntry { header, name, impact_name, qualified_name, inner, internal_hash, size, align, element_align, kind, flags, reserved, count, field_count, constant_count, attribute_count, fields, constants, attributes },
-        HostApi { header, host_version, build, symbol, system, field_offset, type_size, hook, caller_frame, fault, log, settings, publish, service, constant, data_dir, log_level, subscribe, type_hash, component, entity_template, mods, code_range, patch_code, workshop_recipes, hosting, server_world, join_missing, hook_at, status, subscribe_game_event, net_channel, net_send, net_ready, config_schema, config_check, texts, define_event, subscribe_mod_event, send_event, rename_content, mod_dir, language, define_point, attach_point, run_point, event_types, feature, loop_wait, server_wait, task_workers, serve_call, find_call, call, subscribe_tick, set_tick_every, set_config, subscribe_client_game_event, serve_resource, add_text, define_item_data, item_data_get, set_item_data, content_serve, content_read, icons_ready, declare_content, define_entity_data, resource_read, game_text, rebuild_resource, recipe_rule, recipe_disabled, recipe_kind, rate, set_rate, change_data, set_change, use_content, resource_keys, content_hashes, types, game_version, crafting_prop, read_only, resource_served, resource_buffer, content_name, player, players, chat, chat_all, set_label, rename_filter, item_info, request_altars, altars, building_zone_filter, base_zones, entities, destroy, save_world, world_key, component_write, notify, time_of_day, set_time_of_day, request_time_speed, set_time_speed, game_settings, set_game_settings, buff_types, buffs, apply_buff, remove_buff, weather_at, weather_fronts, set_weather, terrain_materials, terrain_edit, altar_zone_filter, altar_zones_changed, altar_limit_filter, base_limit, voxel_read, build_rights, transaction_commit, transaction_undo, transaction_status, world_quiet, transaction_entities, world_persists, map_markers, account_action, map_frame, request_base_limits, set_chat_mute, chat_muted, set_base_limit, save_info, hold_saves, set_saved, progress_write, server_stop, fog_uncover, language_of, join_rule, request_inventory, inventory_submit, survivor_lookup, survivor_bed_check, summon_filter, summon_item, survivor_status, emit, teleport, spawn, damage_filter, summoned, define_stat, stat_info, stat_value, stat_modify, stat_buff, stats_changed, stat_sources, stat_watch, define_affix, affix_roll, item_lines, affix_info, item_filter, drop_items, skill_override, comfort_filter, experience_filter, knowledge, change_knowledge, quests, knowledge_input_filter, game_query, run_console, interaction_filter, craft_filter, build_filter, actions, control, run_action, chat_filter, commands, run_command, command_list, actions_changed, action_window, ui_frame, ui_widget, ui_dialog, ui_hud, ui_markers, request_fog, fog_read, map_marker_types, ui_extension, local_held, local_input_status, client_snapshot, loader_off, client_command, client_command_status, terrain_material_add, interaction_prompt, ui_item_tooltip, change_permissions, transaction_settled, prop_placement_info, container_rule, show_pickup, respawn_point, set_respawn_point, buff_type_add, damage_causes_off, waypoint, sound_play, sound_steer, sound_state, sound_play_for, sound_steer_for, rekey_resource, game_binding, game_rebind, quest_reward_filter, knowledge_set, client_windows, client_slots },
+        HostApi { header, host_version, build, symbol, system, field_offset, type_size, hook, caller_frame, fault, log, settings, publish, service, constant, data_dir, log_level, subscribe, type_hash, component, entity_template, mods, code_range, patch_code, workshop_recipes, hosting, server_world, join_missing, hook_at, status, subscribe_game_event, net_channel, net_send, net_ready, config_schema, config_check, texts, define_event, subscribe_mod_event, send_event, rename_content, mod_dir, language, define_point, attach_point, run_point, event_types, feature, loader_off, loop_wait, server_wait, task_workers, serve_call, find_call, call, subscribe_tick, set_tick_every, set_config, subscribe_client_game_event, serve_resource, add_text, define_item_data, item_data_get, set_item_data, content_serve, content_read, icons_ready, declare_content, define_entity_data, resource_read, game_text, rebuild_resource, rekey_resource, recipe_rule, recipe_disabled, recipe_kind, rate, set_rate, change_data, set_change, use_content, resource_keys, content_hashes, types, game_version, crafting_prop, read_only, resource_served, resource_buffer, content_name, player, players, chat, chat_all, set_label, rename_filter, item_info, request_altars, altars, building_zone_filter, base_zones, entities, destroy, save_world, world_key, component_write, notify, time_of_day, set_time_of_day, request_time_speed, set_time_speed, game_settings, set_game_settings, buff_types, buff_type_add, buffs, apply_buff, remove_buff, weather_at, weather_fronts, set_weather, terrain_materials, terrain_material_add, terrain_edit, altar_zone_filter, altar_zones_changed, altar_limit_filter, base_limit, voxel_read, build_rights, change_permissions, transaction_commit, transaction_undo, transaction_status, world_quiet, transaction_entities, transaction_settled, prop_placement_info, world_persists, map_markers, account_action, map_frame, waypoint, request_base_limits, set_chat_mute, chat_muted, set_base_limit, save_info, hold_saves, set_saved, progress_write, server_stop, fog_uncover, language_of, join_rule, request_inventory, inventory_submit, container_rule, show_pickup, survivor_lookup, survivor_bed_check, summon_filter, summon_item, survivor_status, emit, teleport, spawn, respawn_point, set_respawn_point, damage_filter, damage_causes_off, summoned, define_stat, stat_info, stat_value, stat_modify, stat_buff, stats_changed, stat_sources, stat_watch, define_affix, affix_roll, item_lines, affix_info, item_filter, drop_items, skill_override, comfort_filter, experience_filter, knowledge, change_knowledge, knowledge_set, quests, quest_reward_filter, knowledge_input_filter, game_query, run_console, interaction_filter, interaction_prompt, craft_filter, build_filter, actions, control, run_action, chat_filter, commands, run_command, command_list, actions_changed, action_window, local_held, local_input_status, client_snapshot, client_command, client_command_status, client_windows, client_slots, game_binding, game_rebind, ui_frame, ui_widget, ui_dialog, ui_hud, ui_markers, request_fog, fog_read, map_marker_types, ui_extension, ui_item_tooltip, sound_play, sound_steer, sound_state, sound_play_for, sound_steer_for },
         SaveInfo { header, world, saved_at, size, backups, reserved },
         ChatLine { header, account, entity, kind, loca, text },
         ChatRewrite { header, buffer, capacity, len },
@@ -437,16 +437,18 @@ fn appends(old: &Snapshot, new: &Snapshot) -> bool {
 /// Why `now` is the wrong version for the layout `new`, when the golden
 /// file holds `old` at `was`; `None` when it fits. The next major at minor 0
 /// fits any change; a lower or a skipped one could match mods of an earlier
-/// major. Within a major, an unchanged layout keeps the minor, an append
-/// takes the next one, and any other change fits no minor.
+/// major, except the one step from the last of the [`ALPHA_MAJORS`] to the
+/// stable 1.0. Within a major, an unchanged layout keeps the minor,
+/// an append takes the next one, and any other change fits no minor.
 fn wrong_bump(was: Version, old: &Snapshot, new: &Snapshot, now: Version) -> Option<String> {
     let (major, minor) = was;
     let rewrite = "then run the tests with ENSHWICK_ABI_LAYOUT=update";
+    let stable = major == *ALPHA_MAJORS.end() && now.0 == 1;
+    let next = next_major(major);
     if now.0 != major {
-        if now.0 != major + 1 {
+        if now.0 != next && !stable {
             return Some(format!(
-                "the ABI major after {major} is {}: set ABI_MAJOR to it, {rewrite}",
-                major + 1
+                "the ABI major after {major} is {next}: set ABI_MAJOR to it, {rewrite}"
             ));
         }
         if now.1 != 0 {
@@ -463,8 +465,7 @@ fn wrong_bump(was: Version, old: &Snapshot, new: &Snapshot, now: Version) -> Opt
     } else {
         return Some(format!(
             "the layout changed past an append to ABI {major}.{minor}: \
-             set ABI_MAJOR to {} and ABI_MINOR to 0, {rewrite}",
-            major + 1
+             set ABI_MAJOR to {next} and ABI_MINOR to 0, {rewrite}"
         ));
     };
     if now.1 != needed {
@@ -474,6 +475,16 @@ fn wrong_bump(was: Version, old: &Snapshot, new: &Snapshot, now: Version) -> Opt
         ));
     }
     wrong_born(old, new, false)
+}
+
+/// The major after `major`: the next number, past the [`ALPHA_MAJORS`] a
+/// stable major never takes.
+fn next_major(major: u16) -> u16 {
+    if major + 1 == *ALPHA_MAJORS.start() {
+        ALPHA_MAJORS.end() + 1
+    } else {
+        major + 1
+    }
 }
 
 /// Why a headed type's [`Headed::BORN`](crate::abi::Headed::BORN) in `new`
@@ -740,6 +751,38 @@ fn the_major_moves_only_to_the_next_one() {
     assert!(!fits(headed(), headed(), (4, 0)));
     assert!(!fits(headed(), headed(), (1, 0)));
     assert!(!fits(headed(), headed(), (7, 0)), "a skipped major fails");
+}
+
+#[test]
+fn the_last_alpha_major_steps_back_once_to_the_stable_one() {
+    let old = born_at(layout(&[("Fixture", shape!(Headed { header, value }))]), 12);
+    let grown = layout(&[(
+        "Fixture",
+        shape!(HeadedGrown {
+            header,
+            value,
+            added
+        }),
+    )]);
+    let last = *ALPHA_MAJORS.end();
+    assert_eq!(wrong_bump((last, 29), &old, &grown, (1, 0)), None);
+    assert!(wrong_bump((last, 29), &old, &grown, (1, 1)).is_some());
+    assert!(
+        wrong_bump((last, 29), &old, &born_at(grown.clone(), 12), (1, 0)).is_some(),
+        "the stable major starts again at the size"
+    );
+    assert!(wrong_bump((2, 0), &old, &grown, (1, 0)).is_some());
+    assert_eq!(wrong_bump((1, 0), &old, &grown, (2, 0)), None);
+}
+
+#[test]
+fn a_stable_major_steps_over_the_alpha_majors() {
+    let old = layout(&[("Fixture", shape!(Headed { header, value }))]);
+    let below = *ALPHA_MAJORS.start() - 1;
+    let past = *ALPHA_MAJORS.end() + 1;
+    let why = wrong_bump((below, 3), &old, &old, (below + 1, 0)).unwrap();
+    assert!(why.contains(&format!("is {past}")), "{why}");
+    assert_eq!(wrong_bump((below, 3), &old, &old, (past, 0)), None);
 }
 
 #[test]

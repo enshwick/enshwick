@@ -86,6 +86,7 @@ names every entry of the golden layout once, in that order.
 | `run_point` | loader | — | — |
 | `event_types` | game | every start | — |
 | `feature` | loader | every start | — |
+| `loader_off` | loader | — | — |
 | `loop_wait` | game | probe: loop waits | — |
 | `server_wait` | game | probe: loop waits | — |
 | `task_workers` | game | probe: task workers | — |
@@ -109,6 +110,7 @@ names every entry of the golden layout once, in that order.
 | `resource_read` | game | probe: archive | — |
 | `game_text` | game | — | client |
 | `rebuild_resource` | game | — | client |
+| `rekey_resource` | game | — | client |
 | `recipe_rule` | game | — | client |
 | `recipe_disabled` | game | — | client |
 | `recipe_kind` | game | — | client |
@@ -150,6 +152,7 @@ names every entry of the golden layout once, in that order.
 | `game_settings` | game | probe: game settings | — |
 | `set_game_settings` | game | probe: game settings | — |
 | `buff_types` | game | probe: buffs | — |
+| `buff_type_add` | game | — | client |
 | `buffs` | game | — | with a player |
 | `apply_buff` | game | — | with a player |
 | `remove_buff` | game | — | with a player |
@@ -157,6 +160,7 @@ names every entry of the golden layout once, in that order.
 | `weather_fronts` | game | probe: weather | — |
 | `set_weather` | game | probe: weather | — |
 | `terrain_materials` | game | probe: terrain | — |
+| `terrain_material_add` | game | — | client |
 | `terrain_edit` | game | probe: terrain | — |
 | `altar_zone_filter` | game | probe: altars | — |
 | `altar_zones_changed` | game | probe: altars | — |
@@ -164,15 +168,19 @@ names every entry of the golden layout once, in that order.
 | `base_limit` | game | probe: base limits | — |
 | `voxel_read` | game | probe: world reads | — |
 | `build_rights` | game | — | with a player |
+| `change_permissions` | game | — | with a player |
 | `transaction_commit` | game | probe: transaction | — |
 | `transaction_undo` | game | probe: transaction | — |
 | `transaction_status` | game | probe: transaction | — |
 | `world_quiet` | game | — | with a player |
 | `transaction_entities` | game | probe: transaction | — |
+| `transaction_settled` | game | probe: transaction | — |
+| `prop_placement_info` | game | — | not exercised |
 | `world_persists` | game | probe: world reads | — |
 | `map_markers` | game | probe: map | — |
 | `account_action` | game | — | with a player |
 | `map_frame` | game | probe: map | — |
+| `waypoint` | game | — | with a player |
 | `request_base_limits` | game | probe: base limits | — |
 | `set_chat_mute` | game | — | with a player |
 | `chat_muted` | loader | — | — |
@@ -187,6 +195,8 @@ names every entry of the golden layout once, in that order.
 | `join_rule` | game | — | with a client joining |
 | `request_inventory` | game | probe: affixes | — |
 | `inventory_submit` | game | — | with a player |
+| `container_rule` | game | — | with a player |
+| `show_pickup` | game | — | with a player |
 | `survivor_lookup` | game | — | with a player |
 | `survivor_bed_check` | game | — | with a player |
 | `summon_filter` | game | — | with a player |
@@ -195,7 +205,10 @@ names every entry of the golden layout once, in that order.
 | `emit` | game | probe: ping | — |
 | `teleport` | game | probe: spawns | — |
 | `spawn` | game | probe: spawns | — |
+| `respawn_point` | game | — | with a player |
+| `set_respawn_point` | game | — | with a player |
 | `damage_filter` | game | every start | with a player |
+| `damage_causes_off` | loader | — | — |
 | `summoned` | game | — | with a player |
 | `define_stat` | loader | probe: stats | — |
 | `stat_info` | loader | probe: stats | — |
@@ -216,11 +229,14 @@ names every entry of the golden layout once, in that order.
 | `experience_filter` | game | — | with a player |
 | `knowledge` | game | probe: knowledge | — |
 | `change_knowledge` | game | probe: knowledge | — |
+| `knowledge_set` | game | — | with a player |
 | `quests` | game | probe: knowledge | — |
+| `quest_reward_filter` | game | — | with a player |
 | `knowledge_input_filter` | game | every start | with a player |
 | `game_query` | game | — | with a player |
 | `run_console` | game | probe: console line | — |
 | `interaction_filter` | game | — | with a player |
+| `interaction_prompt` | game | — | with a player, client |
 | `craft_filter` | game | every start | with a player |
 | `build_filter` | game | every start | with a player |
 | `actions` | loader | every start | client |
@@ -232,6 +248,15 @@ names every entry of the golden layout once, in that order.
 | `command_list` | loader | — | — |
 | `actions_changed` | loader | — | — |
 | `action_window` | game | — | client |
+| `local_held` | game | — | client |
+| `local_input_status` | loader | — | not exercised |
+| `client_snapshot` | game | — | client |
+| `client_command` | game | — | client |
+| `client_command_status` | game | — | client |
+| `client_windows` | game | — | client |
+| `client_slots` | game | — | client |
+| `game_binding` | game | — | client |
+| `game_rebind` | game | — | client |
 | `ui_frame` | game | — | client |
 | `ui_widget` | game | — | client |
 | `ui_dialog` | game | — | client |
@@ -241,34 +266,9 @@ names every entry of the golden layout once, in that order.
 | `fog_read` | game | — | client |
 | `map_marker_types` | game | — | client |
 | `ui_extension` | game | — | client |
-| `local_held` | game | — | client |
-| `local_input_status` | loader | — | not exercised |
-| `client_snapshot` | game | — | client |
-| `loader_off` | loader | — | — |
-| `client_command` | game | — | client |
-| `client_command_status` | game | — | client |
-| `terrain_material_add` | game | — | client |
-| `interaction_prompt` | game | — | with a player, client |
 | `ui_item_tooltip` | game | — | client |
-| `change_permissions` | game | — | with a player |
-| `transaction_settled` | game | probe: transaction | — |
-| `prop_placement_info` | game | — | not exercised |
-| `container_rule` | game | — | with a player |
-| `show_pickup` | game | — | with a player |
-| `respawn_point` | game | — | with a player |
-| `set_respawn_point` | game | — | with a player |
-| `buff_type_add` | game | — | client |
-| `damage_causes_off` | loader | — | — |
-| `waypoint` | game | — | with a player |
 | `sound_play` | game | — | client |
 | `sound_steer` | game | — | client |
 | `sound_state` | loader | — | client |
 | `sound_play_for` | game | — | client |
 | `sound_steer_for` | game | — | client |
-| `rekey_resource` | game | — | client |
-| `game_binding` | game | — | client |
-| `game_rebind` | game | — | client |
-| `quest_reward_filter` | game | — | with a player |
-| `knowledge_set` | game | — | with a player |
-| `client_windows` | game | — | client |
-| `client_slots` | game | — | client |

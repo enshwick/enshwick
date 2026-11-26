@@ -168,8 +168,7 @@ impl Input {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Unavailable`] on a server and from a loader older
-    /// than ABI 12.24.
+    /// [`WorldError::Unavailable`] on a server.
     ///
     /// # Examples
     ///

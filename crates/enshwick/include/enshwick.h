@@ -3,6 +3,10 @@
 
 /* Written by cbindgen from the enshwick crate's ABI module: run `cargo xtask header`, never edit by hand. */
 
+/* Every slot and struct here is stable from ABI 1.0, those the Rust and Luau
+   APIs keep behind their `unstable` feature included: a change of meaning
+   takes a new slot. */
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -26,10 +30,11 @@
 // The major version of this interface. A loader refuses a mod built for
 // another major.
 //
-// Any change to the layout other than an append is a new major, with
-// `ABI_MINOR` back at 0; the layout tests of this crate hold the pair to
-// the committed layout.
-#define ENSHWICK_ABI_MAJOR 12
+// The interface is stable from major 1: a mod built for major 1 loads on
+// every loader of major 1 at its minor or a newer one. Any change to the layout other than an append is
+// a new major, with `ABI_MINOR` back at 0; the layout tests of this crate
+// hold the pair to the committed layout.
+#define ENSHWICK_ABI_MAJOR 1
 
 // The minor version of this interface: one more for each append to the
 // layout of this `ABI_MAJOR`, a field at the end of a struct that starts
@@ -38,7 +43,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 29
+#define ENSHWICK_ABI_MINOR 0
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -1073,57 +1078,54 @@ typedef struct EnshwickClientCommand {
   // The server's password for `EnshwickClientCommand_JOIN`, at most
   // `EnshwickClientCommand_MAX_PASSWORD` bytes, empty for none; borrowed for
   // the call. The loader hands it to the game's own join and never
-  // keeps, logs or returns it. ABI 12.11.
+  // keeps, logs or returns it.
   struct EnshwickStr password;
   // The world position, x, y and z in metres, that
   // `EnshwickClientCommand_SET_WAYPOINT` and `EnshwickClientCommand_PING` mark.
-  // ABI 12.23.
   double position[3];
   // The world `EnshwickClientCommand_HOST` plays: its place in the main
   // menu's list of worlds, from 0, below `EnshwickClientCommand_MAX_SLOTS`.
-  // ABI 12.23.
   uint16_t world;
   // The character `EnshwickClientCommand_HOST` plays as: its place in the
   // main menu's list of characters, from 0, below
-  // `EnshwickClientCommand_MAX_SLOTS`. ABI 12.23.
+  // `EnshwickClientCommand_MAX_SLOTS`.
   uint16_t character;
   // 1 when `EnshwickClientCommand_HOST` opens the world to other players
-  // online, 0 to play it offline. ABI 12.23.
+  // online, 0 to play it offline.
   uint32_t online;
   // The item of the carried window `target` (`mod:window`) that
   // `EnshwickClientCommand_WINDOW_PRESS`, `EnshwickClientCommand_WINDOW_PICK` and
   // `EnshwickClientCommand_WINDOW_TEXT` act on, by the id
   // `EnshwickHostApi.client_windows` lists;
-  // borrowed for the call. ABI 12.24.
+  // borrowed for the call.
   struct EnshwickStr item;
   // The option `EnshwickClientCommand_WINDOW_PICK` picks, by the name the
   // window shows, the text `EnshwickClientCommand_WINDOW_TEXT` sets, at
   // most `EnshwickClientCommand_MAX_TEXT` bytes, or the line
   // `EnshwickClientCommand_CHAT` sends, 1 to `EnshwickClientCommand_MAX_CHAT`
-  // bytes (ABI 12.29); borrowed for the call. ABI 12.24.
+  // bytes; borrowed for the call.
   struct EnshwickStr text;
   // The answer `EnshwickClientCommand_ANSWER_DIALOG` gives, such as
   // `EnshwickUiDialog_OK`: a button of the dialog that
-  // shows. ABI 12.25.
+  // shows.
   uint32_t answer;
   // The dialog `EnshwickClientCommand_ANSWER_DIALOG` answers, by the number
   // `EnshwickClientSnapshot.dialog` gives it; a command for a dialog that no
-  // longer shows ends unavailable. ABI 12.25.
+  // longer shows ends unavailable.
   uint32_t dialog;
   // The slot an item command acts on, packed as the game packs one: the
   // inventory entity, then its index shifted left by 32; the source of
-  // `EnshwickClientCommand_MOVE_ITEM`. ABI 12.28.
+  // `EnshwickClientCommand_MOVE_ITEM`.
   uint64_t slot;
   // The slot `EnshwickClientCommand_MOVE_ITEM` moves into, packed as `slot`.
-  // ABI 12.28.
   uint64_t target_slot;
   // The station `EnshwickClientCommand_CRAFT` crafts at, 0 to craft by hand;
   // the inventory `EnshwickClientCommand_TAKE_ALL` takes from or
-  // `EnshwickClientCommand_DEPOSIT_ALL` deposits into. ABI 12.28.
+  // `EnshwickClientCommand_DEPOSIT_ALL` deposits into.
   EnshwickEntity entity;
   // How many: crafts of `EnshwickClientCommand_CRAFT`, 1 to
   // `EnshwickClientCommand_MAX_AMOUNT`; items `EnshwickClientCommand_MOVE_ITEM`
-  // moves, 0 for the whole stack. ABI 12.28.
+  // moves, 0 for the whole stack.
   uint32_t amount;
 } EnshwickClientCommand;
 // Opens `target`, one of the screens the game opens from a key in the
@@ -1143,80 +1145,77 @@ typedef struct EnshwickClientCommand {
 #define EnshwickClientCommand_HIGHLIGHT_RECIPE 7
 // Joins the dedicated server `target`, `host:query_port`, with
 // `password` from the main menu with a character selected; `session`
-// is 0. Refused while a join or a world runs. ABI 12.11.
+// is 0. Refused while a join or a world runs.
 #define EnshwickClientCommand_JOIN 8
-// Leaves the world back to the main menu. ABI 12.11.
+// Leaves the world back to the main menu.
 #define EnshwickClientCommand_LEAVE 9
 // Holds the game action `target` in the local player's input for
-// `hold_ms`, as its key would. ABI 12.21.
+// `hold_ms`, as its key would.
 #define EnshwickClientCommand_PRESS 10
 // Sets the local player's waypoint at `position`, or moves it there.
-// ABI 12.23.
 #define EnshwickClientCommand_SET_WAYPOINT 11
-// Clears the local player's waypoint. ABI 12.23.
+// Clears the local player's waypoint.
 #define EnshwickClientCommand_CLEAR_WAYPOINT 12
-// Pings `position` for the players of the world. ABI 12.23.
+// Pings `position` for the players of the world.
 #define EnshwickClientCommand_PING 13
 // Hosts `world` with `character` from the main menu, offline or
 // `online`; `session` is 0. Refused while a join, a host or a world
-// runs. ABI 12.23.
+// runs.
 #define EnshwickClientCommand_HOST 14
 // Opens the loader's Mods screen over the main menu or the pause menu,
-// whichever shows, at its list of mods. ABI 12.23.
+// whichever shows, at its list of mods.
 #define EnshwickClientCommand_OPEN_MODS 15
 // Opens mod `target`'s page on the Mods screen, by its id, opening
-// the screen first. ABI 12.23.
+// the screen first.
 #define EnshwickClientCommand_OPEN_MOD 16
 // Presses mod `target`'s settings gear on the Mods screen, by its id,
-// opening the screen first. ABI 12.23.
+// opening the screen first.
 #define EnshwickClientCommand_OPEN_MOD_SETTINGS 17
 // Presses `item` of the carried window `target`, as a click would: a
-// button, a list's switch or an on-or-off field. ABI 12.24.
+// button, a list's switch or an on-or-off field.
 #define EnshwickClientCommand_WINDOW_PRESS 18
 // Picks the option named `text` in the list of `item` of the carried
-// window `target`. ABI 12.24.
+// window `target`.
 #define EnshwickClientCommand_WINDOW_PICK 19
 // Sets the text of `item`'s text field in the carried window `target`
-// to `text`, as typing would. ABI 12.24.
+// to `text`, as typing would.
 #define EnshwickClientCommand_WINDOW_TEXT 20
 // Answers the loader's dialog that shows with `answer`, as its button
-// would. ABI 12.25.
+// would.
 #define EnshwickClientCommand_ANSWER_DIALOG 21
 // Crafts `recipe` `amount` times at `entity` or by hand, through the
-// game's own crafting request; the server checks it. ABI 12.28.
+// game's own crafting request; the server checks it.
 #define EnshwickClientCommand_CRAFT 22
 // Moves `amount` items, or the whole stack, from `slot` to
-// `target_slot`, through the game's own item transfer. ABI 12.28.
+// `target_slot`, through the game's own item transfer.
 #define EnshwickClientCommand_MOVE_ITEM 23
 // Equips the item in `slot` into the equipment slot `target` names, a
 // member of the game's `EquipmentSlot` such as `RangedWeapon`.
-// ABI 12.28.
 #define EnshwickClientCommand_EQUIP 24
 // Takes every stack from the inventory `entity` into the player's, as
-// a storage window's take all does. ABI 12.28.
+// a storage window's take all does.
 #define EnshwickClientCommand_TAKE_ALL 25
 // Moves every stack of the player's into the inventory `entity`, as a
-// storage window's deposit all does. ABI 12.28.
+// storage window's deposit all does.
 #define EnshwickClientCommand_DEPOSIT_ALL 26
-// Destroys the stack in `slot`, as the game's trash does. ABI 12.28.
+// Destroys the stack in `slot`, as the game's trash does.
 #define EnshwickClientCommand_TRASH 27
 // Sends `text` to the world's chat as the local player's own line, as
-// the chat window's Enter does, in a world. ABI 12.29.
+// the chat window's Enter does, in a world.
 #define EnshwickClientCommand_CHAT 28
-// The most crafts or items one command asks for. ABI 12.28.
+// The most crafts or items one command asks for.
 #define EnshwickClientCommand_MAX_AMOUNT 65535
-// The longest text, in bytes, a window's field takes. ABI 12.24.
+// The longest text, in bytes, a window's field takes.
 #define EnshwickClientCommand_MAX_TEXT 255
-// The longest chat line, in bytes, the game's chat takes. ABI 12.29.
+// The longest chat line, in bytes, the game's chat takes.
 #define EnshwickClientCommand_MAX_CHAT 1024
 // How many worlds and characters the main menu lists at most.
-// ABI 12.23.
 #define EnshwickClientCommand_MAX_SLOTS 16
 // The longest password, in bytes, the game's join takes.
 #define EnshwickClientCommand_MAX_PASSWORD 1024
 // The longest move.
 #define EnshwickClientCommand_MAX_HOLD_MS 250
-// The longest press. ABI 12.21.
+// The longest press.
 #define EnshwickClientCommand_MAX_PRESS_MS 2000
 // The largest turn of one look, in radians, a quarter turn.
 #define EnshwickClientCommand_MAX_LOOK 1.5707964
@@ -1248,11 +1247,11 @@ typedef struct EnshwickClientCommandStatus {
   uint64_t age_ms;
   // Where the client stands on a `EnshwickClientCommand_JOIN`,
   // `EnshwickClientCommand_HOST` or `EnshwickClientCommand_LEAVE`: `EnshwickClientCommandStatus_PHASE_QUEUED` to
-  // `EnshwickClientCommandStatus_PHASE_LEFT`; 0 for other kinds. ABI 12.11.
+  // `EnshwickClientCommandStatus_PHASE_LEFT`; 0 for other kinds.
   uint32_t phase;
   // Why a `EnshwickClientCommandStatus_FAILED` join failed, as far as the
   // client can tell: `EnshwickClientCommandStatus_WRONG_PASSWORD` to
-  // `EnshwickClientCommandStatus_UNKNOWN`; 0 otherwise. ABI 12.11.
+  // `EnshwickClientCommandStatus_UNKNOWN`; 0 otherwise.
   uint32_t failure;
 } EnshwickClientCommandStatus;
 // Queued; the game has not taken it yet.
@@ -1285,11 +1284,10 @@ typedef struct EnshwickClientCommandStatus {
 #define EnshwickClientCommandStatus_MOD_OFF 7
 // The window shows the item off, as a Run button while a field is
 // empty or an action the player may not run now, or the item has no
-// option of that name or takes no such text. ABI 12.24.
+// option of that name or takes no such text.
 #define EnshwickClientCommandStatus_ITEM_OFF 8
 // The game ended a join or a host without reaching the world, for
 // `failure`.
-// ABI 12.11.
 #define EnshwickClientCommandStatus_FAILED 5
 // Waiting to start: the loader asks the server for its address.
 #define EnshwickClientCommandStatus_PHASE_QUEUED 1
@@ -1324,7 +1322,6 @@ typedef struct EnshwickClientCommandStatus {
 
 // One slot of the local player's inventory as the client's world holds
 // it, which `EnshwickHostApi.client_slots` lists.
-// ABI 12.28.
 typedef struct EnshwickClientSlot {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -1407,65 +1404,61 @@ typedef struct EnshwickClientSnapshot {
   // The server a `EnshwickClientCommand_JOIN` of this loader joins or joined,
   // as `host:query_port`, while the client is on its way there or in its
   // world; empty in the menu and in a world the client hosts or joined
-  // another way. ABI 12.11.
+  // another way.
   struct EnshwickStr server;
   // The mod whose page of the loader's own screen shows, by its id, empty
-  // for none; group `EnshwickClientSnapshot_LOADER_SCREEN`. ABI 12.23.
+  // for none; group `EnshwickClientSnapshot_LOADER_SCREEN`.
   struct EnshwickStr loader_screen_mod;
   // The page of the loader's own Mods screen that shows:
   // `EnshwickClientSnapshot_NO_LOADER_SCREEN` to
   // `EnshwickClientSnapshot_MOD_MISMATCH`; group
-  // `EnshwickClientSnapshot_LOADER_SCREEN`. ABI 12.23.
+  // `EnshwickClientSnapshot_LOADER_SCREEN`.
   uint32_t loader_screen;
   // Zero.
   uint32_t reserved2;
   // The mod whose dialog shows, by its id, empty for the loader's own;
-  // group `EnshwickClientSnapshot_DIALOG`. ABI 12.25.
+  // group `EnshwickClientSnapshot_DIALOG`.
   struct EnshwickStr dialog_mod;
   // The buttons of the dialog that shows, a bit per answer as
   // `EnshwickUiDialog.buttons` holds them, 0 while
-  // none shows; group `EnshwickClientSnapshot_DIALOG`. ABI 12.25.
+  // none shows; group `EnshwickClientSnapshot_DIALOG`.
   uint32_t dialog_buttons;
   // The number of the dialog that shows, 1 to 65,535 counted round as
   // dialogs show, 0 while none shows; an answer names it in
-  // `EnshwickClientCommand.dialog`. Group `EnshwickClientSnapshot_DIALOG`. ABI 12.25.
+  // `EnshwickClientCommand.dialog`. Group `EnshwickClientSnapshot_DIALOG`.
   uint32_t dialog;
   // The entity the interaction prompt that shows targets, in the
   // client's world, such as the chest it opens; 0 while none shows. Group
-  // `EnshwickClientSnapshot_PROMPT`. ABI 12.26.
+  // `EnshwickClientSnapshot_PROMPT`.
   EnshwickEntity prompt_target;
   // The `LocaTagId` of that prompt's verb, as the object offers it before
   // a mod's text takes its place; 0 while none shows. Group
-  // `EnshwickClientSnapshot_PROMPT`. ABI 12.26.
+  // `EnshwickClientSnapshot_PROMPT`.
   uint32_t prompt_verb;
   // The character the main menu has selected, by its place in the menu's
   // list from 0, as `EnshwickClientCommand.character` takes it;
   // `EnshwickClientSnapshot_NO_CHARACTER` while none is and outside the main
-  // menu. Group `EnshwickClientSnapshot_CHARACTER`. ABI 12.26.
+  // menu. Group `EnshwickClientSnapshot_CHARACTER`.
   uint32_t character;
   // Zero.
   uint32_t reserved3;
   // Where the local player stands, x, y and z in metres, as the
   // client's world holds it; group `EnshwickClientSnapshot_POSITION`.
-  // ABI 12.28.
   double position[3];
   // Where the local player's camera looks, a unit quaternion x, y, z, w
-  // in the world's axes; group `EnshwickClientSnapshot_LOOK`. ABI 12.28.
+  // in the world's axes; group `EnshwickClientSnapshot_LOOK`.
   float look[4];
   // The local player's health; group `EnshwickClientSnapshot_VITALS`.
-  // ABI 12.28.
   uint32_t health;
   // The local player's maximum health; group `EnshwickClientSnapshot_VITALS`.
-  // ABI 12.28.
   uint32_t health_max;
   // The local player's stamina; group `EnshwickClientSnapshot_VITALS`.
-  // ABI 12.28.
   uint32_t stamina;
   // The local player's maximum stamina; group
-  // `EnshwickClientSnapshot_VITALS`. ABI 12.28.
+  // `EnshwickClientSnapshot_VITALS`.
   uint32_t stamina_max;
   // The action bar's selected slot, from 0; group
-  // `EnshwickClientSnapshot_ACTIONBAR`. ABI 12.28.
+  // `EnshwickClientSnapshot_ACTIONBAR`.
   uint32_t actionbar_slot;
   // Zero.
   uint32_t reserved4;
@@ -1490,50 +1483,46 @@ typedef struct EnshwickClientSnapshot {
 // `highlighted_recipe`.
 #define EnshwickClientSnapshot_RECIPE 16
 // `loader_screen` and
-// `loader_screen_mod`. ABI 12.23.
+// `loader_screen_mod`.
 #define EnshwickClientSnapshot_LOADER_SCREEN 32
 // `dialog_mod` and
 // `dialog_buttons`: the loader's dialogs show
-// in game on this build. ABI 12.25.
+// in game on this build.
 #define EnshwickClientSnapshot_DIALOG 64
 // `prompt_target` and
 // `prompt_verb`: the prompt reads on this build.
-// ABI 12.26.
 #define EnshwickClientSnapshot_PROMPT 128
 // `character`: the main menu's selected character
-// reads on this build. ABI 12.26.
+// reads on this build.
 #define EnshwickClientSnapshot_CHARACTER 256
 // `position`, read in the client's last step.
-// ABI 12.28.
 #define EnshwickClientSnapshot_POSITION 512
-// `look`, read in the client's last step. ABI 12.28.
+// `look`, read in the client's last step.
 #define EnshwickClientSnapshot_LOOK 1024
 // `health`, `health_max`,
 // `stamina` and `stamina_max`,
-// read in the client's last step. ABI 12.28.
+// read in the client's last step.
 #define EnshwickClientSnapshot_VITALS 2048
 // `actionbar_slot`, read in the client's last
-// step. ABI 12.28.
+// step.
 #define EnshwickClientSnapshot_ACTIONBAR 4096
 // `character` while no character is selected or no
-// main menu shows. ABI 12.26.
+// main menu shows.
 #define EnshwickClientSnapshot_NO_CHARACTER UINT32_MAX
-// The loader's Mods screen does not show. ABI 12.23.
+// The loader's Mods screen does not show.
 #define EnshwickClientSnapshot_NO_LOADER_SCREEN 0
-// The list of mods shows. ABI 12.23.
+// The list of mods shows.
 #define EnshwickClientSnapshot_MOD_LIST 1
 // A mod's page shows, with its settings this world gives it.
-// ABI 12.23.
 #define EnshwickClientSnapshot_MOD_PAGE 2
-// The joined server's settings of a mod show. ABI 12.23.
+// The joined server's settings of a mod show.
 #define EnshwickClientSnapshot_MOD_SERVER_SETTINGS 3
-// The joined server's list of mods with settings shows. ABI 12.23.
+// The joined server's list of mods with settings shows.
 #define EnshwickClientSnapshot_SERVER_MOD_LIST 4
 // The key bindings of a mod the joined server runs and this client
-// lacks show. ABI 12.23.
+// lacks show.
 #define EnshwickClientSnapshot_MOD_BINDINGS 5
 // The mods that differ from a server that refused this client show.
-// ABI 12.23.
 #define EnshwickClientSnapshot_MOD_MISMATCH 6
 
 // An item of a window a server's mod shows this client, as
@@ -1541,7 +1530,7 @@ typedef struct EnshwickClientSnapshot {
 //
 // A `EnshwickClientCommand_WINDOW_PRESS`, `EnshwickClientCommand_WINDOW_PICK` or
 // `EnshwickClientCommand_WINDOW_TEXT` names it by `window` and `item`. The
-// strings are borrowed for the call. ABI 12.24.
+// strings are borrowed for the call.
 typedef struct EnshwickClientWindowItem {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -1632,7 +1621,6 @@ typedef struct EnshwickCommandInfo {
 
 // A stack about to enter one slot of a container, as
 // `EnshwickHostApi.container_rule` hands it on.
-// ABI 12.9.
 typedef struct EnshwickContainerPut {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -2110,7 +2098,7 @@ typedef uint32_t EnshwickEvent;
 // step: a player's first look, as at a join, only notes the waypoint,
 // and one set outside the map's frame raises nothing, though a move
 // back from there does. A mod's waypoint handler hears it. The name
-// is enshwick's. Server only. ABI 12.16.
+// is enshwick's. Server only.
 #define EnshwickEvent_WAYPOINT_CHANGED 27
 // A player, or the world for a quest of the world's, started a quest:
 // the journal shows its first step now, by the knowledge the step asks
@@ -2118,18 +2106,18 @@ typedef uint32_t EnshwickEvent;
 // step always shows raises none. Raised on the game thread after the
 // step that changed that knowledge, a mod's change included; what a
 // player holds when they join raises nothing. The name is enshwick's.
-// Server only. ABI 12.22.
+// Server only.
 #define EnshwickEvent_QUEST_STARTED 28
 // A step of a quest is done for a player or the world: the knowledge
 // its completion asks for holds now and did not before; data is a
 // `EnshwickQuestStepData`. Raised as `EnshwickEvent_QUEST_STARTED` is. The name is
-// enshwick's. Server only. ABI 12.22.
+// enshwick's. Server only.
 #define EnshwickEvent_QUEST_STEP_DONE 29
 // A counter one of a quest step's progress parts counts changed, such
 // as a mod's objective; data is a `EnshwickQuestProgressData` with the count
 // now and the count the part asks for. Raised as
 // `EnshwickEvent_QUEST_STARTED` is, for each change of the counter. The
-// name is enshwick's. Server only. ABI 12.22.
+// name is enshwick's. Server only.
 #define EnshwickEvent_QUEST_PROGRESSED 30
 
 // A mod event a mod defines, or the one it subscribes to.
@@ -2230,7 +2218,7 @@ typedef struct EnshwickFogInfo {
 
 // The keys a game control holds in the client's keyboard and mouse
 // bindings, as `EnshwickHostApi.game_binding`
-// writes them. ABI 12.20.
+// writes them.
 //
 // Each key is in the form of `EnshwickControlSpec.key`, 0 for none. A key a
 // mod control may not take, such as Shift alone or Escape, keeps its scan
@@ -2528,6 +2516,25 @@ typedef uint32_t EnshwickPointVerdict;
 // turns this link off, leaves the answer as it was and asks the next.
 #define EnshwickPointVerdict_FAILED 3
 
+// A part or feature of the loader that is off, which
+// `EnshwickHostApi.loader_off` lists.
+//
+// The loader turns off only what a build lacks or what faulted, and keeps
+// running the rest; every part or feature it does not list runs. The
+// names are the ones the log and the Mods screen show, and a new part of
+// a later loader appears with no new field.
+typedef struct EnshwickLoaderOff {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The part or feature, as its log line names it.
+  struct EnshwickStr name;
+  // Why it is off, as the log says: the build entry it lacks and why,
+  // or the fault that turned it off.
+  struct EnshwickStr reason;
+  // When it turned off, in seconds since the Unix epoch.
+  uint64_t at;
+} EnshwickLoaderOff;
+
 // Which waits `EnshwickHostApi.loop_wait` found and
 // hooked, as bits.
 typedef uint32_t EnshwickLoopWaitSites;
@@ -2798,6 +2805,52 @@ typedef struct EnshwickTerrainMaterialInfo {
 // A player's tool can flatten it.
 #define EnshwickTerrainMaterialInfo_FLATTENS 1
 
+// A terrain material of a mod's own, for
+// `EnshwickHostApi.terrain_material_add`:
+// a copy of a vanilla material, its look included, with the rules
+// `changes` names set from this struct.
+typedef struct EnshwickTerrainMaterialAdd {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The GUID saves name its voxels by: its content id's, which the
+  // calling mod declared with `declare_content`.
+  struct EnshwickGuid guid;
+  // The item digging it yields, by its GUID, with
+  // `EnshwickTerrainMaterialAdd_ITEM`.
+  struct EnshwickGuid item;
+  // The health a voxel of it has against tools, with
+  // `EnshwickTerrainMaterialAdd_HEALTH`.
+  int32_t health;
+  // The game's terrain material it copies, its look and every rule it
+  // does not change, by voxel id.
+  uint8_t like;
+  // The game's terrain material its voxels load as while no mod adds it,
+  // by voxel id.
+  uint8_t fallback;
+  // The rules it sets: `EnshwickTerrainMaterialAdd_ITEM`,
+  // `EnshwickTerrainMaterialAdd_HARDNESS`, `EnshwickTerrainMaterialAdd_HEALTH` and
+  // `EnshwickTerrainMaterialAdd_FLATTENS`, or none.
+  uint8_t changes;
+  // How hard it is to dig, the game's hardness category from 0 (`Soft`)
+  // to 5 (`Unbreakable`), with `EnshwickTerrainMaterialAdd_HARDNESS`.
+  uint8_t hardness;
+  // `EnshwickTerrainMaterialInfo_FLATTENS` or none, with
+  // `EnshwickTerrainMaterialAdd_FLATTENS`.
+  uint8_t flags;
+  // Zero.
+  uint8_t reserved[3];
+} EnshwickTerrainMaterialAdd;
+// Sets the item digging it yields.
+#define EnshwickTerrainMaterialAdd_ITEM 1
+// Sets its hardness.
+#define EnshwickTerrainMaterialAdd_HARDNESS (1 << 1)
+// Sets its health.
+#define EnshwickTerrainMaterialAdd_HEALTH (1 << 2)
+// Sets whether a player's tool can flatten it.
+#define EnshwickTerrainMaterialAdd_FLATTENS (1 << 3)
+// Every change it may set.
+#define EnshwickTerrainMaterialAdd_ALL_CHANGES (((EnshwickTerrainMaterialAdd_ITEM | EnshwickTerrainMaterialAdd_HARDNESS) | EnshwickTerrainMaterialAdd_HEALTH) | EnshwickTerrainMaterialAdd_FLATTENS)
+
 // A terrain edit, for `EnshwickHostApi.terrain_edit`.
 typedef struct EnshwickTerrainEdit {
   // Size and version of this struct.
@@ -2871,7 +2924,6 @@ typedef struct EnshwickVoxel {
 // every voxel of a box lies below it. 2³⁰, far past any world's edge.
 #define EnshwickVoxel_END (1 << 30)
 // Voxels per metre on every axis: a voxel is half a metre a side.
-// ABI 12.27.
 #define EnshwickVoxel_PER_METRE 2.0
 
 // One change of a transaction, handed to
@@ -2990,6 +3042,26 @@ typedef struct EnshwickTransactionInfo {
 // again.
 #define EnshwickTransactionInfo_UNDO_REFUSED 6
 
+// An item's prop template and optional local placement box, copied by
+// `EnshwickHostApi.prop_placement_info`.
+// No entity is placed and no permission, collision or persistence is checked.
+typedef struct EnshwickPropPlacementInfo {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The template the item places, never `NIL` on success.
+  struct EnshwickGuid template_;
+  // The declared local minimum corner in metres; read only with `HAS_LOCAL_BOX`.
+  float min[3];
+  // The declared local maximum corner in metres; read only with `HAS_LOCAL_BOX`.
+  float max[3];
+  // `HAS_LOCAL_BOX` when the existing resolver supplied finite local corners.
+  uint32_t flags;
+} EnshwickPropPlacementInfo;
+// The resolver supplied local corners, without normalization or a complete
+// geometry check. Without it, bounds are unknown,
+// not an empty box or the loader's fallback permission box.
+#define EnshwickPropPlacementInfo_HAS_LOCAL_BOX 1
+
 // A map marker of the scene the server runs, one of the list
 // `EnshwickHostApi.map_markers` writes.
 typedef struct EnshwickMapMarkerInfo {
@@ -3017,6 +3089,25 @@ typedef struct EnshwickMapFrameInfo {
   // The metres one cell of the game's map covers on each axis.
   double metres_per_cell;
 } EnshwickMapFrameInfo;
+
+// The data of `EnshwickEvent_WAYPOINT_CHANGED`, and what
+// `EnshwickHostApi.waypoint` reads now.
+typedef struct EnshwickWaypointData {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The player's account; 0 when the loader answers for an entity no
+  // player online holds.
+  EnshwickPlayerKey key;
+  // Their character.
+  EnshwickEntity entity;
+  // Where the waypoint is, in metres, while `set` is 1; zero otherwise.
+  EnshwickMetres position;
+  // 1 while the waypoint is set, 0 once it is cleared or for an entity
+  // without one.
+  uint32_t set;
+  // Zero.
+  uint32_t reserved_tail;
+} EnshwickWaypointData;
 
 // A world's save on disk, written by
 // `EnshwickHostApi.save_info`.
@@ -3112,7 +3203,6 @@ typedef struct EnshwickInventoryRequest {
 #define EnshwickInventoryRequest_NOTIFY 2
 // With `NOTIFY`, raise the pickup event marked hidden,
 // so no pickup message shows while the event's readers still hear it.
-// ABI 12.9.
 #define EnshwickInventoryRequest_HIDE_IN_UI 4
 
 // A request to move an entity, for `EnshwickHostApi.teleport`.
@@ -3158,6 +3248,34 @@ typedef struct EnshwickSpawnRequest {
 // The entity stays out of the world's save, as the game's own passing
 // animals do: it is gone once the world loads again.
 #define EnshwickSpawnRequest_DO_NOT_SAVE 1
+
+// A player's respawn point, which
+// `EnshwickHostApi.respawn_point` fills: the spawn
+// point entity the character respawns at and where it stands.
+typedef struct EnshwickRespawnPointInfo {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The spawn point entity.
+  EnshwickEntity entity;
+  // The spawn point's kind: `EnshwickRespawnPointInfo_START_LOCATION`,
+  // `EnshwickRespawnPointInfo_SAVE_POINT`, `EnshwickRespawnPointInfo_BASE`,
+  // `EnshwickRespawnPointInfo_NO_RESPAWN` or `EnshwickRespawnPointInfo_OTHER`.
+  uint32_t kind;
+  // Where the character respawns, in metres.
+  EnshwickMetres position;
+  // The orientation it respawns in, a quaternion `x, y, z, w`.
+  float orientation[4];
+} EnshwickRespawnPointInfo;
+// The world's start location.
+#define EnshwickRespawnPointInfo_START_LOCATION 0
+// A save point out in the world.
+#define EnshwickRespawnPointInfo_SAVE_POINT 1
+// A Flame Altar's base.
+#define EnshwickRespawnPointInfo_BASE 2
+// A spawn point nobody respawns at.
+#define EnshwickRespawnPointInfo_NO_RESPAWN 3
+// A kind the loader does not know on this build.
+#define EnshwickRespawnPointInfo_OTHER UINT32_MAX
 
 // A stat kind's definition, for `EnshwickHostApi.define_stat` and
 // `EnshwickHostApi.stat_info`.
@@ -3392,6 +3510,57 @@ typedef struct EnshwickKnowledgeChange {
 // what the value gains granted as the game grants it, what it loses
 // written with the mark of flags kept and none for a bool or a counter.
 #define EnshwickKnowledgeChange_SHOWN 1
+
+// How the prompt of every object placed from one item reads and what its
+// press does, as `EnshwickHostApi.interaction_prompt`
+// takes it.
+//
+// The server writes `verb` and the replaced action, so every
+// client sees them; a client with Enshwick also shows `text`
+// in the verb's place.
+typedef struct EnshwickInteractionPrompt {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The item the objects were placed from (`UsedItem`); never 0.
+  EnshwickItemId item;
+  // The game's `LocaTagId` of the verb every client shows; 0 keeps the
+  // object's own verb.
+  uint32_t verb;
+  // The `LocaTagId` of one of the mod's own texts, shown in the verb's
+  // place on clients with Enshwick; 0 for none.
+  uint32_t text;
+  // `REPLACE_ACTION` or 0.
+  uint32_t flags;
+} EnshwickInteractionPrompt;
+// The press runs the game's empty interaction instead of the object's
+// own action, such as opening a chest, so only the mod's action runs.
+#define EnshwickInteractionPrompt_REPLACE_ACTION 1
+
+// Cached diagnostics of the client's local gameplay-input sampler.
+// Flags and age are weakly consistent observations, not world or session identity.
+// Reading this does not request sampling.
+typedef struct EnshwickLocalInputInfo {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // A combination of this type's flag constants; unknown flags are ignored.
+  uint32_t flags;
+  // Reserved; 0.
+  uint32_t reserved;
+  // Age of the last cached sample in milliseconds; `UINT64_MAX` means never sampled.
+  uint64_t age_ms;
+} EnshwickLocalInputInfo;
+// A mod requested sampling through `local_held`.
+#define EnshwickLocalInputInfo_REQUESTED 1
+// The sampler's existing layout resolved.
+#define EnshwickLocalInputInfo_LAYOUT_AVAILABLE 2
+// The existing sampler link succeeded and its fuse remains on.
+#define EnshwickLocalInputInfo_LINK_AVAILABLE 4
+// The sampler's read fuse remains on; this alone does not mean reads can run.
+#define EnshwickLocalInputInfo_READ_ENABLED 8
+// At least one sample was cached, including a zero mask.
+#define EnshwickLocalInputInfo_SAMPLE_PRESENT 16
+// Requested, available, enabled and sampled within the existing 1000 ms window.
+#define EnshwickLocalInputInfo_FRESH 32
 
 // One widget, drawn with `EnshwickHostApi.ui_widget`: `kind` says which, and
 // which fields it reads; the loader writes `index`, `value` and `result`
@@ -3680,8 +3849,7 @@ typedef struct EnshwickUiExtension {
   // Zero.
   uint32_t reserved_hosts;
   // Where along its edge the panel sits: `EnshwickUiExtension_CENTER`,
-  // `EnshwickUiExtension_START` or `EnshwickUiExtension_END`. A spec of an older
-  // minor reads zero, the centre.
+  // `EnshwickUiExtension_START` or `EnshwickUiExtension_END`.
   uint32_t align;
   // Layout units the panel moves along its edge from where `align` puts
   // it, toward the edge's end (right or down) when positive; at most
@@ -3716,191 +3884,8 @@ typedef struct EnshwickUiExtension {
 // units: the layout's width, past which a panel leaves every screen.
 #define EnshwickUiExtension_MAX_OFFSET 1920.0
 
-// Cached diagnostics of the client's local gameplay-input sampler.
-// Flags and age are weakly consistent observations, not world or session identity.
-// Reading this does not request sampling. ABI 12.1.
-typedef struct EnshwickLocalInputInfo {
-  // Size and version of this struct.
-  struct EnshwickHeader header;
-  // A combination of this type's flag constants; unknown flags are ignored.
-  uint32_t flags;
-  // Reserved; 0.
-  uint32_t reserved;
-  // Age of the last cached sample in milliseconds; `UINT64_MAX` means never sampled.
-  uint64_t age_ms;
-} EnshwickLocalInputInfo;
-// A mod requested sampling through `local_held`.
-#define EnshwickLocalInputInfo_REQUESTED 1
-// The sampler's existing layout resolved.
-#define EnshwickLocalInputInfo_LAYOUT_AVAILABLE 2
-// The existing sampler link succeeded and its fuse remains on.
-#define EnshwickLocalInputInfo_LINK_AVAILABLE 4
-// The sampler's read fuse remains on; this alone does not mean reads can run.
-#define EnshwickLocalInputInfo_READ_ENABLED 8
-// At least one sample was cached, including a zero mask.
-#define EnshwickLocalInputInfo_SAMPLE_PRESENT 16
-// Requested, available, enabled and sampled within the existing 1000 ms window.
-#define EnshwickLocalInputInfo_FRESH 32
-
-// A part or feature of the loader that is off, which
-// `EnshwickHostApi.loader_off` lists.
-//
-// The loader turns off only what a build lacks or what faulted, and keeps
-// running the rest; every part or feature it does not list runs. The
-// names are the ones the log and the Mods screen show, and a new part of
-// a later loader appears with no new field.
-typedef struct EnshwickLoaderOff {
-  // Size and version of this struct.
-  struct EnshwickHeader header;
-  // The part or feature, as its log line names it.
-  struct EnshwickStr name;
-  // Why it is off, as the log says: the build entry it lacks and why,
-  // or the fault that turned it off.
-  struct EnshwickStr reason;
-  // When it turned off, in seconds since the Unix epoch.
-  uint64_t at;
-} EnshwickLoaderOff;
-
-// A terrain material of a mod's own, for
-// `EnshwickHostApi.terrain_material_add`:
-// a copy of a vanilla material, its look included, with the rules
-// `changes` names set from this struct.
-typedef struct EnshwickTerrainMaterialAdd {
-  // Size and version of this struct.
-  struct EnshwickHeader header;
-  // The GUID saves name its voxels by: its content id's, which the
-  // calling mod declared with `declare_content`.
-  struct EnshwickGuid guid;
-  // The item digging it yields, by its GUID, with
-  // `EnshwickTerrainMaterialAdd_ITEM`.
-  struct EnshwickGuid item;
-  // The health a voxel of it has against tools, with
-  // `EnshwickTerrainMaterialAdd_HEALTH`.
-  int32_t health;
-  // The game's terrain material it copies, its look and every rule it
-  // does not change, by voxel id.
-  uint8_t like;
-  // The game's terrain material its voxels load as while no mod adds it,
-  // by voxel id.
-  uint8_t fallback;
-  // The rules it sets: `EnshwickTerrainMaterialAdd_ITEM`,
-  // `EnshwickTerrainMaterialAdd_HARDNESS`, `EnshwickTerrainMaterialAdd_HEALTH` and
-  // `EnshwickTerrainMaterialAdd_FLATTENS`, or none.
-  uint8_t changes;
-  // How hard it is to dig, the game's hardness category from 0 (`Soft`)
-  // to 5 (`Unbreakable`), with `EnshwickTerrainMaterialAdd_HARDNESS`.
-  uint8_t hardness;
-  // `EnshwickTerrainMaterialInfo_FLATTENS` or none, with
-  // `EnshwickTerrainMaterialAdd_FLATTENS`.
-  uint8_t flags;
-  // Zero.
-  uint8_t reserved[3];
-} EnshwickTerrainMaterialAdd;
-// Sets the item digging it yields.
-#define EnshwickTerrainMaterialAdd_ITEM 1
-// Sets its hardness.
-#define EnshwickTerrainMaterialAdd_HARDNESS (1 << 1)
-// Sets its health.
-#define EnshwickTerrainMaterialAdd_HEALTH (1 << 2)
-// Sets whether a player's tool can flatten it.
-#define EnshwickTerrainMaterialAdd_FLATTENS (1 << 3)
-// Every change it may set.
-#define EnshwickTerrainMaterialAdd_ALL_CHANGES (((EnshwickTerrainMaterialAdd_ITEM | EnshwickTerrainMaterialAdd_HARDNESS) | EnshwickTerrainMaterialAdd_HEALTH) | EnshwickTerrainMaterialAdd_FLATTENS)
-
-// How the prompt of every object placed from one item reads and what its
-// press does, as `EnshwickHostApi.interaction_prompt`
-// takes it. ABI 12.3.
-//
-// The server writes `verb` and the replaced action, so every
-// client sees them; a client with Enshwick also shows `text`
-// in the verb's place.
-typedef struct EnshwickInteractionPrompt {
-  // Size and version of this struct.
-  struct EnshwickHeader header;
-  // The item the objects were placed from (`UsedItem`); never 0.
-  EnshwickItemId item;
-  // The game's `LocaTagId` of the verb every client shows; 0 keeps the
-  // object's own verb.
-  uint32_t verb;
-  // The `LocaTagId` of one of the mod's own texts, shown in the verb's
-  // place on clients with Enshwick; 0 for none.
-  uint32_t text;
-  // `REPLACE_ACTION` or 0.
-  uint32_t flags;
-} EnshwickInteractionPrompt;
-// The press runs the game's empty interaction instead of the object's
-// own action, such as opening a chest, so only the mod's action runs.
-#define EnshwickInteractionPrompt_REPLACE_ACTION 1
-
-// An item's prop template and optional local placement box, copied by
-// `EnshwickHostApi.prop_placement_info`.
-// No entity is placed and no permission, collision or persistence is checked.
-typedef struct EnshwickPropPlacementInfo {
-  // Size and version of this struct.
-  struct EnshwickHeader header;
-  // The template the item places, never `NIL` on success.
-  struct EnshwickGuid template_;
-  // The declared local minimum corner in metres; read only with `HAS_LOCAL_BOX`.
-  float min[3];
-  // The declared local maximum corner in metres; read only with `HAS_LOCAL_BOX`.
-  float max[3];
-  // `HAS_LOCAL_BOX` when the existing resolver supplied finite local corners.
-  uint32_t flags;
-} EnshwickPropPlacementInfo;
-// The resolver supplied local corners, without normalization or a complete
-// geometry check. Without it, bounds are unknown,
-// not an empty box or the loader's fallback permission box.
-#define EnshwickPropPlacementInfo_HAS_LOCAL_BOX 1
-
-// A player's respawn point, which
-// `EnshwickHostApi.respawn_point` fills: the spawn
-// point entity the character respawns at and where it stands.
-typedef struct EnshwickRespawnPointInfo {
-  // Size and version of this struct.
-  struct EnshwickHeader header;
-  // The spawn point entity.
-  EnshwickEntity entity;
-  // The spawn point's kind: `EnshwickRespawnPointInfo_START_LOCATION`,
-  // `EnshwickRespawnPointInfo_SAVE_POINT`, `EnshwickRespawnPointInfo_BASE`,
-  // `EnshwickRespawnPointInfo_NO_RESPAWN` or `EnshwickRespawnPointInfo_OTHER`.
-  uint32_t kind;
-  // Where the character respawns, in metres.
-  EnshwickMetres position;
-  // The orientation it respawns in, a quaternion `x, y, z, w`.
-  float orientation[4];
-} EnshwickRespawnPointInfo;
-// The world's start location.
-#define EnshwickRespawnPointInfo_START_LOCATION 0
-// A save point out in the world.
-#define EnshwickRespawnPointInfo_SAVE_POINT 1
-// A Flame Altar's base.
-#define EnshwickRespawnPointInfo_BASE 2
-// A spawn point nobody respawns at.
-#define EnshwickRespawnPointInfo_NO_RESPAWN 3
-// A kind the loader does not know on this build.
-#define EnshwickRespawnPointInfo_OTHER UINT32_MAX
-
-// The data of `EnshwickEvent_WAYPOINT_CHANGED`, and what
-// `EnshwickHostApi.waypoint` reads now.
-typedef struct EnshwickWaypointData {
-  // Size and version of this struct.
-  struct EnshwickHeader header;
-  // The player's account; 0 when the loader answers for an entity no
-  // player online holds.
-  EnshwickPlayerKey key;
-  // Their character.
-  EnshwickEntity entity;
-  // Where the waypoint is, in metres, while `set` is 1; zero otherwise.
-  EnshwickMetres position;
-  // 1 while the waypoint is set, 0 once it is cleared or for an entity
-  // without one.
-  uint32_t set;
-  // Zero.
-  uint32_t reserved_tail;
-} EnshwickWaypointData;
-
 // A sound a client mod starts, which `EnshwickHostApi.sound_play` queues for the
-// client's game thread. ABI 12.17.
+// client's game thread.
 typedef struct EnshwickSoundPlay {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -3932,7 +3917,7 @@ typedef struct EnshwickSoundPlay {
 #define EnshwickSoundPlay_MAX_STARTS 64
 
 // A change to a sound a client mod started, which `EnshwickHostApi.sound_steer`
-// queues. ABI 12.17.
+// queues.
 typedef struct EnshwickSoundSteer {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -3960,7 +3945,7 @@ typedef struct EnshwickSoundSteer {
 #define EnshwickSoundSteer_STOP_ALL 3
 
 // Where a sound a client mod started stands, which
-// `EnshwickHostApi.sound_state` writes. ABI 12.17.
+// `EnshwickHostApi.sound_state` writes.
 typedef struct EnshwickSoundInfo {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -3993,7 +3978,7 @@ typedef struct EnshwickSoundInfo {
 #define EnshwickSoundInfo_FOLLOW_FULL 5
 
 // The clients a server mod's sound plays on, which
-// `EnshwickHostApi.sound_play_for` reads. ABI 12.18.
+// `EnshwickHostApi.sound_play_for` reads.
 typedef struct EnshwickSoundAudience {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -4045,37 +4030,35 @@ typedef struct EnshwickInteraction {
   // Where the target stands, in metres, when `known`.
   EnshwickMetres position;
   // The item of the stack in `from_slot`, when `moving`; 0 for a move
-  // that names no source slot. ABI 12.9.
+  // that names no source slot.
   EnshwickItemId moved;
   // How many items the stack in `from_slot` holds, when `moving`.
-  // ABI 12.9.
   uint32_t stack;
   // The amount the player asked for, which counts only for
-  // `ACTION_AMOUNT`. ABI 12.9.
+  // `ACTION_AMOUNT`.
   uint32_t amount;
   // The container the items leave: the source entity, or the owner of
-  // `from_slot`; 0 when unknown. ABI 12.9.
+  // `from_slot`; 0 when unknown.
   EnshwickEntity from;
   // The container the items enter: the target entity, or the owner of
-  // `to_slot`; 0 for none, as when items are destroyed. ABI 12.9.
+  // `to_slot`; 0 for none, as when items are destroyed.
   EnshwickEntity to;
   // What the player moves, one of the `ACTION_` constants; 0 when
-  // unknown. ABI 12.9.
+  // unknown.
   uint8_t action;
   // How the move travels, a mask of the `TRANSFER_` constants; 0 for a
-  // plain move. ABI 12.9.
+  // plain move.
   uint8_t transfer;
-  // 1 when the fields of ABI 12.9 were read from a
-  // `MOVE`. ABI 12.9.
+  // 1 when the loader read the move fields that follow from a
+  // `MOVE`.
   uint8_t moving;
   // Zero.
   uint8_t reserved_move;
   // The source slot, as a sub-inventory entity in the low 32 bits and
   // its slot index above them; 0 for a move of a whole inventory.
-  // ABI 12.9.
   uint64_t from_slot;
   // The target slot, encoded as `from_slot`; 0 when the game picks the
-  // slots. ABI 12.9.
+  // slots.
   uint64_t to_slot;
 } EnshwickInteraction;
 // `action`: one item.
@@ -5783,6 +5766,18 @@ typedef struct EnshwickHostApi {
   // `EnshwickStatus_BAD_ARGS` for an empty name. Both strings are borrowed for
   // the call. Any thread.
   EnshwickStatus (*feature)(EnshwickModHandle me, struct EnshwickStr name, struct EnshwickStr off);
+  // Up to `capacity` parts and features of the loader that are off, in
+  // the order they turned off, and how many there are. Entries are
+  // `entry_size` bytes apart, the caller's `sizeof(EnshwickLoaderOff)`; the
+  // loader fills what both sides know of each and its own `EnshwickHeader`.
+  // Everything it does not list runs. The strings stay valid for the
+  // process, since the loader keeps each entry's first reason and drops
+  // none. Any thread; it runs no mod callback.
+  EnshwickStatus (*loader_off)(EnshwickModHandle me,
+                               struct EnshwickLoaderOff *out,
+                               uint32_t entry_size,
+                               uint32_t capacity,
+                               uint32_t *count);
   // Calls `callback` with `user` before every wait of the engine's event
   // loop on its handles, on the thread that waits, and writes to `found`
   // which waits it hooked (`EnshwickLoopWaitSites`); a wait this build lacks,
@@ -6041,6 +6036,19 @@ typedef struct EnshwickHostApi {
   // loader frees what each rebuild's patches built in a
   // `resource_buffer`.
   EnshwickStatus (*rebuild_resource)(EnshwickModHandle me, const struct EnshwickResourceKey *key);
+  // As `serve_resource` from `key` itself, for a
+  // patch that serves `key` with the data of the resource `from`, a
+  // re-key: inside `patch`, a `resource_served`
+  // read of `from` builds it without its own re-keys, so the re-keys of
+  // every mod apply at once, each key taking the data its `from` has
+  // before any re-key, and keys re-keyed in a ring rotate.
+  // `EnshwickStatus_BAD_ARGS` when `from` is `key` or of another type.
+  // Allowed during `enshwick_mod_init` only.
+  EnshwickStatus (*rekey_resource)(EnshwickModHandle me,
+                                   const struct EnshwickResourceKey *key,
+                                   const struct EnshwickResourceKey *from,
+                                   EnshwickResourcePatchFn patch,
+                                   void *user);
   // Adds the calling mod's rule that disables recipes (`disable` 1), or
   // takes its own rule of that kind and name back (`disable` 0). `name`
   // names a recipe, an item every recipe of which is disabled, or a
@@ -6417,6 +6425,22 @@ typedef struct EnshwickHostApi {
                                uint32_t entry_size,
                                uint32_t capacity,
                                uint32_t *count);
+  // Adds `buff`, a headed `EnshwickBuffTypeAdd`, as a buff type of the game,
+  // and writes its game id to `id`. The loader serves one patch of the
+  // game's buff collection on both sides with every mod's types after the
+  // vanilla ones, each a copy of its `like` with its changes, and names
+  // a type's icon on a client only once that client shows served UI
+  // images. `EnshwickStatus_BAD_ARGS` for a change or flag it does not know, a
+  // negative life time, or a `like` that is no buff type of the game;
+  // `EnshwickStatus_REFUSED` for a GUID whose content id the calling mod did
+  // not declare with `declare_content`, for a mod not of side both and
+  // for an id the game or a mod loaded before has;
+  // `EnshwickStatus_UNAVAILABLE` on a build whose
+  // archive or layout lacks the collection. Allowed during
+  // `enshwick_mod_init` only.
+  EnshwickStatus (*buff_type_add)(EnshwickModHandle me,
+                                  const struct EnshwickBuffTypeAdd *buff,
+                                  EnshwickBuffTypeId *id);
   // Up to `capacity` buffs `entity` has, and how many there are, as every
   // list answers; `EnshwickStatus_MISSING` for an entity that holds no buffs.
   // On the server's game thread only.
@@ -6470,6 +6494,21 @@ typedef struct EnshwickHostApi {
                                       uint32_t entry_size,
                                       uint32_t capacity,
                                       uint32_t *count);
+  // Adds `material`, a headed `EnshwickTerrainMaterialAdd`, as a terrain
+  // material of the game, and writes the voxel id it has for this run to
+  // `id`. The loader gives mods' materials the terrain ids no palette of
+  // the game names, in load order, and serves the material's palette
+  // entry, rules and look on both sides; saves name its voxels by its
+  // GUID. `EnshwickStatus_BAD_ARGS` for a `like` or `fallback` that is no
+  // terrain material of the game or a change it does not know;
+  // `EnshwickStatus_REFUSED` for a GUID whose content id the calling mod did
+  // not declare with `declare_content`, for a
+  // mod not of side both, for a GUID added before and once every free id
+  // is taken; `EnshwickStatus_UNAVAILABLE` on a build whose archive lacks the
+  // palette or the rules. Allowed during `enshwick_mod_init` only.
+  EnshwickStatus (*terrain_material_add)(EnshwickModHandle me,
+                                         const struct EnshwickTerrainMaterialAdd *material,
+                                         uint8_t *id);
   // Runs a terrain edit in the server's world as the game's terraforming
   // does, and writes the volume it changed in cubic metres (for a
   // flatten, 1 when anything changed) to `amount`; clients see it, and
@@ -6551,6 +6590,26 @@ typedef struct EnshwickHostApi {
   // moment only, outside a step or in a game event:
   // `EnshwickStatus_WRONG_THREAD` inside a step.
   EnshwickStatus (*build_rights)(EnshwickModHandle me, struct EnshwickBuildRights *check);
+  // Replaces the mod's change to the permissions of the player in game
+  // with `account`: `deny` takes bits from the player, `grant` gives
+  // bits, both masks of `EnshwickPlayerInfo`'s permission
+  // bits; both 0 ends the change. The server holds the player to
+  // `(group | every grant) & !every deny`, with `group` the bits of the
+  // player's user group, from its next step on, so the game's own checks
+  // refuse what a taken bit guards, and the loader's own reads of the
+  // player's bits give the bits in force; the player's client still acts
+  // by its group's bits. A change ends when the mod ends it or turns
+  // off, when the player leaves and when the world ends; ending one
+  // needs no player in game. `EnshwickStatus_BAD_ARGS` for account 0 or a bit
+  // past the permissions; `EnshwickStatus_REFUSED` for a new change to an
+  // account not in game; `EnshwickStatus_WRONG_THREAD` off the server's game
+  // thread; `EnshwickStatus_UNAVAILABLE` outside a server and on a build
+  // without the permission table, the step link or the player removal
+  // link.
+  EnshwickStatus (*change_permissions)(EnshwickModHandle me,
+                                       EnshwickPlayerKey account,
+                                       uint32_t deny,
+                                       uint32_t grant);
   // Queues the `count` changes at `ops` as one transaction of the
   // server's world and writes its id to `id`: the loader writes them in
   // order on the server's game thread at quiet moments, a budget of
@@ -6617,6 +6676,34 @@ typedef struct EnshwickHostApi {
                                          EnshwickEntity *out,
                                          uint32_t capacity,
                                          uint32_t *count);
+  // Calls `callback` once for transaction `id` of this mod, with where it
+  // stands and `user`, on the server's game thread after the first step
+  // that ends with it no longer `EnshwickTransactionInfo_PENDING`: written
+  // whole (`EnshwickTransactionInfo_APPLIED`, which says when a prop may still
+  // be absent), or failed, refused, undoing or undone. A step at least
+  // `within_ns` nanoseconds after the call runs it as it stands, still
+  // pending perhaps. The `info` is null when the loader forgot the
+  // transaction meanwhile. A step runs its due callbacks in the order
+  // they were asked, and a callback may ask again. When a client's hosted
+  // game ends, every callback kept runs with its transaction failed or
+  // expired, never in the next game; a dedicated server that stops runs
+  // none. A mod the loader turned off loses its callbacks unrun. `EnshwickStatus_BAD_ARGS` for a null `callback`;
+  // `EnshwickStatus_MISSING` for an id this mod did not get or one the loader
+  // forgot; `EnshwickStatus_UNAVAILABLE` once the transactions are off, which
+  // runs every callback kept at once. Nothing is kept on an error. Any
+  // thread.
+  EnshwickStatus (*transaction_settled)(EnshwickModHandle me,
+                                        uint64_t id,
+                                        uint64_t within_ns,
+                                        EnshwickTransactionSettledFn callback,
+                                        void *user);
+  // Copies the prop template and optional local placement box for `item`
+  // into headed `out`. `BAD_ARGS` for an unknown item or one placing nothing;
+  // `NOT_A_PROP` for creatures and flame altars; `UNAVAILABLE` without a running
+  // server, registry or required reads. Any thread, read-only.
+  EnshwickStatus (*prop_placement_info)(EnshwickModHandle me,
+                                        EnshwickItemId item,
+                                        struct EnshwickPropPlacementInfo *out);
   // Writes to `kept` 1 when a save keeps changes in the box from `min`
   // to `max`, in metres, and 0 when not: the game saves a world only
   // inside its bases' zones, so the box must lie wholly inside one, half
@@ -6671,6 +6758,18 @@ typedef struct EnshwickHostApi {
   // `EnshwickStatus_UNAVAILABLE` while no world runs, for a scene without a biome
   // map, or when the scene does not read on this build.
   EnshwickStatus (*map_frame)(EnshwickModHandle me, struct EnshwickMapFrameInfo *out);
+  // Writes to `out` the waypoint all players see that the character
+  // `entity` has set now, read as `EnshwickEvent_WAYPOINT_CHANGED`
+  // reads it: `set` 0 while it is off or for an entity without one, and
+  // `key` 0 when no player online plays `entity`. `out` is the caller's,
+  // at least a `EnshwickHeader` and writable for the size its header states;
+  // `EnshwickStatus_BAD_ARGS` for a null or smaller one. On the server's game
+  // thread at a quiet moment (`EnshwickStatus_WRONG_THREAD` elsewhere or
+  // inside a step); `EnshwickStatus_UNAVAILABLE` before a world runs or on a
+  // build whose reflection lacks the waypoint.
+  EnshwickStatus (*waypoint)(EnshwickModHandle me,
+                             EnshwickEntity entity,
+                             struct EnshwickWaypointData *out);
   // Asks the game to group up to `zones` altar zones into up to `bases`
   // bases. Raised, the game groups every listed zone into its base;
   // `zones` caps the altars a Flame level allows, and an altar that would
@@ -6841,6 +6940,34 @@ typedef struct EnshwickHostApi {
                                      const struct EnshwickInventoryRequest *request,
                                      EnshwickInventoryResultFn done,
                                      void *user);
+  // Registers `callback` to rule which stacks enter the containers placed
+  // from `item`, vanilla or a mod's own. The loader asks the rules of the
+  // container's item in load order, until one refuses, before a stack
+  // enters one of its slots, whatever moves it: a player's move, a swap, Take All, Deposit
+  // All or Stacks, an area deposit; a stack a rule refuses stays where it
+  // was, or goes to another slot when the game picks the slots. Gives
+  // through `EnshwickHostApi.inventory_submit` and the game's own loot are not
+  // asked. Allowed during `enshwick_mod_init` only; `EnshwickStatus_BAD_ARGS`
+  // for item 0 or a null callback; `EnshwickStatus_UNAVAILABLE` on a build
+  // without the slot link.
+  EnshwickStatus (*container_rule)(EnshwickModHandle me,
+                                   EnshwickItemId item,
+                                   EnshwickContainerRuleFn callback,
+                                   void *user);
+  // Shows `character`'s player the game's pickup message for `count` of
+  // `item`, as if the items had entered the player's inventory, which
+  // they do not: the loader raises the game's pickup event on the server,
+  // and every reader of that event, but the loader's item filters, hears
+  // it. `count` above 65535 shows 65535, the game's most. On the server's
+  // game thread between steps only; the systems of the next step see the
+  // event. `EnshwickStatus_BAD_ARGS` for item 0, count 0 or an entity that is
+  // no player; `EnshwickStatus_WRONG_THREAD` off the game thread or during a
+  // step; `EnshwickStatus_UNAVAILABLE` outside a server and on a build without
+  // the event.
+  EnshwickStatus (*show_pickup)(EnshwickModHandle me,
+                                EnshwickEntity character,
+                                EnshwickItemId item,
+                                uint32_t count);
   // Calls `callback` with `user` to answer the game's survivor lookups
   // that `EnshwickSurvivorLookup` names: the lookups of
   // every mod run in load order, the first that answers deciding, and
@@ -6907,6 +7034,31 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*spawn)(EnshwickModHandle me,
                           const struct EnshwickSpawnRequest *request,
                           EnshwickEntity *out);
+  // Copies the respawn point of the player whose character is `character`
+  // into headed `out`: the spawn point entity, its kind and where the
+  // character respawns. `EnshwickStatus_MISSING` for an entity that is no
+  // player's character, or a character whose respawn point is not in the
+  // world, where the game falls back to the world's start;
+  // `EnshwickStatus_WRONG_THREAD` off the server's game thread;
+  // `EnshwickStatus_UNAVAILABLE` outside a server and on a build without the
+  // layout.
+  EnshwickStatus (*respawn_point)(EnshwickModHandle me,
+                                  EnshwickEntity character,
+                                  struct EnshwickRespawnPointInfo *out);
+  // Makes `spawn_point` the respawn point of the player whose character
+  // is `character`, as the game does when the character stands in a
+  // spawn point, and raises the game's `PlayerSpawnInfoChangeEvent` for
+  // it when the point names a base or a scene. While the character
+  // stands in another spawn point, the game sets that one back at its
+  // next step. Nothing changes when a call fails. `EnshwickStatus_BAD_ARGS` for an entity that is no
+  // spawn point, or one of kind `EnshwickRespawnPointInfo_NO_RESPAWN`;
+  // `EnshwickStatus_MISSING` for an entity that is no player's character;
+  // `EnshwickStatus_WRONG_THREAD` off the server's game thread or during a
+  // step; `EnshwickStatus_UNAVAILABLE` outside a server and on a build without
+  // the layout.
+  EnshwickStatus (*set_respawn_point)(EnshwickModHandle me,
+                                      EnshwickEntity character,
+                                      EnshwickEntity spawn_point);
   // Calls `callback` with `user` on damage about to reach an entity's
   // health in the server's world, before the game applies it: hits,
   // falls and the shroud; what the filters leave in the
@@ -6915,6 +7067,18 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*damage_filter)(EnshwickModHandle me,
                                   EnshwickDamageFilterFn callback,
                                   void *user);
+  // Up to `capacity` damage causes, as `EnshwickDamageCheck`
+  // numbers them, whose sites are not armed, and how many there are, as
+  // every list answers: the causes no damage filter gets on this build
+  // and run. A site arms when a mod registered a damage filter and the
+  // build has it, and stops when it faults; with no filter, only the hit
+  // site arms, and only for stats. `EnshwickStatus_UNAVAILABLE` until the
+  // loader has linked and armed its hooks, after every mod's init. Any
+  // thread.
+  EnshwickStatus (*damage_causes_off)(EnshwickModHandle me,
+                                      uint32_t *out,
+                                      uint32_t capacity,
+                                      uint32_t *count);
   // Calls `callback` with `user` after a summoning staff's use spawned or
   // moved a survivor, with `EnshwickSummon.consumed` set; its return value is
   // ignored. On the thread of the use, as `EnshwickHostApi.summon_filter`.
@@ -7105,12 +7269,50 @@ typedef struct EnshwickHostApi {
   // server's game thread only.
   EnshwickStatus (*change_knowledge)(EnshwickModHandle me,
                                      const struct EnshwickKnowledgeChange *change);
+  // Sets knowledge `id` of the player whose character is `entity`, or of
+  // the world for 0 or an id of the world's, to exactly `value`: 0 or 1
+  // for a `EnshwickKnowledgeInfo_BOOL`, any count or bits otherwise.
+  //
+  // The game keeps a mark beside each value, one bit per flag (all of
+  // them for a bool or a counter), set for what the player has seen.
+  // `EnshwickKnowledgeChange_QUIET` writes the value at once with every bit
+  // marked, as a save loads it, sends it to the clients again and is
+  // saved with the next save; nothing a grant brings follows.
+  // `EnshwickKnowledgeChange_SHOWN` grants what the value gains as
+  // `EnshwickHostApi.change_knowledge` does (the next step applies it with
+  // what follows) and writes what it loses at once, keeping the mark of
+  // flags and no mark for a bool or a counter. A counter's gain is the
+  // difference from the value it reads now, so another grant queued
+  // before the step applies it adds to the count.
+  //
+  // `EnshwickStatus_BAD_ARGS` for an unknown id or `notice`, a bool above 1,
+  // or, for `SHOWN`, a gained bit the game does not expect;
+  // `EnshwickStatus_BUSY` when the game's queue fills while `SHOWN` grants,
+  // with what it wrote and queued before kept;
+  // `EnshwickStatus_REFUSED` as for `EnshwickHostApi.change_knowledge`. On the
+  // server's game thread only.
+  EnshwickStatus (*knowledge_set)(EnshwickModHandle me,
+                                  EnshwickEntity entity,
+                                  EnshwickKnowledgeId id,
+                                  uint32_t value,
+                                  uint8_t notice);
   // Up to `capacity` quest ids of the running game, and how many there
   // are. On the server's game thread only.
   EnshwickStatus (*quests)(EnshwickModHandle me,
                            EnshwickKnowledgeId *out,
                            uint32_t capacity,
                            uint32_t *count);
+  // Registers a filter on what the game pays a player for a quest, the
+  // quest's experience, before it pays it and sets the quest's bool.
+  // Filters run in load order, each with the payment as the filters
+  // before left it, on the thread of the game's quest reward system, in
+  // the dedicated server or a hosting client. `EnshwickStatus_UNAVAILABLE` on
+  // a build where the loader does not find the payment, or where its
+  // code is not what the loader expects; `EnshwickStatus_BAD_ARGS` for a null
+  // callback. Allowed during `enshwick_mod_init` only.
+  EnshwickStatus (*quest_reward_filter)(EnshwickModHandle me,
+                                        EnshwickQuestRewardFilterFn callback,
+                                        void *user);
   // Registers a filter on the knowledge clients ask the server for in
   // their input, which a vanilla game grants unchecked. Filters run in
   // load order after the loader's guard, each with the verdict so far,
@@ -7152,6 +7354,17 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*interaction_filter)(EnshwickModHandle me,
                                        EnshwickInteractionFilterFn callback,
                                        void *user);
+  // Gives every object placed from `spec`'s item, a headed
+  // `EnshwickInteractionPrompt`, its prompt: the game verb and the replaced
+  // action in the server's world, the mod's text on this client. One
+  // prompt per item across all mods. Allowed during `enshwick_mod_init`
+  // only; `EnshwickStatus_BAD_ARGS` for a null or short `spec`, item 0, an
+  // unknown flag or a prompt that changes nothing; `EnshwickStatus_REFUSED`
+  // for an item another prompt has; `EnshwickStatus_UNAVAILABLE` for a verb
+  // or an action on a build without the server's writes, while a build
+  // without the client's text site turns the text off alone.
+  EnshwickStatus (*interaction_prompt)(EnshwickModHandle me,
+                                       const struct EnshwickInteractionPrompt *spec);
   // Calls `callback` with `user` on each player's craft request in the
   // server's world, on the game thread before the crafting system reads
   // it; any filter returning `FILTER_REFUSE` refuses it, and nothing is made or taken.
@@ -7257,7 +7470,7 @@ typedef struct EnshwickHostApi {
   // fills what both sides
   // know of each and its own `EnshwickHeader`. The strings stay valid until the
   // next call on this thread. `EnshwickStatus_BAD_ARGS` for a non-null `out`
-  // whose entries are shorter than a header. Any thread.
+  // whose entries are shorter than the entry's first version. Any thread.
   EnshwickStatus (*command_list)(EnshwickModHandle me,
                                  struct EnshwickCommandInfo *out,
                                  uint32_t entry_size,
@@ -7290,6 +7503,113 @@ typedef struct EnshwickHostApi {
                                   const EnshwickPlayerKey *players,
                                   uint32_t count,
                                   uint32_t change);
+  // Writes to `out` the game controls the local player holds, the
+  // `Bitmask64` of the game's `PlayerInputType` as the client's
+  // interface read it in its last step: gameplay controls only, not the
+  // client-only ones such as menu keys. The bits are the game's, which a
+  // game build may renumber: find each by its name among the constants
+  // `EnshwickHostApi.types` lists for `PlayerInputType`, never as a fixed
+  // value. The loader reads the mask only once a mod asked for it: the
+  // first call, of any mod, starts the reads, and the interface's next
+  // step reads it; the safe layer calls it when a mod opens its input.
+  // Client only; `EnshwickStatus_UNAVAILABLE` on a server, outside a game,
+  // from the first call until that step, while no step read it for a
+  // second, or on a build without the read; `EnshwickStatus_BAD_ARGS` for a
+  // null `out`. Any thread; `out` is borrowed for the call.
+  EnshwickStatus (*local_held)(EnshwickModHandle me, uint64_t *out);
+  // Copies the local input sampler's cached diagnostics without requesting reads.
+  // Client only (`EnshwickStatus_UNAVAILABLE` on a server); callable on any thread.
+  // No game memory is read. Flags are weakly consistent and age is not session identity.
+  // `out` is a headed, writable `EnshwickLocalInputInfo`.
+  EnshwickStatus (*local_input_status)(EnshwickModHandle me, struct EnshwickLocalInputInfo *out);
+  // Writes to `out`, a headed `EnshwickClientSnapshot`, the client's state in
+  // one copy: its session, the open screens and the in-game menu's tab
+  // from the interface's last frame, and the local player's held
+  // controls. The first call, of any mod, starts the interface's reads
+  // and the held controls' reads, so it answers `EnshwickClientSnapshot_NEVER`;
+  // the safe layer calls it when a mod opens its input. Every call after
+  // a frame drew a game answers its copy; until one did, as in the main
+  // menu before the first world, it answers `NEVER`. Client only:
+  // `EnshwickStatus_UNAVAILABLE` on a server; `EnshwickStatus_BAD_ARGS` for a null
+  // or unheaded `out`. Any thread; it runs no mod callback, and `out` is
+  // borrowed for the call.
+  EnshwickStatus (*client_snapshot)(EnshwickModHandle me, struct EnshwickClientSnapshot *out);
+  // Queues `spec`, a headed `EnshwickClientCommand`, and writes its id to `id`:
+  // the call answers only that it is queued, and
+  // `EnshwickHostApi.client_command_status` tells what came of it. One command
+  // of each kind waits per mod: a second answers `EnshwickStatus_REFUSED`
+  // until the first ends. `EnshwickStatus_BAD_ARGS` for an unknown kind, a
+  // target the kind does not take, a look past
+  // `EnshwickClientCommand_MAX_LOOK`, a direction longer than 1 or a hold past
+  // `EnshwickClientCommand_MAX_HOLD_MS`; `EnshwickStatus_UNAVAILABLE` on a server
+  // and on a build without what the kind needs. Any thread; the command
+  // runs later on the client's game thread, never inside a mod callback.
+  EnshwickStatus (*client_command)(EnshwickModHandle me,
+                                   const struct EnshwickClientCommand *spec,
+                                   uint64_t *id);
+  // Writes to `out`, a headed `EnshwickClientCommandStatus`, where the mod's
+  // command `id` stands. The loader keeps the last 64 commands' outcomes;
+  // `EnshwickStatus_UNAVAILABLE` for an id it no longer keeps or another mod's.
+  // Any thread.
+  EnshwickStatus (*client_command_status)(EnshwickModHandle me,
+                                          uint64_t id,
+                                          struct EnshwickClientCommandStatus *out);
+  // Up to `capacity` items of the windows the server's mods show this
+  // client, the newest window last, and how many there are, as every
+  // list answers. Entries are `entry_size` bytes apart, the caller's
+  // `sizeof(EnshwickClientWindowItem)`. Only the newest window shows and
+  // takes `EnshwickClientCommand_WINDOW_PRESS` and its kin; its items are the
+  // ones it draws now, a button's form's while one is open. The strings
+  // stay valid until the next call on this thread. Client only:
+  // `EnshwickStatus_UNAVAILABLE` on a server. Any thread; it runs no mod
+  // callback.
+  EnshwickStatus (*client_windows)(EnshwickModHandle me,
+                                   struct EnshwickClientWindowItem *out,
+                                   uint32_t entry_size,
+                                   uint32_t capacity,
+                                   uint32_t *count);
+  // Up to `capacity` slots of the local player's inventory, empty ones
+  // included, in the game's order, as the client's last step read them
+  // from its copy of the world, and how many there are, as every list
+  // answers. Entries are `entry_size` bytes apart, the caller's
+  // `sizeof(EnshwickClientSlot)`. The first call starts the reads, which
+  // then run in each step for a few seconds after the last call; while
+  // no step read them in the last second it answers
+  // `EnshwickStatus_NOT_LOADED`. Client only: `EnshwickStatus_UNAVAILABLE` on a
+  // server and on a build whose slots the loader cannot read. Any thread;
+  // it runs no mod callback.
+  EnshwickStatus (*client_slots)(EnshwickModHandle me,
+                                 struct EnshwickClientSlot *out,
+                                 uint32_t entry_size,
+                                 uint32_t capacity,
+                                 uint32_t *count);
+  // Writes to `out`, a headed `EnshwickGameBinding`, the keys the client's
+  // keyboard and mouse bindings give the game action named `action`, as
+  // its reflection names it (`ContextualAction`), a mod's rebind
+  // included. The interface reads the bindings every few frames, so a
+  // change the player applies shows within a quarter second.
+  // `EnshwickStatus_UNAVAILABLE` on a server, before the interface drew its
+  // first frame and on a build where the loader does not find the
+  // bindings; `EnshwickStatus_MISSING` for an action the build does not name;
+  // `EnshwickStatus_BAD_ARGS` for a null or unheaded `out`. Any thread; the
+  // strings are borrowed for the call.
+  EnshwickStatus (*game_binding)(EnshwickModHandle me,
+                                 struct EnshwickStr action,
+                                 struct EnshwickGameBinding *out);
+  // Binds `key`, in the form of `EnshwickControlSpec.key`, as the first key of
+  // the game action named `action` in the client's keyboard and mouse
+  // bindings for the mod `me`, or with 0 ends `me`'s rebind of it. The
+  // interface writes it at its next frame and again after each change
+  // the player applies, which the game rebuilds its bindings from, so the
+  // rebind holds until the mod ends it or turns off; the game's Controls
+  // page never shows it. Of the mods that rebind an action, the one that
+  // rebound it last wins; asking again for the same rebind keeps a mod's
+  // place, and an action no mod rebinds holds the game's own key.
+  // `EnshwickStatus_UNAVAILABLE` as for `EnshwickHostApi.game_binding`;
+  // `EnshwickStatus_MISSING` for an action the build does not name;
+  // `EnshwickStatus_BAD_ARGS` for a key a mod control may not take, or a
+  // modifier the game's bindings do not list. Any thread.
+  EnshwickStatus (*game_rebind)(EnshwickModHandle me, struct EnshwickStr action, uint32_t key);
   // Calls `callback` with `user` once per frame of the client's
   // interface, on the thread that draws it, while the mod is on; the
   // callback draws with `EnshwickHostApi.ui_widget`. Client only
@@ -7400,97 +7720,6 @@ typedef struct EnshwickHostApi {
                                  const struct EnshwickUiExtension *spec,
                                  EnshwickUiFrameFn callback,
                                  void *user);
-  // Writes to `out` the game controls the local player holds, the
-  // `Bitmask64` of the game's `PlayerInputType` as the client's
-  // interface read it in its last step: gameplay controls only, not the
-  // client-only ones such as menu keys. The bits are the game's, which a
-  // game build may renumber: find each by its name among the constants
-  // `EnshwickHostApi.types` lists for `PlayerInputType`, never as a fixed
-  // value. The loader reads the mask only once a mod asked for it: the
-  // first call, of any mod, starts the reads, and the interface's next
-  // step reads it; the safe layer calls it when a mod opens its input.
-  // Client only; `EnshwickStatus_UNAVAILABLE` on a server, outside a game,
-  // from the first call until that step, while no step read it for a
-  // second, or on a build without the read; `EnshwickStatus_BAD_ARGS` for a
-  // null `out`. Any thread; `out` is borrowed for the call.
-  EnshwickStatus (*local_held)(EnshwickModHandle me, uint64_t *out);
-  // Copies the local input sampler's cached diagnostics without requesting reads.
-  // Client only (`EnshwickStatus_UNAVAILABLE` on a server); callable on any thread.
-  // No game memory is read. Flags are weakly consistent and age is not session identity.
-  // `out` is a headed, writable `EnshwickLocalInputInfo`. ABI 12.1.
-  EnshwickStatus (*local_input_status)(EnshwickModHandle me, struct EnshwickLocalInputInfo *out);
-  // Writes to `out`, a headed `EnshwickClientSnapshot`, the client's state in
-  // one copy: its session, the open screens and the in-game menu's tab
-  // from the interface's last frame, and the local player's held
-  // controls. The first call, of any mod, starts the interface's reads
-  // and the held controls' reads, so it answers `EnshwickClientSnapshot_NEVER`;
-  // the safe layer calls it when a mod opens its input. Every call after
-  // a frame drew a game answers its copy; until one did, as in the main
-  // menu before the first world, it answers `NEVER`. Client only:
-  // `EnshwickStatus_UNAVAILABLE` on a server; `EnshwickStatus_BAD_ARGS` for a null
-  // or unheaded `out`. Any thread; it runs no mod callback, and `out` is
-  // borrowed for the call. ABI 12.1.
-  EnshwickStatus (*client_snapshot)(EnshwickModHandle me, struct EnshwickClientSnapshot *out);
-  // Up to `capacity` parts and features of the loader that are off, in
-  // the order they turned off, and how many there are. Entries are
-  // `entry_size` bytes apart, the caller's `sizeof(EnshwickLoaderOff)`; the
-  // loader fills what both sides know of each and its own `EnshwickHeader`.
-  // Everything it does not list runs. The strings stay valid for the
-  // process, since the loader keeps each entry's first reason and drops
-  // none. Any thread; it runs no mod callback. ABI 12.1.
-  EnshwickStatus (*loader_off)(EnshwickModHandle me,
-                               struct EnshwickLoaderOff *out,
-                               uint32_t entry_size,
-                               uint32_t capacity,
-                               uint32_t *count);
-  // Queues `spec`, a headed `EnshwickClientCommand`, and writes its id to `id`:
-  // the call answers only that it is queued, and
-  // `EnshwickHostApi.client_command_status` tells what came of it. One command
-  // of each kind waits per mod: a second answers `EnshwickStatus_REFUSED`
-  // until the first ends. `EnshwickStatus_BAD_ARGS` for an unknown kind, a
-  // target the kind does not take, a look past
-  // `EnshwickClientCommand_MAX_LOOK`, a direction longer than 1 or a hold past
-  // `EnshwickClientCommand_MAX_HOLD_MS`; `EnshwickStatus_UNAVAILABLE` on a server
-  // and on a build without what the kind needs. Any thread; the command
-  // runs later on the client's game thread, never inside a mod callback.
-  // ABI 12.1.
-  EnshwickStatus (*client_command)(EnshwickModHandle me,
-                                   const struct EnshwickClientCommand *spec,
-                                   uint64_t *id);
-  // Writes to `out`, a headed `EnshwickClientCommandStatus`, where the mod's
-  // command `id` stands. The loader keeps the last 64 commands' outcomes;
-  // `EnshwickStatus_UNAVAILABLE` for an id it no longer keeps or another mod's.
-  // Any thread. ABI 12.1.
-  EnshwickStatus (*client_command_status)(EnshwickModHandle me,
-                                          uint64_t id,
-                                          struct EnshwickClientCommandStatus *out);
-  // Adds `material`, a headed `EnshwickTerrainMaterialAdd`, as a terrain
-  // material of the game, and writes the voxel id it has for this run to
-  // `id`. The loader gives mods' materials the terrain ids no palette of
-  // the game names, in load order, and serves the material's palette
-  // entry, rules and look on both sides; saves name its voxels by its
-  // GUID. `EnshwickStatus_BAD_ARGS` for a `like` or `fallback` that is no
-  // terrain material of the game or a change it does not know;
-  // `EnshwickStatus_REFUSED` for a GUID whose content id the calling mod did
-  // not declare with `declare_content`, for a
-  // mod not of side both, for a GUID added before and once every free id
-  // is taken; `EnshwickStatus_UNAVAILABLE` on a build whose archive lacks the
-  // palette or the rules. Allowed during `enshwick_mod_init` only.
-  // ABI 12.2.
-  EnshwickStatus (*terrain_material_add)(EnshwickModHandle me,
-                                         const struct EnshwickTerrainMaterialAdd *material,
-                                         uint8_t *id);
-  // Gives every object placed from `spec`'s item, a headed
-  // `EnshwickInteractionPrompt`, its prompt: the game verb and the replaced
-  // action in the server's world, the mod's text on this client. One
-  // prompt per item across all mods. Allowed during `enshwick_mod_init`
-  // only; `EnshwickStatus_BAD_ARGS` for a null or short `spec`, item 0, an
-  // unknown flag or a prompt that changes nothing; `EnshwickStatus_REFUSED`
-  // for an item another prompt has; `EnshwickStatus_UNAVAILABLE` for a verb
-  // or an action on a build without the server's writes, while a build
-  // without the client's text site turns the text off alone. ABI 12.3.
-  EnshwickStatus (*interaction_prompt)(EnshwickModHandle me,
-                                       const struct EnshwickInteractionPrompt *spec);
   // Registers `callback` to add lines to the tooltip and detail panel of
   // every item with an entity of its own, after the game's rows. It runs
   // on the client's main thread, once each time the tooltip shows another
@@ -7499,151 +7728,10 @@ typedef struct EnshwickHostApi {
   // `EnshwickHostApi.ui_widget`; the loader keeps the lines and draws them
   // each frame the tooltip shows. Client only, during init:
   // `EnshwickStatus_UNAVAILABLE` on a server, `EnshwickStatus_BAD_ARGS` for a null
-  // callback. ABI 12.4.
+  // callback.
   EnshwickStatus (*ui_item_tooltip)(EnshwickModHandle me,
                                     EnshwickUiTooltipFn callback,
                                     void *user);
-  // Replaces the mod's change to the permissions of the player in game
-  // with `account`: `deny` takes bits from the player, `grant` gives
-  // bits, both masks of `EnshwickPlayerInfo`'s permission
-  // bits; both 0 ends the change. The server holds the player to
-  // `(group | every grant) & !every deny`, with `group` the bits of the
-  // player's user group, from its next step on, so the game's own checks
-  // refuse what a taken bit guards, and the loader's own reads of the
-  // player's bits give the bits in force; the player's client still acts
-  // by its group's bits. A change ends when the mod ends it or turns
-  // off, when the player leaves and when the world ends; ending one
-  // needs no player in game. `EnshwickStatus_BAD_ARGS` for account 0 or a bit
-  // past the permissions; `EnshwickStatus_REFUSED` for a new change to an
-  // account not in game; `EnshwickStatus_WRONG_THREAD` off the server's game
-  // thread; `EnshwickStatus_UNAVAILABLE` outside a server and on a build
-  // without the permission table, the step link or the player removal
-  // link. ABI 12.5.
-  EnshwickStatus (*change_permissions)(EnshwickModHandle me,
-                                       EnshwickPlayerKey account,
-                                       uint32_t deny,
-                                       uint32_t grant);
-  // Calls `callback` once for transaction `id` of this mod, with where it
-  // stands and `user`, on the server's game thread after the first step
-  // that ends with it no longer `EnshwickTransactionInfo_PENDING`: written
-  // whole (`EnshwickTransactionInfo_APPLIED`, which says when a prop may still
-  // be absent), or failed, refused, undoing or undone. A step at least
-  // `within_ns` nanoseconds after the call runs it as it stands, still
-  // pending perhaps. The `info` is null when the loader forgot the
-  // transaction meanwhile. A step runs its due callbacks in the order
-  // they were asked, and a callback may ask again. When a client's hosted
-  // game ends, every callback kept runs with its transaction failed or
-  // expired, never in the next game; a dedicated server that stops runs
-  // none. A mod the loader turned off loses its callbacks unrun. `EnshwickStatus_BAD_ARGS` for a null `callback`;
-  // `EnshwickStatus_MISSING` for an id this mod did not get or one the loader
-  // forgot; `EnshwickStatus_UNAVAILABLE` once the transactions are off, which
-  // runs every callback kept at once. Nothing is kept on an error. Any
-  // thread. ABI 12.7.
-  EnshwickStatus (*transaction_settled)(EnshwickModHandle me,
-                                        uint64_t id,
-                                        uint64_t within_ns,
-                                        EnshwickTransactionSettledFn callback,
-                                        void *user);
-  // Copies the prop template and optional local placement box for `item`
-  // into headed `out`. `BAD_ARGS` for an unknown item or one placing nothing;
-  // `NOT_A_PROP` for creatures and flame altars; `UNAVAILABLE` without a running
-  // server, registry or required reads. Any thread, read-only. ABI 12.8.
-  EnshwickStatus (*prop_placement_info)(EnshwickModHandle me,
-                                        EnshwickItemId item,
-                                        struct EnshwickPropPlacementInfo *out);
-  // Registers `callback` to rule which stacks enter the containers placed
-  // from `item`, vanilla or a mod's own. The loader asks the rules of the
-  // container's item in load order, until one refuses, before a stack
-  // enters one of its slots, whatever moves it: a player's move, a swap, Take All, Deposit
-  // All or Stacks, an area deposit; a stack a rule refuses stays where it
-  // was, or goes to another slot when the game picks the slots. Gives
-  // through `EnshwickHostApi.inventory_submit` and the game's own loot are not
-  // asked. Allowed during `enshwick_mod_init` only; `EnshwickStatus_BAD_ARGS`
-  // for item 0 or a null callback; `EnshwickStatus_UNAVAILABLE` on a build
-  // without the slot link. ABI 12.9.
-  EnshwickStatus (*container_rule)(EnshwickModHandle me,
-                                   EnshwickItemId item,
-                                   EnshwickContainerRuleFn callback,
-                                   void *user);
-  // Shows `character`'s player the game's pickup message for `count` of
-  // `item`, as if the items had entered the player's inventory, which
-  // they do not: the loader raises the game's pickup event on the server,
-  // and every reader of that event, but the loader's item filters, hears
-  // it. `count` above 65535 shows 65535, the game's most. On the server's
-  // game thread between steps only; the systems of the next step see the
-  // event. `EnshwickStatus_BAD_ARGS` for item 0, count 0 or an entity that is
-  // no player; `EnshwickStatus_WRONG_THREAD` off the game thread or during a
-  // step; `EnshwickStatus_UNAVAILABLE` outside a server and on a build without
-  // the event. ABI 12.9.
-  EnshwickStatus (*show_pickup)(EnshwickModHandle me,
-                                EnshwickEntity character,
-                                EnshwickItemId item,
-                                uint32_t count);
-  // Copies the respawn point of the player whose character is `character`
-  // into headed `out`: the spawn point entity, its kind and where the
-  // character respawns. `EnshwickStatus_MISSING` for an entity that is no
-  // player's character, or a character whose respawn point is not in the
-  // world, where the game falls back to the world's start;
-  // `EnshwickStatus_WRONG_THREAD` off the server's game thread;
-  // `EnshwickStatus_UNAVAILABLE` outside a server and on a build without the
-  // layout. ABI 12.12.
-  EnshwickStatus (*respawn_point)(EnshwickModHandle me,
-                                  EnshwickEntity character,
-                                  struct EnshwickRespawnPointInfo *out);
-  // Makes `spawn_point` the respawn point of the player whose character
-  // is `character`, as the game does when the character stands in a
-  // spawn point, and raises the game's `PlayerSpawnInfoChangeEvent` for
-  // it when the point names a base or a scene. While the character
-  // stands in another spawn point, the game sets that one back at its
-  // next step. Nothing changes when a call fails. `EnshwickStatus_BAD_ARGS` for an entity that is no
-  // spawn point, or one of kind `EnshwickRespawnPointInfo_NO_RESPAWN`;
-  // `EnshwickStatus_MISSING` for an entity that is no player's character;
-  // `EnshwickStatus_WRONG_THREAD` off the server's game thread or during a
-  // step; `EnshwickStatus_UNAVAILABLE` outside a server and on a build without
-  // the layout. ABI 12.12.
-  EnshwickStatus (*set_respawn_point)(EnshwickModHandle me,
-                                      EnshwickEntity character,
-                                      EnshwickEntity spawn_point);
-  // Adds `buff`, a headed `EnshwickBuffTypeAdd`, as a buff type of the game,
-  // and writes its game id to `id`. The loader serves one patch of the
-  // game's buff collection on both sides with every mod's types after the
-  // vanilla ones, each a copy of its `like` with its changes, and names
-  // a type's icon on a client only once that client shows served UI
-  // images. `EnshwickStatus_BAD_ARGS` for a change or flag it does not know, a
-  // negative life time, or a `like` that is no buff type of the game;
-  // `EnshwickStatus_REFUSED` for a GUID whose content id the calling mod did
-  // not declare with `declare_content`, for a mod not of side both and
-  // for an id the game or a mod loaded before has;
-  // `EnshwickStatus_UNAVAILABLE` on a build whose
-  // archive or layout lacks the collection. Allowed during
-  // `enshwick_mod_init` only. ABI 12.13.
-  EnshwickStatus (*buff_type_add)(EnshwickModHandle me,
-                                  const struct EnshwickBuffTypeAdd *buff,
-                                  EnshwickBuffTypeId *id);
-  // Up to `capacity` damage causes, as `EnshwickDamageCheck`
-  // numbers them, whose sites are not armed, and how many there are, as
-  // every list answers: the causes no damage filter gets on this build
-  // and run. A site arms when a mod registered a damage filter and the
-  // build has it, and stops when it faults; with no filter, only the hit
-  // site arms, and only for stats. `EnshwickStatus_UNAVAILABLE` until the
-  // loader has linked and armed its hooks, after every mod's init. Any
-  // thread. ABI 12.14.
-  EnshwickStatus (*damage_causes_off)(EnshwickModHandle me,
-                                      uint32_t *out,
-                                      uint32_t capacity,
-                                      uint32_t *count);
-  // Writes to `out` the waypoint all players see that the character
-  // `entity` has set now, read as `EnshwickEvent_WAYPOINT_CHANGED`
-  // reads it: `set` 0 while it is off or for an entity without one, and
-  // `key` 0 when no player online plays `entity`. `out` is the caller's,
-  // at least a `EnshwickHeader` and writable for the size its header states;
-  // `EnshwickStatus_BAD_ARGS` for a null or smaller one. On the server's game
-  // thread at a quiet moment (`EnshwickStatus_WRONG_THREAD` elsewhere or
-  // inside a step); `EnshwickStatus_UNAVAILABLE` before a world runs or on a
-  // build whose reflection lacks the waypoint. ABI 12.16.
-  EnshwickStatus (*waypoint)(EnshwickModHandle me,
-                             EnshwickEntity entity,
-                             struct EnshwickWaypointData *out);
   // Queues `spec`, a headed `EnshwickSoundPlay`, and writes the sound's id to
   // `id`: the client's game thread starts it in its next interface frame,
   // and `EnshwickHostApi.sound_state` tells what came of it. Any thread, also
@@ -7654,7 +7742,7 @@ typedef struct EnshwickHostApi {
   // `EnshwickSoundPlay_ON`; `EnshwickStatus_BUSY` past
   // `EnshwickSoundPlay_MAX_STARTS` starts of the mod waiting for one frame;
   // `EnshwickStatus_UNAVAILABLE` on a server and on a build where the
-  // loader's playback is off. ABI 12.17.
+  // loader's playback is off.
   EnshwickStatus (*sound_play)(EnshwickModHandle me,
                                const struct EnshwickSoundPlay *spec,
                                uint64_t *id);
@@ -7663,7 +7751,7 @@ typedef struct EnshwickHostApi {
   // sound that ended changes nothing; ids count per mod, so another
   // mod's id names at most one of this mod's own sounds. Any thread. `EnshwickStatus_BAD_ARGS` as for
   // `EnshwickHostApi.sound_play`; `EnshwickStatus_BUSY` when the mod's queue is
-  // full; `EnshwickStatus_UNAVAILABLE` on a server. ABI 12.17.
+  // full; `EnshwickStatus_UNAVAILABLE` on a server.
   EnshwickStatus (*sound_steer)(EnshwickModHandle me,
                                 uint64_t id,
                                 const struct EnshwickSoundSteer *steer);
@@ -7671,7 +7759,7 @@ typedef struct EnshwickHostApi {
   // stands; an id the loader no longer keeps reads as
   // `EnshwickSoundInfo_ENDED`, and another mod's id at most one of this mod's
   // own sounds, since ids count per mod. Any thread. `EnshwickStatus_BAD_ARGS` for a null or
-  // smaller `out`; `EnshwickStatus_UNAVAILABLE` on a server. ABI 12.17.
+  // smaller `out`; `EnshwickStatus_UNAVAILABLE` on a server.
   EnshwickStatus (*sound_state)(EnshwickModHandle me, uint64_t id, struct EnshwickSoundInfo *out);
   // Sends `play`, a headed `EnshwickSoundPlay`, from the server to the clients
   // of `audience`, a headed `EnshwickSoundAudience`, that run Enshwick and the
@@ -7691,7 +7779,7 @@ typedef struct EnshwickHostApi {
   // the mod in one server step; `EnshwickStatus_WRONG_THREAD` off the game
   // thread where it must read; `EnshwickStatus_REFUSED` for a mod that does
   // not run on both sides; `EnshwickStatus_UNAVAILABLE` where no server runs
-  // in the process. ABI 12.18.
+  // in the process.
   EnshwickStatus (*sound_play_for)(EnshwickModHandle me,
                                    const struct EnshwickSoundAudience *audience,
                                    const struct EnshwickSoundPlay *play,
@@ -7701,117 +7789,10 @@ typedef struct EnshwickHostApi {
   // such sound changes nothing. `EnshwickSoundSteer_STOP_ALL` is not taken.
   // Any thread. `EnshwickStatus_BAD_ARGS` out of bounds and for
   // `EnshwickSoundSteer_STOP_ALL`; `EnshwickStatus_UNAVAILABLE` where no server
-  // runs in the process. ABI 12.18.
+  // runs in the process.
   EnshwickStatus (*sound_steer_for)(EnshwickModHandle me,
                                     uint64_t id,
                                     const struct EnshwickSoundSteer *steer);
-  // As `serve_resource` from `key` itself, for a
-  // patch that serves `key` with the data of the resource `from`, a
-  // re-key: inside `patch`, a `resource_served`
-  // read of `from` builds it without its own re-keys, so the re-keys of
-  // every mod apply at once, each key taking the data its `from` has
-  // before any re-key, and keys re-keyed in a ring rotate.
-  // `EnshwickStatus_BAD_ARGS` when `from` is `key` or of another type.
-  // Allowed during `enshwick_mod_init` only. ABI 12.19.
-  EnshwickStatus (*rekey_resource)(EnshwickModHandle me,
-                                   const struct EnshwickResourceKey *key,
-                                   const struct EnshwickResourceKey *from,
-                                   EnshwickResourcePatchFn patch,
-                                   void *user);
-  // Writes to `out`, a headed `EnshwickGameBinding`, the keys the client's
-  // keyboard and mouse bindings give the game action named `action`, as
-  // its reflection names it (`ContextualAction`), a mod's rebind
-  // included. The interface reads the bindings every few frames, so a
-  // change the player applies shows within a quarter second.
-  // `EnshwickStatus_UNAVAILABLE` on a server, before the interface drew its
-  // first frame and on a build where the loader does not find the
-  // bindings; `EnshwickStatus_MISSING` for an action the build does not name;
-  // `EnshwickStatus_BAD_ARGS` for a null or unheaded `out`. Any thread; the
-  // strings are borrowed for the call. ABI 12.20.
-  EnshwickStatus (*game_binding)(EnshwickModHandle me,
-                                 struct EnshwickStr action,
-                                 struct EnshwickGameBinding *out);
-  // Binds `key`, in the form of `EnshwickControlSpec.key`, as the first key of
-  // the game action named `action` in the client's keyboard and mouse
-  // bindings for the mod `me`, or with 0 ends `me`'s rebind of it. The
-  // interface writes it at its next frame and again after each change
-  // the player applies, which the game rebuilds its bindings from, so the
-  // rebind holds until the mod ends it or turns off; the game's Controls
-  // page never shows it. Of the mods that rebind an action, the one that
-  // rebound it last wins; asking again for the same rebind keeps a mod's
-  // place, and an action no mod rebinds holds the game's own key.
-  // `EnshwickStatus_UNAVAILABLE` as for `EnshwickHostApi.game_binding`;
-  // `EnshwickStatus_MISSING` for an action the build does not name;
-  // `EnshwickStatus_BAD_ARGS` for a key a mod control may not take, or a
-  // modifier the game's bindings do not list. Any thread. ABI 12.20.
-  EnshwickStatus (*game_rebind)(EnshwickModHandle me, struct EnshwickStr action, uint32_t key);
-  // Registers a filter on what the game pays a player for a quest, the
-  // quest's experience, before it pays it and sets the quest's bool.
-  // Filters run in load order, each with the payment as the filters
-  // before left it, on the thread of the game's quest reward system, in
-  // the dedicated server or a hosting client. `EnshwickStatus_UNAVAILABLE` on
-  // a build where the loader does not find the payment, or where its
-  // code is not what the loader expects; `EnshwickStatus_BAD_ARGS` for a null
-  // callback. Allowed during `enshwick_mod_init` only. ABI 12.22.
-  EnshwickStatus (*quest_reward_filter)(EnshwickModHandle me,
-                                        EnshwickQuestRewardFilterFn callback,
-                                        void *user);
-  // Sets knowledge `id` of the player whose character is `entity`, or of
-  // the world for 0 or an id of the world's, to exactly `value`: 0 or 1
-  // for a `EnshwickKnowledgeInfo_BOOL`, any count or bits otherwise.
-  //
-  // The game keeps a mark beside each value, one bit per flag (all of
-  // them for a bool or a counter), set for what the player has seen.
-  // `EnshwickKnowledgeChange_QUIET` writes the value at once with every bit
-  // marked, as a save loads it, sends it to the clients again and is
-  // saved with the next save; nothing a grant brings follows.
-  // `EnshwickKnowledgeChange_SHOWN` grants what the value gains as
-  // `EnshwickHostApi.change_knowledge` does (the next step applies it with
-  // what follows) and writes what it loses at once, keeping the mark of
-  // flags and no mark for a bool or a counter. A counter's gain is the
-  // difference from the value it reads now, so another grant queued
-  // before the step applies it adds to the count.
-  //
-  // `EnshwickStatus_BAD_ARGS` for an unknown id or `notice`, a bool above 1,
-  // or, for `SHOWN`, a gained bit the game does not expect;
-  // `EnshwickStatus_BUSY` when the game's queue fills while `SHOWN` grants,
-  // with what it wrote and queued before kept;
-  // `EnshwickStatus_REFUSED` as for `EnshwickHostApi.change_knowledge`. On the
-  // server's game thread only. ABI 12.22.
-  EnshwickStatus (*knowledge_set)(EnshwickModHandle me,
-                                  EnshwickEntity entity,
-                                  EnshwickKnowledgeId id,
-                                  uint32_t value,
-                                  uint8_t notice);
-  // Up to `capacity` items of the windows the server's mods show this
-  // client, the newest window last, and how many there are, as every
-  // list answers. Entries are `entry_size` bytes apart, the caller's
-  // `sizeof(EnshwickClientWindowItem)`. Only the newest window shows and
-  // takes `EnshwickClientCommand_WINDOW_PRESS` and its kin; its items are the
-  // ones it draws now, a button's form's while one is open. The strings
-  // stay valid until the next call on this thread. Client only:
-  // `EnshwickStatus_UNAVAILABLE` on a server. Any thread; it runs no mod
-  // callback. ABI 12.24.
-  EnshwickStatus (*client_windows)(EnshwickModHandle me,
-                                   struct EnshwickClientWindowItem *out,
-                                   uint32_t entry_size,
-                                   uint32_t capacity,
-                                   uint32_t *count);
-  // Up to `capacity` slots of the local player's inventory, empty ones
-  // included, in the game's order, as the client's last step read them
-  // from its copy of the world, and how many there are, as every list
-  // answers. Entries are `entry_size` bytes apart, the caller's
-  // `sizeof(EnshwickClientSlot)`. The first call starts the reads, which
-  // then run in each step for a few seconds after the last call; while
-  // no step read them in the last second it answers
-  // `EnshwickStatus_NOT_LOADED`. Client only: `EnshwickStatus_UNAVAILABLE` on a
-  // server and on a build whose slots the loader cannot read. Any thread;
-  // it runs no mod callback. ABI 12.28.
-  EnshwickStatus (*client_slots)(EnshwickModHandle me,
-                                 struct EnshwickClientSlot *out,
-                                 uint32_t entry_size,
-                                 uint32_t capacity,
-                                 uint32_t *count);
 } EnshwickHostApi;
 
 // The layout the loader was built with, from its golden layout file.
@@ -8380,192 +8361,192 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, attach_point) == 360, "offset o
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, run_point) == 368, "offset of HostApi.run_point");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, event_types) == 376, "offset of HostApi.event_types");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, feature) == 384, "offset of HostApi.feature");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, loop_wait) == 392, "offset of HostApi.loop_wait");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, server_wait) == 400, "offset of HostApi.server_wait");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, task_workers) == 408, "offset of HostApi.task_workers");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, serve_call) == 416, "offset of HostApi.serve_call");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, find_call) == 424, "offset of HostApi.find_call");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, call) == 432, "offset of HostApi.call");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, subscribe_tick) == 440, "offset of HostApi.subscribe_tick");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_tick_every) == 448, "offset of HostApi.set_tick_every");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_config) == 456, "offset of HostApi.set_config");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, subscribe_client_game_event) == 464, "offset of HostApi.subscribe_client_game_event");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, serve_resource) == 472, "offset of HostApi.serve_resource");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, add_text) == 480, "offset of HostApi.add_text");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, define_item_data) == 488, "offset of HostApi.define_item_data");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, item_data_get) == 496, "offset of HostApi.item_data_get");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_item_data) == 504, "offset of HostApi.set_item_data");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, content_serve) == 512, "offset of HostApi.content_serve");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, content_read) == 520, "offset of HostApi.content_read");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, icons_ready) == 528, "offset of HostApi.icons_ready");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, declare_content) == 536, "offset of HostApi.declare_content");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, define_entity_data) == 544, "offset of HostApi.define_entity_data");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, resource_read) == 552, "offset of HostApi.resource_read");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_text) == 560, "offset of HostApi.game_text");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, rebuild_resource) == 568, "offset of HostApi.rebuild_resource");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, recipe_rule) == 576, "offset of HostApi.recipe_rule");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, recipe_disabled) == 584, "offset of HostApi.recipe_disabled");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, recipe_kind) == 592, "offset of HostApi.recipe_kind");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, rate) == 600, "offset of HostApi.rate");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_rate) == 608, "offset of HostApi.set_rate");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, change_data) == 616, "offset of HostApi.change_data");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_change) == 624, "offset of HostApi.set_change");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, use_content) == 632, "offset of HostApi.use_content");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, resource_keys) == 640, "offset of HostApi.resource_keys");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, content_hashes) == 648, "offset of HostApi.content_hashes");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, types) == 656, "offset of HostApi.types");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_version) == 664, "offset of HostApi.game_version");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, crafting_prop) == 672, "offset of HostApi.crafting_prop");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, read_only) == 680, "offset of HostApi.read_only");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, resource_served) == 688, "offset of HostApi.resource_served");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, resource_buffer) == 696, "offset of HostApi.resource_buffer");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, content_name) == 704, "offset of HostApi.content_name");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, player) == 712, "offset of HostApi.player");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, players) == 720, "offset of HostApi.players");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, chat) == 728, "offset of HostApi.chat");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, chat_all) == 736, "offset of HostApi.chat_all");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_label) == 744, "offset of HostApi.set_label");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, rename_filter) == 752, "offset of HostApi.rename_filter");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, item_info) == 760, "offset of HostApi.item_info");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, request_altars) == 768, "offset of HostApi.request_altars");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, altars) == 776, "offset of HostApi.altars");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, building_zone_filter) == 784, "offset of HostApi.building_zone_filter");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, base_zones) == 792, "offset of HostApi.base_zones");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, entities) == 800, "offset of HostApi.entities");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, destroy) == 808, "offset of HostApi.destroy");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, save_world) == 816, "offset of HostApi.save_world");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, world_key) == 824, "offset of HostApi.world_key");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, component_write) == 832, "offset of HostApi.component_write");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, notify) == 840, "offset of HostApi.notify");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, time_of_day) == 848, "offset of HostApi.time_of_day");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_time_of_day) == 856, "offset of HostApi.set_time_of_day");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, request_time_speed) == 864, "offset of HostApi.request_time_speed");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_time_speed) == 872, "offset of HostApi.set_time_speed");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_settings) == 880, "offset of HostApi.game_settings");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_game_settings) == 888, "offset of HostApi.set_game_settings");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, buff_types) == 896, "offset of HostApi.buff_types");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, buffs) == 904, "offset of HostApi.buffs");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, apply_buff) == 912, "offset of HostApi.apply_buff");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, remove_buff) == 920, "offset of HostApi.remove_buff");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, weather_at) == 928, "offset of HostApi.weather_at");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, weather_fronts) == 936, "offset of HostApi.weather_fronts");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_weather) == 944, "offset of HostApi.set_weather");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, terrain_materials) == 952, "offset of HostApi.terrain_materials");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, terrain_edit) == 960, "offset of HostApi.terrain_edit");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, altar_zone_filter) == 968, "offset of HostApi.altar_zone_filter");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, altar_zones_changed) == 976, "offset of HostApi.altar_zones_changed");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, altar_limit_filter) == 984, "offset of HostApi.altar_limit_filter");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, base_limit) == 992, "offset of HostApi.base_limit");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, voxel_read) == 1000, "offset of HostApi.voxel_read");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, build_rights) == 1008, "offset of HostApi.build_rights");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, transaction_commit) == 1016, "offset of HostApi.transaction_commit");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, transaction_undo) == 1024, "offset of HostApi.transaction_undo");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, transaction_status) == 1032, "offset of HostApi.transaction_status");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, world_quiet) == 1040, "offset of HostApi.world_quiet");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, transaction_entities) == 1048, "offset of HostApi.transaction_entities");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, world_persists) == 1056, "offset of HostApi.world_persists");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, map_markers) == 1064, "offset of HostApi.map_markers");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, account_action) == 1072, "offset of HostApi.account_action");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, map_frame) == 1080, "offset of HostApi.map_frame");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, request_base_limits) == 1088, "offset of HostApi.request_base_limits");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_chat_mute) == 1096, "offset of HostApi.set_chat_mute");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, chat_muted) == 1104, "offset of HostApi.chat_muted");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_base_limit) == 1112, "offset of HostApi.set_base_limit");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, save_info) == 1120, "offset of HostApi.save_info");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, hold_saves) == 1128, "offset of HostApi.hold_saves");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_saved) == 1136, "offset of HostApi.set_saved");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, progress_write) == 1144, "offset of HostApi.progress_write");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, server_stop) == 1152, "offset of HostApi.server_stop");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, fog_uncover) == 1160, "offset of HostApi.fog_uncover");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, language_of) == 1168, "offset of HostApi.language_of");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, join_rule) == 1176, "offset of HostApi.join_rule");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, request_inventory) == 1184, "offset of HostApi.request_inventory");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, inventory_submit) == 1192, "offset of HostApi.inventory_submit");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, survivor_lookup) == 1200, "offset of HostApi.survivor_lookup");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, survivor_bed_check) == 1208, "offset of HostApi.survivor_bed_check");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, summon_filter) == 1216, "offset of HostApi.summon_filter");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, summon_item) == 1224, "offset of HostApi.summon_item");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, survivor_status) == 1232, "offset of HostApi.survivor_status");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, emit) == 1240, "offset of HostApi.emit");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, teleport) == 1248, "offset of HostApi.teleport");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, spawn) == 1256, "offset of HostApi.spawn");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, damage_filter) == 1264, "offset of HostApi.damage_filter");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, summoned) == 1272, "offset of HostApi.summoned");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, define_stat) == 1280, "offset of HostApi.define_stat");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, stat_info) == 1288, "offset of HostApi.stat_info");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, stat_value) == 1296, "offset of HostApi.stat_value");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, stat_modify) == 1304, "offset of HostApi.stat_modify");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, stat_buff) == 1312, "offset of HostApi.stat_buff");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, stats_changed) == 1320, "offset of HostApi.stats_changed");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, stat_sources) == 1328, "offset of HostApi.stat_sources");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, stat_watch) == 1336, "offset of HostApi.stat_watch");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, define_affix) == 1344, "offset of HostApi.define_affix");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, affix_roll) == 1352, "offset of HostApi.affix_roll");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, item_lines) == 1360, "offset of HostApi.item_lines");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, affix_info) == 1368, "offset of HostApi.affix_info");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, item_filter) == 1376, "offset of HostApi.item_filter");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, drop_items) == 1384, "offset of HostApi.drop_items");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, skill_override) == 1392, "offset of HostApi.skill_override");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, comfort_filter) == 1400, "offset of HostApi.comfort_filter");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, experience_filter) == 1408, "offset of HostApi.experience_filter");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, knowledge) == 1416, "offset of HostApi.knowledge");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, change_knowledge) == 1424, "offset of HostApi.change_knowledge");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, quests) == 1432, "offset of HostApi.quests");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, knowledge_input_filter) == 1440, "offset of HostApi.knowledge_input_filter");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_query) == 1448, "offset of HostApi.game_query");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, run_console) == 1456, "offset of HostApi.run_console");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, interaction_filter) == 1464, "offset of HostApi.interaction_filter");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, craft_filter) == 1472, "offset of HostApi.craft_filter");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, build_filter) == 1480, "offset of HostApi.build_filter");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, actions) == 1488, "offset of HostApi.actions");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, control) == 1496, "offset of HostApi.control");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, run_action) == 1504, "offset of HostApi.run_action");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, chat_filter) == 1512, "offset of HostApi.chat_filter");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, commands) == 1520, "offset of HostApi.commands");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, run_command) == 1528, "offset of HostApi.run_command");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, command_list) == 1536, "offset of HostApi.command_list");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, actions_changed) == 1544, "offset of HostApi.actions_changed");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, action_window) == 1552, "offset of HostApi.action_window");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, ui_frame) == 1560, "offset of HostApi.ui_frame");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, ui_widget) == 1568, "offset of HostApi.ui_widget");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, ui_dialog) == 1576, "offset of HostApi.ui_dialog");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, ui_hud) == 1584, "offset of HostApi.ui_hud");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, ui_markers) == 1592, "offset of HostApi.ui_markers");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, request_fog) == 1600, "offset of HostApi.request_fog");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, fog_read) == 1608, "offset of HostApi.fog_read");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, map_marker_types) == 1616, "offset of HostApi.map_marker_types");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, ui_extension) == 1624, "offset of HostApi.ui_extension");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, local_held) == 1632, "offset of HostApi.local_held");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, local_input_status) == 1640, "offset of HostApi.local_input_status");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_snapshot) == 1648, "offset of HostApi.client_snapshot");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, loader_off) == 1656, "offset of HostApi.loader_off");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_command) == 1664, "offset of HostApi.client_command");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_command_status) == 1672, "offset of HostApi.client_command_status");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, terrain_material_add) == 1680, "offset of HostApi.terrain_material_add");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, interaction_prompt) == 1688, "offset of HostApi.interaction_prompt");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, ui_item_tooltip) == 1696, "offset of HostApi.ui_item_tooltip");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, change_permissions) == 1704, "offset of HostApi.change_permissions");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, transaction_settled) == 1712, "offset of HostApi.transaction_settled");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, prop_placement_info) == 1720, "offset of HostApi.prop_placement_info");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, container_rule) == 1728, "offset of HostApi.container_rule");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, show_pickup) == 1736, "offset of HostApi.show_pickup");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, respawn_point) == 1744, "offset of HostApi.respawn_point");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_respawn_point) == 1752, "offset of HostApi.set_respawn_point");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, buff_type_add) == 1760, "offset of HostApi.buff_type_add");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, damage_causes_off) == 1768, "offset of HostApi.damage_causes_off");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, waypoint) == 1776, "offset of HostApi.waypoint");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_play) == 1784, "offset of HostApi.sound_play");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_steer) == 1792, "offset of HostApi.sound_steer");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_state) == 1800, "offset of HostApi.sound_state");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_play_for) == 1808, "offset of HostApi.sound_play_for");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_steer_for) == 1816, "offset of HostApi.sound_steer_for");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, rekey_resource) == 1824, "offset of HostApi.rekey_resource");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_binding) == 1832, "offset of HostApi.game_binding");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_rebind) == 1840, "offset of HostApi.game_rebind");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, quest_reward_filter) == 1848, "offset of HostApi.quest_reward_filter");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, knowledge_set) == 1856, "offset of HostApi.knowledge_set");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_windows) == 1864, "offset of HostApi.client_windows");
-ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_slots) == 1872, "offset of HostApi.client_slots");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, loader_off) == 392, "offset of HostApi.loader_off");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, loop_wait) == 400, "offset of HostApi.loop_wait");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, server_wait) == 408, "offset of HostApi.server_wait");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, task_workers) == 416, "offset of HostApi.task_workers");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, serve_call) == 424, "offset of HostApi.serve_call");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, find_call) == 432, "offset of HostApi.find_call");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, call) == 440, "offset of HostApi.call");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, subscribe_tick) == 448, "offset of HostApi.subscribe_tick");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_tick_every) == 456, "offset of HostApi.set_tick_every");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_config) == 464, "offset of HostApi.set_config");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, subscribe_client_game_event) == 472, "offset of HostApi.subscribe_client_game_event");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, serve_resource) == 480, "offset of HostApi.serve_resource");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, add_text) == 488, "offset of HostApi.add_text");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, define_item_data) == 496, "offset of HostApi.define_item_data");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, item_data_get) == 504, "offset of HostApi.item_data_get");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_item_data) == 512, "offset of HostApi.set_item_data");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, content_serve) == 520, "offset of HostApi.content_serve");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, content_read) == 528, "offset of HostApi.content_read");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, icons_ready) == 536, "offset of HostApi.icons_ready");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, declare_content) == 544, "offset of HostApi.declare_content");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, define_entity_data) == 552, "offset of HostApi.define_entity_data");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, resource_read) == 560, "offset of HostApi.resource_read");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_text) == 568, "offset of HostApi.game_text");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, rebuild_resource) == 576, "offset of HostApi.rebuild_resource");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, rekey_resource) == 584, "offset of HostApi.rekey_resource");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, recipe_rule) == 592, "offset of HostApi.recipe_rule");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, recipe_disabled) == 600, "offset of HostApi.recipe_disabled");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, recipe_kind) == 608, "offset of HostApi.recipe_kind");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, rate) == 616, "offset of HostApi.rate");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_rate) == 624, "offset of HostApi.set_rate");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, change_data) == 632, "offset of HostApi.change_data");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_change) == 640, "offset of HostApi.set_change");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, use_content) == 648, "offset of HostApi.use_content");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, resource_keys) == 656, "offset of HostApi.resource_keys");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, content_hashes) == 664, "offset of HostApi.content_hashes");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, types) == 672, "offset of HostApi.types");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_version) == 680, "offset of HostApi.game_version");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, crafting_prop) == 688, "offset of HostApi.crafting_prop");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, read_only) == 696, "offset of HostApi.read_only");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, resource_served) == 704, "offset of HostApi.resource_served");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, resource_buffer) == 712, "offset of HostApi.resource_buffer");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, content_name) == 720, "offset of HostApi.content_name");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, player) == 728, "offset of HostApi.player");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, players) == 736, "offset of HostApi.players");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, chat) == 744, "offset of HostApi.chat");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, chat_all) == 752, "offset of HostApi.chat_all");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_label) == 760, "offset of HostApi.set_label");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, rename_filter) == 768, "offset of HostApi.rename_filter");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, item_info) == 776, "offset of HostApi.item_info");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, request_altars) == 784, "offset of HostApi.request_altars");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, altars) == 792, "offset of HostApi.altars");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, building_zone_filter) == 800, "offset of HostApi.building_zone_filter");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, base_zones) == 808, "offset of HostApi.base_zones");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, entities) == 816, "offset of HostApi.entities");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, destroy) == 824, "offset of HostApi.destroy");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, save_world) == 832, "offset of HostApi.save_world");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, world_key) == 840, "offset of HostApi.world_key");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, component_write) == 848, "offset of HostApi.component_write");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, notify) == 856, "offset of HostApi.notify");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, time_of_day) == 864, "offset of HostApi.time_of_day");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_time_of_day) == 872, "offset of HostApi.set_time_of_day");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, request_time_speed) == 880, "offset of HostApi.request_time_speed");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_time_speed) == 888, "offset of HostApi.set_time_speed");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_settings) == 896, "offset of HostApi.game_settings");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_game_settings) == 904, "offset of HostApi.set_game_settings");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, buff_types) == 912, "offset of HostApi.buff_types");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, buff_type_add) == 920, "offset of HostApi.buff_type_add");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, buffs) == 928, "offset of HostApi.buffs");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, apply_buff) == 936, "offset of HostApi.apply_buff");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, remove_buff) == 944, "offset of HostApi.remove_buff");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, weather_at) == 952, "offset of HostApi.weather_at");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, weather_fronts) == 960, "offset of HostApi.weather_fronts");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_weather) == 968, "offset of HostApi.set_weather");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, terrain_materials) == 976, "offset of HostApi.terrain_materials");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, terrain_material_add) == 984, "offset of HostApi.terrain_material_add");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, terrain_edit) == 992, "offset of HostApi.terrain_edit");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, altar_zone_filter) == 1000, "offset of HostApi.altar_zone_filter");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, altar_zones_changed) == 1008, "offset of HostApi.altar_zones_changed");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, altar_limit_filter) == 1016, "offset of HostApi.altar_limit_filter");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, base_limit) == 1024, "offset of HostApi.base_limit");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, voxel_read) == 1032, "offset of HostApi.voxel_read");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, build_rights) == 1040, "offset of HostApi.build_rights");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, change_permissions) == 1048, "offset of HostApi.change_permissions");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, transaction_commit) == 1056, "offset of HostApi.transaction_commit");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, transaction_undo) == 1064, "offset of HostApi.transaction_undo");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, transaction_status) == 1072, "offset of HostApi.transaction_status");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, world_quiet) == 1080, "offset of HostApi.world_quiet");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, transaction_entities) == 1088, "offset of HostApi.transaction_entities");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, transaction_settled) == 1096, "offset of HostApi.transaction_settled");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, prop_placement_info) == 1104, "offset of HostApi.prop_placement_info");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, world_persists) == 1112, "offset of HostApi.world_persists");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, map_markers) == 1120, "offset of HostApi.map_markers");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, account_action) == 1128, "offset of HostApi.account_action");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, map_frame) == 1136, "offset of HostApi.map_frame");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, waypoint) == 1144, "offset of HostApi.waypoint");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, request_base_limits) == 1152, "offset of HostApi.request_base_limits");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_chat_mute) == 1160, "offset of HostApi.set_chat_mute");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, chat_muted) == 1168, "offset of HostApi.chat_muted");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_base_limit) == 1176, "offset of HostApi.set_base_limit");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, save_info) == 1184, "offset of HostApi.save_info");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, hold_saves) == 1192, "offset of HostApi.hold_saves");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_saved) == 1200, "offset of HostApi.set_saved");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, progress_write) == 1208, "offset of HostApi.progress_write");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, server_stop) == 1216, "offset of HostApi.server_stop");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, fog_uncover) == 1224, "offset of HostApi.fog_uncover");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, language_of) == 1232, "offset of HostApi.language_of");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, join_rule) == 1240, "offset of HostApi.join_rule");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, request_inventory) == 1248, "offset of HostApi.request_inventory");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, inventory_submit) == 1256, "offset of HostApi.inventory_submit");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, container_rule) == 1264, "offset of HostApi.container_rule");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, show_pickup) == 1272, "offset of HostApi.show_pickup");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, survivor_lookup) == 1280, "offset of HostApi.survivor_lookup");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, survivor_bed_check) == 1288, "offset of HostApi.survivor_bed_check");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, summon_filter) == 1296, "offset of HostApi.summon_filter");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, summon_item) == 1304, "offset of HostApi.summon_item");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, survivor_status) == 1312, "offset of HostApi.survivor_status");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, emit) == 1320, "offset of HostApi.emit");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, teleport) == 1328, "offset of HostApi.teleport");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, spawn) == 1336, "offset of HostApi.spawn");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, respawn_point) == 1344, "offset of HostApi.respawn_point");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, set_respawn_point) == 1352, "offset of HostApi.set_respawn_point");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, damage_filter) == 1360, "offset of HostApi.damage_filter");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, damage_causes_off) == 1368, "offset of HostApi.damage_causes_off");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, summoned) == 1376, "offset of HostApi.summoned");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, define_stat) == 1384, "offset of HostApi.define_stat");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, stat_info) == 1392, "offset of HostApi.stat_info");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, stat_value) == 1400, "offset of HostApi.stat_value");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, stat_modify) == 1408, "offset of HostApi.stat_modify");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, stat_buff) == 1416, "offset of HostApi.stat_buff");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, stats_changed) == 1424, "offset of HostApi.stats_changed");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, stat_sources) == 1432, "offset of HostApi.stat_sources");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, stat_watch) == 1440, "offset of HostApi.stat_watch");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, define_affix) == 1448, "offset of HostApi.define_affix");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, affix_roll) == 1456, "offset of HostApi.affix_roll");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, item_lines) == 1464, "offset of HostApi.item_lines");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, affix_info) == 1472, "offset of HostApi.affix_info");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, item_filter) == 1480, "offset of HostApi.item_filter");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, drop_items) == 1488, "offset of HostApi.drop_items");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, skill_override) == 1496, "offset of HostApi.skill_override");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, comfort_filter) == 1504, "offset of HostApi.comfort_filter");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, experience_filter) == 1512, "offset of HostApi.experience_filter");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, knowledge) == 1520, "offset of HostApi.knowledge");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, change_knowledge) == 1528, "offset of HostApi.change_knowledge");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, knowledge_set) == 1536, "offset of HostApi.knowledge_set");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, quests) == 1544, "offset of HostApi.quests");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, quest_reward_filter) == 1552, "offset of HostApi.quest_reward_filter");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, knowledge_input_filter) == 1560, "offset of HostApi.knowledge_input_filter");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_query) == 1568, "offset of HostApi.game_query");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, run_console) == 1576, "offset of HostApi.run_console");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, interaction_filter) == 1584, "offset of HostApi.interaction_filter");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, interaction_prompt) == 1592, "offset of HostApi.interaction_prompt");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, craft_filter) == 1600, "offset of HostApi.craft_filter");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, build_filter) == 1608, "offset of HostApi.build_filter");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, actions) == 1616, "offset of HostApi.actions");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, control) == 1624, "offset of HostApi.control");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, run_action) == 1632, "offset of HostApi.run_action");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, chat_filter) == 1640, "offset of HostApi.chat_filter");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, commands) == 1648, "offset of HostApi.commands");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, run_command) == 1656, "offset of HostApi.run_command");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, command_list) == 1664, "offset of HostApi.command_list");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, actions_changed) == 1672, "offset of HostApi.actions_changed");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, action_window) == 1680, "offset of HostApi.action_window");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, local_held) == 1688, "offset of HostApi.local_held");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, local_input_status) == 1696, "offset of HostApi.local_input_status");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_snapshot) == 1704, "offset of HostApi.client_snapshot");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_command) == 1712, "offset of HostApi.client_command");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_command_status) == 1720, "offset of HostApi.client_command_status");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_windows) == 1728, "offset of HostApi.client_windows");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, client_slots) == 1736, "offset of HostApi.client_slots");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_binding) == 1744, "offset of HostApi.game_binding");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, game_rebind) == 1752, "offset of HostApi.game_rebind");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, ui_frame) == 1760, "offset of HostApi.ui_frame");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, ui_widget) == 1768, "offset of HostApi.ui_widget");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, ui_dialog) == 1776, "offset of HostApi.ui_dialog");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, ui_hud) == 1784, "offset of HostApi.ui_hud");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, ui_markers) == 1792, "offset of HostApi.ui_markers");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, request_fog) == 1800, "offset of HostApi.request_fog");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, fog_read) == 1808, "offset of HostApi.fog_read");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, map_marker_types) == 1816, "offset of HostApi.map_marker_types");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, ui_extension) == 1824, "offset of HostApi.ui_extension");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, ui_item_tooltip) == 1832, "offset of HostApi.ui_item_tooltip");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_play) == 1840, "offset of HostApi.sound_play");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_steer) == 1848, "offset of HostApi.sound_steer");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_state) == 1856, "offset of HostApi.sound_state");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_play_for) == 1864, "offset of HostApi.sound_play_for");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickHostApi, sound_steer_for) == 1872, "offset of HostApi.sound_steer_for");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickInteraction) == 96, "size of Interaction");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickInteraction) == 8, "alignment of Interaction");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickInteraction, header) == 0, "offset of Interaction.header");

@@ -191,25 +191,27 @@ impl World {
     }
 
     /// How long `entity`, a character, holds out in the shroud before it
-    /// drains health, in seconds, and the most it holds; `None` for an
-    /// entity without it, off the game thread, or on a build without it.
-    /// It runs down in the shroud and refills outside.
+    /// drains health, in seconds, and the most it holds: the game's
+    /// `FogResistance`; `None` for an entity without it, off the game
+    /// thread, or on a build without it. It runs down in the shroud and
+    /// refills outside.
     ///
     /// # Examples
     ///
     /// ```
     /// fn left(world: &enshwick::world::World, player: &enshwick::world::Player) -> i32 {
-    ///     world.shroud_time(player.entity).map_or(0, |time| time.current)
+    ///     world.fog_resistance(player.entity).map_or(0, |time| time.current)
     /// }
     /// ```
     #[must_use]
     #[script]
-    pub fn shroud_time(self, entity: Entity) -> Option<Meter> {
-        self.0.stats?.shroud(self, entity)
+    pub fn fog_resistance(self, entity: Entity) -> Option<Meter> {
+        self.0.stats?.fog_resistance(self, entity)
     }
 
-    /// Sets how long `entity` holds out in the shroud to what `change` makes
-    /// of it, in seconds, kept between 0 and its most, and returns it;
+    /// Sets how long `entity` holds out in the shroud, its
+    /// [`fog_resistance`](Self::fog_resistance), to what `change` makes of
+    /// it, in seconds, kept between 0 and its most, and returns it;
     /// clients see it from the next step. Not saved: the game refills it
     /// outside the shroud. On the game thread only.
     ///
@@ -223,15 +225,15 @@ impl World {
     ///
     /// ```
     /// fn refill(world: &enshwick::world::World, player: &enshwick::world::Player) {
-    ///     let _full = world.change_shroud_time(player.entity, |_| i32::MAX);
+    ///     let _full = world.change_fog_resistance(player.entity, |_| i32::MAX);
     /// }
     /// ```
-    pub fn change_shroud_time(
+    pub fn change_fog_resistance(
         self,
         entity: Entity,
         change: impl FnOnce(i32) -> i32,
     ) -> Result<Meter, WorldError> {
-        self.write_stat(entity, stats::Pool::Shroud, change)
+        self.write_stat(entity, stats::Pool::FogResistance, change)
     }
 
     /// Whether `entity`, a character, stands in the shroud where it drains
@@ -242,13 +244,13 @@ impl World {
     ///
     /// ```
     /// fn exposed(world: &enshwick::world::World, player: &enshwick::world::Player) -> bool {
-    ///     world.in_shroud(player.entity) == Some(true)
+    ///     world.in_fog(player.entity) == Some(true)
     /// }
     /// ```
     #[must_use]
     #[script]
-    pub fn in_shroud(self, entity: Entity) -> Option<bool> {
-        self.0.stats?.in_shroud(self, entity)
+    pub fn in_fog(self, entity: Entity) -> Option<bool> {
+        self.0.stats?.in_fog(self, entity)
     }
 
     /// The skill nodes `entity`, a character, unlocked, with their levels;

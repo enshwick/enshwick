@@ -83,7 +83,7 @@ pub(crate) enum Pool {
     /// An item entity's meter, the game's fuel.
     Meter,
     /// The time a character holds out in the shroud.
-    Shroud,
+    FogResistance,
 }
 
 /// A skill node a character unlocked, from [`World::skills`].
@@ -152,10 +152,10 @@ pub(crate) struct Stats {
     experience: Set<2>,
     /// `Fuel` on an item's own entity; `None` on a build without its rows.
     meter: Option<Set<2>>,
-    shroud: Option<Set<2>>,
+    fog_resistance: Option<Set<2>>,
     /// The actor component's state mask and its bit for standing in the
     /// shroud.
-    in_shroud: Option<(crate::world::Field<u64>, u64)>,
+    in_fog: Option<(crate::world::Field<u64>, u64)>,
 }
 
 /// The unlocked skill nodes' component, and where it keeps their ids and
@@ -227,7 +227,7 @@ impl Stats {
                 })
             })()
             .ok(),
-            shroud: (|| {
+            fog_resistance: (|| {
                 Ok::<_, Off>(Set {
                     ty: set(ids::ATTRIBUTE_SET_SHROUD)?,
                     root: value("attribute.shroud")?,
@@ -235,7 +235,7 @@ impl Stats {
                 })
             })()
             .ok(),
-            in_shroud: (|| {
+            in_fog: (|| {
                 let actor = WritableType {
                     ty: ComponentType::named(host, ids::BASE_ACTOR)?,
                     size: load.type_size(ids::BASE_ACTOR)?,
@@ -298,7 +298,12 @@ impl Stats {
             Pool::Stamina => (&self.stamina, 0),
             Pool::Mana => (&self.mana, 0),
             Pool::Meter => (self.meter.as_ref().ok_or(WorldError::Unavailable)?, 0),
-            Pool::Shroud => (self.shroud.as_ref().ok_or(WorldError::Unavailable)?, 0),
+            Pool::FogResistance => (
+                self.fog_resistance
+                    .as_ref()
+                    .ok_or(WorldError::Unavailable)?,
+                0,
+            ),
         };
         let data = world.component_mut(entity, set.ty)?.cast::<u8>();
         // SAFETY: `component_mut` returned the entity's live attribute set,
@@ -356,8 +361,8 @@ impl Stats {
         })
     }
 
-    pub(crate) fn shroud(&self, world: World, entity: Entity) -> Option<Meter> {
-        let [current, max] = self.read(world, entity, self.shroud.as_ref()?)?;
+    pub(crate) fn fog_resistance(&self, world: World, entity: Entity) -> Option<Meter> {
+        let [current, max] = self.read(world, entity, self.fog_resistance.as_ref()?)?;
         Some(Meter {
             current: current.cast_signed(),
             max: max.cast_signed(),
@@ -388,8 +393,8 @@ impl Stats {
         )
     }
 
-    pub(crate) fn in_shroud(&self, world: World, entity: Entity) -> Option<bool> {
-        let (field, bit) = self.in_shroud?;
+    pub(crate) fn in_fog(&self, world: World, entity: Entity) -> Option<bool> {
+        let (field, bit) = self.in_fog?;
         world.get(entity, field).map(|state| state & bit != 0)
     }
 

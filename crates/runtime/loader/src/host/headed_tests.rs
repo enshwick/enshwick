@@ -357,6 +357,7 @@ fn round_trip<T: Headed>(name: &str) {
             stride,
             3,
             &raw mut count,
+            room,
         )
     };
     assert_eq!((status, count), (Status::OK, 4), "{name}");
@@ -443,9 +444,33 @@ fn a_list_whose_entry_size_is_shorter_than_a_header_is_refused() {
             4,
             1,
             &raw mut count,
+            0,
         )
     };
     assert_eq!(status, Status::BAD_ARGS);
+    assert!(bytes_of(&list).iter().all(|&b| b == GUARD));
+}
+
+#[test]
+fn a_list_whose_entry_size_is_shorter_than_the_entry_s_first_version_is_refused() {
+    type Front = api_frame::WeatherFront;
+    let mut list = guarded(2 * Front::BORN);
+    let mut count = 0;
+    let stride = u32::try_from(Front::BORN - 8).unwrap();
+    // SAFETY: `list` is a local buffer writable for two entries of
+    // `Front::BORN` bytes, more than one entry of `stride`, and `count` a
+    // local `u32`; nothing else touches either.
+    let status = unsafe {
+        put_sized_list(
+            &[value::<Front>()],
+            list.as_mut_ptr().cast::<Front>(),
+            stride,
+            1,
+            &raw mut count,
+            Front::BORN,
+        )
+    };
+    assert_eq!((status, count), (Status::BAD_ARGS, 0));
     assert!(bytes_of(&list).iter().all(|&b| b == GUARD));
 }
 

@@ -286,11 +286,7 @@ impl Weather {
                 position: front.position,
                 radius: front.radius,
                 remaining: Duration::from_nanos(u64::try_from(front.remaining_ns).unwrap_or(0)),
-                phenomenon: (front
-                    .header
-                    .covers(core::mem::offset_of!(WeatherFront, phenomenon) + 16)
-                    && front.phenomenon != Guid::NIL)
-                    .then_some(front.phenomenon),
+                phenomenon: (front.phenomenon != Guid::NIL).then_some(front.phenomenon),
             })
             .collect()
     }

@@ -338,6 +338,7 @@ WorldError::of
 abi
 abi::ABI_MAJOR
 abi::ABI_MINOR
+abi::ALPHA_MAJORS
 abi::ALTAR_LEVELS
 abi::AccountActionType
 abi::AccountActionType::BAN
@@ -7785,11 +7786,11 @@ stats::builtin::DAMAGE
 stats::builtin::DAMAGE_BLUNT
 stats::builtin::DAMAGE_CUT
 stats::builtin::DAMAGE_FIRE
+stats::builtin::DAMAGE_FOG
 stats::builtin::DAMAGE_ICE
 stats::builtin::DAMAGE_LIGHTNING
 stats::builtin::DAMAGE_PIERCE
 stats::builtin::DAMAGE_POISON
-stats::builtin::DAMAGE_SHROUD
 stats::builtin::Def
 stats::builtin::Def::to_def
 stats::builtin::HEALTH_MAX
@@ -7798,11 +7799,11 @@ stats::builtin::RESISTANCE
 stats::builtin::RESISTANCE_BLUNT
 stats::builtin::RESISTANCE_CUT
 stats::builtin::RESISTANCE_FIRE
+stats::builtin::RESISTANCE_FOG
 stats::builtin::RESISTANCE_ICE
 stats::builtin::RESISTANCE_LIGHTNING
 stats::builtin::RESISTANCE_PIERCE
 stats::builtin::RESISTANCE_POISON
-stats::builtin::RESISTANCE_SHROUD
 stats::builtin::STAMINA_MAX
 stats::description_key
 stats::key_of
@@ -35606,20 +35607,21 @@ world::World::add_experience
 world::World::broadcast
 world::World::can_build unstable
 world::World::capture unstable
+world::World::change_fog_resistance
 world::World::change_item_meter
 world::World::change_permissions unstable
-world::World::change_shroud_time
 world::World::component
 world::World::containers
 world::World::data_dir
 world::World::destroy
 world::World::entities
+world::World::fog_resistance
 world::World::functions
 world::World::get
 world::World::has_label
 world::World::heal
 world::World::hold_saves
-world::World::in_shroud
+world::World::in_fog
 world::World::item_meter
 world::World::key
 world::World::language_of
@@ -35651,7 +35653,6 @@ world::World::set_muted
 world::World::set_respawn_point unstable
 world::World::set_saved
 world::World::set_stamina
-world::World::shroud_time
 world::World::skills
 world::World::stop
 world::World::tell

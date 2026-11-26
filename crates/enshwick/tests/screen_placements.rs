@@ -1,5 +1,5 @@
 //! Where a panel sits beside its screen: the placement a mod asks for, the
-//! offsets the loader refuses, and a spec of the minor before placements.
+//! offsets the loader refuses, and a spec shorter than every writer's.
 
 #[cfg(test)]
 mod tests {
@@ -13,8 +13,8 @@ mod tests {
 
     /// Whether each placement past the loader's bounds was refused.
     static REFUSED: Mutex<Vec<bool>> = Mutex::new(Vec::new());
-    /// What the host answered a spec of the minor before placements.
-    static OLD: Mutex<Option<Status>> = Mutex::new(None);
+    /// What the host answered a spec that ends before its placement.
+    static SHORT: Mutex<Option<Status>> = Mutex::new(None);
 
     fn under_grid() -> PanelPlacement {
         PanelPlacement::new(Edge::Left)
@@ -46,13 +46,13 @@ mod tests {
                     .is_err()
             });
             *REFUSED.lock().unwrap() = refused.to_vec();
-            // Its header ends where the placement's fields start, so the
-            // values past it are never read.
-            let old = UiExtension {
+            // Its header ends where the placement's fields start, before
+            // the end of what every writer of this major sends.
+            let short = UiExtension {
                 header: Header {
                     size: 48,
                     abi_major: ABI_MAJOR,
-                    abi_minor: ABI_MINOR - 1,
+                    abi_minor: ABI_MINOR,
                 },
                 screen: Str::new("Backpack"),
                 edge: UiExtension::BOTTOM,
@@ -66,9 +66,13 @@ mod tests {
                 reserved_place: 0,
             };
             let host = load.host();
-            let status =
-                (host.api().ui_extension)(host.handle(), &raw const old, Some(nothing), null_mut());
-            *OLD.lock().unwrap() = Some(status);
+            let status = (host.api().ui_extension)(
+                host.handle(),
+                &raw const short,
+                Some(nothing),
+                null_mut(),
+            );
+            *SHORT.lock().unwrap() = Some(status);
             Ok(Self)
         }
     }
@@ -89,19 +93,11 @@ mod tests {
             unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         assert_eq!(*REFUSED.lock().unwrap(), [true; 5]);
-        assert_eq!(
-            *OLD.lock().unwrap(),
-            Some(Status::OK),
-            "a mod of the minor before"
-        );
+        assert_eq!(*SHORT.lock().unwrap(), Some(Status::BAD_ARGS));
         assert_eq!(
             loader.screen_placements(HudScreenType::Backpack),
-            [
-                under_grid(),
-                PanelPlacement::from(Edge::Right),
-                PanelPlacement::new(Edge::Bottom),
-            ],
-            "the older minor's panel centered at its edge"
+            [under_grid(), PanelPlacement::from(Edge::Right)],
+            "no panel from the short spec"
         );
         let drawn = loader.draw_screen(HudScreenType::Backpack);
         assert_eq!(drawn.len(), 1, "only the panel that drew");

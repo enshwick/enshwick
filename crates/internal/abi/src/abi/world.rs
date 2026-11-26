@@ -335,7 +335,7 @@ pub struct BuildCheck {
     pub account: PlayerKey,
 }
 
-impl_headed!(BuildCheck, born = 48);
+impl_headed!(BuildCheck);
 
 /// A mod's build filter: the placement and the pointer given at
 /// registration; returns [`FILTER_REFUSE`](super::FILTER_REFUSE) to refuse it, else [`FILTER_PASS`](super::FILTER_PASS).

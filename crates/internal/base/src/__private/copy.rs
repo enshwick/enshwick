@@ -206,7 +206,7 @@ pub unsafe fn put_list<T: Copy>(
 /// Each entry gets as much as both sides know, with its header saying so;
 /// as `HostApi`'s list rule says, [`Status::BAD_ARGS`] for a null `count`, a
 /// null `out` with a nonzero `capacity` or, with an `out`, a stride shorter
-/// than a [`Header`], with nothing written.
+/// than `required` or a [`Header`], with nothing written.
 ///
 /// # Safety
 ///
@@ -221,6 +221,7 @@ pub unsafe fn put_sized_list<T: Copy>(
     stride: u32,
     capacity: u32,
     count: *mut u32,
+    required: usize,
 ) -> Status {
     let Ok(total) = u32::try_from(items.len()) else {
         return Status::BAD_ARGS;
@@ -230,7 +231,7 @@ pub unsafe fn put_sized_list<T: Copy>(
     }
     if !out.is_null() {
         let stride = stride as usize;
-        if stride < size_of::<Header>() {
+        if stride < required.max(size_of::<Header>()) {
             return Status::BAD_ARGS;
         }
         let known = stride.min(size_of::<T>());

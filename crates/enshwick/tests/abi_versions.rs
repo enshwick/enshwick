@@ -99,7 +99,7 @@ mod tests {
     }
 
     #[test]
-    fn a_mod_s_shorter_list_entries_are_filled_only_as_far_as_they_reach() {
+    fn a_mod_s_list_entries_shorter_than_their_first_version_are_refused() {
         let player = |slot: u32| PlayerInfo {
             slot,
             ..PlayerInfo::with_name(
@@ -115,9 +115,10 @@ mod tests {
             .install();
         // SAFETY: the fake's table is a static, aligned and never written.
         let api = unsafe { &*loader.api() };
-        // An older mod's entries end before `name`, as if a later minor had
-        // appended it.
+        // Entries that end before `name`, a field every writer of this major
+        // knows.
         let stride = core::mem::offset_of!(PlayerInfo, name).next_multiple_of(8);
+        assert!(stride < <PlayerInfo as Headed>::BORN);
         let mut room = vec![0xABAB_ABAB_ABAB_ABABu64; (2 * stride + 16) / 8];
         for entry in 0..2 {
             let header = &mut room[entry * stride / 8];
@@ -126,19 +127,10 @@ mod tests {
         let mut count = 0;
         let out = room.as_mut_ptr().cast::<PlayerInfo>();
         let entry_size = u32::try_from(stride).unwrap();
+        let before = room.clone();
         let status = (api.players)(loader.handle(), out, entry_size, 2, &raw mut count);
-        assert_eq!((status, count), (Status::OK, 2));
-        let written: Vec<u8> = room.iter().flat_map(|word| word.to_le_bytes()).collect();
-        let entity_at = core::mem::offset_of!(PlayerInfo, entity);
-        for entry in 0..2 {
-            let at = entry * stride + entity_at;
-            let entity = u32::from_le_bytes(written[at..at + 4].try_into().unwrap());
-            assert_eq!(entity, 100 + u32::try_from(entry).unwrap());
-        }
-        assert!(
-            written[2 * stride..].iter().all(|&b| b == 0xAB),
-            "written past the list"
-        );
+        assert_eq!((status, count), (Status::BAD_ARGS, 0));
+        assert_eq!(room, before, "nothing written");
         let status = (api.players)(
             loader.handle(),
             core::ptr::null_mut(),

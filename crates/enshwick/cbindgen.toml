@@ -4,7 +4,11 @@ language = "C"
 cpp_compat = true
 header = """#ifndef ENSHWICK_H
 #define ENSHWICK_H"""
-autogen_warning = "/* Written by cbindgen from the enshwick crate's ABI module: run `cargo xtask header`, never edit by hand. */"
+autogen_warning = """/* Written by cbindgen from the enshwick crate's ABI module: run `cargo xtask header`, never edit by hand. */
+
+/* Every slot and struct here is stable from ABI 1.0, those the Rust and Luau
+   APIs keep behind their `unstable` feature included: a change of meaning
+   takes a new slot. */"""
 documentation = true
 documentation_style = "c99"
 style = "both"

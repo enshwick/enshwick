@@ -156,7 +156,7 @@ impl Event {
     /// step: a player's first look, as at a join, only notes the waypoint,
     /// and one set outside the map's frame raises nothing, though a move
     /// back from there does. A mod's waypoint handler hears it. The name
-    /// is enshwick's. Server only. ABI 12.16.
+    /// is enshwick's. Server only.
     pub const WAYPOINT_CHANGED: Self = Self(27);
     /// A player, or the world for a quest of the world's, started a quest:
     /// the journal shows its first step now, by the knowledge the step asks
@@ -164,18 +164,18 @@ impl Event {
     /// step always shows raises none. Raised on the game thread after the
     /// step that changed that knowledge, a mod's change included; what a
     /// player holds when they join raises nothing. The name is enshwick's.
-    /// Server only. ABI 12.22.
+    /// Server only.
     pub const QUEST_STARTED: Self = Self(28);
     /// A step of a quest is done for a player or the world: the knowledge
     /// its completion asks for holds now and did not before; data is a
     /// [`QuestStepData`](super::QuestStepData). Raised as [`Event::QUEST_STARTED`] is. The name is
-    /// enshwick's. Server only. ABI 12.22.
+    /// enshwick's. Server only.
     pub const QUEST_STEP_DONE: Self = Self(29);
     /// A counter one of a quest step's progress parts counts changed, such
     /// as a mod's objective; data is a [`QuestProgressData`](super::QuestProgressData) with the count
     /// now and the count the part asks for. Raised as
     /// [`Event::QUEST_STARTED`] is, for each change of the counter. The
-    /// name is enshwick's. Server only. ABI 12.22.
+    /// name is enshwick's. Server only.
     pub const QUEST_PROGRESSED: Self = Self(30);
 }
 

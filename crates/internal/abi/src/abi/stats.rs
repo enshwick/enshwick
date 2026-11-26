@@ -55,7 +55,7 @@ pub struct StatSpec {
     pub reserved_display: u16,
 }
 
-impl_headed!(StatSpec, born = 24);
+impl_headed!(StatSpec);
 
 impl StatSpec {
     /// In no group of the Character screen.

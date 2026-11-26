@@ -46,7 +46,7 @@ fn is_test(attrs: &[syn::Attribute]) -> bool {
 
 /// The constants the version names itself by, which change on every bump
 /// rather than with the contract.
-const VERSION_CONSTANTS: [&str; 2] = ["ABI_MAJOR", "ABI_MINOR"];
+const VERSION_CONSTANTS: [&str; 3] = ["ABI_MAJOR", "ABI_MINOR", "ALPHA_MAJORS"];
 
 /// The value of every public scalar constant of the ABI source, by
 /// `Type::NAME` for one in an `impl` block and by its bare name at module

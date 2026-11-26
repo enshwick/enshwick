@@ -122,9 +122,8 @@ fn loader_refused(
 ///   header states, with no other writer during the call.
 /// - `call`'s strings are null or point at their `len` bytes, alive and
 ///   unchanged for the call.
-/// - `call`'s `reply`, where its header covers it, is null or writable for
-///   one [`ActionReply`], which the loader reads before it asks again on
-///   this thread.
+/// - `call`'s `reply` is null or writable for one [`ActionReply`], which
+///   the loader reads before it asks again on this thread.
 /// - `user` is the `Box<Arc<Registry>>` that
 ///   `Load::actions` handed over, which the loader
 ///   keeps for the process.
@@ -157,17 +156,9 @@ pub(super) unsafe extern "system" fn answer(
     // SAFETY: the caller keeps the arguments' bytes alive and unchanged for
     // the call, and `args` is not used after it returns.
     let args = unsafe { call.args.as_str() }.unwrap_or("");
-    let word = if call
-        .header
-        .covers(core::mem::offset_of!(ActionCall, word) + size_of::<Str>())
-    {
-        // SAFETY: the header covers the word, whose bytes the caller keeps
-        // alive and unchanged for the call, and `word` is not used after it
-        // returns.
-        unsafe { call.word.as_str() }.unwrap_or("")
-    } else {
-        ""
-    };
+    // SAFETY: the caller keeps the word's bytes alive and unchanged for the
+    // call, and `word` is not used after it returns.
+    let word = unsafe { call.word.as_str() }.unwrap_or("");
     let typed = |via| Typed {
         line: action,
         word,
@@ -184,12 +175,7 @@ pub(super) unsafe extern "system" fn answer(
                 Answered::Text(String::new())
             }
             ActionCall::REFUSED => {
-                let covered = call
-                    .header
-                    .covers(core::mem::offset_of!(ActionCall, reason) + size_of::<u32>());
-                if covered {
-                    loader_refused(registry, &player, (call.via, call.reason), action, args);
-                }
+                loader_refused(registry, &player, (call.via, call.reason), action, args);
                 Answered::Text(String::new())
             }
             ActionCall::RUN => {
@@ -215,14 +201,7 @@ pub(super) unsafe extern "system" fn answer(
             _ => Answered::Text(String::new()),
         },
     );
-    let slot = if call
-        .header
-        .covers(core::mem::offset_of!(ActionCall, reply) + size_of::<*mut ActionReply>())
-    {
-        call.reply
-    } else {
-        core::ptr::null_mut()
-    };
+    let slot = call.reply;
     REPLY.with_borrow_mut(|kept| match answered {
         Answered::Run(outcome) if !slot.is_null() => {
             *kept = outcome.text;
