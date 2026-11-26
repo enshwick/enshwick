@@ -17,7 +17,7 @@ mod tests {
     const CLAIM: Guid = Guid([0xc0; 16]);
     const UPGRADE: Guid = Guid([0xc1; 16]);
     const FLAME: Guid = Guid([0xc2; 16]);
-    const ALTAR_WORKSHOP: u32 = 0x0a17;
+    const ALTAR_WORKSHOP: u32 = enshwick::content::workshops::FLAME_ALTAR.id();
     const FLAME_WORKSHOP: u32 = 0x0f1a;
     const TORCH: u32 = 0x7042;
 
@@ -92,8 +92,8 @@ mod tests {
         use enshwick::{Entity, RecipeId};
 
         use super::{
-            CLAIM, FLAME, FLAME_WORKSHOP, KIND_ALTAR, OTHER_ALTAR, TORCH, UPGRADE, start,
-            start_with,
+            ALTAR_WORKSHOP, CLAIM, FLAME, FLAME_WORKSHOP, KIND_ALTAR, OTHER_ALTAR, TORCH, UPGRADE,
+            start, start_with,
         };
 
         /// The kind's maximum level; each test runs in a process of its own.
@@ -136,6 +136,24 @@ mod tests {
 
             assert!(!craft(&loader, KIND_ALTAR, RecipeId(CLAIM.fnv1a())));
             assert!(craft(&loader, OTHER_ALTAR, RecipeId(CLAIM.fnv1a())));
+        }
+
+        #[test]
+        fn another_workshop_s_upgrade_from_level_0_is_never_taken_for_the_claim() {
+            MAX.store(0, Ordering::Relaxed);
+            let (loader, status) = start_with(&[
+                (FLAME, FLAME_WORKSHOP, 0),
+                (CLAIM, ALTAR_WORKSHOP, 0),
+                (UPGRADE, ALTAR_WORKSHOP, 1),
+            ]);
+            assert_eq!(status, Status::OK, "{:?}", loader.logs());
+
+            assert!(!craft(&loader, KIND_ALTAR, RecipeId(CLAIM.fnv1a())));
+            assert!(!craft(&loader, KIND_ALTAR, RecipeId(UPGRADE.fnv1a())));
+            assert!(
+                craft(&loader, KIND_ALTAR, RecipeId(FLAME.fnv1a())),
+                "the Flame's own upgrade"
+            );
         }
 
         #[test]

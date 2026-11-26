@@ -6,13 +6,12 @@ use crate::PlayerKey;
 use crate::abi::Status;
 use crate::content::Guid;
 use crate::i18n::{Language, Texts};
-use crate::world::Player;
 
 use super::super::Action;
-use super::super::request::{ActionTarget, Arg, RefusedReason, Value};
+use super::super::request::{Arg, RefusedReason, Value};
 use super::super::sheet::ArgView;
 use super::fit::{fits, takes_line};
-use super::{Declared, Registry};
+use super::{Asked, Declared, Registry};
 
 /// How many GUIDs a refusal for a shared name lists before it counts the
 /// rest.
@@ -284,12 +283,11 @@ impl Registry {
     /// optional arguments as far as each reads as its own.
     pub(super) fn console_args(
         &self,
-        d: &Declared,
-        player: &Player,
+        asked: &Asked<'_>,
         line: &str,
         words: &[Word<'_>],
-        language: Language,
     ) -> Result<Vec<Value>, ReadArgsError> {
+        let (d, language) = (asked.d, asked.ask.language);
         let bad = || ReadArgsError::Usage;
         let joined =
             |words: &[Word<'_>]| words.iter().map(|w| w.text).collect::<Vec<_>>().join(" ");
@@ -300,12 +298,12 @@ impl Registry {
             if name.is_empty() {
                 return Err(bad());
             }
-            let mut listed = self.listed(d, player, language, None);
-            listed.extend(Self::known_of(d, &self.ask(player, language, None)));
+            let mut listed = Self::listed(asked);
+            listed.extend(Self::known_of(d, &asked.ask));
             let target = self.player_named(&name, &listed)?;
             return Ok(vec![target, Value::Toggle(on)]);
         }
-        let known = Self::known_of(d, &self.ask(player, language, None));
+        let known = Self::known_of(d, &asked.ask);
         let args = &d.action.args;
         let required = args.iter().take_while(|arg| arg.default.is_none()).count();
         let (required, optional) = args.split_at(required);
@@ -595,15 +593,13 @@ impl Registry {
 
     /// Fills in the players in `values`, which the interface sends by key,
     /// or as a typed name in a player's place: online, on the list of the
-    /// object `target` names, or among the accounts the action knows.
+    /// object the run names, or among the accounts the action knows.
     pub(super) fn name_players(
         &self,
-        d: &Declared,
-        player: &Player,
+        asked: &Asked<'_>,
         values: &mut [Value],
-        language: Language,
-        target: Option<ActionTarget>,
     ) -> Result<(), ReadArgsError> {
+        let d = asked.d;
         let player_at = |i: usize| {
             if d.action.on.is_some() {
                 i == 0
@@ -624,11 +620,11 @@ impl Registry {
         }
         let online = self.online();
         let mut listed = if d.action.on.is_some() {
-            self.listed(d, player, language, target)
+            Self::listed(asked)
         } else {
             Vec::new()
         };
-        listed.extend(Self::known_of(d, &self.ask(player, language, target)));
+        listed.extend(Self::known_of(d, &asked.ask));
         for (i, value) in values.iter_mut().enumerate() {
             match value {
                 Value::Player { key, name } => {

@@ -353,9 +353,9 @@ impl Action {
     }
 
     /// What the action acts on for a player, found on the server each time
-    /// a [window](crate::actions::Window) draws it or the player runs it: a
-    /// [`Subject`], or a [`FindSubjectError`] with why there is none, which
-    /// the player reads beside the dimmed action.
+    /// a [window](crate::actions::Window) draws it or the player runs it,
+    /// once per run: a [`Subject`], or a [`FindSubjectError`] with why there
+    /// is none, which the player reads beside the dimmed action.
     ///
     /// A mod's own permission rules, extension points included, belong
     /// here. Which of the mod's carried controls a player gets follows [`allow`](Self::allow),

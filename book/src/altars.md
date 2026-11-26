@@ -50,6 +50,12 @@ engine's own point test, with axis 1 up. A `CellBox` has these methods:
 - `contains`
 - `touches`
 - `footprint_area`
+- `footprint_touches`
+- `grown`
+- `union_footprint_area`
+
+`content::workshops::FLAME_ALTAR` is the workshop of the recipes that
+claim an altar and raise its level.
 
 Two functions turn a position into its cell: `cell_of_fixed` and
 `cell_of_metres`.
