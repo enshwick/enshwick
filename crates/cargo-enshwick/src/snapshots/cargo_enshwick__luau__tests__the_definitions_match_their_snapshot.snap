@@ -4699,9 +4699,9 @@ declare enshwick: {
 		broadcast: (text: string) -> (),
 		--- The language the player of account `key` reads the game in, as their game named it when they joined, for a mod's own texts in a notice or line to that player outside an action's request. In a game hosted from a client, the host's own player reads the game's language. The fallback for a player whose game runs no Enshwick, for a key no connected player holds and on a client that joined a server. Any thread.
 		language_of: (key: string) -> string,
-		--- Sends `text` to `player`'s chat alone, after the next step; callable from any thread. The console and a remote caller have no account, so a line for them goes to no player, with a log line: answer them in the action's outcome. So does a line for a character no connected player has.
+		--- Sends `text` to `player`'s chat alone, after the next step; callable from any thread for a player named by account. A player named by character alone is found on the game thread only. The console and a remote caller have no account, so a line for them goes to no player, with a log line: answer them in the action's outcome. So does a line for a character no connected player has, or one named off the game thread.
 		tell: (player: any, text: string) -> (),
-		--- Shows `text` on `player`'s screen, as the game shows its own "can't do that" messages, or tells it in chat when the player's client lacks Enshwick to show it; says which. The game shows 255 bytes; keep it to a line. On the game thread; elsewhere it goes to chat. A notice for the console or a remote caller goes to no player, as with `tell`, and answers `Notice.Nobody`.
+		--- Shows `text` on `player`'s screen, as the game shows its own "can't do that" messages, or tells it in chat when the player's client lacks Enshwick to show it; says which. The game shows 255 bytes; keep it to a line. On the game thread; elsewhere it goes to chat, and to no player when the player is named by character alone. A notice for the console or a remote caller goes to no player, as with `tell`, and answers `Notice.Nobody`.
 		notify: (player: any, text: string) -> Notice,
 		--- Sends a notice to every connected player, as `notify` does to one.
 		notify_all: (text: string) -> (),

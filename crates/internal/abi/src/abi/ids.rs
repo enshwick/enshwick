@@ -582,7 +582,9 @@ mod tests {
         let entity = Entity::from_value(Value::Number(7.0));
         assert_eq!(entity.map_err(|e| e.to_string()), Ok(Entity(7)));
         assert!(Entity::from_value(Value::Number(0.0)).is_err());
-        assert!(matches!(Entity(9).into_value(), Value::Number(n) if n == 9.0));
+        assert!(
+            matches!(Entity(9).into_value(), Value::Number(n) if (n - 9.0).abs() < f64::EPSILON)
+        );
     }
 
     #[test]
