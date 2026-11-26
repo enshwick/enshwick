@@ -5,7 +5,7 @@ mods. It starts a Rust mod, a Luau mod or a data pack, and it installs a mod
 into the game.
 
 ```sh
-cargo binstall --git https://github.com/enshwick/enshwick cargo-enshwick@1.0.0-alpha.17
+cargo binstall cargo-enshwick
 cargo enshwick new you.my-mod --side server
 cd my-mod
 cargo enshwick install --with-loader
@@ -14,7 +14,7 @@ cargo enshwick install --with-loader
 [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) downloads the
 tool from the release: Windows and Linux binaries, with their SHA-256
 checksums, SBOM and build provenance on the release. Without it,
-`cargo install --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.17 cargo-enshwick`
+`cargo install cargo-enshwick`
 builds the tool from source. The tool says when a newer release of itself
 is out, at most once a day; without a network it says nothing, and `CI` or
 `CARGO_ENSHWICK_NO_UPDATE_CHECK` set turns the check off.
@@ -25,7 +25,7 @@ is out, at most once a day; without a network it says nothing, and `CI` or
   texts and tests. It builds and loads as it is: settings in each world's
   `<stem>-mod-settings/<id>/settings.toml`, a line in
   `logs/<id>_<date>_<time>.log`. It pins
-  the `enshwick` release the tool was built with, an alpha's tag from git; `--enshwick-rev <commit>`
+  the `enshwick` release the tool was built with, from crates.io; `--enshwick-rev <commit>`
   takes a commit of this repository's `main` branch from git instead.
   Inside a Cargo workspace the crate joins it: its folder goes into the
   workspace's `members` unless a pattern there covers it, and the release

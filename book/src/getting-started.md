@@ -13,7 +13,7 @@ log and in the game.
 
 Every form needs the Enshwick loader in the game's folder. The Rust mod
 puts it in when it installs. For a data pack or a Luau script, take
-`enshwick.zip` of the newest alpha from the
+`enshwick.zip` of the newest release from the
 [releases page](https://github.com/enshwick/enshwick/releases). Extract it
 next to the game's executable.
 
@@ -21,18 +21,18 @@ Starting a mod and building one in Rust also need Rust 1.100 or newer, from
 [rustup](https://rustup.rs). Install the Windows target and the
 [`cargo enshwick`](https://github.com/enshwick/enshwick/tree/main/crates/cargo-enshwick)
 tool. With [cargo-binstall](https://github.com/cargo-bins/cargo-binstall),
-the tool of this alpha downloads in seconds:
+the tool downloads in seconds:
 
 ```bash
 rustup target add x86_64-pc-windows-msvc
-cargo binstall --git https://github.com/enshwick/enshwick cargo-enshwick@1.0.0-alpha.17
+cargo binstall cargo-enshwick
 ```
 
 Without cargo-binstall, Cargo builds the tool from source in a few
 minutes:
 
 ```bash
-cargo install --git https://github.com/enshwick/enshwick --tag v1.0.0-alpha.17 cargo-enshwick
+cargo install cargo-enshwick
 ```
 
 The tool says when a newer release of itself is out, at most once a day.
@@ -206,9 +206,8 @@ The crate holds:
 
 - `Cargo.toml`, with the mod's id, side and name in
   `[package.metadata.enshwick]`, its
-  [manifest](concepts/loader-and-abi.md#the-manifest). Alphas are not on
-  crates.io, so the API comes from git, at the tag of the alpha the tool is
-  from;
+  [manifest](concepts/loader-and-abi.md#the-manifest), and the API from
+  crates.io at the release the tool is from;
 - `src/lib.rs`, a mod with one setting, `enabled`, and a test that it starts
   on the [fake loader](testing.md);
 - `src/texts.toml`, the mod's name, description and setting labels in
