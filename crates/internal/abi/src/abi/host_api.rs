@@ -2554,17 +2554,25 @@ pub struct HostApi {
         extern "system" fn(me: ModHandle, id: u64, steer: *const SoundSteer) -> Status,
 }
 
-/// Builds a host's [`HostApi`] in a `const` from every field but the header,
-/// which is this version's; a field left out fails the build in const
-/// evaluation, and one the table lacks fails it as a name.
+/// Builds a host's [`HostApi`] in an inline `const` from every field but the
+/// header, which is this version's; a field left out fails the build in
+/// const evaluation, in a function body too, and one the table lacks fails
+/// it as a name.
 ///
 /// The table is `#[non_exhaustive]`, since a minor appends functions to it,
 /// so the loader and the fake host, outside this crate, write it field by
 /// field.
+///
+/// ```compile_fail
+/// fn table() -> enshwick_abi::abi::HostApi {
+///     enshwick_abi::host_api! {}
+/// }
+/// let _table = table();
+/// ```
 #[doc(hidden)]
 #[macro_export]
 macro_rules! host_api {
-    ($($field:ident $(: $value:expr)?),* $(,)?) => {{
+    ($($field:ident $(: $value:expr)?),* $(,)?) => {const {
         let mut api = ::core::mem::MaybeUninit::<$crate::abi::HostApi>::uninit();
         let at = api.as_mut_ptr();
         // SAFETY: `at` points at the table being built, aligned and writable.
@@ -2573,8 +2581,8 @@ macro_rules! host_api {
             // SAFETY: as for the header: a field of the table being built.
             unsafe { (&raw mut (*at).$field).write($crate::host_api!(@value $field $(, $value)?)) };
         )*
-        // SAFETY: the writes above set every field; const evaluation refuses
-        // a table with one left unset, as uninitialised bytes.
+        // SAFETY: the writes above set every field; the inline `const`
+        // refuses a table with one left unset, as uninitialised bytes.
         unsafe { api.assume_init() }
     }};
     (@value $field:ident, $value:expr) => {
