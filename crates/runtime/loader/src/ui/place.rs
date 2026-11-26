@@ -21,8 +21,7 @@ pub(crate) struct Place {
 }
 
 impl Place {
-    /// The place at `edge`, centered along it, as a spec of an older minor
-    /// asks.
+    /// The place at `edge`, centered along it.
     #[cfg(test)]
     pub(crate) const fn edge(edge: u32) -> Self {
         Self {

@@ -4773,10 +4773,10 @@ declare enshwick: {
 		set_mana: (entity: number, value: number) -> Meter,
 		--- The meter of an item's own entity, its PIDE (see `FuelSetup`): the count it holds and its maximum. nil for an entity without one, off the game thread, or on a build without the reads.
 		item_meter: (pide: number) -> Meter?,
-		--- How long `entity`, a character, holds out in the shroud before it drains health, in seconds, and the most it holds; nil for an entity without it, off the game thread, or on a build without it. It runs down in the shroud and refills outside.
-		shroud_time: (entity: number) -> Meter?,
+		--- How long `entity`, a character, holds out in the shroud before it drains health, in seconds, and the most it holds: the game's `FogResistance`; nil for an entity without it, off the game thread, or on a build without it. It runs down in the shroud and refills outside.
+		fog_resistance: (entity: number) -> Meter?,
 		--- Whether `entity`, a character, stands in the shroud where it drains them, outside the altars' reach; nil for an entity that is no actor, off the game thread, or on a build without it.
-		in_shroud: (entity: number) -> boolean?,
+		in_fog: (entity: number) -> boolean?,
 		--- The skill nodes `entity`, a character, unlocked, with their levels; nil for an entity without skills, off the game thread, or on a build without them. The game saves them with the character.
 		skills: (entity: number) -> {UnlockedSkill}?,
 		--- `entity`'s level and experience; nil for an entity without them, off the game thread, or on a build without stat reads.
@@ -4789,8 +4789,8 @@ declare enshwick: {
 		add_experience: (entity: number, amount: number) -> (),
 		--- Changes an item's meter on its entity `pide` to what `change` returns for the value now, as `World.change_item_meter` does; nil keeps it.
 		change_item_meter: (pide: number, change: (arg1: number) -> number?) -> Meter,
-		--- Changes `entity`'s shroud time to what `change` returns for the time now, as `World.change_shroud_time` does; nil keeps it.
-		change_shroud_time: (entity: number, change: (arg1: number) -> number?) -> Meter,
+		--- Changes `entity`'s shroud time to what `change` returns for the time now, as `World.change_fog_resistance` does; nil keeps it.
+		change_fog_resistance: (entity: number, change: (arg1: number) -> number?) -> Meter,
 		--- The value of `field` in `entity`'s component, as `World.get` reads it; a 64-bit one as decimal text.
 		get: (entity: number, field: Field) -> any?,
 		--- Writes `value` to `field` in `entity`'s component, as `World.set` does.
@@ -5349,7 +5349,7 @@ declare enshwick: {
 		held: (player: number) -> {string}?,
 		--- The game's controls the local player holds, as this client's interface read them in its last step. Only the gameplay controls: the client-only ones, such as the menu and map keys, are not in it. Read on any thread. The reads start when the mod opens its input, so the interface's first step after that answers. nil on a server, outside a game, before that first step, while no step ran for a second, as in the pause menu, and on a game build without the read.
 		local_held: () -> {string}?,
-		--- Observes only cached loader metadata on any thread, without starting sampling. Fields are weakly consistent; no world, session, player or current UI state is inferred. Requires a matching ABI 12.1 or newer loader; older loaders cannot load this SDK.
+		--- Observes only cached loader metadata on any thread, without starting sampling. Fields are weakly consistent; no world, session, player or current UI state is inferred.
 		local_status: () -> LocalInputStatus,
 		--- The client's state in one copy, for any thread: its session and world, the open screens and menu tab, the local player and its held controls. The reads start when the mod opens its input, so the client's first interface step after that answers, in the mod's first frame in a game. It is `SnapshotState.Never` before that step, and while no frame drew a game since, as in the main menu before the first world. The reads cost one look at the interface's screen state and menu tab per frame, which client commands share, and a copy of four words; the held controls cost their own row, as `Input.local_held` says.
 		client_snapshot: () -> ClientSnapshot,

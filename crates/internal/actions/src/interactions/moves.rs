@@ -215,10 +215,9 @@ impl Transfer {
 }
 
 impl Move {
-    /// The move `call` carries; `None` when the platform read none, or the
-    /// mod's loader is older than the move's fields.
+    /// The move `call` carries; `None` when the platform read none.
     pub(super) fn of(call: &RawInteraction) -> Option<Self> {
-        if !call.header.covers(size_of::<RawInteraction>()) || call.moving == 0 {
+        if call.moving == 0 {
             return None;
         }
         let some = |entity: Entity| (!entity.is_none()).then_some(entity);

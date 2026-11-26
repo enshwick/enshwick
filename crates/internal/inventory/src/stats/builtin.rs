@@ -19,8 +19,9 @@ pub const DAMAGE_BLUNT: Id = Id::new("enshwick:damage_blunt");
 pub const DAMAGE_FIRE: Id = Id::new("enshwick:damage_fire");
 /// Ice damage the entity deals, a factor.
 pub const DAMAGE_ICE: Id = Id::new("enshwick:damage_ice");
-/// Shroud damage the entity deals, a factor.
-pub const DAMAGE_SHROUD: Id = Id::new("enshwick:damage_shroud");
+/// Fog damage, the shroud's, the entity deals, a factor: the game's
+/// `MagicalFog`.
+pub const DAMAGE_FOG: Id = Id::new("enshwick:damage_fog");
 /// Lightning damage the entity deals, a factor.
 pub const DAMAGE_LIGHTNING: Id = Id::new("enshwick:damage_lightning");
 /// Poison damage the entity deals, a factor.
@@ -37,8 +38,8 @@ pub const RESISTANCE_BLUNT: Id = Id::new("enshwick:resistance_blunt");
 pub const RESISTANCE_FIRE: Id = Id::new("enshwick:resistance_fire");
 /// The part of ice damage the entity takes less.
 pub const RESISTANCE_ICE: Id = Id::new("enshwick:resistance_ice");
-/// The part of shroud damage the entity takes less.
-pub const RESISTANCE_SHROUD: Id = Id::new("enshwick:resistance_shroud");
+/// The part of fog damage, the shroud's, the entity takes less.
+pub const RESISTANCE_FOG: Id = Id::new("enshwick:resistance_fog");
 /// The part of lightning damage the entity takes less.
 pub const RESISTANCE_LIGHTNING: Id = Id::new("enshwick:resistance_lightning");
 /// The part of poison damage the entity takes less.
@@ -123,7 +124,7 @@ pub const ALL: [(Id, Def); 21] = [
     (DAMAGE_BLUNT, FACTOR),
     (DAMAGE_FIRE, FACTOR),
     (DAMAGE_ICE, FACTOR),
-    (DAMAGE_SHROUD, FACTOR),
+    (DAMAGE_FOG, FACTOR),
     (DAMAGE_LIGHTNING, FACTOR),
     (DAMAGE_POISON, FACTOR),
     (RESISTANCE, RESISTANCE_DEF),
@@ -132,13 +133,13 @@ pub const ALL: [(Id, Def); 21] = [
     (RESISTANCE_BLUNT, RESISTANCE_DEF),
     (RESISTANCE_FIRE, RESISTANCE_DEF),
     (RESISTANCE_ICE, RESISTANCE_DEF),
-    (RESISTANCE_SHROUD, RESISTANCE_DEF),
+    (RESISTANCE_FOG, RESISTANCE_DEF),
     (RESISTANCE_LIGHTNING, RESISTANCE_DEF),
     (RESISTANCE_POISON, RESISTANCE_DEF),
 ];
 
 /// The per-type damage and resistance kinds, by the game's damage type
-/// index: cut, pierce, blunt, fire, ice, shroud, lightning, then poison
+/// index: cut, pierce, blunt, fire, ice, fog, lightning, then poison
 /// at index 8; `None` for the types without one.
 ///
 /// # Examples
@@ -155,7 +156,7 @@ pub const BY_DAMAGE_TYPE: [Option<(Id, Id)>; crate::damage::DamageTypeNew::ALL.l
     Some((DAMAGE_BLUNT, RESISTANCE_BLUNT)),
     Some((DAMAGE_FIRE, RESISTANCE_FIRE)),
     Some((DAMAGE_ICE, RESISTANCE_ICE)),
-    Some((DAMAGE_SHROUD, RESISTANCE_SHROUD)),
+    Some((DAMAGE_FOG, RESISTANCE_FOG)),
     Some((DAMAGE_LIGHTNING, RESISTANCE_LIGHTNING)),
     None,
     Some((DAMAGE_POISON, RESISTANCE_POISON)),

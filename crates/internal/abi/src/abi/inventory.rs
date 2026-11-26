@@ -120,7 +120,6 @@ impl InventoryRequest {
     pub const NOTIFY: u32 = 2;
     /// With [`NOTIFY`](Self::NOTIFY), raise the pickup event marked hidden,
     /// so no pickup message shows while the event's readers still hear it.
-    /// ABI 12.9.
     pub const HIDE_IN_UI: u32 = 4;
 }
 

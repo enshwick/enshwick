@@ -427,6 +427,20 @@ pub struct HostApi {
     /// [`Status::BAD_ARGS`] for an empty name. Both strings are borrowed for
     /// the call. Any thread.
     pub feature: extern "system" fn(me: ModHandle, name: Str, off: Str) -> Status,
+    /// Up to `capacity` parts and features of the loader that are off, in
+    /// the order they turned off, and how many there are. Entries are
+    /// `entry_size` bytes apart, the caller's `size_of::<LoaderOff>()`; the
+    /// loader fills what both sides know of each and its own [`Header`].
+    /// Everything it does not list runs. The strings stay valid for the
+    /// process, since the loader keeps each entry's first reason and drops
+    /// none. Any thread; it runs no mod callback.
+    pub loader_off: extern "system" fn(
+        me: ModHandle,
+        out: *mut LoaderOff,
+        entry_size: u32,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
     /// Calls `callback` with `user` before every wait of the engine's event
     /// loop on its handles, on the thread that waits, and writes to `found`
     /// which waits it hooked ([`LoopWaitSites`]); a wait this build lacks,
@@ -696,6 +710,21 @@ pub struct HostApi {
     /// loader frees what each rebuild's patches built in a
     /// [`resource_buffer`](Self::resource_buffer).
     pub rebuild_resource: extern "system" fn(me: ModHandle, key: *const ResourceKey) -> Status,
+    /// As [`serve_resource`](Self::serve_resource) from `key` itself, for a
+    /// patch that serves `key` with the data of the resource `from`, a
+    /// re-key: inside `patch`, a [`resource_served`](Self::resource_served)
+    /// read of `from` builds it without its own re-keys, so the re-keys of
+    /// every mod apply at once, each key taking the data its `from` has
+    /// before any re-key, and keys re-keyed in a ring rotate.
+    /// [`Status::BAD_ARGS`] when `from` is `key` or of another type.
+    /// Allowed during `enshwick_mod_init` only.
+    pub rekey_resource: extern "system" fn(
+        me: ModHandle,
+        key: *const ResourceKey,
+        from: *const ResourceKey,
+        patch: Option<ResourcePatchFn>,
+        user: *mut c_void,
+    ) -> Status,
     /// Adds the calling mod's rule that disables recipes (`disable` 1), or
     /// takes its own rule of that kind and name back (`disable` 0). `name`
     /// names a recipe, an item every recipe of which is disabled, or a
@@ -1081,6 +1110,21 @@ pub struct HostApi {
         capacity: u32,
         count: *mut u32,
     ) -> Status,
+    /// Adds `buff`, a headed [`BuffTypeAdd`], as a buff type of the game,
+    /// and writes its game id to `id`. The loader serves one patch of the
+    /// game's buff collection on both sides with every mod's types after the
+    /// vanilla ones, each a copy of its `like` with its changes, and names
+    /// a type's icon on a client only once that client shows served UI
+    /// images. [`Status::BAD_ARGS`] for a change or flag it does not know, a
+    /// negative life time, or a `like` that is no buff type of the game;
+    /// [`Status::REFUSED`] for a GUID whose content id the calling mod did
+    /// not declare with `declare_content`, for a mod not of side both and
+    /// for an id the game or a mod loaded before has;
+    /// [`Status::UNAVAILABLE`] on a build whose
+    /// archive or layout lacks the collection. Allowed during
+    /// `enshwick_mod_init` only.
+    pub buff_type_add:
+        extern "system" fn(me: ModHandle, buff: *const BuffTypeAdd, id: *mut BuffTypeId) -> Status,
     /// Up to `capacity` buffs `entity` has, and how many there are, as every
     /// list answers; [`Status::MISSING`] for an entity that holds no buffs.
     /// On the server's game thread only.
@@ -1143,6 +1187,23 @@ pub struct HostApi {
         entry_size: u32,
         capacity: u32,
         count: *mut u32,
+    ) -> Status,
+    /// Adds `material`, a headed [`TerrainMaterialAdd`], as a terrain
+    /// material of the game, and writes the voxel id it has for this run to
+    /// `id`. The loader gives mods' materials the terrain ids no palette of
+    /// the game names, in load order, and serves the material's palette
+    /// entry, rules and look on both sides; saves name its voxels by its
+    /// GUID. [`Status::BAD_ARGS`] for a `like` or `fallback` that is no
+    /// terrain material of the game or a change it does not know;
+    /// [`Status::REFUSED`] for a GUID whose content id the calling mod did
+    /// not declare with [`declare_content`](Self::declare_content), for a
+    /// mod not of side both, for a GUID added before and once every free id
+    /// is taken; [`Status::UNAVAILABLE`] on a build whose archive lacks the
+    /// palette or the rules. Allowed during `enshwick_mod_init` only.
+    pub terrain_material_add: extern "system" fn(
+        me: ModHandle,
+        material: *const TerrainMaterialAdd,
+        id: *mut u8,
     ) -> Status,
     /// Runs a terrain edit in the server's world as the game's terraforming
     /// does, and writes the volume it changed in cubic metres (for a
@@ -1230,6 +1291,24 @@ pub struct HostApi {
     /// moment only, outside a step or in a game event:
     /// [`Status::WRONG_THREAD`] inside a step.
     pub build_rights: extern "system" fn(me: ModHandle, check: *mut BuildRights) -> Status,
+    /// Replaces the mod's change to the permissions of the player in game
+    /// with `account`: `deny` takes bits from the player, `grant` gives
+    /// bits, both masks of [`PlayerInfo`](super::PlayerInfo)'s permission
+    /// bits; both 0 ends the change. The server holds the player to
+    /// `(group | every grant) & !every deny`, with `group` the bits of the
+    /// player's user group, from its next step on, so the game's own checks
+    /// refuse what a taken bit guards, and the loader's own reads of the
+    /// player's bits give the bits in force; the player's client still acts
+    /// by its group's bits. A change ends when the mod ends it or turns
+    /// off, when the player leaves and when the world ends; ending one
+    /// needs no player in game. [`Status::BAD_ARGS`] for account 0 or a bit
+    /// past the permissions; [`Status::REFUSED`] for a new change to an
+    /// account not in game; [`Status::WRONG_THREAD`] off the server's game
+    /// thread; [`Status::UNAVAILABLE`] outside a server and on a build
+    /// without the permission table, the step link or the player removal
+    /// link.
+    pub change_permissions:
+        extern "system" fn(me: ModHandle, account: PlayerKey, deny: u32, grant: u32) -> Status,
     /// Queues the `count` changes at `ops` as one transaction of the
     /// server's world and writes its id to `id`: the loader writes them in
     /// order on the server's game thread at quiet moments, a budget of
@@ -1299,6 +1378,35 @@ pub struct HostApi {
         capacity: u32,
         count: *mut u32,
     ) -> Status,
+    /// Calls `callback` once for transaction `id` of this mod, with where it
+    /// stands and `user`, on the server's game thread after the first step
+    /// that ends with it no longer [`TransactionInfo::PENDING`]: written
+    /// whole ([`TransactionInfo::APPLIED`], which says when a prop may still
+    /// be absent), or failed, refused, undoing or undone. A step at least
+    /// `within_ns` nanoseconds after the call runs it as it stands, still
+    /// pending perhaps. The `info` is null when the loader forgot the
+    /// transaction meanwhile. A step runs its due callbacks in the order
+    /// they were asked, and a callback may ask again. When a client's hosted
+    /// game ends, every callback kept runs with its transaction failed or
+    /// expired, never in the next game; a dedicated server that stops runs
+    /// none. A mod the loader turned off loses its callbacks unrun. [`Status::BAD_ARGS`] for a null `callback`;
+    /// [`Status::MISSING`] for an id this mod did not get or one the loader
+    /// forgot; [`Status::UNAVAILABLE`] once the transactions are off, which
+    /// runs every callback kept at once. Nothing is kept on an error. Any
+    /// thread.
+    pub transaction_settled: extern "system" fn(
+        me: ModHandle,
+        id: u64,
+        within_ns: u64,
+        callback: Option<TransactionSettledFn>,
+        user: *mut c_void,
+    ) -> Status,
+    /// Copies the prop template and optional local placement box for `item`
+    /// into headed `out`. `BAD_ARGS` for an unknown item or one placing nothing;
+    /// `NOT_A_PROP` for creatures and flame altars; `UNAVAILABLE` without a running
+    /// server, registry or required reads. Any thread, read-only.
+    pub prop_placement_info:
+        extern "system" fn(me: ModHandle, item: ItemId, out: *mut PropPlacementInfo) -> Status,
     /// Writes to `kept` 1 when a save keeps changes in the box from `min`
     /// to `max`, in metres, and 0 when not: the game saves a world only
     /// inside its bases' zones, so the box must lie wholly inside one, half
@@ -1356,6 +1464,17 @@ pub struct HostApi {
     /// [`Status::UNAVAILABLE`] while no world runs, for a scene without a biome
     /// map, or when the scene does not read on this build.
     pub map_frame: extern "system" fn(me: ModHandle, out: *mut MapFrameInfo) -> Status,
+    /// Writes to `out` the waypoint all players see that the character
+    /// `entity` has set now, read as [`Event::WAYPOINT_CHANGED`](super::Event::WAYPOINT_CHANGED)
+    /// reads it: `set` 0 while it is off or for an entity without one, and
+    /// `key` 0 when no player online plays `entity`. `out` is the caller's,
+    /// at least a [`Header`] and writable for the size its header states;
+    /// [`Status::BAD_ARGS`] for a null or smaller one. On the server's game
+    /// thread at a quiet moment ([`Status::WRONG_THREAD`] elsewhere or
+    /// inside a step); [`Status::UNAVAILABLE`] before a world runs or on a
+    /// build whose reflection lacks the waypoint.
+    pub waypoint:
+        extern "system" fn(me: ModHandle, entity: Entity, out: *mut WaypointData) -> Status,
     /// Asks the game to group up to `zones` altar zones into up to `bases`
     /// bases. Raised, the game groups every listed zone into its base;
     /// `zones` caps the altars a Flame level allows, and an altar that would
@@ -1530,6 +1649,34 @@ pub struct HostApi {
         done: Option<InventoryResultFn>,
         user: *mut c_void,
     ) -> Status,
+    /// Registers `callback` to rule which stacks enter the containers placed
+    /// from `item`, vanilla or a mod's own. The loader asks the rules of the
+    /// container's item in load order, until one refuses, before a stack
+    /// enters one of its slots, whatever moves it: a player's move, a swap, Take All, Deposit
+    /// All or Stacks, an area deposit; a stack a rule refuses stays where it
+    /// was, or goes to another slot when the game picks the slots. Gives
+    /// through [`HostApi::inventory_submit`] and the game's own loot are not
+    /// asked. Allowed during `enshwick_mod_init` only; [`Status::BAD_ARGS`]
+    /// for item 0 or a null callback; [`Status::UNAVAILABLE`] on a build
+    /// without the slot link.
+    pub container_rule: extern "system" fn(
+        me: ModHandle,
+        item: ItemId,
+        callback: Option<ContainerRuleFn>,
+        user: *mut c_void,
+    ) -> Status,
+    /// Shows `character`'s player the game's pickup message for `count` of
+    /// `item`, as if the items had entered the player's inventory, which
+    /// they do not: the loader raises the game's pickup event on the server,
+    /// and every reader of that event, but the loader's item filters, hears
+    /// it. `count` above 65535 shows 65535, the game's most. On the server's
+    /// game thread between steps only; the systems of the next step see the
+    /// event. [`Status::BAD_ARGS`] for item 0, count 0 or an entity that is
+    /// no player; [`Status::WRONG_THREAD`] off the game thread or during a
+    /// step; [`Status::UNAVAILABLE`] outside a server and on a build without
+    /// the event.
+    pub show_pickup:
+        extern "system" fn(me: ModHandle, character: Entity, item: ItemId, count: u32) -> Status,
     /// Calls `callback` with `user` to answer the game's survivor lookups
     /// that [`SurvivorLookup`](super::SurvivorLookup) names: the lookups of
     /// every mod run in load order, the first that answers deciding, and
@@ -1601,6 +1748,29 @@ pub struct HostApi {
     /// server's game thread only.
     pub spawn:
         extern "system" fn(me: ModHandle, request: *const SpawnRequest, out: *mut Entity) -> Status,
+    /// Copies the respawn point of the player whose character is `character`
+    /// into headed `out`: the spawn point entity, its kind and where the
+    /// character respawns. [`Status::MISSING`] for an entity that is no
+    /// player's character, or a character whose respawn point is not in the
+    /// world, where the game falls back to the world's start;
+    /// [`Status::WRONG_THREAD`] off the server's game thread;
+    /// [`Status::UNAVAILABLE`] outside a server and on a build without the
+    /// layout.
+    pub respawn_point:
+        extern "system" fn(me: ModHandle, character: Entity, out: *mut RespawnPointInfo) -> Status,
+    /// Makes `spawn_point` the respawn point of the player whose character
+    /// is `character`, as the game does when the character stands in a
+    /// spawn point, and raises the game's `PlayerSpawnInfoChangeEvent` for
+    /// it when the point names a base or a scene. While the character
+    /// stands in another spawn point, the game sets that one back at its
+    /// next step. Nothing changes when a call fails. [`Status::BAD_ARGS`] for an entity that is no
+    /// spawn point, or one of kind [`RespawnPointInfo::NO_RESPAWN`];
+    /// [`Status::MISSING`] for an entity that is no player's character;
+    /// [`Status::WRONG_THREAD`] off the server's game thread or during a
+    /// step; [`Status::UNAVAILABLE`] outside a server and on a build without
+    /// the layout.
+    pub set_respawn_point:
+        extern "system" fn(me: ModHandle, character: Entity, spawn_point: Entity) -> Status,
     /// Calls `callback` with `user` on damage about to reach an entity's
     /// health in the server's world, before the game applies it: hits,
     /// falls and the shroud; what the filters leave in the
@@ -1611,6 +1781,16 @@ pub struct HostApi {
         callback: Option<DamageFilterFn>,
         user: *mut c_void,
     ) -> Status,
+    /// Up to `capacity` damage causes, as [`DamageCheck`](super::DamageCheck)
+    /// numbers them, whose sites are not armed, and how many there are, as
+    /// every list answers: the causes no damage filter gets on this build
+    /// and run. A site arms when a mod registered a damage filter and the
+    /// build has it, and stops when it faults; with no filter, only the hit
+    /// site arms, and only for stats. [`Status::UNAVAILABLE`] until the
+    /// loader has linked and armed its hooks, after every mod's init. Any
+    /// thread.
+    pub damage_causes_off:
+        extern "system" fn(me: ModHandle, out: *mut u32, capacity: u32, count: *mut u32) -> Status,
     /// Calls `callback` with `user` after a summoning staff's use spawned or
     /// moved a survivor, with [`Summon::consumed`](super::Summon::consumed) set; its return value is
     /// ignored. On the thread of the use, as [`HostApi::summon_filter`].
@@ -1817,6 +1997,35 @@ pub struct HostApi {
     /// server's game thread only.
     pub change_knowledge:
         extern "system" fn(me: ModHandle, change: *const KnowledgeChange) -> Status,
+    /// Sets knowledge `id` of the player whose character is `entity`, or of
+    /// the world for 0 or an id of the world's, to exactly `value`: 0 or 1
+    /// for a [`KnowledgeInfo::BOOL`], any count or bits otherwise.
+    ///
+    /// The game keeps a mark beside each value, one bit per flag (all of
+    /// them for a bool or a counter), set for what the player has seen.
+    /// [`KnowledgeChange::QUIET`] writes the value at once with every bit
+    /// marked, as a save loads it, sends it to the clients again and is
+    /// saved with the next save; nothing a grant brings follows.
+    /// [`KnowledgeChange::SHOWN`] grants what the value gains as
+    /// [`HostApi::change_knowledge`] does (the next step applies it with
+    /// what follows) and writes what it loses at once, keeping the mark of
+    /// flags and no mark for a bool or a counter. A counter's gain is the
+    /// difference from the value it reads now, so another grant queued
+    /// before the step applies it adds to the count.
+    ///
+    /// [`Status::BAD_ARGS`] for an unknown id or `notice`, a bool above 1,
+    /// or, for `SHOWN`, a gained bit the game does not expect;
+    /// [`Status::BUSY`] when the game's queue fills while `SHOWN` grants,
+    /// with what it wrote and queued before kept;
+    /// [`Status::REFUSED`] as for [`HostApi::change_knowledge`]. On the
+    /// server's game thread only.
+    pub knowledge_set: extern "system" fn(
+        me: ModHandle,
+        entity: Entity,
+        id: KnowledgeId,
+        value: u32,
+        notice: u8,
+    ) -> Status,
     /// Up to `capacity` quest ids of the running game, and how many there
     /// are. On the server's game thread only.
     pub quests: extern "system" fn(
@@ -1824,6 +2033,19 @@ pub struct HostApi {
         out: *mut KnowledgeId,
         capacity: u32,
         count: *mut u32,
+    ) -> Status,
+    /// Registers a filter on what the game pays a player for a quest, the
+    /// quest's experience, before it pays it and sets the quest's bool.
+    /// Filters run in load order, each with the payment as the filters
+    /// before left it, on the thread of the game's quest reward system, in
+    /// the dedicated server or a hosting client. [`Status::UNAVAILABLE`] on
+    /// a build where the loader does not find the payment, or where its
+    /// code is not what the loader expects; [`Status::BAD_ARGS`] for a null
+    /// callback. Allowed during `enshwick_mod_init` only.
+    pub quest_reward_filter: extern "system" fn(
+        me: ModHandle,
+        callback: Option<QuestRewardFilterFn>,
+        user: *mut c_void,
     ) -> Status,
     /// Registers a filter on the knowledge clients ask the server for in
     /// their input, which a vanilla game grants unchecked. Filters run in
@@ -1866,6 +2088,17 @@ pub struct HostApi {
         callback: Option<InteractionFilterFn>,
         user: *mut c_void,
     ) -> Status,
+    /// Gives every object placed from `spec`'s item, a headed
+    /// [`InteractionPrompt`], its prompt: the game verb and the replaced
+    /// action in the server's world, the mod's text on this client. One
+    /// prompt per item across all mods. Allowed during `enshwick_mod_init`
+    /// only; [`Status::BAD_ARGS`] for a null or short `spec`, item 0, an
+    /// unknown flag or a prompt that changes nothing; [`Status::REFUSED`]
+    /// for an item another prompt has; [`Status::UNAVAILABLE`] for a verb
+    /// or an action on a build without the server's writes, while a build
+    /// without the client's text site turns the text off alone.
+    pub interaction_prompt:
+        extern "system" fn(me: ModHandle, spec: *const InteractionPrompt) -> Status,
     /// Calls `callback` with `user` on each player's craft request in the
     /// server's world, on the game thread before the crafting system reads
     /// it; any filter returning [`FILTER_REFUSE`](super::FILTER_REFUSE) refuses it, and nothing is made or taken.
@@ -2019,6 +2252,114 @@ pub struct HostApi {
         count: u32,
         change: u32,
     ) -> Status,
+    /// Writes to `out` the game controls the local player holds, the
+    /// `Bitmask64` of the game's `PlayerInputType` as the client's
+    /// interface read it in its last step: gameplay controls only, not the
+    /// client-only ones such as menu keys. The bits are the game's, which a
+    /// game build may renumber: find each by its name among the constants
+    /// [`HostApi::types`] lists for `PlayerInputType`, never as a fixed
+    /// value. The loader reads the mask only once a mod asked for it: the
+    /// first call, of any mod, starts the reads, and the interface's next
+    /// step reads it; the safe layer calls it when a mod opens its input.
+    /// Client only; [`Status::UNAVAILABLE`] on a server, outside a game,
+    /// from the first call until that step, while no step read it for a
+    /// second, or on a build without the read; [`Status::BAD_ARGS`] for a
+    /// null `out`. Any thread; `out` is borrowed for the call.
+    pub local_held: extern "system" fn(me: ModHandle, out: *mut u64) -> Status,
+    /// Copies the local input sampler's cached diagnostics without requesting reads.
+    /// Client only ([`Status::UNAVAILABLE`] on a server); callable on any thread.
+    /// No game memory is read. Flags are weakly consistent and age is not session identity.
+    /// `out` is a headed, writable `LocalInputInfo`.
+    pub local_input_status: extern "system" fn(me: ModHandle, out: *mut LocalInputInfo) -> Status,
+    /// Writes to `out`, a headed [`ClientSnapshot`], the client's state in
+    /// one copy: its session, the open screens and the in-game menu's tab
+    /// from the interface's last frame, and the local player's held
+    /// controls. The first call, of any mod, starts the interface's reads
+    /// and the held controls' reads, so it answers [`ClientSnapshot::NEVER`];
+    /// the safe layer calls it when a mod opens its input. Every call after
+    /// a frame drew a game answers its copy; until one did, as in the main
+    /// menu before the first world, it answers `NEVER`. Client only:
+    /// [`Status::UNAVAILABLE`] on a server; [`Status::BAD_ARGS`] for a null
+    /// or unheaded `out`. Any thread; it runs no mod callback, and `out` is
+    /// borrowed for the call.
+    pub client_snapshot: extern "system" fn(me: ModHandle, out: *mut ClientSnapshot) -> Status,
+    /// Queues `spec`, a headed [`ClientCommand`], and writes its id to `id`:
+    /// the call answers only that it is queued, and
+    /// [`HostApi::client_command_status`] tells what came of it. One command
+    /// of each kind waits per mod: a second answers [`Status::REFUSED`]
+    /// until the first ends. [`Status::BAD_ARGS`] for an unknown kind, a
+    /// target the kind does not take, a look past
+    /// [`ClientCommand::MAX_LOOK`], a direction longer than 1 or a hold past
+    /// [`ClientCommand::MAX_HOLD_MS`]; [`Status::UNAVAILABLE`] on a server
+    /// and on a build without what the kind needs. Any thread; the command
+    /// runs later on the client's game thread, never inside a mod callback.
+    pub client_command:
+        extern "system" fn(me: ModHandle, spec: *const ClientCommand, id: *mut u64) -> Status,
+    /// Writes to `out`, a headed [`ClientCommandStatus`], where the mod's
+    /// command `id` stands. The loader keeps the last 64 commands' outcomes;
+    /// [`Status::UNAVAILABLE`] for an id it no longer keeps or another mod's.
+    /// Any thread.
+    pub client_command_status:
+        extern "system" fn(me: ModHandle, id: u64, out: *mut ClientCommandStatus) -> Status,
+    /// Up to `capacity` items of the windows the server's mods show this
+    /// client, the newest window last, and how many there are, as every
+    /// list answers. Entries are `entry_size` bytes apart, the caller's
+    /// `size_of::<ClientWindowItem>()`. Only the newest window shows and
+    /// takes [`ClientCommand::WINDOW_PRESS`] and its kin; its items are the
+    /// ones it draws now, a button's form's while one is open. The strings
+    /// stay valid until the next call on this thread. Client only:
+    /// [`Status::UNAVAILABLE`] on a server. Any thread; it runs no mod
+    /// callback.
+    pub client_windows: extern "system" fn(
+        me: ModHandle,
+        out: *mut ClientWindowItem,
+        entry_size: u32,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
+    /// Up to `capacity` slots of the local player's inventory, empty ones
+    /// included, in the game's order, as the client's last step read them
+    /// from its copy of the world, and how many there are, as every list
+    /// answers. Entries are `entry_size` bytes apart, the caller's
+    /// `size_of::<ClientSlot>()`. The first call starts the reads, which
+    /// then run in each step for a few seconds after the last call; while
+    /// no step read them in the last second it answers
+    /// [`Status::NOT_LOADED`]. Client only: [`Status::UNAVAILABLE`] on a
+    /// server and on a build whose slots the loader cannot read. Any thread;
+    /// it runs no mod callback.
+    pub client_slots: extern "system" fn(
+        me: ModHandle,
+        out: *mut ClientSlot,
+        entry_size: u32,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
+    /// Writes to `out`, a headed [`GameBinding`], the keys the client's
+    /// keyboard and mouse bindings give the game action named `action`, as
+    /// its reflection names it (`ContextualAction`), a mod's rebind
+    /// included. The interface reads the bindings every few frames, so a
+    /// change the player applies shows within a quarter second.
+    /// [`Status::UNAVAILABLE`] on a server, before the interface drew its
+    /// first frame and on a build where the loader does not find the
+    /// bindings; [`Status::MISSING`] for an action the build does not name;
+    /// [`Status::BAD_ARGS`] for a null or unheaded `out`. Any thread; the
+    /// strings are borrowed for the call.
+    pub game_binding:
+        extern "system" fn(me: ModHandle, action: Str, out: *mut GameBinding) -> Status,
+    /// Binds `key`, in the form of [`ControlSpec::key`], as the first key of
+    /// the game action named `action` in the client's keyboard and mouse
+    /// bindings for the mod `me`, or with 0 ends `me`'s rebind of it. The
+    /// interface writes it at its next frame and again after each change
+    /// the player applies, which the game rebuilds its bindings from, so the
+    /// rebind holds until the mod ends it or turns off; the game's Controls
+    /// page never shows it. Of the mods that rebind an action, the one that
+    /// rebound it last wins; asking again for the same rebind keeps a mod's
+    /// place, and an action no mod rebinds holds the game's own key.
+    /// [`Status::UNAVAILABLE`] as for [`HostApi::game_binding`];
+    /// [`Status::MISSING`] for an action the build does not name;
+    /// [`Status::BAD_ARGS`] for a key a mod control may not take, or a
+    /// modifier the game's bindings do not list. Any thread.
+    pub game_rebind: extern "system" fn(me: ModHandle, action: Str, key: u32) -> Status,
     /// Calls `callback` with `user` once per frame of the client's
     /// interface, on the thread that draws it, while the mod is on; the
     /// callback draws with [`HostApi::ui_widget`]. Client only
@@ -2134,99 +2475,6 @@ pub struct HostApi {
         callback: Option<UiFrameFn>,
         user: *mut c_void,
     ) -> Status,
-    /// Writes to `out` the game controls the local player holds, the
-    /// `Bitmask64` of the game's `PlayerInputType` as the client's
-    /// interface read it in its last step: gameplay controls only, not the
-    /// client-only ones such as menu keys. The bits are the game's, which a
-    /// game build may renumber: find each by its name among the constants
-    /// [`HostApi::types`] lists for `PlayerInputType`, never as a fixed
-    /// value. The loader reads the mask only once a mod asked for it: the
-    /// first call, of any mod, starts the reads, and the interface's next
-    /// step reads it; the safe layer calls it when a mod opens its input.
-    /// Client only; [`Status::UNAVAILABLE`] on a server, outside a game,
-    /// from the first call until that step, while no step read it for a
-    /// second, or on a build without the read; [`Status::BAD_ARGS`] for a
-    /// null `out`. Any thread; `out` is borrowed for the call.
-    pub local_held: extern "system" fn(me: ModHandle, out: *mut u64) -> Status,
-    /// Copies the local input sampler's cached diagnostics without requesting reads.
-    /// Client only ([`Status::UNAVAILABLE`] on a server); callable on any thread.
-    /// No game memory is read. Flags are weakly consistent and age is not session identity.
-    /// `out` is a headed, writable `LocalInputInfo`. ABI 12.1.
-    pub local_input_status: extern "system" fn(me: ModHandle, out: *mut LocalInputInfo) -> Status,
-    /// Writes to `out`, a headed [`ClientSnapshot`], the client's state in
-    /// one copy: its session, the open screens and the in-game menu's tab
-    /// from the interface's last frame, and the local player's held
-    /// controls. The first call, of any mod, starts the interface's reads
-    /// and the held controls' reads, so it answers [`ClientSnapshot::NEVER`];
-    /// the safe layer calls it when a mod opens its input. Every call after
-    /// a frame drew a game answers its copy; until one did, as in the main
-    /// menu before the first world, it answers `NEVER`. Client only:
-    /// [`Status::UNAVAILABLE`] on a server; [`Status::BAD_ARGS`] for a null
-    /// or unheaded `out`. Any thread; it runs no mod callback, and `out` is
-    /// borrowed for the call. ABI 12.1.
-    pub client_snapshot: extern "system" fn(me: ModHandle, out: *mut ClientSnapshot) -> Status,
-    /// Up to `capacity` parts and features of the loader that are off, in
-    /// the order they turned off, and how many there are. Entries are
-    /// `entry_size` bytes apart, the caller's `size_of::<LoaderOff>()`; the
-    /// loader fills what both sides know of each and its own [`Header`].
-    /// Everything it does not list runs. The strings stay valid for the
-    /// process, since the loader keeps each entry's first reason and drops
-    /// none. Any thread; it runs no mod callback. ABI 12.1.
-    pub loader_off: extern "system" fn(
-        me: ModHandle,
-        out: *mut LoaderOff,
-        entry_size: u32,
-        capacity: u32,
-        count: *mut u32,
-    ) -> Status,
-    /// Queues `spec`, a headed [`ClientCommand`], and writes its id to `id`:
-    /// the call answers only that it is queued, and
-    /// [`HostApi::client_command_status`] tells what came of it. One command
-    /// of each kind waits per mod: a second answers [`Status::REFUSED`]
-    /// until the first ends. [`Status::BAD_ARGS`] for an unknown kind, a
-    /// target the kind does not take, a look past
-    /// [`ClientCommand::MAX_LOOK`], a direction longer than 1 or a hold past
-    /// [`ClientCommand::MAX_HOLD_MS`]; [`Status::UNAVAILABLE`] on a server
-    /// and on a build without what the kind needs. Any thread; the command
-    /// runs later on the client's game thread, never inside a mod callback.
-    /// ABI 12.1.
-    pub client_command:
-        extern "system" fn(me: ModHandle, spec: *const ClientCommand, id: *mut u64) -> Status,
-    /// Writes to `out`, a headed [`ClientCommandStatus`], where the mod's
-    /// command `id` stands. The loader keeps the last 64 commands' outcomes;
-    /// [`Status::UNAVAILABLE`] for an id it no longer keeps or another mod's.
-    /// Any thread. ABI 12.1.
-    pub client_command_status:
-        extern "system" fn(me: ModHandle, id: u64, out: *mut ClientCommandStatus) -> Status,
-    /// Adds `material`, a headed [`TerrainMaterialAdd`], as a terrain
-    /// material of the game, and writes the voxel id it has for this run to
-    /// `id`. The loader gives mods' materials the terrain ids no palette of
-    /// the game names, in load order, and serves the material's palette
-    /// entry, rules and look on both sides; saves name its voxels by its
-    /// GUID. [`Status::BAD_ARGS`] for a `like` or `fallback` that is no
-    /// terrain material of the game or a change it does not know;
-    /// [`Status::REFUSED`] for a GUID whose content id the calling mod did
-    /// not declare with [`declare_content`](Self::declare_content), for a
-    /// mod not of side both, for a GUID added before and once every free id
-    /// is taken; [`Status::UNAVAILABLE`] on a build whose archive lacks the
-    /// palette or the rules. Allowed during `enshwick_mod_init` only.
-    /// ABI 12.2.
-    pub terrain_material_add: extern "system" fn(
-        me: ModHandle,
-        material: *const TerrainMaterialAdd,
-        id: *mut u8,
-    ) -> Status,
-    /// Gives every object placed from `spec`'s item, a headed
-    /// [`InteractionPrompt`], its prompt: the game verb and the replaced
-    /// action in the server's world, the mod's text on this client. One
-    /// prompt per item across all mods. Allowed during `enshwick_mod_init`
-    /// only; [`Status::BAD_ARGS`] for a null or short `spec`, item 0, an
-    /// unknown flag or a prompt that changes nothing; [`Status::REFUSED`]
-    /// for an item another prompt has; [`Status::UNAVAILABLE`] for a verb
-    /// or an action on a build without the server's writes, while a build
-    /// without the client's text site turns the text off alone. ABI 12.3.
-    pub interaction_prompt:
-        extern "system" fn(me: ModHandle, spec: *const InteractionPrompt) -> Status,
     /// Registers `callback` to add lines to the tooltip and detail panel of
     /// every item with an entity of its own, after the game's rows. It runs
     /// on the client's main thread, once each time the tooltip shows another
@@ -2235,146 +2483,12 @@ pub struct HostApi {
     /// [`HostApi::ui_widget`]; the loader keeps the lines and draws them
     /// each frame the tooltip shows. Client only, during init:
     /// [`Status::UNAVAILABLE`] on a server, [`Status::BAD_ARGS`] for a null
-    /// callback. ABI 12.4.
+    /// callback.
     pub ui_item_tooltip: extern "system" fn(
         me: ModHandle,
         callback: Option<UiTooltipFn>,
         user: *mut c_void,
     ) -> Status,
-    /// Replaces the mod's change to the permissions of the player in game
-    /// with `account`: `deny` takes bits from the player, `grant` gives
-    /// bits, both masks of [`PlayerInfo`](super::PlayerInfo)'s permission
-    /// bits; both 0 ends the change. The server holds the player to
-    /// `(group | every grant) & !every deny`, with `group` the bits of the
-    /// player's user group, from its next step on, so the game's own checks
-    /// refuse what a taken bit guards, and the loader's own reads of the
-    /// player's bits give the bits in force; the player's client still acts
-    /// by its group's bits. A change ends when the mod ends it or turns
-    /// off, when the player leaves and when the world ends; ending one
-    /// needs no player in game. [`Status::BAD_ARGS`] for account 0 or a bit
-    /// past the permissions; [`Status::REFUSED`] for a new change to an
-    /// account not in game; [`Status::WRONG_THREAD`] off the server's game
-    /// thread; [`Status::UNAVAILABLE`] outside a server and on a build
-    /// without the permission table, the step link or the player removal
-    /// link. ABI 12.5.
-    pub change_permissions:
-        extern "system" fn(me: ModHandle, account: PlayerKey, deny: u32, grant: u32) -> Status,
-    /// Calls `callback` once for transaction `id` of this mod, with where it
-    /// stands and `user`, on the server's game thread after the first step
-    /// that ends with it no longer [`TransactionInfo::PENDING`]: written
-    /// whole ([`TransactionInfo::APPLIED`], which says when a prop may still
-    /// be absent), or failed, refused, undoing or undone. A step at least
-    /// `within_ns` nanoseconds after the call runs it as it stands, still
-    /// pending perhaps. The `info` is null when the loader forgot the
-    /// transaction meanwhile. A step runs its due callbacks in the order
-    /// they were asked, and a callback may ask again. When a client's hosted
-    /// game ends, every callback kept runs with its transaction failed or
-    /// expired, never in the next game; a dedicated server that stops runs
-    /// none. A mod the loader turned off loses its callbacks unrun. [`Status::BAD_ARGS`] for a null `callback`;
-    /// [`Status::MISSING`] for an id this mod did not get or one the loader
-    /// forgot; [`Status::UNAVAILABLE`] once the transactions are off, which
-    /// runs every callback kept at once. Nothing is kept on an error. Any
-    /// thread. ABI 12.7.
-    pub transaction_settled: extern "system" fn(
-        me: ModHandle,
-        id: u64,
-        within_ns: u64,
-        callback: Option<TransactionSettledFn>,
-        user: *mut c_void,
-    ) -> Status,
-    /// Copies the prop template and optional local placement box for `item`
-    /// into headed `out`. `BAD_ARGS` for an unknown item or one placing nothing;
-    /// `NOT_A_PROP` for creatures and flame altars; `UNAVAILABLE` without a running
-    /// server, registry or required reads. Any thread, read-only. ABI 12.8.
-    pub prop_placement_info:
-        extern "system" fn(me: ModHandle, item: ItemId, out: *mut PropPlacementInfo) -> Status,
-    /// Registers `callback` to rule which stacks enter the containers placed
-    /// from `item`, vanilla or a mod's own. The loader asks the rules of the
-    /// container's item in load order, until one refuses, before a stack
-    /// enters one of its slots, whatever moves it: a player's move, a swap, Take All, Deposit
-    /// All or Stacks, an area deposit; a stack a rule refuses stays where it
-    /// was, or goes to another slot when the game picks the slots. Gives
-    /// through [`HostApi::inventory_submit`] and the game's own loot are not
-    /// asked. Allowed during `enshwick_mod_init` only; [`Status::BAD_ARGS`]
-    /// for item 0 or a null callback; [`Status::UNAVAILABLE`] on a build
-    /// without the slot link. ABI 12.9.
-    pub container_rule: extern "system" fn(
-        me: ModHandle,
-        item: ItemId,
-        callback: Option<ContainerRuleFn>,
-        user: *mut c_void,
-    ) -> Status,
-    /// Shows `character`'s player the game's pickup message for `count` of
-    /// `item`, as if the items had entered the player's inventory, which
-    /// they do not: the loader raises the game's pickup event on the server,
-    /// and every reader of that event, but the loader's item filters, hears
-    /// it. `count` above 65535 shows 65535, the game's most. On the server's
-    /// game thread between steps only; the systems of the next step see the
-    /// event. [`Status::BAD_ARGS`] for item 0, count 0 or an entity that is
-    /// no player; [`Status::WRONG_THREAD`] off the game thread or during a
-    /// step; [`Status::UNAVAILABLE`] outside a server and on a build without
-    /// the event. ABI 12.9.
-    pub show_pickup:
-        extern "system" fn(me: ModHandle, character: Entity, item: ItemId, count: u32) -> Status,
-    /// Copies the respawn point of the player whose character is `character`
-    /// into headed `out`: the spawn point entity, its kind and where the
-    /// character respawns. [`Status::MISSING`] for an entity that is no
-    /// player's character, or a character whose respawn point is not in the
-    /// world, where the game falls back to the world's start;
-    /// [`Status::WRONG_THREAD`] off the server's game thread;
-    /// [`Status::UNAVAILABLE`] outside a server and on a build without the
-    /// layout. ABI 12.12.
-    pub respawn_point:
-        extern "system" fn(me: ModHandle, character: Entity, out: *mut RespawnPointInfo) -> Status,
-    /// Makes `spawn_point` the respawn point of the player whose character
-    /// is `character`, as the game does when the character stands in a
-    /// spawn point, and raises the game's `PlayerSpawnInfoChangeEvent` for
-    /// it when the point names a base or a scene. While the character
-    /// stands in another spawn point, the game sets that one back at its
-    /// next step. Nothing changes when a call fails. [`Status::BAD_ARGS`] for an entity that is no
-    /// spawn point, or one of kind [`RespawnPointInfo::NO_RESPAWN`];
-    /// [`Status::MISSING`] for an entity that is no player's character;
-    /// [`Status::WRONG_THREAD`] off the server's game thread or during a
-    /// step; [`Status::UNAVAILABLE`] outside a server and on a build without
-    /// the layout. ABI 12.12.
-    pub set_respawn_point:
-        extern "system" fn(me: ModHandle, character: Entity, spawn_point: Entity) -> Status,
-    /// Adds `buff`, a headed [`BuffTypeAdd`], as a buff type of the game,
-    /// and writes its game id to `id`. The loader serves one patch of the
-    /// game's buff collection on both sides with every mod's types after the
-    /// vanilla ones, each a copy of its `like` with its changes, and names
-    /// a type's icon on a client only once that client shows served UI
-    /// images. [`Status::BAD_ARGS`] for a change or flag it does not know, a
-    /// negative life time, or a `like` that is no buff type of the game;
-    /// [`Status::REFUSED`] for a GUID whose content id the calling mod did
-    /// not declare with `declare_content`, for a mod not of side both and
-    /// for an id the game or a mod loaded before has;
-    /// [`Status::UNAVAILABLE`] on a build whose
-    /// archive or layout lacks the collection. Allowed during
-    /// `enshwick_mod_init` only. ABI 12.13.
-    pub buff_type_add:
-        extern "system" fn(me: ModHandle, buff: *const BuffTypeAdd, id: *mut BuffTypeId) -> Status,
-    /// Up to `capacity` damage causes, as [`DamageCheck`](super::DamageCheck)
-    /// numbers them, whose sites are not armed, and how many there are, as
-    /// every list answers: the causes no damage filter gets on this build
-    /// and run. A site arms when a mod registered a damage filter and the
-    /// build has it, and stops when it faults; with no filter, only the hit
-    /// site arms, and only for stats. [`Status::UNAVAILABLE`] until the
-    /// loader has linked and armed its hooks, after every mod's init. Any
-    /// thread. ABI 12.14.
-    pub damage_causes_off:
-        extern "system" fn(me: ModHandle, out: *mut u32, capacity: u32, count: *mut u32) -> Status,
-    /// Writes to `out` the waypoint all players see that the character
-    /// `entity` has set now, read as [`Event::WAYPOINT_CHANGED`](super::Event::WAYPOINT_CHANGED)
-    /// reads it: `set` 0 while it is off or for an entity without one, and
-    /// `key` 0 when no player online plays `entity`. `out` is the caller's,
-    /// at least a [`Header`] and writable for the size its header states;
-    /// [`Status::BAD_ARGS`] for a null or smaller one. On the server's game
-    /// thread at a quiet moment ([`Status::WRONG_THREAD`] elsewhere or
-    /// inside a step); [`Status::UNAVAILABLE`] before a world runs or on a
-    /// build whose reflection lacks the waypoint. ABI 12.16.
-    pub waypoint:
-        extern "system" fn(me: ModHandle, entity: Entity, out: *mut WaypointData) -> Status,
     /// Queues `spec`, a headed [`SoundPlay`], and writes the sound's id to
     /// `id`: the client's game thread starts it in its next interface frame,
     /// and [`HostApi::sound_state`] tells what came of it. Any thread, also
@@ -2385,7 +2499,7 @@ pub struct HostApi {
     /// [`SoundPlay::ON`]; [`Status::BUSY`] past
     /// [`SoundPlay::MAX_STARTS`] starts of the mod waiting for one frame;
     /// [`Status::UNAVAILABLE`] on a server and on a build where the
-    /// loader's playback is off. ABI 12.17.
+    /// loader's playback is off.
     pub sound_play:
         extern "system" fn(me: ModHandle, spec: *const SoundPlay, id: *mut u64) -> Status,
     /// Queues `steer`, a headed [`SoundSteer`], for the mod's sound `id`, or
@@ -2393,13 +2507,13 @@ pub struct HostApi {
     /// sound that ended changes nothing; ids count per mod, so another
     /// mod's id names at most one of this mod's own sounds. Any thread. [`Status::BAD_ARGS`] as for
     /// [`HostApi::sound_play`]; [`Status::BUSY`] when the mod's queue is
-    /// full; [`Status::UNAVAILABLE`] on a server. ABI 12.17.
+    /// full; [`Status::UNAVAILABLE`] on a server.
     pub sound_steer: extern "system" fn(me: ModHandle, id: u64, steer: *const SoundSteer) -> Status,
     /// Writes to `out`, a headed [`SoundInfo`], where the mod's sound `id`
     /// stands; an id the loader no longer keeps reads as
     /// [`SoundInfo::ENDED`], and another mod's id at most one of this mod's
     /// own sounds, since ids count per mod. Any thread. [`Status::BAD_ARGS`] for a null or
-    /// smaller `out`; [`Status::UNAVAILABLE`] on a server. ABI 12.17.
+    /// smaller `out`; [`Status::UNAVAILABLE`] on a server.
     pub sound_state: extern "system" fn(me: ModHandle, id: u64, out: *mut SoundInfo) -> Status,
     /// Sends `play`, a headed [`SoundPlay`], from the server to the clients
     /// of `audience`, a headed [`SoundAudience`], that run Enshwick and the
@@ -2419,7 +2533,7 @@ pub struct HostApi {
     /// the mod in one server step; [`Status::WRONG_THREAD`] off the game
     /// thread where it must read; [`Status::REFUSED`] for a mod that does
     /// not run on both sides; [`Status::UNAVAILABLE`] where no server runs
-    /// in the process. ABI 12.18.
+    /// in the process.
     pub sound_play_for: extern "system" fn(
         me: ModHandle,
         audience: *const SoundAudience,
@@ -2431,125 +2545,9 @@ pub struct HostApi {
     /// such sound changes nothing. [`SoundSteer::STOP_ALL`] is not taken.
     /// Any thread. [`Status::BAD_ARGS`] out of bounds and for
     /// [`SoundSteer::STOP_ALL`]; [`Status::UNAVAILABLE`] where no server
-    /// runs in the process. ABI 12.18.
+    /// runs in the process.
     pub sound_steer_for:
         extern "system" fn(me: ModHandle, id: u64, steer: *const SoundSteer) -> Status,
-    /// As [`serve_resource`](Self::serve_resource) from `key` itself, for a
-    /// patch that serves `key` with the data of the resource `from`, a
-    /// re-key: inside `patch`, a [`resource_served`](Self::resource_served)
-    /// read of `from` builds it without its own re-keys, so the re-keys of
-    /// every mod apply at once, each key taking the data its `from` has
-    /// before any re-key, and keys re-keyed in a ring rotate.
-    /// [`Status::BAD_ARGS`] when `from` is `key` or of another type.
-    /// Allowed during `enshwick_mod_init` only. ABI 12.19.
-    pub rekey_resource: extern "system" fn(
-        me: ModHandle,
-        key: *const ResourceKey,
-        from: *const ResourceKey,
-        patch: Option<ResourcePatchFn>,
-        user: *mut c_void,
-    ) -> Status,
-    /// Writes to `out`, a headed [`GameBinding`], the keys the client's
-    /// keyboard and mouse bindings give the game action named `action`, as
-    /// its reflection names it (`ContextualAction`), a mod's rebind
-    /// included. The interface reads the bindings every few frames, so a
-    /// change the player applies shows within a quarter second.
-    /// [`Status::UNAVAILABLE`] on a server, before the interface drew its
-    /// first frame and on a build where the loader does not find the
-    /// bindings; [`Status::MISSING`] for an action the build does not name;
-    /// [`Status::BAD_ARGS`] for a null or unheaded `out`. Any thread; the
-    /// strings are borrowed for the call. ABI 12.20.
-    pub game_binding:
-        extern "system" fn(me: ModHandle, action: Str, out: *mut GameBinding) -> Status,
-    /// Binds `key`, in the form of [`ControlSpec::key`], as the first key of
-    /// the game action named `action` in the client's keyboard and mouse
-    /// bindings for the mod `me`, or with 0 ends `me`'s rebind of it. The
-    /// interface writes it at its next frame and again after each change
-    /// the player applies, which the game rebuilds its bindings from, so the
-    /// rebind holds until the mod ends it or turns off; the game's Controls
-    /// page never shows it. Of the mods that rebind an action, the one that
-    /// rebound it last wins; asking again for the same rebind keeps a mod's
-    /// place, and an action no mod rebinds holds the game's own key.
-    /// [`Status::UNAVAILABLE`] as for [`HostApi::game_binding`];
-    /// [`Status::MISSING`] for an action the build does not name;
-    /// [`Status::BAD_ARGS`] for a key a mod control may not take, or a
-    /// modifier the game's bindings do not list. Any thread. ABI 12.20.
-    pub game_rebind: extern "system" fn(me: ModHandle, action: Str, key: u32) -> Status,
-    /// Registers a filter on what the game pays a player for a quest, the
-    /// quest's experience, before it pays it and sets the quest's bool.
-    /// Filters run in load order, each with the payment as the filters
-    /// before left it, on the thread of the game's quest reward system, in
-    /// the dedicated server or a hosting client. [`Status::UNAVAILABLE`] on
-    /// a build where the loader does not find the payment, or where its
-    /// code is not what the loader expects; [`Status::BAD_ARGS`] for a null
-    /// callback. Allowed during `enshwick_mod_init` only. ABI 12.22.
-    pub quest_reward_filter: extern "system" fn(
-        me: ModHandle,
-        callback: Option<QuestRewardFilterFn>,
-        user: *mut c_void,
-    ) -> Status,
-    /// Sets knowledge `id` of the player whose character is `entity`, or of
-    /// the world for 0 or an id of the world's, to exactly `value`: 0 or 1
-    /// for a [`KnowledgeInfo::BOOL`], any count or bits otherwise.
-    ///
-    /// The game keeps a mark beside each value, one bit per flag (all of
-    /// them for a bool or a counter), set for what the player has seen.
-    /// [`KnowledgeChange::QUIET`] writes the value at once with every bit
-    /// marked, as a save loads it, sends it to the clients again and is
-    /// saved with the next save; nothing a grant brings follows.
-    /// [`KnowledgeChange::SHOWN`] grants what the value gains as
-    /// [`HostApi::change_knowledge`] does (the next step applies it with
-    /// what follows) and writes what it loses at once, keeping the mark of
-    /// flags and no mark for a bool or a counter. A counter's gain is the
-    /// difference from the value it reads now, so another grant queued
-    /// before the step applies it adds to the count.
-    ///
-    /// [`Status::BAD_ARGS`] for an unknown id or `notice`, a bool above 1,
-    /// or, for `SHOWN`, a gained bit the game does not expect;
-    /// [`Status::BUSY`] when the game's queue fills while `SHOWN` grants,
-    /// with what it wrote and queued before kept;
-    /// [`Status::REFUSED`] as for [`HostApi::change_knowledge`]. On the
-    /// server's game thread only. ABI 12.22.
-    pub knowledge_set: extern "system" fn(
-        me: ModHandle,
-        entity: Entity,
-        id: KnowledgeId,
-        value: u32,
-        notice: u8,
-    ) -> Status,
-    /// Up to `capacity` items of the windows the server's mods show this
-    /// client, the newest window last, and how many there are, as every
-    /// list answers. Entries are `entry_size` bytes apart, the caller's
-    /// `size_of::<ClientWindowItem>()`. Only the newest window shows and
-    /// takes [`ClientCommand::WINDOW_PRESS`] and its kin; its items are the
-    /// ones it draws now, a button's form's while one is open. The strings
-    /// stay valid until the next call on this thread. Client only:
-    /// [`Status::UNAVAILABLE`] on a server. Any thread; it runs no mod
-    /// callback. ABI 12.24.
-    pub client_windows: extern "system" fn(
-        me: ModHandle,
-        out: *mut ClientWindowItem,
-        entry_size: u32,
-        capacity: u32,
-        count: *mut u32,
-    ) -> Status,
-    /// Up to `capacity` slots of the local player's inventory, empty ones
-    /// included, in the game's order, as the client's last step read them
-    /// from its copy of the world, and how many there are, as every list
-    /// answers. Entries are `entry_size` bytes apart, the caller's
-    /// `size_of::<ClientSlot>()`. The first call starts the reads, which
-    /// then run in each step for a few seconds after the last call; while
-    /// no step read them in the last second it answers
-    /// [`Status::NOT_LOADED`]. Client only: [`Status::UNAVAILABLE`] on a
-    /// server and on a build whose slots the loader cannot read. Any thread;
-    /// it runs no mod callback. ABI 12.28.
-    pub client_slots: extern "system" fn(
-        me: ModHandle,
-        out: *mut ClientSlot,
-        entry_size: u32,
-        capacity: u32,
-        count: *mut u32,
-    ) -> Status,
 }
 
 /// The largest radius [`HostApi::fog_uncover`] takes, in metres.
@@ -2606,191 +2604,191 @@ const _: () = {
     assert!(offset_of!(HostApi, run_point) == 24 + 43 * 8);
     assert!(offset_of!(HostApi, event_types) == 24 + 44 * 8);
     assert!(offset_of!(HostApi, feature) == 24 + 45 * 8);
-    assert!(offset_of!(HostApi, loop_wait) == 24 + 46 * 8);
-    assert!(offset_of!(HostApi, server_wait) == 24 + 47 * 8);
-    assert!(offset_of!(HostApi, task_workers) == 24 + 48 * 8);
-    assert!(offset_of!(HostApi, serve_call) == 24 + 49 * 8);
-    assert!(offset_of!(HostApi, find_call) == 24 + 50 * 8);
-    assert!(offset_of!(HostApi, call) == 24 + 51 * 8);
-    assert!(offset_of!(HostApi, subscribe_tick) == 24 + 52 * 8);
-    assert!(offset_of!(HostApi, set_tick_every) == 24 + 53 * 8);
-    assert!(offset_of!(HostApi, set_config) == 24 + 54 * 8);
-    assert!(offset_of!(HostApi, subscribe_client_game_event) == 24 + 55 * 8);
-    assert!(offset_of!(HostApi, serve_resource) == 24 + 56 * 8);
-    assert!(offset_of!(HostApi, add_text) == 24 + 57 * 8);
-    assert!(offset_of!(HostApi, define_item_data) == 24 + 58 * 8);
-    assert!(offset_of!(HostApi, item_data_get) == 24 + 59 * 8);
-    assert!(offset_of!(HostApi, set_item_data) == 24 + 60 * 8);
-    assert!(offset_of!(HostApi, content_serve) == 24 + 61 * 8);
-    assert!(offset_of!(HostApi, content_read) == 24 + 62 * 8);
-    assert!(offset_of!(HostApi, icons_ready) == 24 + 63 * 8);
-    assert!(offset_of!(HostApi, declare_content) == 24 + 64 * 8);
-    assert!(offset_of!(HostApi, define_entity_data) == 24 + 65 * 8);
-    assert!(offset_of!(HostApi, resource_read) == 24 + 66 * 8);
-    assert!(offset_of!(HostApi, game_text) == 24 + 67 * 8);
-    assert!(offset_of!(HostApi, rebuild_resource) == 24 + 68 * 8);
-    assert!(offset_of!(HostApi, recipe_rule) == 24 + 69 * 8);
-    assert!(offset_of!(HostApi, recipe_disabled) == 24 + 70 * 8);
-    assert!(offset_of!(HostApi, recipe_kind) == 24 + 71 * 8);
-    assert!(offset_of!(HostApi, rate) == 24 + 72 * 8);
-    assert!(offset_of!(HostApi, set_rate) == 24 + 73 * 8);
-    assert!(offset_of!(HostApi, change_data) == 24 + 74 * 8);
-    assert!(offset_of!(HostApi, set_change) == 24 + 75 * 8);
-    assert!(offset_of!(HostApi, use_content) == 24 + 76 * 8);
-    assert!(offset_of!(HostApi, resource_keys) == 24 + 77 * 8);
-    assert!(offset_of!(HostApi, content_hashes) == 24 + 78 * 8);
-    assert!(offset_of!(HostApi, types) == 24 + 79 * 8);
-    assert!(offset_of!(HostApi, game_version) == 24 + 80 * 8);
-    assert!(offset_of!(HostApi, crafting_prop) == 24 + 81 * 8);
-    assert!(offset_of!(HostApi, read_only) == 24 + 82 * 8);
-    assert!(offset_of!(HostApi, resource_served) == 24 + 83 * 8);
-    assert!(offset_of!(HostApi, resource_buffer) == 24 + 84 * 8);
-    assert!(offset_of!(HostApi, content_name) == 24 + 85 * 8);
-    assert!(offset_of!(HostApi, player) == 24 + 86 * 8);
-    assert!(offset_of!(HostApi, players) == 24 + 87 * 8);
-    assert!(offset_of!(HostApi, chat) == 24 + 88 * 8);
-    assert!(offset_of!(HostApi, chat_all) == 24 + 89 * 8);
-    assert!(offset_of!(HostApi, set_label) == 24 + 90 * 8);
-    assert!(offset_of!(HostApi, rename_filter) == 24 + 91 * 8);
-    assert!(offset_of!(HostApi, item_info) == 24 + 92 * 8);
-    assert!(offset_of!(HostApi, request_altars) == 24 + 93 * 8);
-    assert!(offset_of!(HostApi, altars) == 24 + 94 * 8);
-    assert!(offset_of!(HostApi, building_zone_filter) == 24 + 95 * 8);
-    assert!(offset_of!(HostApi, base_zones) == 24 + 96 * 8);
-    assert!(offset_of!(HostApi, entities) == 24 + 97 * 8);
-    assert!(offset_of!(HostApi, destroy) == 24 + 98 * 8);
-    assert!(offset_of!(HostApi, save_world) == 24 + 99 * 8);
-    assert!(offset_of!(HostApi, world_key) == 24 + 100 * 8);
-    assert!(offset_of!(HostApi, component_write) == 24 + 101 * 8);
-    assert!(offset_of!(HostApi, notify) == 24 + 102 * 8);
-    assert!(offset_of!(HostApi, time_of_day) == 24 + 103 * 8);
-    assert!(offset_of!(HostApi, set_time_of_day) == 24 + 104 * 8);
-    assert!(offset_of!(HostApi, request_time_speed) == 24 + 105 * 8);
-    assert!(offset_of!(HostApi, set_time_speed) == 24 + 106 * 8);
-    assert!(offset_of!(HostApi, game_settings) == 24 + 107 * 8);
-    assert!(offset_of!(HostApi, set_game_settings) == 24 + 108 * 8);
-    assert!(offset_of!(HostApi, buff_types) == 24 + 109 * 8);
-    assert!(offset_of!(HostApi, buffs) == 24 + 110 * 8);
-    assert!(offset_of!(HostApi, apply_buff) == 24 + 111 * 8);
-    assert!(offset_of!(HostApi, remove_buff) == 24 + 112 * 8);
-    assert!(offset_of!(HostApi, weather_at) == 24 + 113 * 8);
-    assert!(offset_of!(HostApi, weather_fronts) == 24 + 114 * 8);
-    assert!(offset_of!(HostApi, set_weather) == 24 + 115 * 8);
-    assert!(offset_of!(HostApi, terrain_materials) == 24 + 116 * 8);
-    assert!(offset_of!(HostApi, terrain_edit) == 24 + 117 * 8);
-    assert!(offset_of!(HostApi, altar_zone_filter) == 24 + 118 * 8);
-    assert!(offset_of!(HostApi, altar_zones_changed) == 24 + 119 * 8);
-    assert!(offset_of!(HostApi, altar_limit_filter) == 24 + 120 * 8);
-    assert!(offset_of!(HostApi, base_limit) == 24 + 121 * 8);
-    assert!(offset_of!(HostApi, voxel_read) == 24 + 122 * 8);
-    assert!(offset_of!(HostApi, build_rights) == 24 + 123 * 8);
-    assert!(offset_of!(HostApi, transaction_commit) == 24 + 124 * 8);
-    assert!(offset_of!(HostApi, transaction_undo) == 24 + 125 * 8);
-    assert!(offset_of!(HostApi, transaction_status) == 24 + 126 * 8);
-    assert!(offset_of!(HostApi, world_quiet) == 24 + 127 * 8);
-    assert!(offset_of!(HostApi, transaction_entities) == 24 + 128 * 8);
-    assert!(offset_of!(HostApi, world_persists) == 24 + 129 * 8);
-    assert!(offset_of!(HostApi, map_markers) == 24 + 130 * 8);
-    assert!(offset_of!(HostApi, account_action) == 24 + 131 * 8);
-    assert!(offset_of!(HostApi, map_frame) == 24 + 132 * 8);
-    assert!(offset_of!(HostApi, request_base_limits) == 24 + 133 * 8);
-    assert!(offset_of!(HostApi, set_chat_mute) == 24 + 134 * 8);
-    assert!(offset_of!(HostApi, chat_muted) == 24 + 135 * 8);
-    assert!(offset_of!(HostApi, set_base_limit) == 24 + 136 * 8);
-    assert!(offset_of!(HostApi, save_info) == 24 + 137 * 8);
-    assert!(offset_of!(HostApi, hold_saves) == 24 + 138 * 8);
-    assert!(offset_of!(HostApi, set_saved) == 24 + 139 * 8);
-    assert!(offset_of!(HostApi, progress_write) == 24 + 140 * 8);
-    assert!(offset_of!(HostApi, server_stop) == 24 + 141 * 8);
-    assert!(offset_of!(HostApi, fog_uncover) == 24 + 142 * 8);
-    assert!(offset_of!(HostApi, language_of) == 24 + 143 * 8);
-    assert!(offset_of!(HostApi, join_rule) == 24 + 144 * 8);
-    assert!(offset_of!(HostApi, request_inventory) == 24 + 145 * 8);
-    assert!(offset_of!(HostApi, inventory_submit) == 24 + 146 * 8);
-    assert!(offset_of!(HostApi, survivor_lookup) == 24 + 147 * 8);
-    assert!(offset_of!(HostApi, survivor_bed_check) == 24 + 148 * 8);
-    assert!(offset_of!(HostApi, summon_filter) == 24 + 149 * 8);
-    assert!(offset_of!(HostApi, summon_item) == 24 + 150 * 8);
-    assert!(offset_of!(HostApi, survivor_status) == 24 + 151 * 8);
-    assert!(offset_of!(HostApi, emit) == 24 + 152 * 8);
-    assert!(offset_of!(HostApi, teleport) == 24 + 153 * 8);
-    assert!(offset_of!(HostApi, spawn) == 24 + 154 * 8);
-    assert!(offset_of!(HostApi, damage_filter) == 24 + 155 * 8);
-    assert!(offset_of!(HostApi, summoned) == 24 + 156 * 8);
-    assert!(offset_of!(HostApi, define_stat) == 24 + 157 * 8);
-    assert!(offset_of!(HostApi, stat_info) == 24 + 158 * 8);
-    assert!(offset_of!(HostApi, stat_value) == 24 + 159 * 8);
-    assert!(offset_of!(HostApi, stat_modify) == 24 + 160 * 8);
-    assert!(offset_of!(HostApi, stat_buff) == 24 + 161 * 8);
-    assert!(offset_of!(HostApi, stats_changed) == 24 + 162 * 8);
-    assert!(offset_of!(HostApi, stat_sources) == 24 + 163 * 8);
-    assert!(offset_of!(HostApi, stat_watch) == 24 + 164 * 8);
-    assert!(offset_of!(HostApi, define_affix) == 24 + 165 * 8);
-    assert!(offset_of!(HostApi, affix_roll) == 24 + 166 * 8);
-    assert!(offset_of!(HostApi, item_lines) == 24 + 167 * 8);
-    assert!(offset_of!(HostApi, affix_info) == 24 + 168 * 8);
-    assert!(offset_of!(HostApi, item_filter) == 24 + 169 * 8);
-    assert!(offset_of!(HostApi, drop_items) == 24 + 170 * 8);
-    assert!(offset_of!(HostApi, skill_override) == 24 + 171 * 8);
-    assert!(offset_of!(HostApi, comfort_filter) == 24 + 172 * 8);
-    assert!(offset_of!(HostApi, experience_filter) == 24 + 173 * 8);
-    assert!(offset_of!(HostApi, knowledge) == 24 + 174 * 8);
-    assert!(offset_of!(HostApi, change_knowledge) == 24 + 175 * 8);
-    assert!(offset_of!(HostApi, quests) == 24 + 176 * 8);
-    assert!(offset_of!(HostApi, knowledge_input_filter) == 24 + 177 * 8);
-    assert!(offset_of!(HostApi, game_query) == 24 + 178 * 8);
-    assert!(offset_of!(HostApi, run_console) == 24 + 179 * 8);
-    assert!(offset_of!(HostApi, interaction_filter) == 24 + 180 * 8);
-    assert!(offset_of!(HostApi, craft_filter) == 24 + 181 * 8);
-    assert!(offset_of!(HostApi, build_filter) == 24 + 182 * 8);
-    assert!(offset_of!(HostApi, actions) == 24 + 183 * 8);
-    assert!(offset_of!(HostApi, control) == 24 + 184 * 8);
-    assert!(offset_of!(HostApi, run_action) == 24 + 185 * 8);
-    assert!(offset_of!(HostApi, chat_filter) == 24 + 186 * 8);
-    assert!(offset_of!(HostApi, commands) == 24 + 187 * 8);
-    assert!(offset_of!(HostApi, run_command) == 24 + 188 * 8);
-    assert!(offset_of!(HostApi, command_list) == 24 + 189 * 8);
-    assert!(offset_of!(HostApi, actions_changed) == 24 + 190 * 8);
-    assert!(offset_of!(HostApi, action_window) == 24 + 191 * 8);
-    assert!(offset_of!(HostApi, ui_frame) == 24 + 192 * 8);
-    assert!(offset_of!(HostApi, ui_widget) == 24 + 193 * 8);
-    assert!(offset_of!(HostApi, ui_dialog) == 24 + 194 * 8);
-    assert!(offset_of!(HostApi, ui_hud) == 24 + 195 * 8);
-    assert!(offset_of!(HostApi, ui_markers) == 24 + 196 * 8);
-    assert!(offset_of!(HostApi, request_fog) == 24 + 197 * 8);
-    assert!(offset_of!(HostApi, fog_read) == 24 + 198 * 8);
-    assert!(offset_of!(HostApi, map_marker_types) == 24 + 199 * 8);
-    assert!(offset_of!(HostApi, ui_extension) == 24 + 200 * 8);
-    assert!(offset_of!(HostApi, local_held) == 24 + 201 * 8);
-    assert!(offset_of!(HostApi, local_input_status) == 24 + 202 * 8);
-    assert!(offset_of!(HostApi, client_snapshot) == 24 + 203 * 8);
-    assert!(offset_of!(HostApi, loader_off) == 24 + 204 * 8);
-    assert!(offset_of!(HostApi, client_command) == 24 + 205 * 8);
-    assert!(offset_of!(HostApi, client_command_status) == 24 + 206 * 8);
-    assert!(offset_of!(HostApi, terrain_material_add) == 24 + 207 * 8);
-    assert!(offset_of!(HostApi, interaction_prompt) == 24 + 208 * 8);
-    assert!(offset_of!(HostApi, ui_item_tooltip) == 24 + 209 * 8);
-    assert!(offset_of!(HostApi, change_permissions) == 24 + 210 * 8);
-    assert!(offset_of!(HostApi, transaction_settled) == 24 + 211 * 8);
-    assert!(offset_of!(HostApi, prop_placement_info) == 24 + 212 * 8);
-    assert!(offset_of!(HostApi, container_rule) == 24 + 213 * 8);
-    assert!(offset_of!(HostApi, show_pickup) == 24 + 214 * 8);
-    assert!(offset_of!(HostApi, respawn_point) == 24 + 215 * 8);
-    assert!(offset_of!(HostApi, set_respawn_point) == 24 + 216 * 8);
-    assert!(offset_of!(HostApi, buff_type_add) == 24 + 217 * 8);
-    assert!(offset_of!(HostApi, damage_causes_off) == 24 + 218 * 8);
-    assert!(offset_of!(HostApi, waypoint) == 24 + 219 * 8);
-    assert!(offset_of!(HostApi, sound_play) == 24 + 220 * 8);
-    assert!(offset_of!(HostApi, sound_steer) == 24 + 221 * 8);
-    assert!(offset_of!(HostApi, sound_state) == 24 + 222 * 8);
-    assert!(offset_of!(HostApi, sound_play_for) == 24 + 223 * 8);
-    assert!(offset_of!(HostApi, sound_steer_for) == 24 + 224 * 8);
-    assert!(offset_of!(HostApi, rekey_resource) == 24 + 225 * 8);
-    assert!(offset_of!(HostApi, game_binding) == 24 + 226 * 8);
-    assert!(offset_of!(HostApi, game_rebind) == 24 + 227 * 8);
-    assert!(offset_of!(HostApi, quest_reward_filter) == 24 + 228 * 8);
-    assert!(offset_of!(HostApi, knowledge_set) == 24 + 229 * 8);
-    assert!(offset_of!(HostApi, client_windows) == 24 + 230 * 8);
-    assert!(offset_of!(HostApi, client_slots) == 24 + 231 * 8);
+    assert!(offset_of!(HostApi, loader_off) == 24 + 46 * 8);
+    assert!(offset_of!(HostApi, loop_wait) == 24 + 47 * 8);
+    assert!(offset_of!(HostApi, server_wait) == 24 + 48 * 8);
+    assert!(offset_of!(HostApi, task_workers) == 24 + 49 * 8);
+    assert!(offset_of!(HostApi, serve_call) == 24 + 50 * 8);
+    assert!(offset_of!(HostApi, find_call) == 24 + 51 * 8);
+    assert!(offset_of!(HostApi, call) == 24 + 52 * 8);
+    assert!(offset_of!(HostApi, subscribe_tick) == 24 + 53 * 8);
+    assert!(offset_of!(HostApi, set_tick_every) == 24 + 54 * 8);
+    assert!(offset_of!(HostApi, set_config) == 24 + 55 * 8);
+    assert!(offset_of!(HostApi, subscribe_client_game_event) == 24 + 56 * 8);
+    assert!(offset_of!(HostApi, serve_resource) == 24 + 57 * 8);
+    assert!(offset_of!(HostApi, add_text) == 24 + 58 * 8);
+    assert!(offset_of!(HostApi, define_item_data) == 24 + 59 * 8);
+    assert!(offset_of!(HostApi, item_data_get) == 24 + 60 * 8);
+    assert!(offset_of!(HostApi, set_item_data) == 24 + 61 * 8);
+    assert!(offset_of!(HostApi, content_serve) == 24 + 62 * 8);
+    assert!(offset_of!(HostApi, content_read) == 24 + 63 * 8);
+    assert!(offset_of!(HostApi, icons_ready) == 24 + 64 * 8);
+    assert!(offset_of!(HostApi, declare_content) == 24 + 65 * 8);
+    assert!(offset_of!(HostApi, define_entity_data) == 24 + 66 * 8);
+    assert!(offset_of!(HostApi, resource_read) == 24 + 67 * 8);
+    assert!(offset_of!(HostApi, game_text) == 24 + 68 * 8);
+    assert!(offset_of!(HostApi, rebuild_resource) == 24 + 69 * 8);
+    assert!(offset_of!(HostApi, rekey_resource) == 24 + 70 * 8);
+    assert!(offset_of!(HostApi, recipe_rule) == 24 + 71 * 8);
+    assert!(offset_of!(HostApi, recipe_disabled) == 24 + 72 * 8);
+    assert!(offset_of!(HostApi, recipe_kind) == 24 + 73 * 8);
+    assert!(offset_of!(HostApi, rate) == 24 + 74 * 8);
+    assert!(offset_of!(HostApi, set_rate) == 24 + 75 * 8);
+    assert!(offset_of!(HostApi, change_data) == 24 + 76 * 8);
+    assert!(offset_of!(HostApi, set_change) == 24 + 77 * 8);
+    assert!(offset_of!(HostApi, use_content) == 24 + 78 * 8);
+    assert!(offset_of!(HostApi, resource_keys) == 24 + 79 * 8);
+    assert!(offset_of!(HostApi, content_hashes) == 24 + 80 * 8);
+    assert!(offset_of!(HostApi, types) == 24 + 81 * 8);
+    assert!(offset_of!(HostApi, game_version) == 24 + 82 * 8);
+    assert!(offset_of!(HostApi, crafting_prop) == 24 + 83 * 8);
+    assert!(offset_of!(HostApi, read_only) == 24 + 84 * 8);
+    assert!(offset_of!(HostApi, resource_served) == 24 + 85 * 8);
+    assert!(offset_of!(HostApi, resource_buffer) == 24 + 86 * 8);
+    assert!(offset_of!(HostApi, content_name) == 24 + 87 * 8);
+    assert!(offset_of!(HostApi, player) == 24 + 88 * 8);
+    assert!(offset_of!(HostApi, players) == 24 + 89 * 8);
+    assert!(offset_of!(HostApi, chat) == 24 + 90 * 8);
+    assert!(offset_of!(HostApi, chat_all) == 24 + 91 * 8);
+    assert!(offset_of!(HostApi, set_label) == 24 + 92 * 8);
+    assert!(offset_of!(HostApi, rename_filter) == 24 + 93 * 8);
+    assert!(offset_of!(HostApi, item_info) == 24 + 94 * 8);
+    assert!(offset_of!(HostApi, request_altars) == 24 + 95 * 8);
+    assert!(offset_of!(HostApi, altars) == 24 + 96 * 8);
+    assert!(offset_of!(HostApi, building_zone_filter) == 24 + 97 * 8);
+    assert!(offset_of!(HostApi, base_zones) == 24 + 98 * 8);
+    assert!(offset_of!(HostApi, entities) == 24 + 99 * 8);
+    assert!(offset_of!(HostApi, destroy) == 24 + 100 * 8);
+    assert!(offset_of!(HostApi, save_world) == 24 + 101 * 8);
+    assert!(offset_of!(HostApi, world_key) == 24 + 102 * 8);
+    assert!(offset_of!(HostApi, component_write) == 24 + 103 * 8);
+    assert!(offset_of!(HostApi, notify) == 24 + 104 * 8);
+    assert!(offset_of!(HostApi, time_of_day) == 24 + 105 * 8);
+    assert!(offset_of!(HostApi, set_time_of_day) == 24 + 106 * 8);
+    assert!(offset_of!(HostApi, request_time_speed) == 24 + 107 * 8);
+    assert!(offset_of!(HostApi, set_time_speed) == 24 + 108 * 8);
+    assert!(offset_of!(HostApi, game_settings) == 24 + 109 * 8);
+    assert!(offset_of!(HostApi, set_game_settings) == 24 + 110 * 8);
+    assert!(offset_of!(HostApi, buff_types) == 24 + 111 * 8);
+    assert!(offset_of!(HostApi, buff_type_add) == 24 + 112 * 8);
+    assert!(offset_of!(HostApi, buffs) == 24 + 113 * 8);
+    assert!(offset_of!(HostApi, apply_buff) == 24 + 114 * 8);
+    assert!(offset_of!(HostApi, remove_buff) == 24 + 115 * 8);
+    assert!(offset_of!(HostApi, weather_at) == 24 + 116 * 8);
+    assert!(offset_of!(HostApi, weather_fronts) == 24 + 117 * 8);
+    assert!(offset_of!(HostApi, set_weather) == 24 + 118 * 8);
+    assert!(offset_of!(HostApi, terrain_materials) == 24 + 119 * 8);
+    assert!(offset_of!(HostApi, terrain_material_add) == 24 + 120 * 8);
+    assert!(offset_of!(HostApi, terrain_edit) == 24 + 121 * 8);
+    assert!(offset_of!(HostApi, altar_zone_filter) == 24 + 122 * 8);
+    assert!(offset_of!(HostApi, altar_zones_changed) == 24 + 123 * 8);
+    assert!(offset_of!(HostApi, altar_limit_filter) == 24 + 124 * 8);
+    assert!(offset_of!(HostApi, base_limit) == 24 + 125 * 8);
+    assert!(offset_of!(HostApi, voxel_read) == 24 + 126 * 8);
+    assert!(offset_of!(HostApi, build_rights) == 24 + 127 * 8);
+    assert!(offset_of!(HostApi, change_permissions) == 24 + 128 * 8);
+    assert!(offset_of!(HostApi, transaction_commit) == 24 + 129 * 8);
+    assert!(offset_of!(HostApi, transaction_undo) == 24 + 130 * 8);
+    assert!(offset_of!(HostApi, transaction_status) == 24 + 131 * 8);
+    assert!(offset_of!(HostApi, world_quiet) == 24 + 132 * 8);
+    assert!(offset_of!(HostApi, transaction_entities) == 24 + 133 * 8);
+    assert!(offset_of!(HostApi, transaction_settled) == 24 + 134 * 8);
+    assert!(offset_of!(HostApi, prop_placement_info) == 24 + 135 * 8);
+    assert!(offset_of!(HostApi, world_persists) == 24 + 136 * 8);
+    assert!(offset_of!(HostApi, map_markers) == 24 + 137 * 8);
+    assert!(offset_of!(HostApi, account_action) == 24 + 138 * 8);
+    assert!(offset_of!(HostApi, map_frame) == 24 + 139 * 8);
+    assert!(offset_of!(HostApi, waypoint) == 24 + 140 * 8);
+    assert!(offset_of!(HostApi, request_base_limits) == 24 + 141 * 8);
+    assert!(offset_of!(HostApi, set_chat_mute) == 24 + 142 * 8);
+    assert!(offset_of!(HostApi, chat_muted) == 24 + 143 * 8);
+    assert!(offset_of!(HostApi, set_base_limit) == 24 + 144 * 8);
+    assert!(offset_of!(HostApi, save_info) == 24 + 145 * 8);
+    assert!(offset_of!(HostApi, hold_saves) == 24 + 146 * 8);
+    assert!(offset_of!(HostApi, set_saved) == 24 + 147 * 8);
+    assert!(offset_of!(HostApi, progress_write) == 24 + 148 * 8);
+    assert!(offset_of!(HostApi, server_stop) == 24 + 149 * 8);
+    assert!(offset_of!(HostApi, fog_uncover) == 24 + 150 * 8);
+    assert!(offset_of!(HostApi, language_of) == 24 + 151 * 8);
+    assert!(offset_of!(HostApi, join_rule) == 24 + 152 * 8);
+    assert!(offset_of!(HostApi, request_inventory) == 24 + 153 * 8);
+    assert!(offset_of!(HostApi, inventory_submit) == 24 + 154 * 8);
+    assert!(offset_of!(HostApi, container_rule) == 24 + 155 * 8);
+    assert!(offset_of!(HostApi, show_pickup) == 24 + 156 * 8);
+    assert!(offset_of!(HostApi, survivor_lookup) == 24 + 157 * 8);
+    assert!(offset_of!(HostApi, survivor_bed_check) == 24 + 158 * 8);
+    assert!(offset_of!(HostApi, summon_filter) == 24 + 159 * 8);
+    assert!(offset_of!(HostApi, summon_item) == 24 + 160 * 8);
+    assert!(offset_of!(HostApi, survivor_status) == 24 + 161 * 8);
+    assert!(offset_of!(HostApi, emit) == 24 + 162 * 8);
+    assert!(offset_of!(HostApi, teleport) == 24 + 163 * 8);
+    assert!(offset_of!(HostApi, spawn) == 24 + 164 * 8);
+    assert!(offset_of!(HostApi, respawn_point) == 24 + 165 * 8);
+    assert!(offset_of!(HostApi, set_respawn_point) == 24 + 166 * 8);
+    assert!(offset_of!(HostApi, damage_filter) == 24 + 167 * 8);
+    assert!(offset_of!(HostApi, damage_causes_off) == 24 + 168 * 8);
+    assert!(offset_of!(HostApi, summoned) == 24 + 169 * 8);
+    assert!(offset_of!(HostApi, define_stat) == 24 + 170 * 8);
+    assert!(offset_of!(HostApi, stat_info) == 24 + 171 * 8);
+    assert!(offset_of!(HostApi, stat_value) == 24 + 172 * 8);
+    assert!(offset_of!(HostApi, stat_modify) == 24 + 173 * 8);
+    assert!(offset_of!(HostApi, stat_buff) == 24 + 174 * 8);
+    assert!(offset_of!(HostApi, stats_changed) == 24 + 175 * 8);
+    assert!(offset_of!(HostApi, stat_sources) == 24 + 176 * 8);
+    assert!(offset_of!(HostApi, stat_watch) == 24 + 177 * 8);
+    assert!(offset_of!(HostApi, define_affix) == 24 + 178 * 8);
+    assert!(offset_of!(HostApi, affix_roll) == 24 + 179 * 8);
+    assert!(offset_of!(HostApi, item_lines) == 24 + 180 * 8);
+    assert!(offset_of!(HostApi, affix_info) == 24 + 181 * 8);
+    assert!(offset_of!(HostApi, item_filter) == 24 + 182 * 8);
+    assert!(offset_of!(HostApi, drop_items) == 24 + 183 * 8);
+    assert!(offset_of!(HostApi, skill_override) == 24 + 184 * 8);
+    assert!(offset_of!(HostApi, comfort_filter) == 24 + 185 * 8);
+    assert!(offset_of!(HostApi, experience_filter) == 24 + 186 * 8);
+    assert!(offset_of!(HostApi, knowledge) == 24 + 187 * 8);
+    assert!(offset_of!(HostApi, change_knowledge) == 24 + 188 * 8);
+    assert!(offset_of!(HostApi, knowledge_set) == 24 + 189 * 8);
+    assert!(offset_of!(HostApi, quests) == 24 + 190 * 8);
+    assert!(offset_of!(HostApi, quest_reward_filter) == 24 + 191 * 8);
+    assert!(offset_of!(HostApi, knowledge_input_filter) == 24 + 192 * 8);
+    assert!(offset_of!(HostApi, game_query) == 24 + 193 * 8);
+    assert!(offset_of!(HostApi, run_console) == 24 + 194 * 8);
+    assert!(offset_of!(HostApi, interaction_filter) == 24 + 195 * 8);
+    assert!(offset_of!(HostApi, interaction_prompt) == 24 + 196 * 8);
+    assert!(offset_of!(HostApi, craft_filter) == 24 + 197 * 8);
+    assert!(offset_of!(HostApi, build_filter) == 24 + 198 * 8);
+    assert!(offset_of!(HostApi, actions) == 24 + 199 * 8);
+    assert!(offset_of!(HostApi, control) == 24 + 200 * 8);
+    assert!(offset_of!(HostApi, run_action) == 24 + 201 * 8);
+    assert!(offset_of!(HostApi, chat_filter) == 24 + 202 * 8);
+    assert!(offset_of!(HostApi, commands) == 24 + 203 * 8);
+    assert!(offset_of!(HostApi, run_command) == 24 + 204 * 8);
+    assert!(offset_of!(HostApi, command_list) == 24 + 205 * 8);
+    assert!(offset_of!(HostApi, actions_changed) == 24 + 206 * 8);
+    assert!(offset_of!(HostApi, action_window) == 24 + 207 * 8);
+    assert!(offset_of!(HostApi, local_held) == 24 + 208 * 8);
+    assert!(offset_of!(HostApi, local_input_status) == 24 + 209 * 8);
+    assert!(offset_of!(HostApi, client_snapshot) == 24 + 210 * 8);
+    assert!(offset_of!(HostApi, client_command) == 24 + 211 * 8);
+    assert!(offset_of!(HostApi, client_command_status) == 24 + 212 * 8);
+    assert!(offset_of!(HostApi, client_windows) == 24 + 213 * 8);
+    assert!(offset_of!(HostApi, client_slots) == 24 + 214 * 8);
+    assert!(offset_of!(HostApi, game_binding) == 24 + 215 * 8);
+    assert!(offset_of!(HostApi, game_rebind) == 24 + 216 * 8);
+    assert!(offset_of!(HostApi, ui_frame) == 24 + 217 * 8);
+    assert!(offset_of!(HostApi, ui_widget) == 24 + 218 * 8);
+    assert!(offset_of!(HostApi, ui_dialog) == 24 + 219 * 8);
+    assert!(offset_of!(HostApi, ui_hud) == 24 + 220 * 8);
+    assert!(offset_of!(HostApi, ui_markers) == 24 + 221 * 8);
+    assert!(offset_of!(HostApi, request_fog) == 24 + 222 * 8);
+    assert!(offset_of!(HostApi, fog_read) == 24 + 223 * 8);
+    assert!(offset_of!(HostApi, map_marker_types) == 24 + 224 * 8);
+    assert!(offset_of!(HostApi, ui_extension) == 24 + 225 * 8);
+    assert!(offset_of!(HostApi, ui_item_tooltip) == 24 + 226 * 8);
+    assert!(offset_of!(HostApi, sound_play) == 24 + 227 * 8);
+    assert!(offset_of!(HostApi, sound_steer) == 24 + 228 * 8);
+    assert!(offset_of!(HostApi, sound_state) == 24 + 229 * 8);
+    assert!(offset_of!(HostApi, sound_play_for) == 24 + 230 * 8);
+    assert!(offset_of!(HostApi, sound_steer_for) == 24 + 231 * 8);
     assert!(size_of::<HostApi>() == 24 + 232 * 8);
 };

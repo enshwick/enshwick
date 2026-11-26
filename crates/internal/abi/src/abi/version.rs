@@ -1,12 +1,15 @@
 //! The ABI version, a major and a minor, and the check a loader makes on a
 //! mod's.
 
+use core::ops::RangeInclusive;
+
 /// The major version of this interface. A loader refuses a mod built for
 /// another major.
 ///
-/// Any change to the layout other than an append is a new major, with
-/// [`ABI_MINOR`] back at 0; the layout tests of this crate hold the pair to
-/// the committed layout.
+/// The interface is stable from major 1: a mod built for major 1 loads on
+/// every loader of major 1. Any change to the layout other than an append is
+/// a new major, with [`ABI_MINOR`] back at 0; the layout tests of this crate
+/// hold the pair to the committed layout.
 ///
 /// # Examples
 ///
@@ -15,7 +18,7 @@
 ///
 /// assert_eq!(Header::of::<Manifest>().abi_major, ABI_MAJOR);
 /// ```
-pub const ABI_MAJOR: u16 = 12;
+pub const ABI_MAJOR: u16 = 1;
 
 /// The minor version of this interface: one more for each append to the
 /// layout of this [`ABI_MAJOR`], a field at the end of a struct that starts
@@ -32,7 +35,23 @@ pub const ABI_MAJOR: u16 = 12;
 ///
 /// assert_eq!(Header::of::<Manifest>().abi_minor, ABI_MINOR);
 /// ```
-pub const ABI_MINOR: u16 = 29;
+pub const ABI_MINOR: u16 = 0;
+
+/// The majors of the Enshwick alphas, before the interface was called stable
+/// at major 1: a mod built for one of them needs a rebuild, not a newer
+/// Enshwick.
+///
+/// [`check_major`] reads them so only while [`ABI_MAJOR`] is below them.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{ALPHA_MAJORS, CheckAbiError, check_major};
+///
+/// let alpha = *ALPHA_MAJORS.end();
+/// assert_eq!(check_major(alpha), Err(CheckAbiError::OtherMajor { major: alpha }));
+/// ```
+pub const ALPHA_MAJORS: RangeInclusive<u16> = 5..=12;
 
 /// Why a loader or its tools refuse a mod built for another ABI, naming the
 /// mod's version, this build's and what to do.
@@ -59,7 +78,8 @@ pub enum CheckAbiError {
         /// The major the mod was built for.
         major: u16,
     },
-    /// The mod was built for an older major: it needs a rebuild.
+    /// The mod was built for an older major or one of the
+    /// [`ALPHA_MAJORS`]: it needs a rebuild.
     #[error(
         "built for ABI major {major}, and Enshwick {version} runs ABI {ABI_MAJOR}.{ABI_MINOR}: \
          rebuild it for Enshwick {version}",
@@ -89,7 +109,9 @@ pub enum CheckAbiError {
 ///
 /// # Errors
 ///
-/// [`CheckAbiError`] for another major.
+/// [`CheckAbiError`] for another major: [`CheckAbiError::OtherMajor`] for an
+/// older one or one of the [`ALPHA_MAJORS`], else
+/// [`CheckAbiError::NewerMajor`].
 ///
 /// # Examples
 ///
@@ -100,9 +122,10 @@ pub enum CheckAbiError {
 /// assert_eq!(check_major(ABI_MAJOR + 1), Err(CheckAbiError::NewerMajor { major: ABI_MAJOR + 1 }));
 /// ```
 pub fn check_major(major: u16) -> Result<(), CheckAbiError> {
+    let alpha = ABI_MAJOR < *ALPHA_MAJORS.start() && ALPHA_MAJORS.contains(&major);
     match major {
         ABI_MAJOR => Ok(()),
-        newer if newer > ABI_MAJOR => Err(CheckAbiError::NewerMajor { major: newer }),
+        newer if newer > ABI_MAJOR && !alpha => Err(CheckAbiError::NewerMajor { major: newer }),
         older => Err(CheckAbiError::OtherMajor { major: older }),
     }
 }
@@ -160,7 +183,7 @@ mod tests {
             }
         );
         assert!(newer.to_string().ends_with("update Enshwick"), "{newer}");
-        for older in [ABI_MAJOR - 1, 1] {
+        for older in 0..ABI_MAJOR {
             assert_eq!(
                 check_major(older),
                 Err(CheckAbiError::OtherMajor { major: older })
@@ -171,6 +194,20 @@ mod tests {
             Err(CheckAbiError::NewerMajor {
                 major: ABI_MAJOR + 1
             })
+        );
+    }
+
+    #[test]
+    fn a_mod_built_for_an_alpha_major_asks_for_a_rebuild() {
+        for alpha in ALPHA_MAJORS {
+            let why = check_abi(alpha, 3).unwrap_err();
+            assert_eq!(why, CheckAbiError::OtherMajor { major: alpha });
+            assert!(why.to_string().contains("rebuild it for Enshwick"), "{why}");
+        }
+        let past = *ALPHA_MAJORS.end() + 1;
+        assert_eq!(
+            check_major(past),
+            Err(CheckAbiError::NewerMajor { major: past })
         );
     }
 }

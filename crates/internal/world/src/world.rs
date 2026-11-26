@@ -407,18 +407,18 @@ impl World {
     }
 
     /// Changes `entity`'s shroud time to what `change` returns for the time
-    /// now, as `World::change_shroud_time` does; nil keeps it.
+    /// now, as `World::change_fog_resistance` does; nil keeps it.
     ///
     /// # Errors
     ///
-    /// As [`World::change_shroud_time`].
-    #[script(name = "change_shroud_time")]
-    pub(crate) fn change_shroud_time_script(
+    /// As [`World::change_fog_resistance`].
+    #[script(name = "change_fog_resistance")]
+    pub(crate) fn change_fog_resistance_script(
         self,
         entity: Entity,
         change: impl Fn(i32) -> Option<i32>,
     ) -> Result<Meter, WorldError> {
-        self.change_shroud_time(entity, |now| change(now).unwrap_or(now))
+        self.change_fog_resistance(entity, |now| change(now).unwrap_or(now))
     }
 }
 

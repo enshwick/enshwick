@@ -133,7 +133,7 @@ pub type ControlFn = unsafe extern "system" fn(event: *const ControlEvent, user:
 
 /// The keys a game control holds in the client's keyboard and mouse
 /// bindings, as [`HostApi::game_binding`](super::HostApi::game_binding)
-/// writes them. ABI 12.20.
+/// writes them.
 ///
 /// Each key is in the form of [`ControlSpec::key`], 0 for none. A key a
 /// mod control may not take, such as Shift alone or Escape, keeps its scan

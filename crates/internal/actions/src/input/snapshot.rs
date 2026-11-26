@@ -260,7 +260,7 @@ impl ClientSnapshot {
     /// The server a [`CommandAction::Join`](super::CommandAction::Join) of
     /// this loader joins or joined, as `host:query_port`, while the client is
     /// on its way there or in its world; `None` in the menu, in a hosted
-    /// world, after a join another way, and from a loader older than ABI 12.11.
+    /// world and after a join another way.
     ///
     /// # Examples
     ///

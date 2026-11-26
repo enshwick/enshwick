@@ -89,15 +89,17 @@ feature; the call itself does not.
 ## Luau
 
 A Luau mod has no features to turn on. The definitions in `enshwick.d.luau` mark
-the unstable parts "Unstable". They are the props, build rights, captures
-and transactions of the `world` namespace, and `enshwick.caller`.
-`enshwick.on_client_game_type` is one too. They may change in any release,
-as their Rust counterparts do.
+each unstable part "Unstable": the mirror of every Rust item that needs the
+feature. Two parts with no Rust twin are unstable too: `enshwick.caller`
+and `enshwick.on_client_game_type`. They may change in any release, as their
+Rust counterparts do.
 
 ## The ABI
 
 The loader and the mods talk through one C ABI, whatever features a mod turns
-on. An unstable call is a slot of the same table as a stable one.
+on. An unstable call is a slot of the same table as a stable one, and its
+slot and structs are as stable as every other. The C header marks nothing
+unstable for that reason: only the safe layer of Rust and Luau changes.
 
 The ABI version is a major and a minor (see
 [ABI reference](abi-reference.md#versions)). A loader loads mods built for
@@ -106,7 +108,11 @@ layout other than by appending is a new major, and every mod is rebuilt
 against it. A release that only adds game
 builds keeps the layout and the mods.
 
-From 1.0 the layout is frozen. The loader's table and its structs grow only
-by appending fields, and a loader runs mods built against older releases.
+The ABI is stable from ABI 1.0, the ABI of Enshwick 1.0. A mod built for
+ABI 1 loads on every loader of ABI 1, until a new major, ABI 2. The loader's
+table and its structs grow only by appending, and each append is the next
+minor. A slot keeps its signature and its meaning, unstable calls included:
+a call whose meaning changes gets a new slot. The alphas used the ABI majors
+5 to 12, and a loader of ABI 1 asks to rebuild a mod built for one of them.
 [ABI test coverage](abi-coverage.md) lists how each entry of the table is
 tested.

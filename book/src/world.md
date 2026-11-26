@@ -202,11 +202,12 @@ own entity. It returns a `Meter` with the count and its maximum.
 the count, kept between 0 and the maximum. The game saves it with the world
 and shows it on the item's slot.
 
-`shroud_time(entity)` reads how long, in seconds, a character holds out in
-the shroud before it drains health. It returns a `Meter` with the most the
-character holds. `change_shroud_time(entity, change)` sets it, kept between
-0 and that most; clients see it from the next step. The game refills it
-outside the shroud and saves none of it. `in_shroud(entity)` tells whether a character
+`fog_resistance(entity)` reads how long, in seconds, a character holds out in
+the shroud before it drains health. The game calls this value
+`FogResistance`. It returns a `Meter` with the most the character holds.
+`change_fog_resistance(entity, change)` sets it, kept between 0 and that
+most; clients see it from the next step. The game refills it outside the
+shroud and saves none of it. `in_fog(entity)` tells whether a character
 stands in the shroud where it drains them, outside the altars' reach.
 
 `skills(entity)` lists the skill nodes a character unlocked, each a `Skill`.
@@ -680,7 +681,7 @@ takes the same lists.
 
 ## Prop placement metadata
 
-Enable `unstable` and use a matching ABI 12.8 loader.
+Enable `unstable`.
 Read metadata with `world.prop_placement_info(item)`.
 The returned optional `PropPlacementBox` holds local corners in metres.
 Its `min` and `max` fields preserve declared values.

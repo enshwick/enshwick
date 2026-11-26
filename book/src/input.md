@@ -230,9 +230,7 @@ This getter does not request sampling itself. Opening the input or a
 They are not world or session identity, or proof of input execution.
 They do not explain why a player row or component was not sampled.
 No new game memory is read. The getter is client-only and returns
-`WorldError::Unavailable` on a server. It requires ABI 12.1 or newer.
-An older loader rejects this SDK at mod initialization before accessing its
-appended host slot.
+`WorldError::Unavailable` on a server.
 
 ```lua
 local status = enshwick.input.local_status()

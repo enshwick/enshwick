@@ -24,8 +24,8 @@ pub struct Frame<'f> {
     pub(super) host: Host,
     pub(super) token: u64,
     pub(super) screen: Screen,
-    /// The loader's frame, its fields past an older loader's size zero:
-    /// the game screen's name, kept for the process, the prompt's title,
+    /// The loader's frame with the game screen's name, kept for the
+    /// process, the prompt's title,
     /// borrowed for the callback, and the screen's host.
     pub(super) raw: UiFrame,
     /// The player pressed Back over the window whose body is drawing.
@@ -33,9 +33,6 @@ pub struct Frame<'f> {
     pub(super) _life: PhantomData<&'f mut ()>,
     pub(super) _thread: PhantomData<*const ()>,
 }
-
-/// The size of the first `UiFrame`, which every loader passes.
-const BORN: usize = core::mem::offset_of!(UiFrame, hud_screen);
 
 /// What the player's interaction prompt offers in a frame, from
 /// [`Frame::prompt`]. The name is enshwick's.
@@ -96,8 +93,7 @@ impl Frame<'_> {
     /// (`UiFrame`'s `hud_screen`); empty for none.
     #[cfg(feature = "unstable")]
     pub(super) fn hud_screen_name(&self) -> &'static str {
-        // SAFETY: the loader keeps the text for the process, and a frame of
-        // an older loader reads it zero, which is empty.
+        // SAFETY: the loader keeps the text for the process.
         unsafe { self.raw.hud_screen.as_str() }.unwrap_or("")
     }
 
@@ -124,7 +120,7 @@ impl Frame<'_> {
     #[must_use]
     pub fn prompt(&self) -> Option<Prompt> {
         // SAFETY: the loader borrows the title for the callback, inside
-        // which `self` lives; a frame of an older loader reads it zero.
+        // which `self` lives.
         let title = unsafe { self.raw.prompt_title.as_str() }?;
         (!title.is_empty() || self.raw.prompt_verb != 0).then(|| Prompt {
             title: title.to_owned(),
@@ -504,8 +500,10 @@ where
     F: FnMut(&mut Frame<'_>),
 {
     // SAFETY: the loader passes a frame readable for the size its header
-    // states, for the call; the fields an older loader lacks read zero.
-    let Some(raw) = (unsafe { crate::abi::read_headed(frame, BORN) }) else {
+    // states, for the call.
+    let Some(raw) =
+        (unsafe { crate::abi::read_headed(frame, <UiFrame as crate::abi::Headed>::BORN) })
+    else {
         return;
     };
     // SAFETY: `user` is the leaked `Drawer<F>` this function was registered

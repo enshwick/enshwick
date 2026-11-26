@@ -56,41 +56,39 @@ pub struct Interaction {
     /// Where the target stands, in metres, when `known`.
     pub position: Metres,
     /// The item of the stack in `from_slot`, when `moving`; 0 for a move
-    /// that names no source slot. ABI 12.9.
+    /// that names no source slot.
     pub moved: ItemId,
     /// How many items the stack in `from_slot` holds, when `moving`.
-    /// ABI 12.9.
     pub stack: u32,
     /// The amount the player asked for, which counts only for
-    /// [`ACTION_AMOUNT`](Self::ACTION_AMOUNT). ABI 12.9.
+    /// [`ACTION_AMOUNT`](Self::ACTION_AMOUNT).
     pub amount: u32,
     /// The container the items leave: the source entity, or the owner of
-    /// `from_slot`; 0 when unknown. ABI 12.9.
+    /// `from_slot`; 0 when unknown.
     pub from: Entity,
     /// The container the items enter: the target entity, or the owner of
-    /// `to_slot`; 0 for none, as when items are destroyed. ABI 12.9.
+    /// `to_slot`; 0 for none, as when items are destroyed.
     pub to: Entity,
     /// What the player moves, one of the `ACTION_` constants; 0 when
-    /// unknown. ABI 12.9.
+    /// unknown.
     pub action: u8,
     /// How the move travels, a mask of the `TRANSFER_` constants; 0 for a
-    /// plain move. ABI 12.9.
+    /// plain move.
     pub transfer: u8,
-    /// 1 when the fields of ABI 12.9 were read from a
-    /// [`MOVE`](Self::MOVE). ABI 12.9.
+    /// 1 when the loader read the move fields that follow from a
+    /// [`MOVE`](Self::MOVE).
     pub moving: u8,
     /// Zero.
     pub reserved_move: u8,
     /// The source slot, as a sub-inventory entity in the low 32 bits and
     /// its slot index above them; 0 for a move of a whole inventory.
-    /// ABI 12.9.
     pub from_slot: u64,
     /// The target slot, encoded as `from_slot`; 0 when the game picks the
-    /// slots. ABI 12.9.
+    /// slots.
     pub to_slot: u64,
 }
 
-impl_headed!(Interaction, born = 56);
+impl_headed!(Interaction);
 
 impl Interaction {
     /// A call of `kind` by `character` on `target`, its other fields zero:
@@ -182,7 +180,6 @@ pub type InteractionFilterFn =
 
 /// A stack about to enter one slot of a container, as
 /// [`HostApi::container_rule`](super::HostApi::container_rule) hands it on.
-/// ABI 12.9.
 ///
 /// # Examples
 ///
@@ -239,7 +236,7 @@ pub type ContainerRuleFn =
 
 /// How the prompt of every object placed from one item reads and what its
 /// press does, as [`HostApi::interaction_prompt`](super::HostApi::interaction_prompt)
-/// takes it. ABI 12.3.
+/// takes it.
 ///
 /// The server writes [`verb`](Self::verb) and the replaced action, so every
 /// client sees them; a client with Enshwick also shows [`text`](Self::text)

@@ -159,11 +159,7 @@ where
     let Some(call) = (unsafe { call.as_ref() }) else {
         return crate::abi::FILTER_PASS;
     };
-    let account = call
-        .header
-        .covers(core::mem::offset_of!(BuildCheck, account) + size_of::<PlayerKey>())
-        .then_some(call.account)
-        .filter(|&key| key != PlayerKey::default());
+    let account = Some(call.account).filter(|&key| key != PlayerKey::default());
     let placement = Placement {
         player: call.character,
         item: call.item,
@@ -182,10 +178,7 @@ where
         BuildVerdict::Refuse => return crate::abi::FILTER_REFUSE,
         BuildVerdict::RefuseBecause(reason) => reason,
     };
-    let covered = call
-        .header
-        .covers(core::mem::offset_of!(BuildCheck, reason) + size_of::<*mut Str>());
-    if !covered || call.reason.is_null() {
+    if call.reason.is_null() {
         return crate::abi::FILTER_REFUSE;
     }
     REASON.with_borrow_mut(|kept| {

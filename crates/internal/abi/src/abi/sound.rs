@@ -5,7 +5,7 @@ use crate::abi::{Entity, Header, Metres, PlayerKey};
 use crate::content::Guid;
 
 /// A sound a client mod starts, which [`HostApi::sound_play`] queues for the
-/// client's game thread. ABI 12.17.
+/// client's game thread.
 ///
 /// [`HostApi::sound_play`]: crate::abi::HostApi::sound_play
 ///
@@ -96,7 +96,7 @@ impl SoundPlay {
 }
 
 /// A change to a sound a client mod started, which [`HostApi::sound_steer`]
-/// queues. ABI 12.17.
+/// queues.
 ///
 /// [`HostApi::sound_steer`]: crate::abi::HostApi::sound_steer
 ///
@@ -176,7 +176,7 @@ impl SoundSteer {
 }
 
 /// The clients a server mod's sound plays on, which
-/// [`HostApi::sound_play_for`] reads. ABI 12.18.
+/// [`HostApi::sound_play_for`] reads.
 ///
 /// [`HostApi::sound_play_for`]: crate::abi::HostApi::sound_play_for
 ///
@@ -284,7 +284,7 @@ impl SoundAudience {
 }
 
 /// Where a sound a client mod started stands, which
-/// [`HostApi::sound_state`] writes. ABI 12.17.
+/// [`HostApi::sound_state`] writes.
 ///
 /// [`HostApi::sound_state`]: crate::abi::HostApi::sound_state
 ///

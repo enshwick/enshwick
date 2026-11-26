@@ -91,7 +91,7 @@ pub struct UiFrame {
     pub reserved_hovered: u32,
 }
 
-impl_headed!(UiFrame, born = 104);
+impl_headed!(UiFrame);
 
 impl UiFrame {
     /// The title screen and the menus before a game.
@@ -162,8 +162,7 @@ pub struct UiExtension {
     /// Zero.
     pub reserved_hosts: u32,
     /// Where along its edge the panel sits: [`UiExtension::CENTER`],
-    /// [`UiExtension::START`] or [`UiExtension::END`]. A spec of an older
-    /// minor reads zero, the centre.
+    /// [`UiExtension::START`] or [`UiExtension::END`].
     pub align: u32,
     /// Layout units the panel moves along its edge from where `align` puts
     /// it, toward the edge's end (right or down) when positive; at most
@@ -177,7 +176,7 @@ pub struct UiExtension {
     pub reserved_place: u32,
 }
 
-impl_headed!(UiExtension, born = 48);
+impl_headed!(UiExtension);
 
 impl UiExtension {
     /// The left edge.
@@ -205,8 +204,7 @@ impl UiExtension {
     /// Whether the panel's place holds what the loader takes: an edge and an
     /// alignment it knows, a `shift` within [`UiExtension::MAX_OFFSET`]
     /// either way and an `inset` from 0 to it, each a number, and a zero
-    /// `reserved_place`, kept for a later minor. A spec of an older minor
-    /// reads zero in the place's fields, which holds.
+    /// `reserved_place`, kept for a later minor.
     ///
     /// # Examples
     ///
@@ -245,8 +243,7 @@ impl UiExtension {
 
     /// The host templates the panel names, empty for every host, as the
     /// loader reads them; `None` for a null list with a count or more than
-    /// [`UiExtension::MAX_HOSTS`]. A spec of an older minor reads zero
-    /// there, so it names no host.
+    /// [`UiExtension::MAX_HOSTS`].
     ///
     /// # Safety
     ///
@@ -359,7 +356,7 @@ pub struct UiWidget {
     pub count: u32,
 }
 
-impl_headed!(UiWidget, born = 112);
+impl_headed!(UiWidget);
 
 impl UiWidget {
     /// A window in the game's style, a panel over the screen that takes the

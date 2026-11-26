@@ -281,7 +281,7 @@
 "damage_blunt.name" = "Blunt Damage" # text tag 0xa2068a9e
 "damage_fire.name" = "Fire Damage" # text tag 0x7f387b06
 "damage_ice.name" = "Ice Damage" # text tag 0x3722a8df
-"damage_shroud.name" = "Shroud Damage" # text tag 0x7d2cc66a
+"damage_fog.name" = "Shroud Damage" # text tag 0x7d2cc66a
 "damage_lightning.name" = "Shock Damage" # text tag 0x8338a244
 "damage_poison.name" = "Poison Damage" # text tag 0xfaf93b2b
 "resistance.name" = "Resistance" # text tag 0x140f9bb0
@@ -290,7 +290,7 @@
 "resistance_blunt.name" = "Blunt Resistance" # text tag 0xcda06562
 "resistance_fire.name" = "Fire Resistance" # text tag 0xfd1298ec
 "resistance_ice.name" = "Ice Resistance" # text tag 0xe78a8f59
-"resistance_shroud.name" = "Shroud Resistance" # text tag 0x9c80d874
+"resistance_fog.name" = "Shroud Resistance" # text tag 0x9c80d874
 "resistance_lightning.name" = "Shock Resistance" # text tag 0x5ac47d26
 "resistance_poison.name" = "Poison Resistance" # text tag 0x4b140014
 "mods.developer.off" = "a developer tool: it runs only while the file mods/enshwick/developer-tools exists"

@@ -266,7 +266,6 @@ pub struct LocalInputStatus {
 impl Input {
     /// Observes only cached loader metadata on any thread, without starting sampling.
     /// Fields are weakly consistent; no world, session, player or current UI state is inferred.
-    /// Requires a matching ABI 12.1 or newer loader; older loaders cannot load this SDK.
     ///
     /// # Errors
     /// [`WorldError::Unavailable`] on a server, otherwise the loader's refusal.

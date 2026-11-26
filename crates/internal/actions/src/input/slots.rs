@@ -56,8 +56,8 @@ impl Input {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Unavailable`] on a server, on a build whose slots the
-    /// loader cannot read, and from a loader older than ABI 12.28.
+    /// [`WorldError::Unavailable`] on a server and on a build whose slots
+    /// the loader cannot read.
     ///
     /// # Examples
     ///

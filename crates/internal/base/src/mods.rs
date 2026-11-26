@@ -412,8 +412,7 @@ pub struct LoaderOff {
 /// The loader turns off only what the game build lacks or what faulted, so
 /// a mod tells a read that failed from one that never ran, such as the
 /// local player's held controls on a build without them. Each entry keeps
-/// its first reason. Empty before the loader initialises this mod, and on
-/// a loader older than ABI 12.1.
+/// its first reason. Empty before the loader initialises this mod.
 ///
 /// # Examples
 ///
