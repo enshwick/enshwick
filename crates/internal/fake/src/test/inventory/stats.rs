@@ -553,7 +553,8 @@ entries! {
         };
         // As the loader: the id and its owner, then the phase, then the
         // definition.
-        if !with(false, |s| is_own(s, me, &id)) {
+        // Without a fake installed the open below answers MISSING.
+        if !with(true, |s| is_own(s, me, &id)) {
             return Status::REFUSED;
         }
         if crate::test::table::late() {

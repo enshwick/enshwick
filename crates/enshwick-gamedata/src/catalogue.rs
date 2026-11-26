@@ -289,13 +289,8 @@ const _: () = {
 /// FNV-1a over `id`, spread by the splitmix64 finaliser so that sums of
 /// hashes of similar ids do not cancel.
 const fn id_hash(id: &str) -> u64 {
-    let bytes = id.as_bytes();
-    let mut hash = 0xcbf2_9ce4_8422_2325u64;
-    let mut i = 0;
-    while i < bytes.len() {
-        hash = (hash ^ bytes[i] as u64).wrapping_mul(0x0100_0000_01b3);
-        i += 1;
-    }
+    use enshwick_values::fnv::{BASIS64, fnv1a64};
+    let mut hash = fnv1a64(BASIS64, id.as_bytes());
     hash = (hash ^ (hash >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
     hash = (hash ^ (hash >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
     hash ^ (hash >> 31)
@@ -672,9 +667,8 @@ mod tests {
         );
     }
 
-    /// With either executable `ENSH_SERVER_EXE` or `ENSH_CLIENT_EXE` names
-    ///, an item's tags are a blob array of tag
-    /// entries, each holding its tag as a 16-byte GUID, and every slot of
+    /// On each executable `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name, an
+    /// item's tags are a blob array of tag entries, each holding its tag as a 16-byte GUID, and every slot of
     /// the tag kinds resolves.
     #[test]
     #[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
@@ -709,9 +703,8 @@ mod tests {
         }
     }
 
-    /// With either executable `ENSH_SERVER_EXE` or `ENSH_CLIENT_EXE` names
-    ///, the marker type registry keeps its types as
-    /// a blob array of marker types, and each marker type sorting resolves
+    /// On each executable `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name, the
+    /// marker type registry keeps its types as a blob array of marker types, and each marker type sorting resolves
     /// to a value of its own.
     #[test]
     #[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
@@ -766,9 +759,8 @@ mod tests {
         }
     }
 
-    /// With either executable `ENSH_SERVER_EXE` or `ENSH_CLIENT_EXE` names
-    ///, every slot constant of the kinds resolves,
-    /// each to a value of its own.
+    /// On each executable `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name, every
+    /// slot constant of the kinds resolves, each to a value of its own.
     #[test]
     #[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
     fn every_recipe_kind_s_slot_is_reflected() {
@@ -788,9 +780,8 @@ mod tests {
         }
     }
 
-    /// With both executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` named
-    ///, every API name the game names itself stands
-    /// for a type, field or enum constant one of them reflects.
+    /// With both executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` named,
+    /// every API name the game names itself stands for a type, field or enum constant one of them reflects.
     #[test]
     #[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
     fn every_api_game_name_is_reflected() {
@@ -821,9 +812,8 @@ mod tests {
         }
     }
 
-    /// With both executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name
-    ///, every type and offset of the catalogue
-    /// resolves in the reflection of at least one: the client alone has
+    /// With both executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` named,
+    /// every type and offset of the catalogue resolves in the reflection of at least one: the client alone has
     /// its interface.
     #[test]
     #[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]

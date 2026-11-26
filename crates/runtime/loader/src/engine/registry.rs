@@ -2,21 +2,27 @@
 //! without a lock after.
 
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::{self, ThreadId};
 
 use enshwick_base::Relock;
 
 /// The registries' phase.
 struct State {
-    /// Whether the loader links its parts now: every registry sealed before,
-    /// in the seal phase, so no link sees an open one whatever the order the
-    /// parts link in, and a seal now is a part's mistake.
-    linking: AtomicBool,
+    /// The thread that links the loader's parts now: every registry sealed
+    /// before, in the seal phase, so no link sees an open one whatever the
+    /// order the parts link in, and a seal on that thread now is a part's
+    /// mistake. A seal on another thread, a mod's own, is not the link's.
+    linker: Mutex<Option<ThreadId>>,
 }
 
 static STATE: State = State {
-    linking: AtomicBool::new(false),
+    linker: Mutex::new(None),
 };
+
+/// Whether the calling thread links the parts now.
+fn links_now() -> bool {
+    *STATE.linker.relock() == Some(thread::current().id())
+}
 
 /// A registry first sealed while the parts link, at `at`: logged, and a
 /// failure in a debug build.
@@ -30,8 +36,8 @@ fn late_seal(at: &core::panic::Location<'_>) {
 }
 
 /// Runs `link`, the start's linking of its parts, as the phase in which no
-/// registry may seal: a seal in it is logged with its caller, and fails a
-/// debug build there.
+/// registry may seal on the calling thread: a seal there is logged with its
+/// caller, and fails a debug build.
 #[cfg_attr(
     all(not(windows), not(test)),
     expect(dead_code, reason = "only the Windows start links the parts")
@@ -41,10 +47,10 @@ pub(crate) fn linking<R>(link: impl FnOnce() -> R) -> R {
     struct Linked;
     impl Drop for Linked {
         fn drop(&mut self) {
-            STATE.linking.store(false, Ordering::Release);
+            *STATE.linker.relock() = None;
         }
     }
-    STATE.linking.store(true, Ordering::Release);
+    *STATE.linker.relock() = Some(thread::current().id());
     let _linked = Linked;
     link()
 }
@@ -235,7 +241,7 @@ impl<T> Registry<T> {
     /// lock it runs under; it runs only on the first seal.
     #[track_caller]
     pub fn seal_with(&self, finish: impl FnOnce(Vec<T>) -> Vec<T>) -> &[T] {
-        if STATE.linking.load(Ordering::Acquire) && self.sealed.get().is_none() {
+        if self.sealed.get().is_none() && links_now() {
             late_seal(core::panic::Location::caller());
         }
         let mut open = self.open.relock();
@@ -315,6 +321,13 @@ mod tests {
     }
 
     #[test]
+    fn a_first_seal_on_another_thread_while_the_parts_link_is_no_late_seal() {
+        static OTHER: Registry<u32> = Registry::new();
+        let sealed = linking(|| thread::scope(|scope| scope.spawn(|| OTHER.seal().len()).join()));
+        assert_eq!(sealed.ok(), Some(0));
+    }
+
+    #[test]
     fn a_registry_sealed_before_the_link_reads_again_while_the_parts_link() {
         static EARLY: Registry<u32> = Registry::new();
         EARLY.add(7).unwrap();
@@ -341,7 +354,7 @@ mod tests {
         assert_eq!(REGISTRY.add(1), Ok(()));
         let mut late = None;
         let sealed = REGISTRY.seal_with(|mut items| {
-            late = Some(std::thread::spawn(|| REGISTRY.add(9)));
+            late = Some(thread::spawn(|| REGISTRY.add(9)));
             items.push(2);
             items
         });

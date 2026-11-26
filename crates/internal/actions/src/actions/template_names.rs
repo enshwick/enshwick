@@ -50,7 +50,7 @@ unsafe extern "system" fn world_loaded(
             return;
         };
         if let Err(error) = crate::host::__spawn("template-names", move || {
-            let _read = vanilla.templates();
+            enshwick_content::__internal::read_template_names(vanilla);
         }) {
             crate::warn!(
                 "the template names are read at the first console line naming one: {error}"

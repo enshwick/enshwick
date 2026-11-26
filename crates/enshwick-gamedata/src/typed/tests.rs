@@ -12,8 +12,14 @@ fn the_relevance_rule_reads() {
 
 /// The catalogue of the server executable `ENSH_SERVER_EXE` names, when it
 /// names one of `age`; `None` on another build.
+///
+/// # Panics
+///
+/// Without `ENSH_SERVER_EXE`, so an ignored test run on purpose never passes
+/// unchecked.
 fn server(age: u32) -> Option<Catalogue> {
-    let path = std::env::var("ENSH_SERVER_EXE").ok()?;
+    let path = std::env::var("ENSH_SERVER_EXE")
+        .unwrap_or_else(|_| panic!("ENSH_SERVER_EXE names the game executable"));
     let bytes = std::fs::read(path).unwrap();
     let image = Image::parse(&bytes, Layout::File, None).unwrap();
     (image.fingerprint()?.age() == age)

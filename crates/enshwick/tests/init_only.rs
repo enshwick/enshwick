@@ -52,7 +52,6 @@ mod tests {
         Some(unsafe { core::mem::transmute_copy(&any) })
     }
 
-    /// A headed struct of zeros with its own header.
     /// A well-formed change, so only the phase refuses it.
     fn stack_size() -> DataChange {
         enshwick::abi::headed!(DataChange {
@@ -64,6 +63,7 @@ mod tests {
         })
     }
 
+    /// A headed struct of zeros with its own header.
     fn spec<T: Headed>() -> T {
         // SAFETY: `Headed` requires `Zeroable`: all-zero bytes are a valid `T`.
         let mut spec: T = unsafe { core::mem::zeroed() };

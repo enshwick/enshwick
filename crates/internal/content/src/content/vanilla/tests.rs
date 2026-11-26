@@ -166,6 +166,18 @@ fn a_template_is_found_by_its_name_or_its_near_names_or_its_twins_named() {
 }
 
 #[test]
+fn template_names_read_ahead_are_kept_for_the_first_name_looked_up() {
+    use super::super::loot_tables::fixtures::FILL;
+
+    let vanilla =
+        game_with_tables(&[("Enemy_Wolf", Guid([1; 16]))]).with_template_names(Some(FILL.name));
+    assert!(vanilla.template_names.get().is_none());
+    crate::__internal::read_template_names(&vanilla);
+    assert!(vanilla.template_names.get().is_some_and(Option::is_some));
+    assert_eq!(vanilla.template("Enemy_Wolf"), Ok(Guid([0x40; 16])));
+}
+
+#[test]
 fn a_console_s_template_name_in_another_case_is_found_when_one_template_has_it() {
     use super::super::loot_tables::fixtures::FILL;
 

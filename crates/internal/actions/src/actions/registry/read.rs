@@ -425,7 +425,7 @@ impl Registry {
         let Some(vanilla) = crate::content::vanilla::Vanilla::game() else {
             return Err(unknown(Vec::new()));
         };
-        // Read aside as the world loaded (`Registry::read_template_names_aside`).
+        // Read aside as the world loaded (`template_names::watch`).
         match enshwick_content::__internal::template(vanilla, text) {
             Ok(template) => Ok(Value::Template(template)),
             Err(VanillaError::AmbiguousTemplate { templates, .. }) => {
