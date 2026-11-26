@@ -158,6 +158,14 @@ that players, admins or mod authors get, at most one a day:
    refused, and so is one whose changelogs lack its section or whose change
    files are not joined yet. The workflow scans the archive on VirusTotal.
 
+The 1.0 release moves every crate to `1.0.0`. From that version on,
+`cargo xtask check` accepts install and dependency lines that take the
+crates from crates.io, and `cargo enshwick new` makes a mod require the
+major and minor of the release from crates.io.
+The text that says alpha changes in the same round: this repository's
+README and the book's install and dependency lines, the docs site, and the
+READMEs of the mods, which release after the loader.
+
 `enshwick.zip` holds the stub and the loader, and no mod: each mod ships in
 its own archive from its own repository. `cargo xtask dist` writes the same
 archive into `target/dist` on any machine with `cargo-xwin`; the

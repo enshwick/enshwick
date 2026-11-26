@@ -20,8 +20,8 @@ is out, at most once a day; without a network it says nothing, and `CI` or
 `CARGO_ENSHWICK_NO_UPDATE_CHECK` set turns the check off.
 
 - `new <id>` creates a mod crate for the id `<author>.<name>` in
-  `<dir>/<name>` (`--dir`, default the current folder) for `--side server`,
-  `client` or `both`. The crate has a toolchain file, build flags, lints,
+  `<dir>/<name>` (`--dir`, default the current folder) for `--side server`
+  or `both`. The crate has a toolchain file, build flags, lints,
   texts and tests. It builds and loads as it is: settings in each world's
   `<stem>-mod-settings/<id>/settings.toml`, a line in
   `logs/<id>_<date>_<time>.log`. It pins
