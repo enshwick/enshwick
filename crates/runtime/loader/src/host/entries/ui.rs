@@ -17,7 +17,7 @@ entries! {
 
     fn client_snapshot(loader as Caller, out as HeadedOut<api_frame::ClientSnapshot>) -> Status {
         on_client(loader)?;
-        let scene = crate::base::saves::world_key(loader).map(crate::base::saves::stem);
+        let scene = crate::base::saves::save_key(loader).map(crate::base::saves::stem);
         out.put(crate::actions::client_snapshot::snapshot(loader, scene))
     }
 

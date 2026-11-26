@@ -136,7 +136,7 @@ fn a_served_hash_carries_its_size_and_the_mark() {
 }
 
 #[test]
-fn requests_are_read_only_when_few_enough_and_inside_one_readable_region() {
+fn requests_are_read_only_when_inside_one_readable_region() {
     use windows_sys::Win32::System::Memory::{
         MEM_COMMIT, MEM_PRIVATE, PAGE_NOACCESS, PAGE_READWRITE,
     };
@@ -159,8 +159,8 @@ fn requests_are_read_only_when_few_enough_and_inside_one_readable_region() {
     ))));
     assert!(!requests_read(0x1000, 1, 0x40, |_| None));
     assert!(
-        !requests_read(0x1000, MAX_REQUESTS + 1, 1, readable),
-        "too many"
+        requests_read(0x1000, 5000, 1, readable),
+        "any count the region holds"
     );
     assert!(!requests_read(0x1000, 0, 0x40, readable), "none to read");
     assert!(!requests_read(0, 1, 0x40, readable), "no array");

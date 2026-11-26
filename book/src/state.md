@@ -47,11 +47,12 @@ line. When that name is taken, the folders get `-2`, `-3` and on after it. The
 world starts from each mod's defaults. Nothing is deleted. A copy of a save
 keeps its GUID, so a copied world keeps its folders.
 
-When one of the two folders cannot be renamed, as while another program holds
-a file in it, the loader renames the first folder back. Then no world has mod
-settings or data until the game restarts, and players read that "world mod
-folders" are off. A world never reads one folder of its own and one of
-another world's.
+A folder that another program holds is tried again for about a second. When
+one of the two folders still cannot be renamed, the loader renames the first
+folder back. Then no world has mod settings or data until the game restarts,
+and players read that "world mod folders" are off. A world never reads one
+folder of its own and one of another world's. [Holds](#holds) on a world
+still stop the game, and mods still read its save.
 
 ## The data folder
 

@@ -138,6 +138,24 @@ fn a_client_keeps_at_most_its_cap_of_a_server_s_records() {
 }
 
 #[test]
+fn the_check_after_an_overflowing_step_waits_for_the_next_step_s_end() {
+    let state = State::new();
+    assert!(!state.sweep_now(true), "its destroys are still queued");
+    assert!(
+        state.sweep_now(false),
+        "they played back by the next step's end"
+    );
+    assert!(!state.sweep_now(false), "checked once");
+    assert!(!state.sweep_now(true));
+    assert!(state.sweep_now(true), "two overflows in a row check twice");
+    state.start_server(server(Vec::new(), Vec::new()));
+    assert!(
+        !state.sweep_now(false),
+        "a new world checks nothing of the last"
+    );
+}
+
+#[test]
 fn a_sweep_after_an_overflowing_step_names_each_value_it_took_for_the_clients() {
     let record = || Record {
         item: 7,

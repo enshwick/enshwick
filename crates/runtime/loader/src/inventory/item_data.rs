@@ -173,6 +173,10 @@ struct State {
     /// of them holds. The store refuses values until the next load.
     unread: AtomicBool,
     destroyed: Destroyed,
+    /// Whether the last step noted more destroy requests than
+    /// [`DESTROYED_CAP`], so this step's end checks every record against
+    /// the world.
+    overflowed: AtomicBool,
 }
 
 impl State {
@@ -185,11 +189,20 @@ impl State {
             finding: AtomicBool::new(false),
             unread: AtomicBool::new(false),
             destroyed: Destroyed::new(),
+            overflowed: AtomicBool::new(false),
         }
     }
 
     fn finding(&self) -> bool {
         self.finding.load(Ordering::Relaxed)
+    }
+
+    /// Whether this step's end checks every record against the world, given
+    /// whether this step's destroy requests `overflowed`: a step's destroys
+    /// play back after the next step's systems, so the check for an
+    /// overflow runs one step later, once its entities are gone.
+    fn sweep_now(&self, overflowed: bool) -> bool {
+        self.overflowed.swap(overflowed, Ordering::Relaxed)
     }
 
     fn unread(&self) -> bool {
@@ -205,6 +218,7 @@ impl State {
         self.finding
             .store(!server.pending.is_empty(), Ordering::Relaxed);
         let _stale = self.destroyed.take();
+        self.overflowed.store(false, Ordering::Relaxed);
         *self.server.relock() = Some(server);
     }
 
@@ -217,6 +231,7 @@ impl State {
         self.kept.store(false, Ordering::Relaxed);
         self.unread.store(false, Ordering::Relaxed);
         let _stale = self.destroyed.take();
+        self.overflowed.store(false, Ordering::Relaxed);
         last.map(|server| (server, finding))
     }
 
@@ -521,9 +536,10 @@ fn prune_destroyed(values: &mut Values, destroyed: &FxHashSet<u32>) -> Vec<(Kind
 /// After the server's step: after a load's first, finds the file's records'
 /// entities; every [`JOIN_LOOK_EVERY`] steps, looks for joined characters'
 /// carried items; after every step, drops the records of the entities
-/// destroyed in it, and tells the clients. A step with more destroy
-/// requests than [`DESTROYED_CAP`] checks every record against the world,
-/// so none stays on an id the game gives to a new entity.
+/// destroyed in it, and tells the clients. After a step with more destroy
+/// requests than [`DESTROYED_CAP`], the next step's end checks every record
+/// against the world, so none stays on an id the game gives to a new
+/// entity.
 pub(crate) fn after_step(loader: &Loader) {
     if STATE.finding() {
         find_pending(loader);
@@ -531,10 +547,12 @@ pub(crate) fn after_step(loader: &Loader) {
     if crate::engine::ticks::steps().is_multiple_of(JOIN_LOOK_EVERY) && wanted() {
         look_for_carried(loader);
     }
-    if !STATE.kept.load(Ordering::Relaxed) || !STATE.destroyed.any() {
+    let due = STATE.overflowed.load(Ordering::Relaxed);
+    if !STATE.kept.load(Ordering::Relaxed) || !(due || STATE.destroyed.any()) {
         return;
     }
     let (destroyed, overflowed) = STATE.destroyed.take();
+    let sweep = STATE.sweep_now(overflowed);
     let gone = {
         let mut server = STATE.server.relock();
         let Some(server) = server.as_mut() else {
@@ -545,7 +563,7 @@ pub(crate) fn after_step(loader: &Loader) {
             .cleared
             .retain(|(_, pide, _)| !destroyed.contains(&pide.0));
         server.changed |= !gone.is_empty();
-        if overflowed && !STATE.finding() {
+        if sweep && !STATE.finding() {
             gone.extend(world_file::sweep(loader, server));
         }
         gone

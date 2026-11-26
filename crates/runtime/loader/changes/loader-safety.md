@@ -4,10 +4,14 @@
   could not be renamed aside, renames back the folder it renamed first. The
   worlds' mod folders then turn off until the game restarts, and the player is
   told that "world mod folders" are off, so no world reads another world's mod
-  settings or data. A taken `.old-<date>-<time>` name gets `-2` on (#1294).
-- A step with more than 1024 destroy requests checks every item data record
-  against the world, so no value stays on an entity id the game gives to a new
-  entity (#1294).
+  settings or data. Holds on a world still stop the game, and mods still read
+  its save. A folder another program holds is tried again for about a second
+  first. A taken `.old-<date>-<time>` name gets `-2` on, and a stamp with every
+  name taken counts as a folder that cannot be renamed (#1294).
+- After a step with more than 1024 destroy requests, the next step's end checks
+  every item data record against the world, once the game has destroyed those
+  entities, so no value stays on an entity id the game gives to a new entity
+  (#1294).
 - Saved stat modifiers whose write failed are written again at the next save
   (#1294).
 - Content mods serve is kept up to 3072 contents or 512 MiB in all; past that
@@ -27,4 +31,5 @@
   replaced by an empty file (#1294).
 - The loader's own file writes on the game thread wait about 30 ms per step for
   a file another program holds, not a second, so the game does not stall for
-  seconds (#1294).
+  seconds. The writes at the shutdown and of the final save wait the full
+  second, as no later save writes what they keep (#1294).

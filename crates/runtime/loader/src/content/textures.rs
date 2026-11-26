@@ -513,20 +513,17 @@ unsafe extern "system" fn request(requester: *mut u8, requests: *mut Requests) {
     unsafe { REQUEST_NEXT.get()(requester, &raw mut rest) };
 }
 
-/// The most requests one content request is read for; past it the call
-/// passes on unread.
-const MAX_REQUESTS: usize = 4096; // bound, not a game offset: the loader's limit on a count it reads
-
 /// Whether the `count` requests of `size` bytes at `data`, counts read from
-/// the game's memory, are few enough and lie in one region that reads, as
-/// `query` reports it, so the loop over them reads nothing else.
+/// the game's memory, lie in one region that reads, as `query` reports it,
+/// so the loop over them reads nothing else and the requests it keeps for
+/// the game copy no more than the game mapped.
 fn requests_read(
     data: usize,
     count: usize,
     size: usize,
     query: impl FnOnce(usize) -> Option<crate::engine::pages::Region>,
 ) -> bool {
-    if count == 0 || count > MAX_REQUESTS || data == 0 {
+    if count == 0 || data == 0 {
         return false;
     }
     let Some(end) = count
@@ -888,6 +885,32 @@ pub fn bench_texture_request() -> impl FnMut() {
         // SAFETY: `requester` and `requests` are live for the call, and the
         // slot holds the stand-in, which reads neither.
         unsafe { request(&raw mut requester, &raw mut requests) };
+    }
+}
+
+/// Readies the content request's reads for their benchmark: `served`
+/// contents in a store of their own and `count` requests on the heap, none
+/// of them served, as in a request whose content is all the game's. The
+/// closure checks the requests' memory and looks each hash up, as the
+/// request does before it passes them on, and returns how many it found.
+#[cfg(feature = "test")]
+#[doc(hidden)]
+pub fn bench_request_reads(served: u32, count: u32) -> impl FnMut() -> usize {
+    let store: &'static store::Store = Box::leak(Box::new(store::Store::new()));
+    for n in 0..served {
+        let _kept = store.insert([4, n, n.wrapping_mul(7), MARK], &[1]);
+    }
+    let requests: Vec<ContentHash> = (0..count).map(|n| [4, u32::MAX - n, 0, MARK]).collect();
+    move || {
+        let data = requests.as_ptr().addr();
+        let size = size_of::<ContentHash>();
+        if !requests_read(data, requests.len(), size, crate::engine::pages::query) {
+            return 0;
+        }
+        requests
+            .iter()
+            .filter(|hash| store.get(hash).is_some())
+            .count()
     }
 }
 

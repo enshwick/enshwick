@@ -42,6 +42,7 @@ use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
 use crate::engine::registry::JoinFeatureError;
 use crate::engine::world::ServerAccess;
+use enshwick_base::__internal::inventory_queue::MAX_QUEUED;
 use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
@@ -264,10 +265,6 @@ impl Finished {
         }
     }
 }
-
-/// The most requests waiting at once, so mods that submit faster than rows
-/// run them cannot grow the queue without end.
-const MAX_QUEUED: usize = 4096;
 
 /// Requests in order; `pending` is set while it holds any, so a row with
 /// nothing to do takes one atomic load. Alone on its cache lines, since mod

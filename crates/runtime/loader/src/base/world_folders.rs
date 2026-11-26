@@ -152,9 +152,10 @@ pub enum CheckError {
     /// the folders are as they were, or renamed together.
     #[error(transparent)]
     Io(#[from] io::Error),
-    /// A folder was not renamed, and the folders renamed before it were
-    /// renamed back, so both still belong to the other world.
-    #[error("{} was not renamed ({error}), so the folders renamed before it were renamed back", folder.display())]
+    /// A folder was not renamed, or no free name was left for it, and the
+    /// folders renamed before it were renamed back, so both still belong to
+    /// the other world.
+    #[error("{} was not renamed ({error}), and no folder of the world was left renamed", folder.display())]
     NotRenamed {
         /// The folder that kept its name.
         folder: PathBuf,
@@ -198,7 +199,8 @@ pub fn check(key: &str, stamp: &str) -> Result<Identity, CheckError> {
     check_with(key, stamp, &mut |from, to| std::fs::rename(from, to))
 }
 
-/// [`check`], renaming through `rename`.
+/// [`check`], renaming through `rename`, each rename tried again for about a
+/// second while another program holds a file in the folder.
 fn check_with(
     key: &str,
     stamp: &str,
@@ -216,7 +218,9 @@ fn check_with(
         (Some(_), _) => {
             let folders = [settings_of(key), data_of(key)];
             let suffix = free_suffix(&folders, stamp)?;
-            set_aside(&folders, &suffix, rename)?;
+            set_aside(&folders, &suffix, &mut |from, to| {
+                enshwick_base::__internal::while_busy(|| rename(from, to))
+            })?;
             Identity::Renamed { suffix }
         }
         (None, _) => Identity::Kept,
@@ -232,7 +236,12 @@ fn check_with(
 const SUFFIXES: u16 = 1000;
 
 /// The first suffix of `stamp` that no folder of `folders` carries yet.
-fn free_suffix(folders: &[PathBuf], stamp: &str) -> io::Result<String> {
+///
+/// # Errors
+///
+/// [`CheckError::NotRenamed`] naming the first folder when every suffix is
+/// taken, as the folders then stay another world's.
+fn free_suffix(folders: &[PathBuf], stamp: &str) -> Result<String, CheckError> {
     (1..=SUFFIXES)
         .map(|n| match n {
             1 => format!(".old-{stamp}"),
@@ -243,11 +252,12 @@ fn free_suffix(folders: &[PathBuf], stamp: &str) -> io::Result<String> {
                 .iter()
                 .all(|folder| !renamed(folder, suffix).exists())
         })
-        .ok_or_else(|| {
-            io::Error::new(
+        .ok_or_else(|| CheckError::NotRenamed {
+            folder: folders.first().cloned().unwrap_or_default(),
+            error: io::Error::new(
                 io::ErrorKind::AlreadyExists,
                 format!("every suffix of .old-{stamp} is taken"),
-            )
+            ),
         })
 }
 
@@ -578,6 +588,52 @@ mod tests {
         assert_eq!(stuck, &dir.join("world3-mod-settings.old-s"));
         assert!(error.foreign());
         assert!(!CheckError::Io(io::Error::other("x")).foreign());
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_folder_another_program_holds_for_a_moment_is_still_set_aside() {
+        let dir = scratch("held");
+        let key = foreign_world(&dir);
+        let mut refusals = 0;
+        let mut rename = |from: &Path, to: &Path| {
+            if from.ends_with("world3-mod-data") && refusals < 3 {
+                refusals += 1;
+                return Err(io::ErrorKind::PermissionDenied.into());
+            }
+            std::fs::rename(from, to)
+        };
+        assert_eq!(
+            check_with(&key, "s", &mut rename).unwrap(),
+            Identity::Renamed {
+                suffix: ".old-s".to_owned()
+            }
+        );
+        assert!(
+            dir.join("world3-mod-data.old-s/you.lockers/owners.toml")
+                .exists()
+        );
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn folders_with_every_old_name_taken_stay_another_world_s() {
+        let dir = scratch("every-name");
+        let key = foreign_world(&dir);
+        for n in 1..=SUFFIXES {
+            let suffix = if n == 1 {
+                ".old-s".to_owned()
+            } else {
+                format!(".old-s-{n}")
+            };
+            std::fs::create_dir(renamed(&data_of(&key), &suffix)).unwrap();
+        }
+        let error = check(&key, "s").unwrap_err();
+        assert!(
+            matches!(error, CheckError::NotRenamed { .. }) && error.foreign(),
+            "{error}"
+        );
+        assert!(data_of(&key).join("you.lockers/owners.toml").exists());
         let _gone = std::fs::remove_dir_all(&dir);
     }
 

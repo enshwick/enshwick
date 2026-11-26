@@ -147,7 +147,7 @@ fn online() -> Option<Vec<enshwick_core::abi::PlayerInfo>> {
 pub(crate) fn capture(server: usize, thread: u32, world_offset: usize, entities: usize) {
     STATE.server.publish(server);
     if thread != 0 && STATE.game_thread.swap(thread, Ordering::AcqRel) != thread {
-        enshwick_base::__internal::wait_briefly_on_this_thread();
+        enshwick_base::__internal::wait_briefly_on_this_thread(true);
     }
     let world = if server == 0 {
         0
@@ -168,8 +168,11 @@ pub(crate) fn capture(server: usize, thread: u32, world_offset: usize, entities:
 /// Begins the server's end at its shutdown, on its game thread: no reader
 /// off the game thread pins it from now on, while the game thread still
 /// reads it for the shutdown work. The game frees the server only in the
-/// teardown after [`tear_down`] (server 399, client 426).
+/// teardown after [`tear_down`] (server 399, client 426). The shutdown's
+/// writes and the final save's wait the full time for a held file, as no
+/// later save writes what they would keep.
 pub(crate) fn retire() {
+    enshwick_base::__internal::wait_briefly_on_this_thread(false);
     STATE
         .retired_on
         .store(STATE.game_thread.load(Ordering::Acquire), Ordering::Release);
