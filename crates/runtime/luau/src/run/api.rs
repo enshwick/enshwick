@@ -11,7 +11,7 @@ use enshwick_core::{Load, Relock as _};
 use mlua::{Function, Lua, MultiValue, Table, Value as LuaValue};
 
 use super::{Asked, Defined, Inner, Owned, Scope, Vm};
-use crate::bridge::{LuaArgs, call, failed, raising, refused, to_lua};
+use crate::bridge::{Answer, LuaArgs, call, failed, raising, refused, to_lua};
 use crate::calls::{CallDesc, ServedCall};
 use crate::files::{Requirer, Scripts};
 use crate::points::{EventDesc, PointDesc, Read, decode, encode};
@@ -620,14 +620,11 @@ impl Inner {
                     let (bridge, what) = (bridge.clone(), what.clone());
                     scope.create_function(move |lua, args: MultiValue| {
                         call(lua, &bridge, args, signature, &what, |slots| {
-                            let mut load = load.try_relock().ok_or_else(|| {
-                                script::Error::new("called from inside another start call")
-                            })?;
+                            let mut load = load.try_relock().ok_or_else(nested)?;
                             function.call(&mut load, slots)
                         })
                     })?
                 };
-                let during = raising(lua, during)?;
                 table.raw_set(function.name(), start_only(vm, what, during)?)?;
             }
             if let Some(getter) = namespace.request_function() {
@@ -643,22 +640,32 @@ impl Inner {
     }
 }
 
-/// `during`, a function of the start's scope, as the function `what` that
-/// raises an error once the start is over.
+/// The error of a start call made while another runs.
+fn nested() -> script::Error {
+    script::Error::with_kind(
+        script::Error::WRONG_TIME,
+        "called from inside another start call",
+    )
+}
+
+/// `during`, a function of the start's scope that answers an [`Answer`], as
+/// the raising function `what` that refuses once the start is over.
 fn start_only(vm: &Arc<Vm>, what: String, during: Function) -> mlua::Result<Function> {
     let weak = Arc::downgrade(vm);
-    vm.lua.create_function(move |_, args: MultiValue| {
+    let gated = vm.lua.create_function(move |lua, args: MultiValue| {
         if !weak
             .upgrade()
             .is_some_and(|vm| vm.starting.load(Ordering::Acquire))
         {
-            return Err(failed(
-                &what,
+            let late = script::Error::with_kind(
+                script::Error::WRONG_TIME,
                 "allowed only while the mod starts, at the top level of main.luau",
-            ));
+            );
+            return refused(lua, &what, &late);
         }
-        during.call::<MultiValue>(args)
-    })
+        during.call::<Answer>(args)
+    })?;
+    raising(&vm.lua, gated)
 }
 
 /// Puts `namespace`, which a script asks for, into `table`: its `getter`
@@ -682,8 +689,10 @@ fn requested<'scope, 'env>(
         let signature = declared.signature();
         let function = lua.create_function(move |lua, args: LuaArgs| {
             let Some(opened) = slot.get() else {
-                let early =
-                    script::Error::new(format!("call {ask}() at the top level of main.luau first"));
+                let early = script::Error::with_kind(
+                    script::Error::WRONG_TIME,
+                    format!("call {ask}() at the top level of main.luau first"),
+                );
                 return refused(lua, &what, &early);
             };
             call(lua, &bridge, args, signature, &what, |slots| {
@@ -695,15 +704,19 @@ fn requested<'scope, 'env>(
     let during = {
         let (bridge, what) = (bridge.clone(), ask.clone());
         scope.create_function(move |lua, ()| {
-            let mut load = load
-                .try_relock()
-                .ok_or_else(|| failed(&what, "called from inside another start call"))?;
-            let (opened, handle) = namespace
-                .request(&mut load)
-                .ok_or_else(|| failed(&what, "no such function"))?
-                .map_err(|off| failed(&what, off))?;
+            let Some(mut load) = load.try_relock() else {
+                return refused(lua, &what, &nested());
+            };
+            let (opened, handle) = match namespace.request(&mut load) {
+                Some(Ok(opened)) => opened,
+                Some(Err(off)) => return refused(lua, &what, &script::Error::failed(&off)),
+                None => return refused(lua, &what, &script::Error::new("no such function")),
+            };
             let _first = slot.set(opened);
-            to_lua(lua, &bridge, handle, getter.signature().ret())
+            Ok((
+                to_lua(lua, &bridge, handle, getter.signature().ret())?,
+                None,
+            ))
         })?
     };
     table.raw_set(getter.name(), start_only(vm, ask, during)?)

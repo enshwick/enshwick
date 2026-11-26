@@ -180,7 +180,9 @@ A call that fails raises a Luau error as a table. Its `kind` is the name of
 the Rust error's variant, and its `message` says what went wrong. Its `call`
 names the call that failed. A kind is `WrongThread` for
 `WorldError::WrongThread`, for example. It is `BadArgs` for an argument the
-call cannot take. `pcall` catches the table. `tostring` reads it as the call
+call cannot take. It is `WrongTime` for a call at the wrong time, such as a
+start call after the start. It is `Gone` for a call on an object whose call
+ended. `pcall` catches the table. `tostring` reads it as the call
 and the message, such as
 `enshwick.world.broadcast: text: expected a string, got a number`.
 

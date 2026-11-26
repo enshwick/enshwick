@@ -151,7 +151,8 @@ impl Object {
         let function = lua.create_function(
             move |lua, (this, args): (mlua::UserDataRef<Self>, LuaArgs)| {
                 if this.ended() {
-                    let ended = Error::new("the object was lent to a call that ended");
+                    let ended =
+                        Error::with_kind(Error::GONE, "the object was lent to a call that ended");
                     return refused(lua, &what, &ended);
                 }
                 // Not borrowed through the call, which may lend this object again.

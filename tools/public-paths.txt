@@ -7346,9 +7346,12 @@ script::Declared::name unstable
 script::Declared::signature unstable
 script::Error unstable
 script::Error::BAD_ARGS unstable
+script::Error::GONE unstable
+script::Error::WRONG_TIME unstable
 script::Error::failed unstable
 script::Error::kind unstable
 script::Error::new unstable
+script::Error::with_kind unstable
 script::EventKind unstable
 script::EventKind::data unstable
 script::EventKind::doc unstable

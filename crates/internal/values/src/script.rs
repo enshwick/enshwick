@@ -760,14 +760,36 @@ impl Error {
     /// The kind of an argument or value the call cannot take.
     pub const BAD_ARGS: &'static str = "BadArgs";
 
+    /// The kind of a call made when it cannot run: after the start, before
+    /// the call it needs, or from inside another start call.
+    pub const WRONG_TIME: &'static str = "WrongTime";
+
+    /// The kind of a call on an object whose call or game ended.
+    pub const GONE: &'static str = "Gone";
+
     /// An error saying `message`, of the kind [`Error::BAD_ARGS`].
     ///
     /// # Examples
     ///
     /// See [`Error`].
     pub fn new(message: impl Into<String>) -> Self {
+        Self::with_kind(Self::BAD_ARGS, message)
+    }
+
+    /// An error saying `message`, of the kind `kind`, such as
+    /// [`Error::WRONG_TIME`].
+    ///
+    /// # Examples
+    ///
+    /// ```rust,standalone_crate
+    /// use enshwick::script::Error;
+    ///
+    /// let error = Error::with_kind(Error::WRONG_TIME, "allowed only while the mod starts");
+    /// assert_eq!(error.kind(), "WrongTime");
+    /// ```
+    pub fn with_kind(kind: &str, message: impl Into<String>) -> Self {
         Self {
-            kind: Self::BAD_ARGS.to_owned(),
+            kind: kind.to_owned(),
             message: message.into(),
         }
     }
