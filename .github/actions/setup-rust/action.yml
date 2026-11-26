@@ -159,7 +159,7 @@ runs:
       if: inputs.fuzz == 'true'
       shell: bash
       env:
-        NIGHTLY: nightly-2026-11-22
+        NIGHTLY: nightly-2026-11-23
         # renovate: datasource=github-release-attachments depName=rust-fuzz/cargo-fuzz
         CARGO_FUZZ_VERSION: 0.13.2
         CARGO_FUZZ_SHA256: b5b704018b63e0f151c17a057ac53b5111e1db545d1b9f72fee79f08a545931c
