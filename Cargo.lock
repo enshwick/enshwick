@@ -744,6 +744,7 @@ dependencies = [
  "enshwick",
  "enshwick-base",
  "enshwick-content",
+ "enshwick-values",
  "iced-x86",
  "insta",
  "memchr",
