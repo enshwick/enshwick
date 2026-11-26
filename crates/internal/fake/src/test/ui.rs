@@ -491,7 +491,7 @@ impl Installed {
         table::with(Vec::new(), |s| {
             s.ui.client_commands
                 .iter()
-                .map(|(id, kind, target, _)| (*id, *kind, target.clone()))
+                .map(|c| (c.id, c.kind, c.target.clone()))
                 .collect()
         })
     }
@@ -510,13 +510,9 @@ impl Installed {
     /// ```
     pub fn set_command_status(&self, id: u64, state: u32, reason: u32) {
         table::with((), |s| {
-            if let Some((.., status)) =
-                s.ui.client_commands
-                    .iter_mut()
-                    .find(|(queued, ..)| *queued == id)
-            {
-                status.state = state;
-                status.reason = reason;
+            if let Some(command) = s.ui.client_commands.iter_mut().find(|c| c.id == id) {
+                command.status.state = state;
+                command.status.reason = reason;
             }
         });
     }
@@ -535,13 +531,9 @@ impl Installed {
     /// ```
     pub fn set_command_phase(&self, id: u64, phase: u32, failure: u32) {
         table::with((), |s| {
-            if let Some((.., status)) =
-                s.ui.client_commands
-                    .iter_mut()
-                    .find(|(queued, ..)| *queued == id)
-            {
-                status.phase = phase;
-                status.failure = failure;
+            if let Some(command) = s.ui.client_commands.iter_mut().find(|c| c.id == id) {
+                command.status.phase = phase;
+                command.status.failure = failure;
             }
         });
     }

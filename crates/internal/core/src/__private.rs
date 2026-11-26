@@ -20,6 +20,12 @@ pub mod rules {
     pub use crate::rates::may_declare_rate;
 }
 
+/// The one walk of an inventory's links, which the loader's readers share
+/// with the API's.
+pub mod inventory_links {
+    pub use enshwick_inventory::__internal::inventory_links::*;
+}
+
 /// What the loader reads of the journal through the domains, as the mods
 /// read it: the quests, the knowledge their queries read, and the tests.
 #[cfg(feature = "typed")]

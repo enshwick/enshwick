@@ -2,8 +2,10 @@
 //! equipment category, read through its `InventorySetup` as the game links
 //! them.
 
+use std::ops::ControlFlow;
 use std::sync::OnceLock;
 
+use enshwick_core::__private::inventory_links::{self, SetupLayout};
 use enshwick_core::Entity;
 use enshwick_core::inventory::InventoryCategory;
 use enshwick_core::raw::read_at;
@@ -11,12 +13,8 @@ use enshwick_core::raw::read_at;
 use crate::engine::catalogue::{self, ids};
 use crate::engine::loader::Loader;
 
-use crate::world::transactions::props::{LINKS, SLOTS};
+use crate::world::transactions::props::SLOTS;
 
-/// The equipment category of an inventory link.
-const EQUIPMENT: u8 = InventoryCategory::EQUIPMENT.0;
-/// The virtual category, whose link leads to more links.
-const VIRTUAL: u8 = InventoryCategory::VIRTUAL.0;
 /// How deep virtual links are followed.
 const MAX_DEPTH: u32 = 2;
 
@@ -25,9 +23,7 @@ const MAX_DEPTH: u32 = 2;
 struct Layout {
     setup: u32,
     inventory: u32,
-    links: usize,
-    categories: usize,
-    initialized: usize,
+    links: SetupLayout,
     stack: usize,
     count: usize,
     pide: usize,
@@ -41,9 +37,11 @@ fn layout(loader: &Loader) -> Option<Layout> {
         Some(Layout {
             setup: catalogue::component_hash(loader, ids::INVENTORY_SETUP)?,
             inventory: catalogue::component_hash(loader, ids::INVENTORY)?,
-            links: catalogue::offset(loader, ids::INVENTORY_SETUP_LINKS)?,
-            categories: catalogue::offset(loader, ids::INVENTORY_SETUP_CATEGORIES)?,
-            initialized: catalogue::setup_initialized_at(loader)?,
+            links: SetupLayout {
+                links: catalogue::offset(loader, ids::INVENTORY_SETUP_LINKS)?,
+                categories: catalogue::offset(loader, ids::INVENTORY_SETUP_CATEGORIES)?,
+                initialized: catalogue::setup_initialized_at(loader)?,
+            },
             stack: catalogue::size(loader, ids::ITEM_STACK)?,
             count,
             pide: count + size_of::<u32>(),
@@ -55,64 +53,58 @@ fn layout(loader: &Loader) -> Option<Layout> {
 /// its own; empty for an entity without inventories. On the game thread.
 pub(super) fn worn(loader: &Loader, entity: Entity) -> Vec<(u32, u32)> {
     let mut out = Vec::new();
-    if let Some(layout) = layout(loader) {
-        walk(loader, &layout, entity.0, 0, &mut out);
-    }
+    let Some(layout) = layout(loader) else {
+        return out;
+    };
+    let mut setup = |entity| {
+        crate::engine::world::component(loader, entity, layout.setup)
+            .ok()
+            .map(<*const _>::cast)
+    };
+    let mut visit = |link, category| {
+        if category == InventoryCategory::EQUIPMENT {
+            worn_in(loader, &layout, link, &mut out);
+        }
+        ControlFlow::<()>::Continue(())
+    };
+    // SAFETY: `world::component` returns only the entity's live
+    // `InventorySetup`, read on the game thread that owns it, laid out as
+    // the reflected `layout.links` says.
+    let _walked = unsafe {
+        inventory_links::walk(
+            entity,
+            MAX_DEPTH,
+            Entity::NONE,
+            &layout.links,
+            &mut setup,
+            &mut visit,
+        )
+    };
     out
 }
 
-fn walk(loader: &Loader, layout: &Layout, root: u32, depth: u32, out: &mut Vec<(u32, u32)>) {
-    let Ok(setup) = crate::engine::world::component(loader, Entity(root), layout.setup) else {
+/// Adds to `out` the `(entity, item)` of each item with an entity of its
+/// own in the equipment inventory `link`.
+fn worn_in(loader: &Loader, layout: &Layout, link: Entity, out: &mut Vec<(u32, u32)>) {
+    let Ok(slots) = crate::engine::world::component(loader, link, layout.inventory) else {
         return;
     };
-    // SAFETY: `world::component` returned the entity's live `InventorySetup`,
-    // read on the game thread that owns it; `isInitialized` is a one-byte
-    // field at the offset reflection gave.
-    if !unsafe {
-        crate::world::transactions::props::setup_initialized(setup.cast(), layout.initialized)
-    } {
-        return;
-    }
-    for i in 0..LINKS {
-        // SAFETY: the live `InventorySetup` from `world::component`, on the
-        // game thread, holds 16 `u32` links at the reflected `linksEntities`
-        // offset, and `i` is below 16.
-        let link: u32 = unsafe { read_at(setup.cast(), layout.links + i * size_of::<u32>()) };
-        if link == 0 {
-            break;
-        }
-        // SAFETY: the live `InventorySetup` from `world::component`, on the
-        // game thread, holds 16 one-byte categories at the reflected
-        // `linksCategories` offset, and `i` is below 16.
-        let category: u8 = unsafe { read_at(setup.cast(), layout.categories + i) };
-        if category == VIRTUAL && depth < MAX_DEPTH {
-            walk(loader, layout, link, depth + 1, out);
-            continue;
-        }
-        if category != EQUIPMENT {
-            continue;
-        }
-        let Ok(slots) = crate::engine::world::component(loader, Entity(link), layout.inventory)
-        else {
-            continue;
-        };
-        for index in 0..SLOTS {
-            let at = index * layout.stack;
-            // SAFETY: the live `Inventory` from `world::component`, on the
-            // game thread, holds 8 stacks of the reflected `ItemStack` size,
-            // `index` is below 8, and a stack starts with its `u32` item id.
-            let item: u32 = unsafe { read_at(slots.cast(), at) };
-            // SAFETY: the stack at `at` lies in the live `Inventory` (8 stacks,
-            // `index` below 8) and holds its `u32` count at the reflected
-            // `data` offset.
-            let count: u32 = unsafe { read_at(slots.cast(), at + layout.count) };
-            // SAFETY: the stack at `at` lies in the live `Inventory` (8 stacks,
-            // `index` below 8) and holds its `u32` entity id right after the
-            // count, inside the reflected `ItemStack` size.
-            let pide: u32 = unsafe { read_at(slots.cast(), at + layout.pide) };
-            if item != 0 && count != 0 && pide != 0 {
-                out.push((pide, item));
-            }
+    for index in 0..SLOTS {
+        let at = index * layout.stack;
+        // SAFETY: the live `Inventory` from `world::component`, on the game
+        // thread, holds 8 stacks of the reflected `ItemStack` size, `index`
+        // is below 8, and a stack starts with its `u32` item id.
+        let item: u32 = unsafe { read_at(slots.cast(), at) };
+        // SAFETY: the stack at `at` lies in the live `Inventory` (8 stacks,
+        // `index` below 8) and holds its `u32` count at the reflected `data`
+        // offset.
+        let count: u32 = unsafe { read_at(slots.cast(), at + layout.count) };
+        // SAFETY: the stack at `at` lies in the live `Inventory` (8 stacks,
+        // `index` below 8) and holds its `u32` entity id right after the
+        // count, inside the reflected `ItemStack` size.
+        let pide: u32 = unsafe { read_at(slots.cast(), at + layout.pide) };
+        if item != 0 && count != 0 && pide != 0 {
+            out.push((pide, item));
         }
     }
 }

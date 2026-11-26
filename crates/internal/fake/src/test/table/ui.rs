@@ -38,6 +38,24 @@ pub(crate) type Extension = (
     Vec<enshwick_core::content::Guid>,
 );
 
+/// A client command a mod queued: its id, the mod that queued it, its raw
+/// kind and target, and its status as the test drives it.
+pub(crate) struct QueuedCommand {
+    pub(crate) id: u64,
+    pub(crate) owner: ModHandle,
+    pub(crate) kind: u32,
+    pub(crate) target: String,
+    pub(crate) status: enshwick_core::abi::ClientCommandStatus,
+}
+
+impl QueuedCommand {
+    /// Whether it still waits or runs, as the loader counts an open one.
+    pub(crate) const fn open(&self) -> bool {
+        use enshwick_core::abi::ClientCommandStatus as Raw;
+        self.status.state == Raw::PENDING || self.status.state == Raw::APPLIED
+    }
+}
+
 /// The local player's held controls as the test set them, `None` as outside
 /// a game; whether a mod asked yet, as the loader starts reading them at the
 /// first ask; and whether an interface step ran since, the first that reads
@@ -84,9 +102,8 @@ pub(crate) struct UiState {
     /// Whether a snapshot ask started the frame's reads, and whether an
     /// interface step read them since.
     pub(crate) snapshot_reads: (bool, bool),
-    /// The client commands mods queued, each with its kind, target and
-    /// status, as the test drives them.
-    pub(crate) client_commands: Vec<(u64, u32, String, enshwick_core::abi::ClientCommandStatus)>,
+    /// The client commands mods queued, as the test drives them.
+    pub(crate) client_commands: Vec<QueuedCommand>,
     /// The items of the carried windows the client holds, as the test set
     /// them.
     pub(crate) client_windows: Vec<enshwick_core::abi::ClientWindowItem>,

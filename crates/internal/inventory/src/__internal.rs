@@ -13,6 +13,12 @@ pub mod inventory_checks {
     pub use crate::inventory::checks::*;
 }
 
+/// The one walk of an inventory's links, for the API's reads and the
+/// loader's.
+pub mod inventory_links {
+    pub use crate::inventory::links::*;
+}
+
 /// Adds `drop` to random loot as `Load::add_loot` does, in the drops of
 /// `group`, a data pack's, which [`replace_loot_group`] replaces.
 ///
