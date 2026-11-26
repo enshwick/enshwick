@@ -184,10 +184,17 @@ run, not by a new run from a later `main`:
    the workflow runs `cargo xtask close --date <today> --package <crate>`
    for each crate the pull request releases, so their change files join
    that section at the crate's own version and go, and pushes the result to
-   the release pull request. A crate without a `CHANGELOG.md` keeps none:
-   [release-plz.toml](release-plz.toml) turns its changelog off.
+   the release pull request.
 2. Once that pull request merges, `release` tags each released crate
    `<package>-v<version>`, such as `enshwick-v1.0.0-alpha.3`, makes its
    GitHub release with the crate's joined changelog section as its notes,
    and publishes the public crates to crates.io. The loader
    and the stub are tagged only; they never go to crates.io.
+
+Every crate release-plz releases keeps a `CHANGELOG.md`, the loader and the
+stub included, since a crate without one gets a GitHub release with no
+notes; `cargo xtask check` refuses a released crate without one, or with
+its changelog turned off in [release-plz.toml](release-plz.toml). A change
+to the loader or the stub that players and admins see takes a change file
+beside the loader's or the stub's changelog, and what mod authors see of
+it, one beside the changelog of `enshwick`.

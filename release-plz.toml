@@ -26,9 +26,10 @@ Each package's `CHANGELOG.md` in this pull request lists what changed.
 # A package's changelog is its change files, joined by `cargo xtask close` in
 # the release pull request after release-plz writes it: release-plz adds only
 # the version's heading, never entries of its own from the commits, and
-# `release` takes the joined section as the GitHub release's notes. A package
-# without a CHANGELOG.md sets `changelog_update = false`, or release-plz
-# would write one for it.
+# `release` takes the joined section as the GitHub release's notes. Every
+# package it releases keeps a CHANGELOG.md, since without one the release
+# carries no notes; `cargo xtask check` refuses a package that lacks it or
+# turns its changelog off.
 [changelog]
 body = """
 ## [{{ version }}] - {{ timestamp | date(format="%Y-%m-%d") }}
@@ -51,7 +52,6 @@ version_group = "api"
 [[package]]
 name = "enshwick-abi"
 version_group = "api"
-changelog_update = false
 
 [[package]]
 name = "enshwick-base"
@@ -96,21 +96,18 @@ version_group = "api"
 [[package]]
 name = "enshwick-fake"
 version_group = "api"
-changelog_update = false
 
 # The loader DLL and the proxy stub are not published to crates.io: their
-# versions live in git tags, and their release carries `enshwick.zip`.
+# versions live in git tags.
 [[package]]
 name = "enshwick-loader"
 git_only = true
 publish = false
-changelog_update = false
 
 [[package]]
 name = "enshwick-loader-stub"
 git_only = true
 publish = false
-changelog_update = false
 
 # The start contract, built into the loader and the stub, examples and
 # tools never release.

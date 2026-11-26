@@ -6,12 +6,14 @@
 //! platform crate depends on the API crate only for its tests, features
 //! name what they add, `anyhow` stays in binaries, `rust-version` is the
 //! pinned toolchain's, a published crate's path dependencies carry
-//! versions, and release-plz versions the API crate and every crate of
-//! `crates/internal` as one group.
+//! versions, release-plz versions the API crate and every crate of
+//! `crates/internal` as one group, and every crate it releases keeps a
+//! changelog for its release notes.
 
 use std::path::Path;
 use std::process::Command;
 
+use cargo_enshwick::changelog::CHANGELOG;
 use cargo_enshwick::rules::TEST;
 
 use crate::FACADE;
@@ -36,6 +38,7 @@ pub(crate) fn check(packages: &[Package]) -> Result<Vec<String>, String> {
     let toolchain = toolchain(&read(&crate::workspace_root().join("rust-toolchain.toml"))?)?;
     let root = Path::new(metadata["workspace_root"].as_str().unwrap_or_default());
     let mut api_crates = Vec::new();
+    let mut releasables = Vec::new();
     let mut problems = Vec::new();
     for package in metadata["packages"].as_array().into_iter().flatten() {
         let name = package["name"].as_str().unwrap_or_default();
@@ -44,6 +47,14 @@ pub(crate) fn check(packages: &[Package]) -> Result<Vec<String>, String> {
         if is_api_crate(name, dir.strip_prefix(root).unwrap_or(dir)) {
             api_crates.push(name.to_owned());
         }
+        releasables.push(Releasable {
+            name,
+            // release-plz's reading: no `publish` publishes, `false` is `[]`.
+            publishable: package["publish"]
+                .as_array()
+                .is_none_or(|registries| !registries.is_empty()),
+            changelog: dir.join(CHANGELOG).is_file(),
+        });
         problems.extend(cargo_enshwick::rules::check(package).map_err(|e| e.to_string())?);
         problems.extend(fake_reach(name, package));
         if packages
@@ -54,10 +65,9 @@ pub(crate) fn check(packages: &[Package]) -> Result<Vec<String>, String> {
         }
         problems.extend(manifest_facts(name, package, &toolchain));
     }
-    problems.extend(release_group(
-        &api_crates,
-        &read(&root.join("release-plz.toml"))?,
-    )?);
+    let release_plz = read(&root.join("release-plz.toml"))?;
+    problems.extend(release_group(&api_crates, &release_plz)?);
+    problems.extend(release_notes(&releasables, &release_plz)?);
     Ok(problems)
 }
 
@@ -268,8 +278,7 @@ pub(crate) fn is_api_crate(name: &str, dir: &Path) -> bool {
 ///
 /// When the text does not read as TOML.
 fn release_group(api_crates: &[String], release_plz: &str) -> Result<Vec<String>, String> {
-    let file: toml::Table =
-        toml::from_str(release_plz).map_err(|e| format!("release-plz.toml: {}", e.message()))?;
+    let file = release_plz_table(release_plz)?;
     let grouped: Vec<&str> = file
         .get("package")
         .and_then(toml::Value::as_array)
@@ -289,6 +298,71 @@ fn release_group(api_crates: &[String], release_plz: &str) -> Result<Vec<String>
             )
         })
         .collect())
+}
+
+/// A workspace package as release-plz weighs it for a release.
+#[derive(Debug)]
+struct Releasable<'a> {
+    name: &'a str,
+    /// Its manifest lets it go to a registry.
+    publishable: bool,
+    /// A `CHANGELOG.md` lies beside its manifest.
+    changelog: bool,
+}
+
+/// The problems of `releasables` with `release_plz`, the text of
+/// `release-plz.toml`: a package release-plz releases without a
+/// `CHANGELOG.md`, or with its changelog turned off, since release-plz takes
+/// the version's changelog section as the GitHub release's notes and sends
+/// an empty body without one.
+///
+/// # Errors
+///
+/// When the text does not read as TOML.
+fn release_notes(releasables: &[Releasable<'_>], release_plz: &str) -> Result<Vec<String>, String> {
+    let file = release_plz_table(release_plz)?;
+    let workspace = file.get("workspace").and_then(toml::Value::as_table);
+    let entries: Vec<&toml::Table> = file
+        .get("package")
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(toml::Value::as_table)
+        .collect();
+    let mut problems = Vec::new();
+    for package in releasables {
+        let entry = entries
+            .iter()
+            .find(|entry| entry.get("name").and_then(toml::Value::as_str) == Some(package.name));
+        // A package's own setting wins over the workspace's.
+        let setting = |key: &str| {
+            entry
+                .and_then(|entry| entry.get(key))
+                .or_else(|| workspace.and_then(|workspace| workspace.get(key)))
+                .and_then(toml::Value::as_bool)
+        };
+        let released = setting("release") != Some(false)
+            && (package.publishable || setting("git_only") == Some(true));
+        if !released {
+            continue;
+        }
+        let name = package.name;
+        if !package.changelog {
+            problems.push(format!(
+                "{name}: release-plz releases it, so it keeps a {CHANGELOG} whose section is its GitHub release's notes"
+            ));
+        }
+        if setting("changelog_update") == Some(false) {
+            problems.push(format!(
+                "{name}: release-plz.toml turns its changelog off, so its GitHub release would carry no notes"
+            ));
+        }
+    }
+    Ok(problems)
+}
+
+fn release_plz_table(text: &str) -> Result<toml::Table, String> {
+    toml::from_str(text).map_err(|e| format!("release-plz.toml: {}", e.message()))
 }
 
 /// `version`'s major and minor: `1.99` of `1.99.1`.
@@ -500,6 +574,41 @@ mod tests {
         );
         assert!(release_group(&crates[..1], release_plz).unwrap().is_empty());
         assert!(release_group(&crates, "[[package]\n").is_err());
+    }
+
+    #[test]
+    fn a_released_crate_without_its_changelog_or_with_it_turned_off_is_a_problem() {
+        let release_plz = "[workspace]\nchangelog_update = true\n\n\
+            [[package]]\nname = \"loader\"\ngit_only = true\nchangelog_update = false\n\n\
+            [[package]]\nname = \"tool\"\nrelease = false\n";
+        let package = |name, publishable, changelog| Releasable {
+            name,
+            publishable,
+            changelog,
+        };
+        let packages = [
+            package("api", true, true),
+            package("abi", true, false),
+            package("loader", false, false),
+            package("tool", true, false),
+            package("example", false, false),
+        ];
+        assert_eq!(
+            release_notes(&packages, release_plz).unwrap(),
+            [
+                "abi: release-plz releases it, so it keeps a CHANGELOG.md whose section is its GitHub release's notes",
+                "loader: release-plz releases it, so it keeps a CHANGELOG.md whose section is its GitHub release's notes",
+                "loader: release-plz.toml turns its changelog off, so its GitHub release would carry no notes",
+            ]
+        );
+        let off = "[workspace]\nchangelog_update = false\n";
+        assert_eq!(
+            release_notes(&packages[..1], off).unwrap(),
+            [
+                "api: release-plz.toml turns its changelog off, so its GitHub release would carry no notes"
+            ]
+        );
+        assert!(release_notes(&packages, "[[package]\n").is_err());
     }
 
     #[test]
