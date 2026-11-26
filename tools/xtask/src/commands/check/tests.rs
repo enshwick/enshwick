@@ -918,6 +918,56 @@ fn the_stable_doctests_skip_unstable_modules_under_either_path_separator() {
     assert!(!skipped("crates\\enshwick\\src\\lib.rs - item (line 1)"));
 }
 
+#[test]
+fn a_package_that_tests_in_a_build_of_its_own_leaves_the_workspace_s_test_run_for_its_own() {
+    let mut loader = package("enshwick-loader", "crates/runtime/loader", false);
+    loader.own_tests = true;
+    loader.features = vec!["test".to_owned()];
+    let mut start = package("enshwick-loader-start", "crates/runtime/start", false);
+    start.own_tests = true;
+    let packages = [
+        loader,
+        start,
+        package("enshwick-abi", "crates/internal/abi", false),
+    ];
+    let some = |code: &[&str], tested: &[&str]| Scope::Some {
+        code: code.iter().map(|name| (*name).to_owned()).collect(),
+        docs: BTreeSet::new(),
+        tested: tested.iter().map(|name| (*name).to_owned()).collect(),
+        built: BTreeSet::new(),
+        wide: false,
+    };
+    let named = |own: BTreeSet<String>| own.into_iter().collect::<Vec<_>>();
+    assert_eq!(
+        named(own_tests(
+            &some(&["enshwick-abi"], &["enshwick-loader"]),
+            &packages,
+            |_| true
+        )),
+        ["enshwick-loader"]
+    );
+    assert!(own_tests(&some(&["enshwick-abi"], &[]), &packages, |_| true).is_empty());
+    assert!(own_tests(&Scope::All, &packages, |_| false).is_empty());
+    let own = own_tests(&Scope::All, &packages, |_| true);
+    let lines: Vec<String> = own_test_steps(&own, &packages)
+        .iter()
+        .map(Step::line)
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            "cargo nextest run --no-tests=pass --package enshwick-loader --features enshwick-loader/test",
+            "cargo nextest run --no-tests=pass --package enshwick-loader-start",
+        ]
+    );
+    let (_, tests, _) = plan(
+        &some(&["enshwick-abi", "enshwick-loader"], &[]),
+        &packages,
+        |name| !own.contains(name),
+    );
+    assert_eq!(tests.as_deref(), Some("package(enshwick-abi)"));
+}
+
 mod docs;
 mod feature_lints;
 mod targets;

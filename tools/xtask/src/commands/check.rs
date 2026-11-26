@@ -35,6 +35,7 @@ use crate::commands::{fuzz, header, public_paths, wine};
 use crate::{FACADE, packages, say, workspace_root};
 use failures::Failures;
 pub(crate) use failures::{Ran, run_steps};
+use own_tests::{own_test_steps, own_tests};
 use part::{
     Part, due_parts, facade_code_reached, stable_api_due, stable_api_out_of_scope,
     stable_examples_left_to_ci, trybuild_due, windows_features_due,
@@ -810,7 +811,9 @@ fn host_steps(
 /// narrowed `cargo doc --package` would unify features differently and
 /// rebuild their dependencies on each switch (an `xtask` alone 34 s, then the
 /// workspace 64 s, 2026-11-14), while the workspace's rustdoc redoes only the
-/// changed packages and their dependents. Host steps run one
+/// changed packages and their dependents. The one exception is a package
+/// marked `own-tests` ([`Package::own_tests`]): its tests build alone, since
+/// the workspace's build turns on the fake host's features below it. Host steps run one
 /// after another (they share the build lock); the Windows lint runs beside
 /// them. What fails goes into `failures` ([`failures::run_steps`]).
 fn check(
@@ -879,10 +882,15 @@ fn check(
     } else {
         say("checking the whole workspace");
     }
-    let separate = in_process::packages(scope, parts.contains(&Part::Host), packages, host_ok);
-    let (flags, tests, doctests) = plan(scope, packages, |name| {
-        host_ok(name) && !separate.contains(name)
+    let own = own_tests(scope, packages, host_ok);
+    let mut separate = in_process::packages(scope, parts.contains(&Part::Host), packages, host_ok);
+    separate.retain(|name| !own.contains(name));
+    let (flags, mut tests, doctests) = plan(scope, packages, |name| {
+        host_ok(name) && !separate.contains(name) && !own.contains(name)
     });
+    if tests.is_none() && !own.is_empty() {
+        tests = Some(format!("not ({})", test_filter(own.iter())));
+    }
     let workspace = host_args(packages, on_windows);
     let stable = stable_api(packages);
     // The feature lints go first: they are cheap, and in CI the first
@@ -910,6 +918,9 @@ fn check(
         full,
         parts,
     ));
+    if flags.0 && parts.contains(&Part::Host) {
+        host_run.extend(own_test_steps(&own, packages));
+    }
     let windows = if !on_windows && flags.0 {
         let root = workspace_root();
         windows_lint::steps(scope, packages, parts, windows_code(&root), alone)
@@ -962,6 +973,7 @@ fn run_sides(
 mod failures;
 mod features;
 mod in_process;
+mod own_tests;
 mod part;
 mod step;
 #[cfg(test)]

@@ -39,6 +39,11 @@ pub(crate) struct Package {
     /// Has tests of its Windows code, run under Wine off Windows
     /// (`package.metadata.xtask.windows-tests`, or `windows-only`).
     pub(crate) windows_tests: bool,
+    /// Runs its tests in a build of its own, with its own `test` feature and
+    /// no other (`package.metadata.xtask.own-tests`): the workspace's build
+    /// turns on the fake host's features of the crates below it, which its
+    /// tests must not run on.
+    pub(crate) own_tests: bool,
     /// Compiles C for its target, itself or through a dependency
     /// (`package.metadata.xtask.compiles-c`): a check for another target
     /// than the host's would need a cross compiler for it.

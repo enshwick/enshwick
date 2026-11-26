@@ -84,6 +84,9 @@ proptest.workspace = true
 # Most of it runs only on Windows: off Windows, `cargo xtask check` runs its
 # portable tests on the host and the rest under Wine with `--windows`.
 windows-tests = true
+# Its tests run in a build of their own: the workspace's turns on the fake
+# host's features of the crates it runs on, such as the fake's clock.
+own-tests = true
 
 [lints]
 workspace = true
