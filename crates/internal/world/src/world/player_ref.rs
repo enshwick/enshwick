@@ -53,36 +53,43 @@ impl PlayerRef {
     }
 
     /// The account's key, from the connected player when only the
-    /// character was given.
+    /// character was given; never key 0, which names no account.
     pub(crate) fn key_in(self, host: Host) -> Result<PlayerKey, WorldError> {
         match (self.key, self.entity) {
             (Some(key), _) => Ok(key),
-            (None, Some(entity)) => {
-                connected(host, |player| player.entity == entity).map(|p| p.key)
-            }
+            (None, Some(entity)) => connected(host, |player| player.entity == entity)?
+                .key
+                .ok_or(WorldError::Gone),
             (None, None) => Err(WorldError::Gone),
         }
     }
 
     /// The character, from the connected player when only the key was
-    /// given.
+    /// given; never [`Entity::NONE`].
     pub(crate) fn entity_in(self, host: Host) -> Result<Entity, WorldError> {
         match (self.entity, self.key) {
             (Some(entity), _) => Ok(entity),
-            (None, Some(key)) => connected(host, |player| player.key == key).map(|p| p.entity),
+            (None, Some(key)) => connected(host, |player| player.key == key)?
+                .entity
+                .ok_or(WorldError::Gone),
             (None, None) => Err(WorldError::Gone),
         }
     }
 }
 
-/// The connected player `test` picks; [`WorldError::Gone`] when none is.
-fn connected(host: Host, test: impl Fn(&Player) -> bool) -> Result<Player, WorldError> {
+/// The connected player `test` picks, with the halves that name no one
+/// left out; [`WorldError::Gone`] when none is.
+fn connected(host: Host, test: impl Fn(&Player) -> bool) -> Result<PlayerRef, WorldError> {
     let players = crate::world::listed(host).map_err(|status| {
         WorldError::from_status(status)
             .err()
             .unwrap_or(WorldError::Unavailable)
     })?;
-    players.into_iter().find(test).ok_or(WorldError::Gone)
+    players
+        .iter()
+        .find(|player| test(player))
+        .map(PlayerRef::from)
+        .ok_or(WorldError::Gone)
 }
 
 impl From<PlayerKey> for PlayerRef {

@@ -191,10 +191,12 @@ impl World {
     }
 
     /// Sends `text` to `player`'s chat alone, after the next step; callable
-    /// from any thread. The console and a remote caller have no account, so
-    /// a line for them goes to no player, with a log line: answer them in
-    /// the action's outcome. So does a line for a character no connected
-    /// player has.
+    /// from any thread for a player named by account. A player named by
+    /// character alone is found on the game thread only. The console and a
+    /// remote caller have no account, so a line for them goes to no player,
+    /// with a log line: answer them in the action's outcome. So does a line
+    /// for a character no connected player has, or one named off the game
+    /// thread.
     ///
     /// # Examples
     ///
@@ -205,19 +207,22 @@ impl World {
     /// ```
     #[script]
     pub fn tell(self, player: impl Into<PlayerRef>, text: &str) {
-        let Ok(key) = player.into().key_in(self.0.host) else {
-            crate::warn_once!(
+        match player.into().key_in(self.0.host) {
+            Ok(key) => self.chat(key, text),
+            Err(WorldError::WrongThread) => crate::warn_once!(
+                "a chat line for a player named by character alone goes to no player off the game thread: a character is found only on the game thread, so name the player by account"
+            ),
+            Err(_) => crate::warn_once!(
                 "a chat line for the console, a remote caller or a player who left goes to no player: answer the console and remote callers in the action's outcome"
-            );
-            return;
-        };
-        self.chat(key, text);
+            ),
+        }
     }
 
     /// Shows `text` on `player`'s screen, as the game shows its own "can't
     /// do that" messages, or tells it in chat when the player's client lacks
     /// Enshwick to show it; says which. The game shows 255 bytes; keep it to
-    /// a line. On the game thread; elsewhere it goes to chat. A notice for
+    /// a line. On the game thread; elsewhere it goes to chat, and to no
+    /// player when the player is named by character alone. A notice for
     /// the console or a remote caller goes to no player, as with
     /// [`tell`](World::tell), and answers [`Notice::Nobody`].
     ///
