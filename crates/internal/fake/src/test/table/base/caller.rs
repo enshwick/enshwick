@@ -84,6 +84,7 @@ macro_rules! entries {
         $(
             #[cfg(test)]
             impl $crate::test::table::base::caller::Callers {
+                $(#[$attr])*
                 #[expect(non_upper_case_globals, reason = "named after its entry, as the contract test lists it")]
                 pub(crate) const $name: $crate::test::table::base::caller::Kind =
                     $crate::test::table::base::caller::Kind::$kind;

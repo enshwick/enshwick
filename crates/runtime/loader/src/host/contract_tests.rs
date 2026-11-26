@@ -33,7 +33,7 @@ fn fresh() -> &'static Loader {
     let mut loader = crate::start::tests::loader_running(&IDS);
     let ids: Vec<&str> = loader.mods.iter().map(|m| m.id.as_str()).collect();
     assert_eq!(ids, IDS, "the mod is first and the pack second");
-    loader.mods[usize::try_from(PACK.0).unwrap() - 1].pack = true;
+    loader.mods[PACK.0 - 1].pack = true;
     install_for_test(loader)
 }
 

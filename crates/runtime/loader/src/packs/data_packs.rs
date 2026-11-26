@@ -224,7 +224,7 @@ mod tests {
     #[test]
     fn the_loader_s_tests_run_packs_on_the_game_s_clock_and_not_the_fake_host_s() {
         assert!(
-            !enshwick_base::__internal::FAKE_HOST,
+            !enshwick_base::__internal::is_fake_host(),
             "a dev-dependency turned on the fake host's features of enshwick-base, \
              so a pack's timed task here would never see time pass"
         );
