@@ -1,6 +1,7 @@
 use super::*;
 use enshwick_core::abi::Str;
 
+mod chat_lines;
 mod dialog_answers;
 mod item_acts;
 
@@ -822,16 +823,17 @@ fn at_the_main_menu_a_mods_command_runs_on_the_loader_s_screen_alone() {
         Some(menu(Snapshot::NO_LOADER_SCREEN)),
         150,
         |change| {
-            asked.push(change);
+            asked.push(format!("{change:?}"));
             Applied::Taken
         }
     ));
+    let mods = FrameChange::Mods(ModsAsk {
+        mod_index: None,
+        gear: false,
+    });
     assert_eq!(
         asked,
-        [ScreenChange::Mods(ModsAsk {
-            mod_index: None,
-            gear: false
-        })],
+        [format!("{mods:?}")],
         "the Mods screen only: no game screen reads at the menu"
     );
     assert_eq!(commands.kept[0].state, Status::APPLIED);

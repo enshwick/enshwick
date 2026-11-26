@@ -690,6 +690,45 @@ enshwick.input.client_command({
 })
 ```
 
+## Saying a line in the world's chat
+
+`CommandAction::Chat(text)` sends `text` to the world's chat as the local
+player's own line, on any server the client plays on, a joined one included.
+The loader posts it through the game's own chat, as the chat window's Enter
+does. The server's chat filter and mute see it as any line the player types. A line of 1 to 1,024 bytes (`CommandAction::MAX_CHAT`, the game's own
+limit) is taken; an empty or longer one returns `WorldError::Refused`.
+
+The command runs in a world, on any screen. It is observed once the game's
+interface queue takes the line, in the next frame; a full queue retries in
+the frames after. A line queued at the main menu ends `TimedOut` after two
+seconds. Nothing on the client shows the line arrive: a server whose chat is
+off, or whose filter or mute drops the line, gives no answer. A mod has one
+chat line open at a time.
+
+The poster was read on client 26430625 and is found by its engine route on
+every kept client.
+
+```rust
+use enshwick::input::{ClientCommand, CommandAction};
+
+fn greet(input: enshwick::input::Input) {
+    let Ok(snapshot) = input.client_snapshot() else {
+        return;
+    };
+    let line = CommandAction::Chat("Hello from the companion".to_owned());
+    let _queued = input.client_command(&ClientCommand::new(line, snapshot.session()));
+}
+```
+
+```luau
+local snapshot = enshwick.input.client_snapshot()
+enshwick.input.client_command({
+    kind = "chat",
+    session = snapshot.session,
+    text = "Hello from the companion",
+})
+```
+
 ## Joining a server and leaving it
 
 `CommandAction::Join { server, password }` joins a dedicated server from the

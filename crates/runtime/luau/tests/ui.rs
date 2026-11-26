@@ -586,6 +586,28 @@ mod tests {
     }
 
     #[test]
+    fn a_script_sends_a_chat_line_and_one_without_a_text_or_empty_is_refused() {
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r#"
+            local bare = pcall(enshwick.input.client_command, { kind = "chat", session = "1" })
+            local empty = pcall(enshwick.input.client_command, { kind = "chat", session = "1", text = "" })
+            local id = enshwick.input.client_command({ kind = "chat", session = "1", text = "hello" })
+            enshwick.log.info(`chat {id} bare {bare} empty {empty}`)
+            "#,
+        );
+        assert_eq!(
+            loader.client_commands(),
+            [(1, enshwick::abi::ClientCommand::CHAT, String::new())]
+        );
+        assert!(
+            logged(&loader, "chat 1 bare false empty false"),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
     fn a_script_reads_the_local_player_s_state_and_slots_and_crafts_once_at_a_time() {
         use enshwick::abi::{ClientSlot, ClientSnapshot};
         let loader = run(

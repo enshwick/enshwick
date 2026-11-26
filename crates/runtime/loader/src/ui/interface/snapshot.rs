@@ -4,7 +4,7 @@
 use std::cell::OnceCell;
 
 use super::{READS_FUSE, extensions};
-use crate::actions::client_commands::{Applied, ScreenChange, Seen};
+use crate::actions::client_commands::{Applied, FrameChange, Seen};
 use crate::actions::client_snapshot::{FrameRead, TabRead};
 use enshwick_core::abi::UiFrame;
 
@@ -127,12 +127,12 @@ unsafe fn play(engine: &Engine, context: usize, popup: bool, game: impl FnOnce()
 ///
 /// - Called inside a frame on the interface thread; `context` is the frame's
 ///   own, non-zero, and `state` the interface state it read, if any.
-unsafe fn apply(context: usize, state: Option<usize>, change: ScreenChange) -> Applied {
+unsafe fn apply(context: usize, state: Option<usize>, change: FrameChange<'_>) -> Applied {
     let groups = &crate::actions::client_control::GROUPS;
     match (change, state) {
-        (ScreenChange::Mods(ask), _) => super::mods::ask(ask),
+        (FrameChange::Mods(ask), _) => super::mods::ask(ask),
         (_, None) => Applied::Busy,
-        (ScreenChange::Open(screen) | ScreenChange::Close(screen), Some(_)) => {
+        (FrameChange::Open(screen) | FrameChange::Close(screen), Some(_)) => {
             let Some(toggle) = groups.toggle.get() else {
                 return Applied::Unavailable;
             };
@@ -144,7 +144,20 @@ unsafe fn apply(context: usize, state: Option<usize>, change: ScreenChange) -> A
                 Applied::Busy
             }
         }
-        (ScreenChange::Tab(tab), Some(state)) => {
+        (FrameChange::Chat(line), Some(_)) => {
+            let Some(chat) = groups.chat.get() else {
+                return Applied::Unavailable;
+            };
+            // SAFETY: the caller's contract: the UI context is live only
+            // inside the interface frame, as the chat window posts its line
+            // (client 26430625).
+            if unsafe { chat.post(context, line) } {
+                Applied::Taken
+            } else {
+                Applied::Busy
+            }
+        }
+        (FrameChange::Tab(tab), Some(state)) => {
             let Some(layout) = groups.tab.get() else {
                 return Applied::Unavailable;
             };

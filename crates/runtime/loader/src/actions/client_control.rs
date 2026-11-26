@@ -19,12 +19,14 @@ use crate::engine::loader::Loader;
 use crate::engine::pinned;
 
 mod acts;
+mod chat;
 mod menu;
 mod waypoint;
 
 #[cfg(test)]
 pub(crate) use acts::TEST_LAYOUT as ACT_TEST_LAYOUT;
 pub(crate) use acts::{Act, ActLayout};
+pub(crate) use chat::ChatPost;
 pub(crate) use menu::{HostPosts, MenuPosts, SelectedCharacter, post as post_menu};
 #[cfg(test)]
 pub(crate) use waypoint::TEST_LAYOUT as WAYPOINT_TEST_LAYOUT;
@@ -64,6 +66,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::RECIPE_HIGHLIGHTED.id(),
     pinned::ui::RECIPE_SELECT.id(),
     pinned::ui::TOGGLE_HUD_SCREEN.id(),
+    pinned::ui::POST_CHAT.id(),
 ];
 
 /// The input builder's passes, by its mode argument (client 26430625,
@@ -158,6 +161,8 @@ pub(crate) struct Groups {
     pub(crate) acts: Group<ActLayout>,
     /// The main menu's selected character, which the client snapshot reads.
     pub(crate) character: Group<SelectedCharacter>,
+    /// The chat window's poster, which chat commands send through.
+    pub(crate) chat: Group<ChatPost>,
 }
 
 /// The groups of this process.
@@ -172,6 +177,7 @@ pub(crate) static GROUPS: Groups = Groups {
     waypoint: Group::new("the client's waypoint and ping commands"),
     acts: Group::new("the client's crafting and item commands"),
     character: Group::new("the main menu's selected character"),
+    chat: Group::new("the client's chat command"),
 };
 
 /// Where the in-game menu keeps its tab, and which screen bytes are the
@@ -642,6 +648,7 @@ pub(crate) fn link(loader: &Loader) {
     GROUPS
         .character
         .link(loader, SelectedCharacter::resolve(loader));
+    GROUPS.chat.link(loader, ChatPost::resolve(loader));
 }
 
 /// A look input per device, each a float pair, as the input builder writes

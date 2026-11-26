@@ -84,6 +84,8 @@ pub(super) fn kind(loader: &Loader, spec: &Spec) -> Result<Kind, CommandError> {
             online: spec.online != 0,
         })),
         Spec::LEAVE => Ok(Kind::Leave),
+        // Its line is copied once, by `queue`, which parks it.
+        Spec::CHAT => Ok(Kind::Chat),
         Spec::SET_WAYPOINT => on_map(spec.position).map(|at| Kind::Mark(Mark::Set(at))),
         Spec::CLEAR_WAYPOINT => Ok(Kind::Mark(Mark::Clear)),
         Spec::OPEN_MODS => Ok(Kind::Mods(ModsAsk {

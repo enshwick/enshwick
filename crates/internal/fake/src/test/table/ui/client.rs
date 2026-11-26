@@ -42,7 +42,7 @@ entries! {
                 unsafe { id.write(spec.cancels) };
                 return Status::OK;
             }
-            if !(Spec::OPEN_SCREEN..=Spec::TRASH).contains(&spec.kind) || !spec.in_bounds() {
+            if !(Spec::OPEN_SCREEN..=Spec::CHAT).contains(&spec.kind) || !spec.in_bounds() {
                 return Status::BAD_ARGS;
             }
             // As the loader: an answer goes to the dialog it names while that

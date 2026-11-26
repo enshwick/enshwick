@@ -21,7 +21,9 @@ Unstable: needs the `unstable` feature and may change in any release
 ([Stability](stability.md)).
 
 Chat lines work on the dedicated server and on a client while it hosts a
-game.
+game. On a client that joined a server, a mod says a line as its own player
+with the client command
+[`Chat`](input.md#saying-a-line-in-the-worlds-chat).
 
 [`world.broadcast(text)`](https://github.com/enshwick/enshwick/blob/main/crates/internal/world/src/world.rs)
 sends a line to every player and

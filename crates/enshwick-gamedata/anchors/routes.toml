@@ -9494,6 +9494,21 @@ loads = ["[GameUi] toggleHudScreen to %k"]
 check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rsi", "push rdi"]
 
 [[route]]
+id = "~text_chat_window"
+sides = ["client"]
+loads = ["textChatWindow"]
+
+# The chat window's Enter posts the typed line as the player's own (type 0,
+# both words 0) through the chat poster, the UI context first.
+[[route]]
+id = "ui.post_chat"
+sides = ["client"]
+in = "~text_chat_window"
+shape = ["mov rcx,{ui.context}", "xor r8d,r8d", "mov [rsp+?],rax", "mov [rsp+0x20],?r", "call *"]
+take = "address"
+check = ["mov [rsp+0x10],rbx", "mov [rsp+0x18],rbp", "push rsi", "push rdi"]
+
+[[route]]
 id = "~in_game_menu"
 sides = ["client"]
 loads = ["codexTab"]

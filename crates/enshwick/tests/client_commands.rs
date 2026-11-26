@@ -151,6 +151,30 @@ side = "both""#
     }
 
     #[test]
+    fn a_chat_line_queues_within_the_game_s_bounds_and_an_empty_or_longer_one_is_refused() {
+        let (loader, input) = input(Side::CLIENT);
+        let chat = |text: String| ClientCommand::new(CommandAction::Chat(text), 1);
+        for refused in [String::new(), "x".repeat(CommandAction::MAX_CHAT + 1)] {
+            assert!(
+                matches!(
+                    input.client_command(&chat(refused)),
+                    Err(WorldError::Refused)
+                ),
+                "refused at the call"
+            );
+        }
+        let id = input
+            .client_command(&chat("x".repeat(CommandAction::MAX_CHAT)))
+            .unwrap();
+        assert_eq!(loader.client_commands(), [(1, Raw::CHAT, String::new())]);
+        loader.set_command_status(1, Status::OBSERVED, 0);
+        assert_eq!(
+            input.command_status(id).unwrap().state,
+            CommandState::Observed
+        );
+    }
+
+    #[test]
     fn a_look_or_move_past_its_bounds_is_refused() {
         let (_loader, input) = input(Side::CLIENT);
         for refused in [
