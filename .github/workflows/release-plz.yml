@@ -128,21 +128,22 @@ jobs:
       # it as over its own commit, and this step joins the files again.
       - name: Join the change files into the release pull request
         env:
+          CREATED: ${{ steps.release-plz.outputs.prs_created }}
           PR: ${{ steps.release-plz.outputs.pr }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
           APP: ${{ steps.token.outputs.app-slug }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          branch=$(jq -r '.head_branch // empty' <<<"${PR:-null}")
+          if [[ "${CREATED}" != "true" ]]; then
+            echo "no release pull request"
+            exit 0
+          fi
+          branch=$(jq -er '.head_branch' <<<"$PR")
+          packages=$(jq -er '.releases[].package_name' <<<"$PR")
           args=()
           while read -r package; do
             args+=(--package "$package")
-          done < <(jq -r '.releases[]?.package_name' <<<"${PR:-null}")
-          # Without `--package`, close would take every package.
-          if [[ -z "$branch" || ${#args[@]} -eq 0 ]]; then
-            echo "no release pull request with packages"
-            exit 0
-          fi
+          done <<<"$packages"
           git fetch --no-tags origin "$branch"
           git switch --detach FETCH_HEAD
           cargo xtask close --date "$(date -u +%F)" "${args[@]}"

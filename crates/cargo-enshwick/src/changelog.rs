@@ -169,7 +169,8 @@ pub fn close(changelog: &str, version: &str, date: &str) -> Result<Option<String
 /// the package's own. When the version is closed already, the fragments
 /// join its section after the entries there, so a change file merged after
 /// the close joins on a second run; an empty heading of the version, such
-/// as the bare one release-plz writes, is replaced, as [`close`] does.
+/// as the bare one release-plz writes, is replaced, as [`close`] does,
+/// keeping its own date when no fragment joins it.
 ///
 /// # Errors
 ///
@@ -188,8 +189,16 @@ pub fn join(
     }
     let stripped;
     let mut changelog = changelog;
+    let mut date = date;
     if let Some((at, start, end)) = heading(changelog, version) {
         let body = changelog[start..end].trim();
+        if body.is_empty() && fragments.is_empty() {
+            let dated = changelog[at..start]
+                .trim_end()
+                .strip_prefix(&format!("## [{version}] - "))
+                .filter(|text| is_date(text));
+            date = dated.unwrap_or(date);
+        }
         if !body.is_empty() {
             if fragments.is_empty() {
                 return Ok(changelog.to_owned());
@@ -523,12 +532,18 @@ mod tests {
         let alone = "# Changelog\n\n## [Unreleased]\n## [0.1.1] - 2026-11-12";
         assert_eq!(
             join(written, "0.1.1", "2026-11-13", &[]).unwrap(),
-            "# Changelog\n\n## [Unreleased]\n\n## [0.1.1] - 2026-11-13\n\n## [0.1.0] - 2026-11-05\n\n- First.\n"
+            "# Changelog\n\n## [Unreleased]\n\n## [0.1.1] - 2026-11-12\n\n## [0.1.0] - 2026-11-05\n\n- First.\n"
         );
         assert_eq!(
             join(alone, "0.1.1", "2026-11-13", &[]).unwrap(),
-            "# Changelog\n\n## [Unreleased]\n\n## [0.1.1] - 2026-11-13\n\n"
+            "# Changelog\n\n## [Unreleased]\n\n## [0.1.1] - 2026-11-12\n\n"
         );
+    }
+
+    #[test]
+    fn a_second_run_keeps_the_date_of_a_section_without_entries() {
+        let closed = "# Changelog\n\n## [Unreleased]\n\n## [0.1.1] - 2026-11-13\n\n## [0.1.0] - 2026-11-05\n\n- First.\n";
+        assert_eq!(join(closed, "0.1.1", "2026-11-14", &[]).unwrap(), closed);
     }
 
     #[test]

@@ -36,22 +36,28 @@ fn date(text: &str) -> Result<String, String> {
 }
 
 /// Each package `args` close with the version it closes at: every package
-/// at the loader's version, or the named ones at their own.
+/// at the loader's version, or the named ones at their own, each once.
+///
+/// # Errors
+///
+/// When no package is named and the loader is not among the packages, or a
+/// named package is not in the workspace.
 fn chosen<'a>(packages: &'a [Package], args: &Args) -> Result<Vec<(&'a Package, &'a str)>, String> {
     if args.packages.is_empty() {
         let version = release_version(packages)?;
         return Ok(packages.iter().map(|p| (p, version)).collect());
     }
-    args.packages
-        .iter()
-        .map(|name| {
-            packages
-                .iter()
-                .find(|p| &p.name == name)
-                .map(|p| (p, p.version.as_str()))
-                .ok_or_else(|| format!("no package {name} in the workspace"))
-        })
-        .collect()
+    let mut chosen: Vec<(&Package, &str)> = Vec::new();
+    for name in &args.packages {
+        let package = packages
+            .iter()
+            .find(|p| &p.name == name)
+            .ok_or_else(|| format!("no package {name} in the workspace"))?;
+        if !chosen.iter().any(|(p, _)| std::ptr::eq(*p, package)) {
+            chosen.push((package, package.version.as_str()));
+        }
+    }
+    Ok(chosen)
 }
 
 /// Closes the changelogs of `packages` under `root` that `args` choose;
@@ -234,6 +240,15 @@ mod tests {
         assert!(
             tool_kept,
             "a package the release does not take keeps its change files"
+        );
+        let twice = Args {
+            date: "2026-11-13".to_owned(),
+            packages: vec!["tool".to_owned(), "tool".to_owned()],
+        };
+        assert_eq!(
+            run(&root, &packages, &twice).unwrap(),
+            "closed 1 changelogs for 1.0.0-alpha.15, joining 1 change files",
+            "a package named twice closes once"
         );
         let unknown = Args {
             date: "2026-11-13".to_owned(),
