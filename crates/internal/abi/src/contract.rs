@@ -99,6 +99,10 @@ macro_rules! entries {
         const fn every_field(api: &HostApi) {
             let HostApi { header: _, host_version: _, $($field: _),* } = api;
         }
+
+        /// Each entry's offset in `HostApi`, in the order of [`ENTRIES`].
+        #[cfg(test)]
+        const OFFSETS: &[usize] = &[$(core::mem::offset_of!(HostApi, $field)),*];
     };
 }
 
@@ -115,8 +119,10 @@ pub enum Precondition {
     ModOff,
     /// A mod during its init.
     InInit,
-    /// A data pack of the server side, while a mod's init runs, as the
-    /// loader runs a pack's own init.
+    /// A data pack of the server side calling in its init: on the loader
+    /// during the pack's own init, as the loader runs it; on the fake host,
+    /// which runs no init of a pack's own, while its mod's init runs, the
+    /// one window it gives a pack's init calls.
     Pack,
     /// The loader's own copy of the table, the one caller that is no mod.
     Loader,
@@ -174,14 +180,44 @@ pub fn status_name(status: Status) -> Option<&'static str> {
         .map(|&(_, name)| name)
 }
 
+/// Who may call an entry, as each host's entry layer reads the calling
+/// handle before the entry's body runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CallerKind {
+    /// A loaded mod that is on.
+    Mod,
+    /// A loaded mod, on or off.
+    AnyMod,
+    /// A mod that is on, or the loader's own copy.
+    Caller,
+    /// A loaded mod, on or off, or the loader's own copy.
+    Writer,
+}
+
+impl CallerKind {
+    /// Every kind.
+    pub const ALL: [Self; 4] = [Self::Mod, Self::AnyMod, Self::Caller, Self::Writer];
+
+    /// The kind's word in the table, the loader's name for its parameter
+    /// kind.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Mod => "Mod",
+            Self::AnyMod => "AnyMod",
+            Self::Caller => "Caller",
+            Self::Writer => "Writer",
+        }
+    }
+}
+
 /// One entry's line of the table.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Row {
     /// The entry's field name.
     pub entry: String,
-    /// The kind of caller the entry takes, as the loader names it: `Mod`,
-    /// `AnyMod`, `Caller` or `Writer`.
-    pub caller: String,
+    /// The kind of caller the entry takes.
+    pub caller: CallerKind,
     /// The answer under each of [`PRECONDITIONS`], in order.
     pub answers: [Status; PRECONDITIONS.len()],
 }
@@ -194,7 +230,7 @@ pub fn render(rows: &[Row]) -> String {
         let _ = write!(text, " {precondition:?}");
     }
     for row in rows {
-        let _ = write!(text, "\n{} {}", row.entry, row.caller);
+        let _ = write!(text, "\n{} {}", row.entry, row.caller.name());
         for status in row.answers {
             let _ = match status_name(status) {
                 Some(name) => write!(text, " {name}"),
@@ -252,7 +288,10 @@ pub fn parse(text: &str) -> Result<Vec<Row>, ReadTableError> {
 fn row(line: &str) -> Option<Row> {
     let mut words = line.split(' ');
     let entry = words.next()?.to_owned();
-    let caller = words.next()?.to_owned();
+    let word = words.next()?;
+    let caller = CallerKind::ALL
+        .into_iter()
+        .find(|kind| kind.name() == word)?;
     let mut answers = [Status::OK; PRECONDITIONS.len()];
     for answer in &mut answers {
         let word = words.next()?;
@@ -271,6 +310,43 @@ fn row(line: &str) -> Option<Row> {
     })
 }
 
+/// Set in the child process [`run_apart`] starts.
+const APART: &str = "ENSHWICK_CONTRACT_CHILD";
+
+/// Runs `test`, an ignored test of this test binary, alone in a child
+/// process: each host's half fills process-wide state that the other tests
+/// of its binary read.
+///
+/// # Errors
+///
+/// The child process did not start.
+///
+/// # Panics
+///
+/// When `test` fails in the child or does not run there.
+pub fn run_apart(test: &str) -> std::io::Result<()> {
+    let child = std::process::Command::new(std::env::current_exe()?)
+        .args(["--exact", test, "--ignored", "--nocapture"])
+        .args(["--test-threads", "1"])
+        .env(APART, "1")
+        .output()?;
+    let out = format!(
+        "{}{}",
+        String::from_utf8_lossy(&child.stdout),
+        String::from_utf8_lossy(&child.stderr)
+    );
+    assert!(child.status.success(), "{out}");
+    assert!(out.contains("1 passed"), "{test} ran in the child: {out}");
+    Ok(())
+}
+
+/// Whether this process is the child [`run_apart`] started, the one where
+/// its test does its work.
+#[must_use]
+pub fn apart() -> bool {
+    std::env::var_os(APART).is_some()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -279,7 +355,7 @@ mod tests {
         vec![
             Row {
                 entry: "build".to_owned(),
-                caller: "Caller".to_owned(),
+                caller: CallerKind::Caller,
                 answers: [
                     Status::BAD_ARGS,
                     Status::FAULTED,
@@ -291,7 +367,7 @@ mod tests {
             },
             Row {
                 entry: "log".to_owned(),
-                caller: "Writer".to_owned(),
+                caller: CallerKind::Writer,
                 answers: [Status::UNAVAILABLE; 6],
             },
         ]
@@ -325,11 +401,24 @@ mod tests {
     }
 
     #[test]
-    fn every_entry_is_listed_once() {
-        let mut names: Vec<&str> = ENTRIES.iter().map(|&(name, _)| name).collect();
-        names.sort_unstable();
-        let listed = names.len();
-        names.dedup();
-        assert_eq!(names.len(), listed);
+    fn a_row_whose_caller_is_no_kind_names_its_line() {
+        let table = render(&rows()).replacen("Writer", "Admin", 1);
+        assert_eq!(parse(&table).unwrap_err().line, 3);
+        for kind in CallerKind::ALL {
+            let row = Row {
+                caller: kind,
+                ..rows().remove(1)
+            };
+            assert_eq!(parse(&render(core::slice::from_ref(&row))).unwrap(), [row]);
+        }
+    }
+
+    #[test]
+    fn the_entries_are_listed_in_the_order_of_the_fields_of_host_api() {
+        let early = OFFSETS
+            .windows(2)
+            .position(|pair| pair[0] >= pair[1])
+            .map(|at| ENTRIES[at + 1].0);
+        assert_eq!(early, None, "listed before a field it follows");
     }
 }

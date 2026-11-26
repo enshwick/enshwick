@@ -7,7 +7,7 @@
 use std::sync::atomic::Ordering;
 
 use enshwick_abi::contract::{
-    self, ENTRIES, Entry, ME, PACK, PRECONDITIONS, Precondition, Row, UNKNOWN,
+    self, CallerKind, ENTRIES, Entry, ME, PACK, PRECONDITIONS, Precondition, Row, UNKNOWN,
 };
 use enshwick_core::abi::{ModHandle, Status};
 
@@ -18,7 +18,7 @@ use crate::engine::loader::{Loader, initialising, install_for_test};
 /// [`CALLERS`], every entry's caller kind by name, in field order.
 macro_rules! callers {
     ($($field:ident)*) => {
-        const CALLERS: &[(&str, &str)] = &[$((stringify!($field), Callers::$field),)*];
+        const CALLERS: &[(&str, CallerKind)] = &[$((stringify!($field), Callers::$field),)*];
     };
 }
 
@@ -63,9 +63,6 @@ fn loader_answers(entry: Entry, precondition: Precondition) -> Status {
     }
 }
 
-/// Set in the child process that writes the table.
-const CHILD: &str = "ENSHWICK_CONTRACT_CHILD";
-
 /// The child test that writes the table.
 const WRITTEN: &str = "host::contract_tests::the_table_is_written_in_a_process_of_its_own";
 
@@ -73,25 +70,13 @@ const WRITTEN: &str = "host::contract_tests::the_table_is_written_in_a_process_o
 fn the_loader_s_answer_and_caller_of_every_entry_match_the_contract_table() {
     // The calls fill the loader's process-wide registries and seal them for
     // good, which the other tests of this process read, so they run apart.
-    let child = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["--exact", WRITTEN, "--ignored", "--nocapture"])
-        .args(["--test-threads", "1"])
-        .env(CHILD, "1")
-        .output()
-        .unwrap();
-    let out = format!(
-        "{}{}",
-        String::from_utf8_lossy(&child.stdout),
-        String::from_utf8_lossy(&child.stderr)
-    );
-    assert!(child.status.success(), "{out}");
-    assert!(out.contains("1 passed"), "the table was written: {out}");
+    contract::run_apart(WRITTEN).unwrap();
 }
 
 #[test]
 #[ignore = "runs only as that test's child, in a process of its own"]
 fn the_table_is_written_in_a_process_of_its_own() {
-    if std::env::var_os(CHILD).is_none() {
+    if !contract::apart() {
         return;
     }
     let mut rows: Vec<Row> = ENTRIES
@@ -101,7 +86,7 @@ fn the_table_is_written_in_a_process_of_its_own() {
             assert_eq!(entry, named);
             Row {
                 entry: entry.to_owned(),
-                caller: caller.to_owned(),
+                caller,
                 answers: [Status::OK; PRECONDITIONS.len()],
             }
         })

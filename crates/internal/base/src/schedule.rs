@@ -133,7 +133,7 @@ pub(crate) fn fake_clock() -> bool {
 
 /// Whether the scheduler counts time by a fake host's steps: never in a
 /// build without the fake.
-#[cfg(not(feature = "fake"))]
+#[cfg(all(not(feature = "fake"), any(test, feature = "test")))]
 pub(crate) const fn fake_clock() -> bool {
     false
 }
@@ -350,14 +350,18 @@ mod tests {
 
     #[test]
     fn before_a_fake_host_is_installed_the_scheduler_counts_the_wall_clock_in_any_build() {
-        // A test of this process that installed a fake has moved on to its clock.
-        if crate::fresh::life() > 1 {
-            return;
-        }
-        assert!(!fake_clock());
+        let life = crate::fresh::life();
+        let wall = !fake_clock();
         let before = now();
         std::thread::sleep(Duration::from_millis(5));
-        assert!(now() - before >= Duration::from_millis(5));
+        let after = now();
+        // Another test of this process renewed the life, before or during
+        // this one, and so moved the scheduler on to the fake's clock.
+        if life > 1 || crate::fresh::life() != life {
+            return;
+        }
+        assert!(wall);
+        assert!(after - before >= Duration::from_millis(5));
     }
 
     #[test]

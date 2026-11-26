@@ -1,3 +1,4 @@
+use enshwick_abi::contract::CallerKind;
 use enshwick_core::abi::{ModHandle, Status, Str};
 
 use super::*;
@@ -127,8 +128,11 @@ entries! {
 }
 
 #[test]
-fn an_entry_records_its_caller_kind_by_the_name_the_fake_host_gives_it() {
-    assert_eq!((Callers::oil, Callers::oil_asked), ("Mod", "Caller"));
+fn an_entry_records_the_kind_of_caller_its_handle_admits() {
+    assert_eq!(
+        (Callers::oil, Callers::oil_asked),
+        (CallerKind::Mod, CallerKind::Caller)
+    );
     assert_eq!(oil_asked(ModHandle(77)), Status::BAD_ARGS);
 }
 

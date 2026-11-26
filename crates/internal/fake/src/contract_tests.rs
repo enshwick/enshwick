@@ -7,16 +7,16 @@ use std::cell::Cell;
 use std::path::Path;
 
 use enshwick_abi::contract::{
-    self, ENTRIES, Entry, ME, PACK, PRECONDITIONS, Precondition, UNKNOWN,
+    self, CallerKind, ENTRIES, Entry, ME, PACK, PRECONDITIONS, Precondition, UNKNOWN,
 };
 use enshwick_core::abi::{HostApi, ModHandle, Side, Status};
 
-use crate::test::table::base::caller::{Callers, Kind};
+use crate::test::table::base::caller::Callers;
 
 /// [`CALLERS`], every entry's caller kind by name, in field order.
 macro_rules! callers {
     ($($field:ident)*) => {
-        const CALLERS: &[(&str, Kind)] = &[$((stringify!($field), Callers::$field),)*];
+        const CALLERS: &[(&str, CallerKind)] = &[$((stringify!($field), Callers::$field),)*];
     };
 }
 
@@ -57,20 +57,33 @@ thread_local! {
 }
 
 /// An init that calls the entry [`PROBED`] holds and keeps its answer.
+///
+/// # Safety
+///
+/// `api` points at a `HostApi` that lives for the call, as the fake's
+/// static table does.
 unsafe extern "system" fn probe(api: *const HostApi, _me: ModHandle) -> Status {
     if let Some((entry, by)) = PROBED.take() {
-        // SAFETY: the fake passes its table, a static.
+        // SAFETY: the caller promises `api` points at a live table.
         ANSWER.set(entry(unsafe { &*api }, by));
     }
     Status::OK
 }
 
 /// An init or ready that agrees.
+///
+/// # Safety
+///
+/// None: it reads neither argument.
 unsafe extern "system" fn agree(_api: *const HostApi, _me: ModHandle) -> Status {
     Status::OK
 }
 
 /// An init that fails, so the fake turns the mod off.
+///
+/// # Safety
+///
+/// None: it reads neither argument.
 unsafe extern "system" fn refuse(_api: *const HostApi, _me: ModHandle) -> Status {
     Status::REFUSED
 }
@@ -107,15 +120,13 @@ fn fake_answers(entry: Entry, precondition: Precondition) -> Status {
         Precondition::AfterInit => {
             // SAFETY: `agree` takes the table and handle the fake passes.
             let _init = unsafe { fake.init(agree) };
-            // SAFETY: as for the init, which answered OK before this ready.
+            // SAFETY: `agree` reads neither the table nor the handle the
+            // fake passes, and the mod's init answered OK before this ready.
             let _ready = unsafe { fake.ready(agree) };
             entry(api, ME)
         }
     }
 }
-
-/// Set in the child process that compares the hosts.
-const CHILD: &str = "ENSHWICK_CONTRACT_CHILD";
 
 /// The child test that compares the hosts.
 const COMPARED: &str = "contract_tests::every_entry_is_compared_in_a_process_of_its_own";
@@ -124,25 +135,13 @@ const COMPARED: &str = "contract_tests::every_entry_is_compared_in_a_process_of_
 fn every_entry_takes_the_loader_s_caller_and_answers_as_the_loader_s_table_says() {
     // Each call installs a fresh fake, which the other tests of this process
     // would see, so they run apart.
-    let child = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["--exact", COMPARED, "--ignored", "--nocapture"])
-        .args(["--test-threads", "1"])
-        .env(CHILD, "1")
-        .output()
-        .unwrap();
-    let out = format!(
-        "{}{}",
-        String::from_utf8_lossy(&child.stdout),
-        String::from_utf8_lossy(&child.stderr)
-    );
-    assert!(child.status.success(), "{out}");
-    assert!(out.contains("1 passed"), "the comparison ran: {out}");
+    contract::run_apart(COMPARED).unwrap();
 }
 
 #[test]
 #[ignore = "runs only as that test's child, in a process of its own"]
 fn every_entry_is_compared_in_a_process_of_its_own() {
-    if std::env::var_os(CHILD).is_none() {
+    if !contract::apart() {
         return;
     }
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(TABLE);
@@ -156,10 +155,13 @@ fn every_entry_is_compared_in_a_process_of_its_own() {
         path.display()
     );
     let mut differences = Vec::new();
-    for (row, &(name, kind)) in rows.iter().zip(CALLERS) {
-        let fake = format!("{kind:?}");
+    for (row, &(name, fake)) in rows.iter().zip(CALLERS) {
         if row.caller != fake {
-            differences.push(format!("{name} caller: loader {}, fake {fake}", row.caller));
+            differences.push(format!(
+                "{name} caller: loader {}, fake {}",
+                row.caller.name(),
+                fake.name()
+            ));
         }
     }
     for (column, precondition) in PRECONDITIONS.into_iter().enumerate() {

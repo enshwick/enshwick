@@ -77,6 +77,7 @@ crossbeam-queue.workspace = true
 # crates the loader runs on without the fake host's features.
 enshwick.workspace = true
 enshwick-abi = { workspace = true, features = ["test"] }
+enshwick-base = { workspace = true, features = ["test"] }
 enshwick-core = { workspace = true, features = ["unstable", "test"] }
 enshwick-gamedata = { workspace = true, features = ["test"] }
 insta.workspace = true

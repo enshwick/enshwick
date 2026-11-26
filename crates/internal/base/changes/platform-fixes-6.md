@@ -7,6 +7,6 @@
 
 ### Added
 
-- `__internal::fake_clock`: whether the scheduler counts time by a fake
-  host's steps, so the loader's tests can check that theirs is the wall
-  clock.
+- The `test` feature and, behind it, `__internal::fake_clock`: whether the
+  scheduler counts time by a fake host's steps, so the loader's tests can
+  check that theirs is the wall clock.

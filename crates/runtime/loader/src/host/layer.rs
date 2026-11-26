@@ -336,21 +336,22 @@ macro_rules! entries {
     (@entry $attrs:tt $name:ident $ret:tt $body:block $($params:tt)*) => {
         $crate::host::layer::entries!(@param call $attrs $name $ret $body [] [] $($params)*);
     };
-    // The caller kinds by the names the fake host's entries give them;
-    // `Asker` admits what `Caller` admits and hands the body the handle too.
-    (@caller $attrs:tt $name:ident Mod) => { $crate::host::layer::entries!(@record $attrs $name "Mod"); };
-    (@caller $attrs:tt $name:ident AnyMod) => { $crate::host::layer::entries!(@record $attrs $name "AnyMod"); };
-    (@caller $attrs:tt $name:ident Caller) => { $crate::host::layer::entries!(@record $attrs $name "Caller"); };
-    (@caller $attrs:tt $name:ident Asker) => { $crate::host::layer::entries!(@record $attrs $name "Caller"); };
-    (@caller $attrs:tt $name:ident Writer) => { $crate::host::layer::entries!(@record $attrs $name "Writer"); };
+    // The caller kind each handle kind admits; `Asker` admits what `Caller`
+    // admits and hands the body the handle too.
+    (@caller $attrs:tt $name:ident Mod) => { $crate::host::layer::entries!(@record $attrs $name Mod); };
+    (@caller $attrs:tt $name:ident AnyMod) => { $crate::host::layer::entries!(@record $attrs $name AnyMod); };
+    (@caller $attrs:tt $name:ident Caller) => { $crate::host::layer::entries!(@record $attrs $name Caller); };
+    (@caller $attrs:tt $name:ident Asker) => { $crate::host::layer::entries!(@record $attrs $name Caller); };
+    (@caller $attrs:tt $name:ident Writer) => { $crate::host::layer::entries!(@record $attrs $name Writer); };
     (@caller $attrs:tt $name:ident $other:ident) => {};
     // The entry's own attributes, such as a `cfg`, hold for its record too.
-    (@record [$(#[$attr:meta])*] $name:ident $kind:literal) => {
+    (@record [$(#[$attr:meta])*] $name:ident $kind:ident) => {
         #[cfg(test)]
         impl $crate::host::layer::Callers {
             $(#[$attr])*
             #[expect(non_upper_case_globals, reason = "named after its entry, as the contract test lists it")]
-            pub(crate) const $name: &'static str = $kind;
+            pub(crate) const $name: enshwick_abi::contract::CallerKind =
+                enshwick_abi::contract::CallerKind::$kind;
         }
     };
     (@param $call:ident $attrs:tt $name:ident $ret:tt $body:block

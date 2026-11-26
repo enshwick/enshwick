@@ -55,7 +55,8 @@ pub(crate) struct Callers;
 
 /// Writes the fake's `HostApi` entries, each answering its caller and its
 /// parameters as the loader's `entries!` does before its body runs, and in
-/// a test build records each one's [`Kind`] in [`Callers`].
+/// a test build records each one's [`Kind`], as the contract names it, in
+/// [`Callers`].
 ///
 /// ```ignore
 /// entries! {
@@ -86,8 +87,8 @@ macro_rules! entries {
             impl $crate::test::table::base::caller::Callers {
                 $(#[$attr])*
                 #[expect(non_upper_case_globals, reason = "named after its entry, as the contract test lists it")]
-                pub(crate) const $name: $crate::test::table::base::caller::Kind =
-                    $crate::test::table::base::caller::Kind::$kind;
+                pub(crate) const $name: enshwick_abi::contract::CallerKind =
+                    enshwick_abi::contract::CallerKind::$kind;
             }
 
             $crate::test::table::base::caller::entries!(
