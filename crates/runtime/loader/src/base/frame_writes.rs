@@ -161,6 +161,7 @@ pub(crate) fn untold() -> Vec<PathBuf> {
 
 /// After a server step on its game thread: tells each administrator online
 /// of every file given up on since, by name.
+#[cfg(windows)]
 pub(crate) fn after_step(loader: &crate::engine::loader::Loader) {
     if !STATE.any_lost.load(Ordering::Acquire) {
         return;
@@ -575,13 +576,21 @@ mod tests {
         assert!(state.settle(&path, turn, full()));
         let raised = |state: &State| state.lost(|lost| Some(&mut lost.raised));
         let told = |state: &State| state.lost(|lost| Some(&mut lost.told));
-        assert_eq!(raised(&state), [path.clone()], "the watch raises it");
+        assert_eq!(
+            raised(&state),
+            std::slice::from_ref(&path),
+            "the watch raises it"
+        );
         assert!(raised(&state).is_empty(), "once");
-        assert_eq!(told(&state), [path.clone()], "the admins hear of it apart");
+        assert_eq!(
+            told(&state),
+            std::slice::from_ref(&path),
+            "the admins hear of it apart"
+        );
         assert!(told(&state).is_empty(), "once");
         assert_eq!(
             state.lost(|_| None),
-            [path.clone()],
+            std::slice::from_ref(&path),
             "the Mods screen keeps it"
         );
         let turn = queue(&state, &path, "again", long_ago);
@@ -591,7 +600,11 @@ mod tests {
             1,
             "a file lost again takes one place"
         );
-        assert_eq!(raised(&state), [path.clone()], "and is raised again");
+        assert_eq!(
+            raised(&state),
+            std::slice::from_ref(&path),
+            "and is raised again"
+        );
         let turn = queue(&state, &path, "landed", Instant::now());
         assert!(state.settle(&path, turn, Ok(())));
         assert!(

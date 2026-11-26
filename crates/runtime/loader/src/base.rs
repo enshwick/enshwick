@@ -218,7 +218,7 @@ pub(crate) static PARTS: &[&Part] = &[
     },
     &Part {
         steps: &[step!(Output, "lost writes told", |s| {
-            frame_writes::after_step(s.loader)
+            frame_writes::after_step(s.loader);
         })],
         ..part!("frame_writes", frame_writes)
     },

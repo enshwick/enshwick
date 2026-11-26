@@ -111,7 +111,7 @@ mod tests {
         call.moved = item;
         call.stack = 3;
         call.action = action;
-        call.from_slot = 4100 | 2 << 32;
+        call.from_slot = 0x1004 | 0x2 << 32;
         call
     }
 

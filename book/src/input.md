@@ -619,7 +619,7 @@ build that cannot read the player's slots, they return
 A count moved into an empty slot splits a stack. A move out of an equipment
 slot unequips the item. The server refuses to equip an item into an
 equipment slot of another kind, such as a chest armour as `Shield`. A
-trash is an item transfer of type `Destroy`, as the backpack's Delete is: a
+trash is an item transfer of type `Destroy`, as the backpack's Delete is. A
 server mod refuses it in its interaction filter or with an item filter on
 `Trash`.
 
