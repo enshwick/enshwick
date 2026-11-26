@@ -291,6 +291,8 @@ fn every_domain_error_answers_mods_the_status_it_answered_before() {
         EmitError::NoEntity,
         EmitError::NotMovable,
         EmitError::BadPosition,
+        EmitError::OutsideWorld,
+        EmitError::NotLoaded,
         EmitError::World(world),
         NoticeError::NoClient,
         NoticeError::World(world),

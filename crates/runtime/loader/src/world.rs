@@ -72,6 +72,7 @@ pub(crate) mod voxels;
 pub(crate) mod waypoints;
 #[cfg(windows)]
 pub(crate) mod weather;
+pub mod world_box;
 #[cfg(windows)]
 pub(crate) mod writes;
 
@@ -241,6 +242,9 @@ pub(crate) static PARTS: &[&Part] = &[
     },
     &Part {
         table_ids: scene::TABLE_IDS,
+        steps: &[step!(Follow, "world box read", |s| scene::after_step(
+            s.loader
+        ))],
         forget: Some(|_| scene::forget()),
         ..part!("scene", scene)
     },

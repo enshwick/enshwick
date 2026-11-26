@@ -105,6 +105,12 @@ pub const FUEL_REFILLS: [&str; 2] = [
     ids::FUEL_SETUP_AUTOMATIC_REFILL_ENABLED,
     ids::FUEL_SETUP_RAIN_REFILL_ENABLED,
 ];
+/// The ids of a world position's axes, x, y and z.
+pub const WORLD_POSITION_AXES: [&str; 3] = [
+    ids::WORLD_POSITION_X,
+    ids::WORLD_POSITION_Y,
+    ids::WORLD_POSITION_Z,
+];
 /// The ids of a packed transform's position halves, low then high word of
 /// x, y and z, each a `u16`.
 pub const SCENE_TRANSFORM_POSITION: [&str; 6] = [

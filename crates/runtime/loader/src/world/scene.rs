@@ -1,5 +1,5 @@
-//! The map markers and the map's frame of the scene the server runs, read
-//! from the game's archive.
+//! The map markers, the map's frame and the world's box of the scene the
+//! server runs, read from the game's archive.
 //!
 //! Engine facts from server and client build 1273043 (ages 399 and 426):
 //! the entity world keeps a scene chunk manager whose requested
@@ -10,19 +10,22 @@
 //! the global chunk resource and the template resources it names. The
 //! scene's `SceneResource` and its `BiomeMapResource` carry the scene's
 //! GUID too, at part 0; the biome map holds the map's frame (server 399
-//! data). Both change only with the scene, so they are read once per scene,
+//! data), and the scene resource the box the game keeps players in (server
+//! 26430253). They change only with the scene, so they are read once per scene,
 //! and a scene that does not read is reported once. The client's archive
 //! also holds one `MapMarkerRegistryResource`, the map's marker types,
 //! found by its reflected type and read once (client 426; a dedicated
 //! server's archive has none).
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
+use crate::base::emits::EmitError;
 use crate::engine::off_thread::ReadFailure;
 
 use enshwick_core::abi::{
-    MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MarkerTypeSorting, ResourceKey, Side,
+    MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MarkerTypeSorting, Metres, ResourceKey, Side,
 };
 use enshwick_gamedata::catalogue as names;
 
@@ -35,6 +38,7 @@ use crate::world::map_marker_types::{ReadTypesError, TypesLayout, types};
 use crate::world::scene_markers::{
     Lookup, ReadSceneError, SceneCache, SceneKey, SceneLayout, collect, placements,
 };
+use crate::world::world_box::{BoxLayout, ReadBoxError, WorldBox, world_box as parse_box};
 use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
@@ -45,12 +49,14 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 ];
 
 /// What the loader knows of scenes: the reflected layouts, resolved once,
-/// and the markers and the frame of the last scene asked for.
+/// and the markers, the frame and the world box of the last scene asked for.
 struct SceneState {
     layout: OnceLock<Result<SceneLayout, Lacks>>,
     frame_layout: OnceLock<Result<FrameLayout, Lacks>>,
     markers: SceneCache<Arc<[MapMarkerInfo]>, ReadSceneError>,
     frame: SceneCache<MapFrameInfo, ReadFrameError>,
+    box_layout: OnceLock<Result<BoxLayout, Lacks>>,
+    bounds: SceneCache<WorldBox, ReadBoxError>,
     /// The client's marker types, once read; `None` when they do not read.
     marker_types: OnceLock<Option<Arc<[MapMarkerTypeInfo]>>>,
     /// The hosted game the caches belong to; [`forget`] moves it on, so a
@@ -58,14 +64,26 @@ struct SceneState {
     generation: u64,
 }
 
-static STATE: Mutex<SceneState> = Mutex::new(SceneState {
-    layout: OnceLock::new(),
-    frame_layout: OnceLock::new(),
-    markers: SceneCache::new(),
-    frame: SceneCache::new(),
-    marker_types: OnceLock::new(),
-    generation: 0,
-});
+/// The scenes' state, and whether this game's world box read has started,
+/// which the server step looks at without the lock.
+struct Scenes {
+    state: Mutex<SceneState>,
+    box_asked: AtomicBool,
+}
+
+static SCENES: Scenes = Scenes {
+    state: Mutex::new(SceneState {
+        layout: OnceLock::new(),
+        frame_layout: OnceLock::new(),
+        markers: SceneCache::new(),
+        frame: SceneCache::new(),
+        box_layout: OnceLock::new(),
+        bounds: SceneCache::new(),
+        marker_types: OnceLock::new(),
+        generation: 0,
+    }),
+    box_asked: AtomicBool::new(false),
+};
 
 /// The API's marker type groups, by the catalogue's id of the game's
 /// constant for each.
@@ -172,6 +190,30 @@ fn frame_layout(loader: &Loader) -> Result<FrameLayout, Lacks> {
             .is_sound()
             .then_some(layout)
             .ok_or((names::ids::BIOME_MAP, UNSOUND))
+    })
+}
+
+/// The reflected layout the world box parse reads, from the catalogue's
+/// facts, or the first entry it lacks.
+fn box_layout(loader: &Loader) -> Result<BoxLayout, Lacks> {
+    let [x, y, z] = names::WORLD_POSITION_AXES;
+    Ok(BoxLayout {
+        bounds: field_of(loader, names::ids::SCENE_RESOURCE_PLAYER_BOUNDS)?,
+        world_min: field_of(loader, names::ids::PLAYER_BOUNDS_WORLD_MIN)?,
+        world_max: field_of(loader, names::ids::PLAYER_BOUNDS_WORLD_MAX)?,
+        scene_size: size_of(loader, names::ids::SCENE_RESOURCE)?,
+        corner: size_of(loader, names::ids::WORLD_POSITION)?,
+        axes: [
+            field_of(loader, x)?,
+            field_of(loader, y)?,
+            field_of(loader, z)?,
+        ],
+    })
+    .and_then(|layout| {
+        layout
+            .is_sound()
+            .then_some(layout)
+            .ok_or((names::ids::SCENE_RESOURCE_PLAYER_BOUNDS, UNSOUND))
     })
 }
 
@@ -320,6 +362,24 @@ fn read_frame(layout: FrameLayout, key: SceneKey) -> Result<MapFrameInfo, ReadFr
     }))
 }
 
+/// Reads the world box of the scene `key` from its scene resource in the
+/// archive, unless a mod serves that resource: then the game keeps the
+/// mod's box, which the archive does not hold.
+fn read_box(layout: BoxLayout, key: SceneKey) -> Result<WorldBox, ReadBoxError> {
+    let scene_hash = names::type_hash(names::ids::SCENE_RESOURCE).ok_or(ReadBoxError::Layout)?;
+    let resource = ResourceKey {
+        guid: enshwick_core::content::Guid(key.scene),
+        type_hash: scene_hash,
+        part: 0,
+    };
+    if crate::content::served::mods_serve(&resource) {
+        return Err(ReadBoxError::Served);
+    }
+    let archive = crate::engine::archive::game().ok_or(ReadBoxError::Archive)?;
+    let scene = archive.resource(&resource).ok_or(ReadBoxError::Scene)?;
+    parse_box(&layout, &scene)
+}
+
 /// What a read of the scene says about itself in the log.
 trait Described: Clone + Send + 'static {
     /// The line once the read is done.
@@ -341,6 +401,24 @@ impl Described for MapFrameInfo {
             "map frame: origin {:?} m, size {:?} m, {} m per cell, read in {millis} ms",
             self.origin, self.size, self.metres_per_cell
         )
+    }
+}
+
+impl Described for WorldBox {
+    fn done(&self, millis: u128) -> String {
+        let (min, max) = self.metres();
+        format!("world box: {min:?} to {max:?} m, read in {millis} ms")
+    }
+}
+
+impl ReadFailure for ReadBoxError {
+    const PANICKED: Self = Self::Panicked;
+    const THREAD: Self = Self::Thread;
+}
+
+impl SceneFailure for ReadBoxError {
+    fn is_fault(&self) -> bool {
+        matches!(self, Self::Layout | Self::Panicked)
     }
 }
 
@@ -380,6 +458,9 @@ impl SceneFailure for ReadFrameError {
 static MARKERS_FUSE: Fuse = Fuse::new("world map markers");
 /// The switch of the map's frame.
 static FRAME_FUSE: Fuse = Fuse::new("map frame");
+/// The switch of the world box, which bounds teleports; while it is off only
+/// the engine's fixed point bounds them.
+static BOX_FUSE: Fuse = Fuse::new("world box of teleports");
 /// The switch of the client's marker types.
 static TYPES_FUSE: Fuse = Fuse::new("map marker types");
 
@@ -395,7 +476,7 @@ fn cached<V: Described, E: SceneFailure>(
     if fuse.is_off() {
         return Err(SceneError::Off);
     }
-    let mut state = STATE.relock();
+    let mut state = SCENES.state.relock();
     let generation = state.generation;
     match cache(&mut state).lookup(key) {
         Lookup::Ready(found) => return found.map_err(|_| SceneError::Unreadable),
@@ -423,7 +504,7 @@ fn land<V: Described, E: SceneFailure>(
     cache: fn(&mut SceneState) -> &mut SceneCache<V, E>,
     found: Result<V, E>,
 ) -> bool {
-    let mut state = STATE.relock();
+    let mut state = SCENES.state.relock();
     state.generation == generation && cache(&mut state).finish(key, found)
 }
 
@@ -433,7 +514,7 @@ fn land<V: Described, E: SceneFailure>(
 /// answers [`SceneError::Reading`] until it is done.
 pub(crate) fn markers(loader: &Loader) -> Result<Arc<[MapMarkerInfo]>, SceneError> {
     let key = scene_key(loader)?;
-    let found = *STATE.relock().layout.get_or_init(|| layout(loader));
+    let found = *SCENES.state.relock().layout.get_or_init(|| layout(loader));
     let layout = sound(loader, &MARKERS_FUSE, found)?;
     cached(
         key,
@@ -447,7 +528,8 @@ pub(crate) fn markers(loader: &Loader) -> Result<Arc<[MapMarkerInfo]>, SceneErro
 /// quiet moment, read like [`markers`].
 pub(crate) fn frame_info(loader: &Loader) -> Result<MapFrameInfo, SceneError> {
     let key = scene_key(loader)?;
-    let found = *STATE
+    let found = *SCENES
+        .state
         .relock()
         .frame_layout
         .get_or_init(|| frame_layout(loader));
@@ -460,10 +542,93 @@ pub(crate) fn frame_info(loader: &Loader) -> Result<MapFrameInfo, SceneError> {
     )
 }
 
+/// The box of the world the scene the server runs keeps players in; on its
+/// game thread at a quiet moment, read like [`markers`]. The scene part
+/// starts the read after the first server step of a game, so the box of the
+/// game's first scene is there before its first teleport; a later scene's
+/// box starts reading at the first teleport asked there.
+pub(crate) fn world_box(loader: &Loader) -> Result<WorldBox, SceneError> {
+    let key = scene_key(loader)?;
+    let found = *SCENES
+        .state
+        .relock()
+        .box_layout
+        .get_or_init(|| box_layout(loader));
+    let layout = sound(loader, &BOX_FUSE, found)?;
+    cached(
+        key,
+        &BOX_FUSE,
+        |state| &mut state.bounds,
+        move || read_box(layout, key),
+    )
+}
+
+/// Whether a teleport may land at `position`: inside the world box of the
+/// scene the server runs, as [`crate::base::emits::teleport`] asks.
+///
+/// # Errors
+///
+/// As [`admits`] answers for the box [`world_box`] finds.
+pub(crate) fn admit_teleport(loader: &Loader, position: Metres) -> Result<(), EmitError> {
+    admits(world_box(loader), position)
+}
+
+/// Whether a teleport may land at `position` given the box `found`. A box
+/// that does not read (the build lacks its layout, its fuse is off, the
+/// scene or a mod's served one does not give it) bounds nothing: the
+/// engine's fixed point, checked before, is then the only bound, as before
+/// the loader read the box.
+///
+/// # Errors
+///
+/// [`EmitError::OutsideWorld`] past the box, [`EmitError::NotLoaded`] while
+/// it reads, [`EmitError::NoWorld`] before a scene runs.
+fn admits(found: Result<WorldBox, SceneError>, position: Metres) -> Result<(), EmitError> {
+    match found {
+        Ok(world) if world.holds(position) => Ok(()),
+        Ok(_) => Err(EmitError::OutsideWorld),
+        Err(SceneError::Reading) => Err(EmitError::NotLoaded),
+        Err(SceneError::NoScene) => Err(EmitError::NoWorld),
+        Err(SceneError::World(why)) => Err(why.into()),
+        Err(
+            SceneError::Unread
+            | SceneError::Off
+            | SceneError::Unreadable
+            | SceneError::NotClient
+            | SceneError::NoTypes,
+        ) => Ok(()),
+    }
+}
+
+/// After a server step: until the read of the world box has started in this
+/// game, asks for it; then only one atomic load a step.
+pub(crate) fn after_step(loader: &Loader) {
+    if !SCENES.box_asked.load(Ordering::Relaxed) {
+        ask_world_box(loader);
+    }
+}
+
+/// For the benchmark of the step pass: what [`after_step`] pays each step
+/// once this game's box was asked for; true while it skips the ask.
+#[cfg(feature = "test")]
+#[doc(hidden)]
+pub fn bench_world_box_step() -> impl FnMut() -> bool {
+    SCENES.box_asked.store(true, Ordering::Relaxed);
+    || SCENES.box_asked.load(Ordering::Relaxed)
+}
+
+#[cold]
+fn ask_world_box(loader: &Loader) {
+    match world_box(loader) {
+        Err(SceneError::NoScene | SceneError::World(_)) => {}
+        _ => SCENES.box_asked.store(true, Ordering::Relaxed),
+    }
+}
+
 /// The map's frame the loader last read, on any thread; `None` before a
 /// hosted world's frame read, so a client joined to a server has none.
 pub(crate) fn last_frame() -> Option<MapFrameInfo> {
-    STATE.relock().frame.last()
+    SCENES.state.relock().frame.last()
 }
 
 /// The client's marker types, read from the game's archive at the first ask
@@ -474,7 +639,7 @@ pub(crate) fn marker_types(loader: &Loader) -> Result<Arc<[MapMarkerTypeInfo]>, 
     if loader.side == Side::SERVER {
         return Err(SceneError::NotClient);
     }
-    let state = STATE.relock();
+    let state = SCENES.state.relock();
     let known = state
         .marker_types
         .get_or_init(|| kept_types(loader, &TYPES_FUSE, || read_marker_types(loader)));
@@ -549,15 +714,18 @@ fn read_marker_types(loader: &Loader) -> Result<Vec<MapMarkerTypeInfo>, ReadType
     types(&layout, &groups, &registry)
 }
 
-/// Forgets the markers and the frame read for the last scene, when a hosted
-/// game ends: the next world's served data may differ. A read still under
-/// way is dropped, even when the next game asks for the same scene; the
-/// build's layouts stay.
+/// Forgets the markers, the frame and the world box read for the last scene,
+/// when a hosted game ends: the next world's served data may differ, and the
+/// next game's first step asks for its box again. A read still under way is
+/// dropped, even when the next game asks for the same scene; the build's
+/// layouts stay.
 pub(crate) fn forget() {
-    let mut state = STATE.relock();
+    let mut state = SCENES.state.relock();
     state.markers = SceneCache::new();
     state.frame = SceneCache::new();
+    state.bounds = SceneCache::new();
     state.generation = state.generation.wrapping_add(1);
+    SCENES.box_asked.store(false, Ordering::Relaxed);
 }
 
 #[cfg(test)]
@@ -571,11 +739,11 @@ mod tests {
     fn a_scene_read_once_its_hosted_game_ended_is_dropped_and_read_again() {
         let _turn = TURN.relock();
         let key = SceneKey::new([7; 16], 3).unwrap();
-        let mut state = STATE.relock();
+        let mut state = SCENES.state.relock();
         assert!(matches!(state.frame.lookup(key), Lookup::Start));
         drop(state);
         forget();
-        let mut state = STATE.relock();
+        let mut state = SCENES.state.relock();
         assert!(
             !state.frame.finish(key, Err(ReadFrameError::Scene)),
             "the read of the ended game's scene is dropped"
@@ -590,11 +758,17 @@ mod tests {
     fn a_read_of_an_ended_game_does_not_land_when_the_next_game_asks_for_the_same_scene() {
         let _turn = TURN.relock();
         let key = SceneKey::new([8; 16], 3).unwrap();
-        let ended = STATE.relock().generation;
-        assert!(matches!(STATE.relock().frame.lookup(key), Lookup::Start));
+        let ended = SCENES.state.relock().generation;
+        assert!(matches!(
+            SCENES.state.relock().frame.lookup(key),
+            Lookup::Start
+        ));
         forget();
-        let next = STATE.relock().generation;
-        assert!(matches!(STATE.relock().frame.lookup(key), Lookup::Start));
+        let next = SCENES.state.relock().generation;
+        assert!(matches!(
+            SCENES.state.relock().frame.lookup(key),
+            Lookup::Start
+        ));
         let frame: fn(&mut SceneState) -> &mut SceneCache<MapFrameInfo, ReadFrameError> =
             |state| &mut state.frame;
         assert!(
@@ -606,7 +780,7 @@ mod tests {
             "the next game's read lands"
         );
         assert!(matches!(
-            STATE.relock().frame.lookup(key),
+            SCENES.state.relock().frame.lookup(key),
             Lookup::Ready(Err(ReadFrameError::BiomeMap))
         ));
     }
@@ -692,6 +866,42 @@ mod tests {
             Some(SceneError::Unreadable)
         );
         assert!(!FRAMES.is_off());
+    }
+
+    #[test]
+    fn a_teleport_is_bounded_by_the_box_it_reads_and_only_by_the_fixed_point_where_none_reads() {
+        let world = WorldBox {
+            min: [0; 3],
+            max: [10_240 << 32, 2_560 << 32, 10_240 << 32],
+        };
+        let edge = [2_147_483_647.0, 900.0, 2_147_483_647.0];
+        assert_eq!(admits(Ok(world), [3_734.25, 843.75, 1_437.0]), Ok(()));
+        assert_eq!(admits(Ok(world), edge), Err(EmitError::OutsideWorld));
+        assert_eq!(
+            admits(Err(SceneError::Reading), edge),
+            Err(EmitError::NotLoaded)
+        );
+        assert_eq!(
+            admits(Err(SceneError::NoScene), edge),
+            Err(EmitError::NoWorld)
+        );
+        for unread in [SceneError::Unread, SceneError::Off, SceneError::Unreadable] {
+            assert_eq!(admits(Err(unread), edge), Ok(()), "{unread:?}");
+        }
+    }
+
+    #[test]
+    fn a_box_failure_turns_its_feature_off_only_for_a_fault_of_the_read() {
+        assert!(ReadBoxError::Layout.is_fault() && ReadBoxError::Panicked.is_fault());
+        for kept in [
+            ReadBoxError::Archive,
+            ReadBoxError::Scene,
+            ReadBoxError::Unreadable,
+            ReadBoxError::Thread,
+            ReadBoxError::Served,
+        ] {
+            assert!(!kept.is_fault(), "{kept:?}");
+        }
     }
 
     #[test]

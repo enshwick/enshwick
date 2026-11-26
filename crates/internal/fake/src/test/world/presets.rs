@@ -54,6 +54,10 @@ pub(crate) enum BaseCode {
     Unknown,
 }
 
+/// The box the game's world scene keeps players in, lowest corner first, in
+/// metres, as the loader read it on server 26430253.
+pub(crate) const GAME_WORLD_BOX: ([f64; 3], [f64; 3]) = ([0.0; 3], [10_240.0, 2_560.0, 10_240.0]);
+
 /// What the fake's world answers, as the test set it.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct WorldPresets {
@@ -74,6 +78,10 @@ pub(crate) struct WorldPresets {
     pub(crate) voxels: Vec<VoxelGrid>,
     pub(crate) zones: FakeZones,
     pub(crate) extent: Option<[u32; 3]>,
+    /// The box the scene keeps players and entities in, lowest corner
+    /// first, in metres; a teleport past it is outside the world. `None` is
+    /// the game's own, [`GAME_WORLD_BOX`].
+    pub(crate) world_box: Option<([f64; 3], [f64; 3])>,
     pub(crate) blueprints: rustc_hash::FxHashMap<u32, [u32; 3]>,
     pub(crate) props: Vec<props::FakeProp>,
     /// The items whose props are logic triggers.

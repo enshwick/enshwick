@@ -808,6 +808,21 @@ ids! {
     SCENE_RESOURCE = "scene_resource";
     /// The id of a scene resource's flag for a biome map, a byte.
     SCENE_RESOURCE_HAS_BIOME_MAP = "scene_resource.has_biome_map";
+    /// The id of a scene resource's box players are kept in, a
+    /// `SceneResetPlayersOutOfBounds`.
+    SCENE_RESOURCE_PLAYER_BOUNDS = "scene_resource.player_bounds";
+    /// The id of that box's lowest corner, a `WorldPosition` in fixed point.
+    PLAYER_BOUNDS_WORLD_MIN = "player_bounds.world_min";
+    /// The id of that box's highest corner, a `WorldPosition` in fixed point.
+    PLAYER_BOUNDS_WORLD_MAX = "player_bounds.world_max";
+    /// The id of the engine's world position type, whose size is a corner's.
+    WORLD_POSITION = "world_position";
+    /// The id of a world position's x, an `i64` in fixed point.
+    WORLD_POSITION_X = "world_position.x";
+    /// The id of a world position's y, an `i64` in fixed point.
+    WORLD_POSITION_Y = "world_position.y";
+    /// The id of a world position's z, an `i64` in fixed point.
+    WORLD_POSITION_Z = "world_position.z";
     /// The id of a scene's biome map resource type, keyed by the scene's GUID.
     BIOME_MAP = "biome_map";
     /// The id of a biome map's world origin, two `i32`, x then z.

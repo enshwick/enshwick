@@ -764,6 +764,25 @@ impl FakeHost {
         self.world.extent = Some(end);
         self
     }
+
+    /// The box, in metres from `min` to `max`, that the world's scene keeps
+    /// entities in: a teleport to a target past it is outside the world, as
+    /// the loader refuses it from the scene's own box. Without it, the fake
+    /// keeps the game's box, 0 to 10,240 m across and 0 to 2,560 m high.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .world_box([0.0; 3], [10_240.0, 2_560.0, 10_240.0])
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub const fn world_box(mut self, min: [f64; 3], max: [f64; 3]) -> Self {
+        self.world.world_box = Some((min, max));
+        self
+    }
 }
 
 /// Whether the box of `size` from `min` leaves a world ending at `end`.

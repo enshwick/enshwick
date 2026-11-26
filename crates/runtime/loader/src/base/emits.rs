@@ -13,7 +13,10 @@
 //! the next step; the game's `teleport` system then moves the entity, counts
 //! the teleport for the clients and removes the component. That system moves
 //! only entities that count their teleports, actors and characters, so the
-//! loader refuses any other.
+//! loader refuses any other. A target outside the world's box is refused
+//! too: past it the game removes an entity or moves a player back, and a
+//! player's client can crash first (a player at 2^31 m wrapped its x and z
+//! to -2^31 m and crashed the joined client 26430625).
 
 use std::sync::{Mutex, OnceLock};
 
@@ -228,6 +231,12 @@ pub(crate) enum EmitError {
     /// A position past the engine's fixed point.
     #[error("the position is past the engine's fixed point")]
     BadPosition,
+    /// A target outside the world's box, where the game keeps no entity.
+    #[error("the position is outside the world")]
+    OutsideWorld,
+    /// The world's box, which bounds a teleport, still reads.
+    #[error("the world's box is not read yet")]
+    NotLoaded,
     /// An entity the game's teleport does not move.
     #[error("the game's teleport does not move the entity")]
     NotMovable,
@@ -325,8 +334,13 @@ pub(crate) fn push(loader: &Loader, hash: u32, bytes: &[u8]) -> Result<(), EmitE
 }
 
 /// Asks the server to teleport an entity after the next step, as its admin
-/// teleport does.
-pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(), EmitError> {
+/// teleport does, once `inside` admits its target, a position the engine's
+/// fixed point holds: the layer above that knows the world's box.
+pub(crate) fn teleport(
+    loader: &Loader,
+    request: &TeleportRequest,
+    inside: impl FnOnce(enshwick_core::abi::Metres) -> Result<(), EmitError>,
+) -> Result<(), EmitError> {
     crate::engine::world::entity_call(loader)?;
     let layout = layout(loader).ok_or(EmitError::Unavailable)?;
     let teleport = layout.teleport.ok_or(EmitError::Unavailable)?;
@@ -342,6 +356,7 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
     if crate::engine::world::component(loader, request.entity, layout.teleport_count).is_err() {
         return Err(EmitError::NotMovable);
     }
+    inside(request.position)?;
     let orientation: [f32; 4] = if request.flags & TeleportRequest::ORIENTED == 0 {
         // SAFETY: `component` found the entity's live `CurrentTransform` on
         // the game thread between steps; it is a `WorldTransform`, whose

@@ -232,16 +232,84 @@ mod tests {
         assert!(loader.emits().is_empty());
 
         effects.spawn(template, AT_THE_BOUND, Spawn::new()).unwrap();
-        effects
-            .teleport(Entity::from_engine(5), AT_THE_BOUND, Teleport::new())
-            .unwrap();
+        assert_eq!(
+            effects.teleport(Entity::from_engine(5), AT_THE_BOUND, Teleport::new()),
+            Err(WorldError::OutsideWorld),
+            "the fixed point holds it, the game's world box does not"
+        );
         effects
             .npc_command(42, NpcCommandType::GoToPosition(AT_THE_BOUND))
             .unwrap();
         effects.ping(Entity::from_engine(6), AT_THE_BOUND).unwrap();
         assert_eq!(loader.spawns()[0].1.position, AT_THE_BOUND);
-        assert_eq!(loader.teleports()[0].position, AT_THE_BOUND);
+        assert!(loader.teleports().is_empty());
         assert_eq!(loader.emits().len(), 2);
+    }
+
+    #[test]
+    fn a_teleport_past_the_worlds_box_is_outside_the_world_and_one_inside_it_lands() {
+        let loader = FakeHost::new()
+            .world()
+            .world_box([0.0, -64.0, 0.0], [10_240.0, 2_560.0, 10_240.0])
+            .template(Entity::from_engine(5), enshwick::content::Guid([5; 16]))
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Acting)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let effects = EFFECTS.get().unwrap();
+        let edge = 2_147_483_647.999_999_8;
+        for far in [
+            [edge, 900.0, edge],
+            [10_300.0, 100.0, 0.0],
+            [-5.0, 100.0, 0.0],
+            [0.0, 2_561.0, 0.0],
+        ] {
+            assert_eq!(
+                effects.teleport(Entity::from_engine(5), far, Teleport::new()),
+                Err(WorldError::OutsideWorld),
+                "teleport {far:?}"
+            );
+        }
+        assert!(loader.teleports().is_empty());
+        assert_eq!(
+            effects.teleport(
+                Entity::from_engine(5),
+                [f64::NAN, 0.0, 0.0],
+                Teleport::new()
+            ),
+            Err(WorldError::Refused),
+            "a position the fixed point cannot hold stays a bad argument"
+        );
+        let corner = [10_240.0, 2_560.0, 10_240.0];
+        effects
+            .teleport(Entity::from_engine(5), corner, Teleport::new())
+            .unwrap();
+        assert_eq!(loader.teleports()[0].position, corner);
+    }
+
+    #[test]
+    fn the_fake_keeps_the_games_box_and_names_a_missing_entity_before_its_target() {
+        let loader = FakeHost::new()
+            .world()
+            .template(Entity::from_engine(5), enshwick::content::Guid([5; 16]))
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Acting)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let effects = EFFECTS.get().unwrap();
+        let far = [15_000.0, 100.0, 0.0];
+        assert_eq!(
+            effects.teleport(Entity::from_engine(5), far, Teleport::new()),
+            Err(WorldError::OutsideWorld)
+        );
+        assert_eq!(
+            effects.teleport(Entity::from_engine(9), far, Teleport::new()),
+            Err(WorldError::Gone),
+            "the entity is looked up before the box"
+        );
+        assert!(loader.teleports().is_empty());
     }
 
     #[test]
