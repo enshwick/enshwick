@@ -31,6 +31,7 @@
 "mods.points" = "확장 지점: {points}"
 "mods.feature.off" = "{feature} 꺼짐: {reason}"
 "mods.part.off" = "오류로 꺼진 Enshwick 부분: {part} ({reason})"
+"files.lost" = "다른 프로그램이 {path} 파일을 {minutes}분 동안 잡고 있어서 게임에서 한 변경이 사라졌습니다."
 "mods.others.beside" = "게임 옆에 있는 다른 모드의 파일: {files}"
 "mods.features.off" = "이 게임 버전에서 꺼졌거나 일부 꺼짐: {features}"
 "mods.discovery.off" = "모드 감지가 꺼져 있습니다. 플레이어가 호스트하는 게임에서는 호스트와 참가하는 플레이어가 서로의 모드를 볼 수 없습니다."

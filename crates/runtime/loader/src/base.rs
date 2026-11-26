@@ -217,6 +217,12 @@ pub(crate) static PARTS: &[&Part] = &[
         ..part!("notices", notices)
     },
     &Part {
+        steps: &[step!(Output, "lost writes told", |s| {
+            frame_writes::after_step(s.loader)
+        })],
+        ..part!("frame_writes", frame_writes)
+    },
+    &Part {
         table_ids: stop::TABLE_IDS,
         ..part!("stop", stop)
     },

@@ -242,7 +242,8 @@ fn store_off(label: &str, feature: &str, reason: &str) -> Option<String> {
 
 /// What the loader itself has on, off or wrong, above the mods: developer
 /// tools on, with the interface demo's button where this game has them,
-/// features this build lacks, parts a panic turned off, an unofficial build,
+/// features this build lacks, parts a panic turned off, changes lost to a
+/// file another program held, an unofficial build,
 /// a newer release, a broken settings file and discovery off.
 fn loader_notes(loader: &Loader, paint: &Painter<'_>) {
     if loader.developer_tools {
@@ -262,6 +263,10 @@ fn loader_notes(loader: &Loader, paint: &Painter<'_>) {
         paint.label(line.as_bytes(), UiWidget::STYLE_NEGATIVE, true, false);
     }
     parts_off(paint);
+    for path in crate::base::frame_writes::lost() {
+        let line = crate::base::frame_writes::lost_line(&path);
+        paint.label(line.as_bytes(), UiWidget::STYLE_NEGATIVE, true, false);
+    }
     if loader.unofficial.load(Ordering::Acquire) {
         paint.label(
             texts::text("mods.unofficial").as_bytes(),

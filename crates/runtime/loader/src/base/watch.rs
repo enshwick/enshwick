@@ -1,7 +1,8 @@
 //! Settings files watched for changes: the loader's own re-reads the log
 //! levels and raises [`Event::LOADER_SETTINGS_CHANGED`] for every mod. While
 //! a world runs, each settings file of each mod in that world is watched,
-//! and a change raises [`Event::SETTINGS_CHANGED`] for the mod.
+//! and a change raises [`Event::SETTINGS_CHANGED`] for the mod, as does a
+//! change kept for a held file that the writer gave up on.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -187,6 +188,9 @@ fn watch_worlds(loader: &Loader, worlds: &mut Vec<WorldWatched>) {
         }
     }
     let key = crate::base::worlds::current();
+    // A change the loader kept for a held file and gave up on: readers went
+    // back to the file, which no stamp shows.
+    let lost = crate::base::frame_writes::unraised();
     let mut edited = Vec::new();
     for file in worlds {
         let path = key.as_deref().and_then(|key| {
@@ -194,10 +198,12 @@ fn watch_worlds(loader: &Loader, worlds: &mut Vec<WorldWatched>) {
             Some(crate::base::worlds::world_file(&record.id, &file.file, key))
         });
         let now = path.as_deref().and_then(stamp);
-        if file.changed(key.as_deref(), path.as_deref(), now) {
+        let given_up = path.as_ref().is_some_and(|path| lost.contains(path));
+        if file.changed(key.as_deref(), path.as_deref(), now) || given_up {
             edited.push(file.owner.get());
         }
     }
+    edited.sort_unstable();
     edited.dedup();
     for index in edited {
         crate::base::worlds::changed(loader, index);

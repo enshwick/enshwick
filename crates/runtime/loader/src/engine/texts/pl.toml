@@ -31,6 +31,7 @@
 "mods.points" = "Punkty rozszerzeń: {points}"
 "mods.feature.off" = "{feature} (wyłączone): {reason}"
 "mods.part.off" = "Część Enshwick wyłączona po błędzie: {part} ({reason})"
+"files.lost" = "Inny program trzymał {path} przez {minutes} min, więc zmiana wprowadzona w grze przepadła."
 "mods.others.beside" = "Pliki innych modów obok gry: {files}"
 "mods.features.off" = "Wyłączone w całości lub częściowo w tej wersji gry: {features}"
 "mods.discovery.off" = "Wykrywanie modów jest wyłączone: w grach hostowanych przez gracza host i dołączający gracze nie widzą nawzajem swoich modów."

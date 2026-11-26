@@ -35,19 +35,36 @@ struct Waiting {
     since: Instant,
 }
 
+/// A file whose kept text the writer gave up on: its readers went back to
+/// what the file holds, and whom the loader told so far.
+struct Lost {
+    path: PathBuf,
+    /// The settings watch raised the change of the mod whose file it is.
+    raised: bool,
+    /// The administrators online were told, on a server's game thread.
+    told: bool,
+}
+
 /// The writes that wait, and whether a thread writes them.
 struct Queue {
     waiting: Vec<Waiting>,
     turns: u64,
     writing: bool,
+    /// The files given up on, the newest last, at most [`MOST_LOST`].
+    lost: Vec<Lost>,
 }
 
-/// The queue, and whether anything waits, so readers skip its lock while
-/// nothing does.
+/// The queue, and whether anything waits or was given up on, so readers
+/// skip its lock while nothing does.
 struct State {
     queue: Mutex<Queue>,
     any: AtomicBool,
+    any_lost: AtomicBool,
 }
+
+/// How many given-up files the loader remembers to show; a file given up
+/// on again moves to the end instead of taking a second place.
+const MOST_LOST: usize = 8;
 
 static STATE: State = State::new();
 
@@ -105,7 +122,12 @@ pub(crate) fn write(path: &Path, text: &str, write: Writer) -> io::Result<()> {
             "{} is held by another program ({e}); it is written once let go",
             path.display()
         ),
-        done => return done,
+        done => {
+            if done.is_ok() {
+                STATE.found(&mut queue, path);
+            }
+            return done;
+        }
     }
     queue.waiting.push(kept);
     STATE.any.store(true, Ordering::Release);
@@ -117,6 +139,57 @@ pub(crate) fn write(path: &Path, text: &str, write: Writer) -> io::Result<()> {
 /// it in place of what the file holds.
 pub(crate) fn waiting(path: &Path) -> Option<String> {
     STATE.waiting(path)
+}
+
+/// The files whose kept text was given up on, the newest last, for the Mods
+/// screen.
+pub(crate) fn lost() -> Vec<PathBuf> {
+    STATE.lost(|_| None)
+}
+
+/// The given-up files the settings watch has not raised yet; each comes
+/// once.
+pub(crate) fn unraised() -> Vec<PathBuf> {
+    STATE.lost(|lost| Some(&mut lost.raised))
+}
+
+/// The given-up files the administrators were not told of yet; each comes
+/// once.
+pub(crate) fn untold() -> Vec<PathBuf> {
+    STATE.lost(|lost| Some(&mut lost.told))
+}
+
+/// After a server step on its game thread: tells each administrator online
+/// of every file given up on since, by name.
+pub(crate) fn after_step(loader: &crate::engine::loader::Loader) {
+    if !STATE.any_lost.load(Ordering::Acquire) {
+        return;
+    }
+    let untold = untold();
+    if untold.is_empty() {
+        return;
+    }
+    let Ok(players) = crate::engine::world::players(loader) else {
+        return;
+    };
+    for player in players.iter().filter(|p| p.is_admin()) {
+        let key = player.key.get();
+        for path in &untold {
+            let text = crate::base::net::for_player(key, || lost_line(path));
+            crate::base::tell::tell(loader, key, &text);
+        }
+    }
+}
+
+/// The words that tell a player the change to `path` is lost.
+pub(crate) fn lost_line(path: &Path) -> String {
+    crate::engine::texts::fill(
+        "files.lost",
+        &[
+            ("path", &path.display().to_string()),
+            ("minutes", &(GIVE_UP_AFTER.as_secs() / 60).to_string()),
+        ],
+    )
 }
 
 /// Starts the writer unless it runs; a thread that does not start leaves
@@ -176,9 +249,55 @@ impl State {
                 waiting: Vec::new(),
                 turns: 0,
                 writing: false,
+                lost: Vec::new(),
             }),
             any: AtomicBool::new(false),
+            any_lost: AtomicBool::new(false),
         }
+    }
+
+    /// The given-up files whose flag `pick` names is unset, which it then
+    /// sets; every one when `pick` names none.
+    fn lost(&self, pick: impl Fn(&mut Lost) -> Option<&mut bool>) -> Vec<PathBuf> {
+        if !self.any_lost.load(Ordering::Acquire) {
+            return Vec::new();
+        }
+        let mut queue = self.queue.relock();
+        queue
+            .lost
+            .iter_mut()
+            .filter_map(|lost| match pick(lost) {
+                Some(done) if *done => None,
+                Some(done) => {
+                    *done = true;
+                    Some(lost.path.clone())
+                }
+                None => Some(lost.path.clone()),
+            })
+            .collect()
+    }
+
+    /// Forgets that the writer gave up on `path`, which a write just reached.
+    fn found(&self, queue: &mut Queue, path: &Path) {
+        if self.any_lost.load(Ordering::Acquire) {
+            queue.lost.retain(|lost| lost.path != path);
+            self.any_lost
+                .store(!queue.lost.is_empty(), Ordering::Release);
+        }
+    }
+
+    /// Remembers that the writer gave up on `path`, under the queue's lock.
+    fn give_up(&self, queue: &mut Queue, path: PathBuf) {
+        queue.lost.retain(|lost| lost.path != path);
+        if queue.lost.len() == MOST_LOST {
+            queue.lost.remove(0);
+        }
+        queue.lost.push(Lost {
+            path,
+            raised: false,
+            told: false,
+        });
+        self.any_lost.store(true, Ordering::Release);
     }
 
     /// The text that waits for `path`, unless another program wrote the
@@ -231,6 +350,7 @@ impl State {
             (_, None) => true,
             (Ok(()), Some(at)) => {
                 crate::log!(INFO, "{} written once let go", path.display());
+                self.found(&mut queue, path);
                 if let Some(newer) = queue.waiting.get_mut(at).filter(|w| w.turn != turn) {
                     newer.seen = modified(path);
                 } else {
@@ -251,6 +371,7 @@ impl State {
                         path.display(),
                         GIVE_UP_AFTER.as_secs() / 60
                     );
+                    self.give_up(&mut queue, kept.path);
                     true
                 }
             }
@@ -440,6 +561,57 @@ mod tests {
         assert_eq!(state.waiting(&path), None, "given up");
         assert!(state.next().is_none(), "the writer ends");
         let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_given_up_file_is_raised_and_told_once_and_shown_until_a_write_lands() {
+        let state = State::new();
+        let dir = dir("lost");
+        let path = dir.join("settings.toml");
+        let long_ago = Instant::now().checked_sub(GIVE_UP_AFTER).unwrap();
+        let full = || Err(io::Error::other("the disk is full"));
+        assert!(state.lost(|_| None).is_empty(), "nothing lost yet");
+        let turn = queue(&state, &path, "kept", long_ago);
+        assert!(state.settle(&path, turn, full()));
+        let raised = |state: &State| state.lost(|lost| Some(&mut lost.raised));
+        let told = |state: &State| state.lost(|lost| Some(&mut lost.told));
+        assert_eq!(raised(&state), [path.clone()], "the watch raises it");
+        assert!(raised(&state).is_empty(), "once");
+        assert_eq!(told(&state), [path.clone()], "the admins hear of it apart");
+        assert!(told(&state).is_empty(), "once");
+        assert_eq!(
+            state.lost(|_| None),
+            [path.clone()],
+            "the Mods screen keeps it"
+        );
+        let turn = queue(&state, &path, "again", long_ago);
+        assert!(state.settle(&path, turn, full()));
+        assert_eq!(
+            state.lost(|_| None).len(),
+            1,
+            "a file lost again takes one place"
+        );
+        assert_eq!(raised(&state), [path.clone()], "and is raised again");
+        let turn = queue(&state, &path, "landed", Instant::now());
+        assert!(state.settle(&path, turn, Ok(())));
+        assert!(
+            state.lost(|_| None).is_empty(),
+            "a write that lands clears it"
+        );
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_loader_remembers_only_the_latest_given_up_files() {
+        let state = State::new();
+        let mut queue = state.queue.relock();
+        for at in 0..=MOST_LOST {
+            state.give_up(&mut queue, PathBuf::from(format!("{at}.toml")));
+        }
+        drop(queue);
+        let lost = state.lost(|_| None);
+        assert_eq!(lost.len(), MOST_LOST);
+        assert_eq!(lost[0], PathBuf::from("1.toml"), "the oldest goes");
     }
 
     #[test]

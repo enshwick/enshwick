@@ -211,7 +211,10 @@ change, on a thread that is not fixed:
 - about a second after a person saves the file;
 - at once after the console or the Mods screen changes a value;
 - when the server of another's world sends new values;
-- at once after the mod writes a value of its own.
+- at once after the mod writes a value of its own;
+- about a second after the loader gives up a change it kept for a file
+  another program held for 10 minutes. The values go back to what the file
+  holds, and the Mods screen names the file.
 
 ## Write a value of the mod's own
 

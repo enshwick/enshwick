@@ -31,6 +31,7 @@
 "mods.points" = "Points d'extension : {points}"
 "mods.feature.off" = "{feature} est désactivé : {reason}"
 "mods.part.off" = "Partie d'Enshwick désactivée après une erreur : {part} ({reason})"
+"files.lost" = "Un autre programme a bloqué {path} pendant {minutes} minutes : la modification faite dans le jeu est perdue."
 "mods.others.beside" = "Fichiers d'autres mods à côté du jeu : {files}"
 "mods.features.off" = "Désactivé en tout ou en partie dans cette version du jeu : {features}"
 "mods.discovery.off" = "La détection des mods est désactivée : dans les parties hébergées par un joueur, l'hôte et les joueurs qui rejoignent ne voient pas les mods des autres."

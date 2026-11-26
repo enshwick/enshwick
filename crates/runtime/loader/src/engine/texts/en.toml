@@ -38,6 +38,7 @@
 "mods.points" = "Extension points: {points}"
 "mods.feature.off" = "{feature} is off: {reason}"
 "mods.part.off" = "Enshwick part off after an error: {part} ({reason})"
+"files.lost" = "Another program held {path} for {minutes} minutes, so the change made in the game is lost."
 "mods.others.beside" = "Other mods' files beside the game: {files}"
 "mods.features.off" = "Off or partly off on this game version: {features}"
 "mods.discovery.off" = "Mod discovery is off: in games a player hosts, the host and the players who join do not see each other's mods."
