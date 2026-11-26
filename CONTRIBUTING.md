@@ -166,8 +166,11 @@ run's artefact.
 
 Alphas go to GitHub only, never to crates.io. Real releases come from
 [release-plz](https://release-plz.dev), set up in
-[release-plz.toml](release-plz.toml) and run by hand through the
-[release-plz workflow](.github/workflows/release-plz.yml):
+[release-plz.toml](release-plz.toml) and run through the
+[release-plz workflow](.github/workflows/release-plz.yml). It runs by hand
+until the first real release; from then on, the repository variable
+`RELEASE_ON_MERGE` set to `true` runs it on every merge to `main` that
+changes the crates, `release` first and then `release-pr`:
 
 1. `release-pr` reads the conventional commits since each crate's last
    release, checks the public API with cargo-semver-checks, and opens or

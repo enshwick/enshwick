@@ -1,12 +1,20 @@
-# Release pull requests and releases with release-plz (release-plz.toml), run
-# by hand on main only. `release-pr` opens or updates the release pull
+# Release pull requests and releases with release-plz (release-plz.toml), on
+# main only. `release-pr` opens or updates the release pull
 # request; `release`, after that pull request merged, tags each
 # released crate `<package>-v<version>`, makes its GitHub release and
 # publishes the public crates to crates.io through trusted publishing, which
-# matches this file's name.
+# matches this file's name. A push to main runs both, but only while the repository variable RELEASE_ON_MERGE is `true`; until the
+# first real release it is unset and releases run by hand.
 name: release-plz
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - crates/**
+      - Cargo.toml
+      - Cargo.lock
+      - release-plz.toml
   workflow_dispatch:
     inputs:
       command:
@@ -21,8 +29,10 @@ permissions: {}
 
 jobs:
   release-plz:
-    # Releases come only from main.
-    if: github.ref == 'refs/heads/main'
+    # Releases come only from main; a push releases only once switched on.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' || vars.RELEASE_ON_MERGE == 'true')
     # The release environment admits main only.
     environment: release
     # A fresh machine: what ships is built and published without the
@@ -57,8 +67,21 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
 
-      - uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
+      # A push has no command and runs both. `release` goes first: the
+      # action's own order, release-pr first, would open a new release pull
+      # request for versions the merged one has not tagged yet.
+      - name: Release
+        if: inputs.command != 'release-pr'
+        uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
         with:
-          command: ${{ inputs.command }}
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ steps.token.outputs.token }}
+
+      - name: Release pull request
+        if: inputs.command != 'release'
+        uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
+        with:
+          command: release-pr
         env:
           GITHUB_TOKEN: ${{ steps.token.outputs.token }}
