@@ -227,12 +227,12 @@ pub enum CommandAction {
     /// Moves every stack of the player's into the inventory `to`, as a
     /// storage window's deposit all does. Observed as [`Self::TakeAll`].
     DepositAll(Entity),
-    /// Destroys the stack in `slot`, as the backpack's Delete does; the game
-    /// has no drop of an item on the ground. It is an item transfer of type
+    /// Destroys the stack in `slot`, as the game's trash does; the game has
+    /// no drop of an item on the ground. It is an item transfer of type
     /// [`Destroy`](crate::interactions::InventoryActionType::Destroy), so a
-    /// server mod refuses it through its interaction filter's move or an
-    /// item filter on trash. Observed once the client's copy of the slot's
-    /// inventory changes.
+    /// server mod refuses it through its interaction filter's move, not
+    /// through an item filter on trash. Observed once the client's copy of
+    /// the slot's inventory changes.
     Trash(SlotRef),
     /// Sends `text` to the world's chat as the local player's own line, as
     /// the chat window's Enter does, on any server the client plays on: 1
