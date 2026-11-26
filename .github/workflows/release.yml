@@ -34,6 +34,19 @@ on:
         description: Make the release; off builds and shows the notes in the run's summary only
         type: boolean
         default: true
+    # A called job reads an environment secret only when the caller passes
+    # it by name; one not passed is empty without an error.
+    secrets:
+      ENSHWICK_SIGNING_KEY:
+        required: true
+      ENSHWICK_CI_CLIENT_ID:
+        required: true
+      ENSHWICK_CI_PRIVATE_KEY:
+        required: true
+      DOCS_DEPLOY_HOOK:
+        required: false
+      VIRUSTOTAL_API_KEY:
+        required: false
 
 permissions: {}
 

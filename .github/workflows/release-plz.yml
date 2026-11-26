@@ -111,7 +111,8 @@ jobs:
 
   # The version's GitHub release, on the tag release-plz just pushed, with
   # `enshwick.zip`, `cargo-enshwick` and the notes of every crate. Its jobs
-  # take the release environment's secrets themselves.
+  # run in the release environment, whose secrets reach them only when
+  # passed here by name.
   loader:
     needs: release
     if: needs.release.outputs.loader == 'true'
@@ -123,6 +124,12 @@ jobs:
     with:
       known_issues: ${{ inputs.known_issues }}
       publish: true
+    secrets:
+      ENSHWICK_SIGNING_KEY: ${{ secrets.ENSHWICK_SIGNING_KEY }}
+      ENSHWICK_CI_CLIENT_ID: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
+      ENSHWICK_CI_PRIVATE_KEY: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
+      DOCS_DEPLOY_HOOK: ${{ secrets.DOCS_DEPLOY_HOOK }}
+      VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
 
   release-pr:
     # After `release`, the order the action keeps when given no command;
