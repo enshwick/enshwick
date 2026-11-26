@@ -159,6 +159,32 @@ pub struct PropId {
     pub crafting_prop: Option<Guid>,
 }
 
+impl PropId {
+    /// The prop type of `item`, which places `template`, as a test or a
+    /// call that takes one names it; no crafting prop.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::ItemId;
+    /// use enshwick::content::id;
+    /// use enshwick::content::props::PropId;
+    /// use enshwick::content::templates::TemplateId;
+    ///
+    /// let tent = TemplateId::new(id!("tent").guid());
+    /// let prop = PropId::new(ItemId::new(9_001), tent);
+    /// assert_eq!((prop.item, prop.template, prop.crafting_prop), (ItemId::new(9_001), tent, None));
+    /// ```
+    #[must_use]
+    pub const fn new(item: ItemId, template: TemplateId) -> Self {
+        Self {
+            item,
+            template,
+            crafting_prop: None,
+        }
+    }
+}
+
 /// The template the vanilla item `item` places.
 fn placed_by(load: &crate::BaseLoad, item: Guid) -> Result<Guid, Off> {
     let at = load.offset(ids::ITEM_INFO_PLACED_ENTITY)?;
@@ -372,6 +398,20 @@ mod tests {
             (REQUIRED.into(), Value::List(required)),
             (REQUIRED_MASK.into(), Value::Uint(mask)),
         ])
+    }
+
+    #[test]
+    fn a_prop_type_named_by_item_and_template_is_no_crafting_prop() {
+        let tent = TemplateId::new(Guid::named("you.camp:tent"));
+        let prop = PropId::new(ItemId::new(9_001), tent);
+        assert_eq!(
+            prop,
+            PropId {
+                item: ItemId::new(9_001),
+                template: tent,
+                crafting_prop: None,
+            }
+        );
     }
 
     #[test]

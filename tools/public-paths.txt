@@ -4293,6 +4293,7 @@ content::props::PropId::crafting_prop
 content::props::PropId::from_value
 content::props::PropId::into_value
 content::props::PropId::item
+content::props::PropId::new
 content::props::PropId::template
 content::rebuild
 content::recipes
