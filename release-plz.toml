@@ -10,9 +10,10 @@ release_always = false
 # A version with a prerelease part (`1.0.0-alpha.3`) makes a GitHub prerelease.
 git_release_type = "auto"
 # A release's notes are its changelog section; a version without change files
-# of its own says so instead of an empty body.
+# of its own says so instead of an empty body, and points to `enshwick`'s
+# changelog only from another package.
 git_release_body = """
-{% if changelog | trim %}{{ changelog }}{% else %}This version lists no changes of its own. The changelog of `enshwick` lists what mod authors see.{% endif %}
+{% if changelog | trim %}{{ changelog }}{% else %}This version lists no changes of its own.{% if package != "enshwick" %} The changelog of `enshwick` lists what mod authors see.{% endif %}{% endif %}
 """
 # Only our own crates move in a release pull request; Renovate moves the rest.
 dependencies_update = false

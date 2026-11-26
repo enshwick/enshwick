@@ -67,8 +67,9 @@ rules the hooks enforce, and the ones they cannot, are in this file:
   branch merges, so the fix goes first;
 - code follows the style of the code around it, unsafe code included;
 - a pull request adds its changelog entries as a file of its own,
-  `changes/<branch>.md` beside the `CHANGELOG.md` of each crate it changes,
-  named after its branch, so parallel pull requests never edit one file. The file holds the Keep a Changelog headings it needs
+  `changes/<branch>.md` beside the `CHANGELOG.md` of the crate whose readers
+  see the change (see Releases for the loader and the stub), named after its
+  branch, so parallel pull requests never edit one file. The file holds the Keep a Changelog headings it needs
   (`### Added`, `### Changed`, `### Deprecated`, `### Removed`, `### Fixed`,
   `### Security`), each once, with a list of entries under each;
   `cargo xtask check` refuses a file that does not read so, an edit to a
@@ -196,7 +197,7 @@ stub included, since a crate without one gets a GitHub release with no
 notes; `cargo xtask check` refuses a released crate without one, or with
 its changelog turned off in [release-plz.toml](release-plz.toml). A version
 whose section is empty, since none of its commits added a change file for the
-crate, gets a release that says it lists no changes of its own. A change
-to the loader or the stub that players and admins see takes a change file
-beside the loader's or the stub's changelog, and what mod authors see of
-it, one beside the changelog of `enshwick`.
+crate, gets a release that says it lists no changes of its own. Each
+entry goes into one changelog only, since the alpha notes join them all:
+what players and admins see, the loader's or the stub's; what only mod
+authors see, that of `enshwick`. A change nobody sees needs no change file.
