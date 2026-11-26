@@ -5,7 +5,7 @@
 mod tests {
     use std::sync::OnceLock;
 
-    use enshwick::abi::{Header, ResourceKey, Status, TypeEntry};
+    use enshwick::abi::{Headed, Header, ResourceKey, Status, TypeEntry};
     use enshwick::content::{Guid, Id};
     use enshwick::resources::{Attribute, Constant, Field, Kind, Registry, Type, Value};
     use enshwick::{Load, Mod, Off};
@@ -175,16 +175,13 @@ mod tests {
         let mut out = [TypeEntry::EMPTY; 3];
         let mut count = 0u32;
         let header = u32::try_from(size_of::<Header>()).unwrap();
-        let refused = (api.types)(
-            loader.handle(),
-            out.as_mut_ptr(),
-            header - 1,
-            3,
-            &raw mut count,
-        );
-        assert_eq!(refused, Status::BAD_ARGS);
-        let listed = (api.types)(loader.handle(), out.as_mut_ptr(), header, 3, &raw mut count);
-        assert_eq!((listed, count, out[0].header.size), (Status::OK, 3, header));
+        let born = u32::try_from(<TypeEntry as Headed>::BORN).unwrap();
+        for short in [header - 1, born - 1] {
+            let refused = (api.types)(loader.handle(), out.as_mut_ptr(), short, 3, &raw mut count);
+            assert_eq!((refused, count), (Status::BAD_ARGS, 0), "{short}");
+        }
+        let listed = (api.types)(loader.handle(), out.as_mut_ptr(), born, 3, &raw mut count);
+        assert_eq!((listed, count, out[0].header.size), (Status::OK, 3, born));
     }
 
     #[test]

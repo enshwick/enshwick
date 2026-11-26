@@ -819,19 +819,26 @@ impl<T> Arg4 for SizedListOut<T> {
     }
 }
 
-impl<T: Copy> SizedListSlot<'_, T> {
+impl<T: enshwick_core::abi::Headed> SizedListSlot<'_, T> {
     /// Writes as many of `items` as fit, as far as both sides know an entry,
     /// and their total.
     ///
     /// # Errors
     ///
-    /// [`Status::BAD_ARGS`] for an entry size shorter than a header or a
-    /// null total.
+    /// [`Status::BAD_ARGS`] for an entry size shorter than the entry's first
+    /// version ([`BORN`](enshwick_core::abi::Headed::BORN)) or a null total.
     pub(crate) fn put(self, items: &[T]) -> Result<(), Refused> {
         // SAFETY: the ABI's promise for `SizedListOut` is `put_sized_list`'s,
         // for the call this slot borrows.
         checked(unsafe {
-            memory::put_sized_list(items, self.out, self.stride, self.capacity, self.count)
+            memory::put_sized_list(
+                items,
+                self.out,
+                self.stride,
+                self.capacity,
+                self.count,
+                T::BORN,
+            )
         })
     }
 }

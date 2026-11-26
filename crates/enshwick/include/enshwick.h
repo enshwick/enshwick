@@ -31,7 +31,7 @@
 // another major.
 //
 // The interface is stable from major 1: a mod built for major 1 loads on
-// every loader of major 1. Any change to the layout other than an append is
+// every loader of major 1 at its minor or a newer one. Any change to the layout other than an append is
 // a new major, with `ABI_MINOR` back at 0; the layout tests of this crate
 // hold the pair to the committed layout.
 #define ENSHWICK_ABI_MAJOR 1
@@ -7470,7 +7470,7 @@ typedef struct EnshwickHostApi {
   // fills what both sides
   // know of each and its own `EnshwickHeader`. The strings stay valid until the
   // next call on this thread. `EnshwickStatus_BAD_ARGS` for a non-null `out`
-  // whose entries are shorter than a header. Any thread.
+  // whose entries are shorter than the entry's first version. Any thread.
   EnshwickStatus (*command_list)(EnshwickModHandle me,
                                  struct EnshwickCommandInfo *out,
                                  uint32_t entry_size,

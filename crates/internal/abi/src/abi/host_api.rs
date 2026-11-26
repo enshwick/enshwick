@@ -2215,7 +2215,7 @@ pub struct HostApi {
     /// fills what both sides
     /// know of each and its own [`Header`]. The strings stay valid until the
     /// next call on this thread. [`Status::BAD_ARGS`] for a non-null `out`
-    /// whose entries are shorter than a header. Any thread.
+    /// whose entries are shorter than the entry's first version. Any thread.
     pub command_list: extern "system" fn(
         me: ModHandle,
         out: *mut CommandInfo,
