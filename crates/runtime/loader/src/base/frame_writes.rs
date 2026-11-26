@@ -34,7 +34,7 @@ struct Queue {
     writing: bool,
 }
 
-static QUEUE: Mutex<Queue> = Mutex::new(Queue {
+static STATE: Mutex<Queue> = Mutex::new(Queue {
     waiting: Vec::new(),
     turns: 0,
     writing: false,
@@ -68,7 +68,7 @@ pub(crate) fn whole(path: &Path, text: &str) -> io::Result<()> {
 pub(crate) fn write(path: &Path, text: &str, write: Writer) -> io::Result<()> {
     // Held across the try: a write of the same file from another thread
     // never lands under a text that waits.
-    let mut queue = QUEUE.relock();
+    let mut queue = STATE.relock();
     queue.turns += 1;
     let turn = queue.turns;
     let kept = Waiting {
@@ -98,7 +98,7 @@ pub(crate) fn write(path: &Path, text: &str, write: Writer) -> io::Result<()> {
 /// The text of a write of `path` that waits for its file: a reader takes
 /// it in place of what the file holds.
 pub(crate) fn waiting(path: &Path) -> Option<String> {
-    QUEUE
+    STATE
         .relock()
         .waiting
         .iter()
@@ -113,11 +113,8 @@ fn start(queue: &mut Queue) {
     if queue.writing {
         return;
     }
-    let spawned = std::thread::Builder::new()
-        .name("enshwick held files".to_owned())
-        .spawn(write_waiting);
-    match spawned {
-        Ok(_) => queue.writing = true,
+    match crate::engine::off_thread::spawn("held files", write_waiting) {
+        Ok(()) => queue.writing = true,
         Err(e) => crate::log!(WARN, "held files wait for the next write: {e}"),
     }
 }
@@ -128,7 +125,7 @@ fn write_waiting() {
     let mut pause = FIRST_PAUSE;
     loop {
         let (path, text, write, turn) = {
-            let mut queue = QUEUE.relock();
+            let mut queue = STATE.relock();
             let Some(next) = queue.waiting.first() else {
                 queue.writing = false;
                 return;
@@ -137,7 +134,7 @@ fn write_waiting() {
         };
         let written = std::panic::catch_unwind(|| write(&path, &text))
             .unwrap_or_else(|_| Err(io::Error::other("the write panicked")));
-        let mut queue = QUEUE.relock();
+        let mut queue = STATE.relock();
         let at = queue.waiting.iter().position(|w| w.path == path);
         match written {
             Err(e) if held(&e) => {
@@ -166,7 +163,7 @@ fn write_waiting() {
 /// held, so it gives up rather than wait.
 #[cfg(any(test, windows))]
 fn write_left() {
-    let mut queue = match QUEUE.try_lock() {
+    let mut queue = match STATE.try_lock() {
         Ok(queue) => queue,
         Err(std::sync::TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
         Err(std::sync::TryLockError::WouldBlock) => return,
@@ -211,7 +208,8 @@ mod at_exit {
     pub(super) const fn register() {}
 }
 
-#[cfg(all(test, windows))]
+#[cfg(test)]
+#[cfg(windows)]
 mod tests {
     use std::os::windows::fs::OpenOptionsExt as _;
     use std::time::Instant;
@@ -292,7 +290,7 @@ mod tests {
         let path = dir.join("world.toml");
         std::fs::write(&path, "old").unwrap();
         {
-            let mut queue = QUEUE.relock();
+            let mut queue = STATE.relock();
             queue.turns += 1;
             let turn = queue.turns;
             queue.waiting.push(Waiting {
