@@ -38,9 +38,9 @@ pub(crate) enum Act {
     MoveAll { from: u32, to: u32 },
     /// Equips the slot's item into the `EquipmentSlot` member `equipment`.
     Equip { slot: u64, equipment: u8 },
-    /// Destroys the slot's stack, a transfer of type `Destroy` as the
-    /// game's trash writes; `ItemActionType::Trash` is another action, which
-    /// the server runs only for some items.
+    /// Destroys the slot's stack, a transfer of type `Destroy`, which the
+    /// server runs as a plain destroy; `ItemActionType::Trash` is another
+    /// action, which it runs only for some items and which gives one back.
     Trash { slot: u64 },
 }
 
