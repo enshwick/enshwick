@@ -774,7 +774,7 @@ answers with a button, as Windows decides for the box.
 ## The title screen's line
 
 Under the game's version on the title screen, the loader writes its own line
-in the same look: `Enshwick 1.0.0-alpha.9 · mods: 6`. The line adds how many
+in the same look: `Enshwick 1.0.0 · mods: 6`. The line adds how many
 mods are off, and a warning when this game version leaves some of the loader's features
 off.
 

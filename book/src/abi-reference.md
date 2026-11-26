@@ -58,17 +58,17 @@ one:
   when an append moves it within a major.
 
 A mod keeps loading across every release of its major, so a mod author
-rebuilds only for a new major. Alphas are not on crates.io, so a mod pins
-`enshwick` to an alpha's tag from git, as `cargo enshwick new` writes it:
+rebuilds only for a new major. A mod takes `enshwick` from crates.io, as
+`cargo enshwick new` writes it:
 
 ```toml
 [dependencies]
-enshwick = { git = "https://github.com/enshwick/enshwick", tag = "v1.0.0-alpha.17" }
+enshwick = "1"
 ```
 
-A tag never moves, so `cargo update` keeps the mod on that alpha.
+`cargo update` moves the mod to the newest release of its major.
 
-Some loaders are built from a commit of `main` between two alphas, such as
+Some loaders are built from a commit of `main` between two releases, such as
 one from `cargo xtask dist`. Such a loader loads a mod built against `main`
 from git, pinned to a commit:
 
@@ -83,8 +83,7 @@ a newer one.
 ## How does `enshwick` version its API?
 
 The `enshwick` crate follows [SemVer](https://semver.org) for its Rust API.
-Until 1.0.0 the crate is a prerelease: any release may break the API and
-the ABI, and a break raises the prerelease number of `1.0.0-alpha.N`.
+A release that breaks the API is a new major; new API is a new minor.
 
 The repository checks this in CI:
 

@@ -84,27 +84,16 @@ unless the DLL has that version:
 cargo enshwick manifest target/x86_64-pc-windows-msvc/release/my_mod.dll --expect-version 0.3.0
 ```
 
-## Alpha releases
+## Where are Enshwick releases?
 
-Until the first public release, 1.0.0, Enshwick ships alphas. Its crates
-carry prerelease versions, `1.0.0-alpha.N`, and alphas do not go to
-crates.io, so a mod depends on the alpha's tag from git:
-
-```toml
-[dependencies]
-enshwick = { git = "https://github.com/enshwick/enshwick", tag = "v1.0.0-alpha.N" }
-```
-
-Each alpha is a GitHub prerelease tagged
-`v1.0.0-alpha.N` on the
+Each release of Enshwick is on the
 [releases page](https://github.com/enshwick/enshwick/releases). Its
 `enshwick.zip` holds the stub and the loader, and no mod. Its notes name the
-game version the alpha was checked against and what changed, since Enshwick
-supports the latest game version. Before 1.0 any alpha may change
-the API, the ABI, file layouts, settings and mod ids. So a mod built for one
-alpha may need a rebuild for the next. A build of `main` between two alphas
-carries the version of the last one. So the join check does not tell it apart
-from that alpha. How the platform builds and releases
+game version the release was checked against and what changed, since Enshwick
+supports the latest game version. The crates a mod builds with are on
+crates.io. A build of `main` between two releases carries the version of the
+last one. So the join check does not tell it apart from that release. How
+the platform builds and releases
 its own crates is in
 [CONTRIBUTING.md](https://github.com/enshwick/enshwick/blob/main/CONTRIBUTING.md#releases).
 

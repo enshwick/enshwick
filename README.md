@@ -11,9 +11,7 @@ in enshwick/docs, the source of the project's words. Change it there first.
 
 [![Coverage](https://codecov.io/gh/enshwick/enshwick/graph/badge.svg)](https://codecov.io/gh/enshwick/enshwick)
 
-Enshwick is in alpha: version 1.0 is not out yet. Until 1.0, anything may
-change between alphas, so back up your saves before you update. The site,
-[enshwick.com](https://enshwick.com), has the guides for players and server
+The site, [enshwick.com](https://enshwick.com), has the guides for players and server
 admins and the docs for mod makers.
 
 ## For mod makers
@@ -47,10 +45,9 @@ loads every mod from the `mods/` folder beside it.
 
 ### Install
 
-1. Download `enshwick.zip` from the newest alpha on the
+1. Download `enshwick.zip` from the newest release on the
    [releases page](https://github.com/enshwick/enshwick/releases). It holds
-   the loader and no mod. Until the first release, 1.0.0, every release is an
-   alpha: anything may change between alphas, so back up your saves.
+   the loader and no mod.
 2. Extract it into the folder with `enshrouded.exe` (players) or
    `enshrouded_server.exe` (servers). You get `powrprof.dll` and a `mods`
    folder.
