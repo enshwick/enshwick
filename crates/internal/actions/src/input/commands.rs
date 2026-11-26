@@ -229,6 +229,19 @@ pub enum CommandAction {
     /// Destroys the stack in `slot`, as the game's trash does; the game has
     /// no drop of an item on the ground. Observed as [`Self::Equip`].
     Trash(SlotRef),
+    /// Sends `text` to the world's chat as the local player's own line, as
+    /// the chat window's Enter does, on any server the client plays on: 1
+    /// to [`CommandAction::MAX_CHAT`] bytes, refused at the call outside
+    /// them. Observed once the game's interface queue takes the line; the
+    /// server's chat filter and mute see it as any player's line, and a
+    /// server whose chat is off drops it.
+    Chat(String),
+}
+
+impl CommandAction {
+    /// The longest line, in bytes, [`CommandAction::Chat`] sends: the
+    /// game's own limit.
+    pub const MAX_CHAT: usize = RawCommand::MAX_CHAT;
 }
 
 /// A server's password for [`CommandAction::Join`]: the loader hands it to
@@ -412,6 +425,10 @@ impl ClientCommand {
                 raw.kind = RawCommand::ANSWER_DIALOG;
                 raw.dialog = *dialog;
                 raw.answer = response.to_raw();
+            }
+            CommandAction::Chat(text) => {
+                raw.kind = RawCommand::CHAT;
+                raw.text = Str::new(text);
             }
             CommandAction::Craft { .. }
             | CommandAction::MoveItem { .. }

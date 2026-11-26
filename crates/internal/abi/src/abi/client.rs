@@ -321,7 +321,7 @@ impl ClientSnapshot {
 pub struct ClientCommand {
     /// Size and version of this struct.
     pub header: Header,
-    /// What to do: [`ClientCommand::OPEN_SCREEN`] to [`ClientCommand::TRASH`].
+    /// What to do: [`ClientCommand::OPEN_SCREEN`] to [`ClientCommand::CHAT`].
     pub kind: u32,
     /// A move's hold in milliseconds, 1 to [`ClientCommand::MAX_HOLD_MS`];
     /// a press's, 1 to [`ClientCommand::MAX_PRESS_MS`].
@@ -380,9 +380,10 @@ pub struct ClientCommand {
     /// borrowed for the call. ABI 12.24.
     pub item: Str,
     /// The option [`ClientCommand::WINDOW_PICK`] picks, by the name the
-    /// window shows, or the text [`ClientCommand::WINDOW_TEXT`] sets, at
-    /// most [`ClientCommand::MAX_TEXT`] bytes; borrowed for the call.
-    /// ABI 12.24.
+    /// window shows, the text [`ClientCommand::WINDOW_TEXT`] sets, at
+    /// most [`ClientCommand::MAX_TEXT`] bytes, or the line
+    /// [`ClientCommand::CHAT`] sends, 1 to [`ClientCommand::MAX_CHAT`]
+    /// bytes (ABI 12.29); borrowed for the call. ABI 12.24.
     pub text: Str,
     /// The answer [`ClientCommand::ANSWER_DIALOG`] gives, such as
     /// [`UiDialog::OK`](super::UiDialog::OK): a button of the dialog that
@@ -486,10 +487,15 @@ impl ClientCommand {
     pub const DEPOSIT_ALL: u32 = 26;
     /// Destroys the stack in `slot`, as the game's trash does. ABI 12.28.
     pub const TRASH: u32 = 27;
+    /// Sends `text` to the world's chat as the local player's own line, as
+    /// the chat window's Enter does, in a world. ABI 12.29.
+    pub const CHAT: u32 = 28;
     /// The most crafts or items one command asks for. ABI 12.28.
     pub const MAX_AMOUNT: u32 = 0xffff;
     /// The longest text, in bytes, a window's field takes. ABI 12.24.
     pub const MAX_TEXT: usize = 255;
+    /// The longest chat line, in bytes, the game's chat takes. ABI 12.29.
+    pub const MAX_CHAT: usize = 0x400;
     /// How many worlds and characters the main menu lists at most.
     /// ABI 12.23.
     pub const MAX_SLOTS: u16 = 16;
@@ -539,8 +545,8 @@ impl ClientCommand {
     /// button can give to a dialog named by its number, a craft of a
     /// non-zero recipe 1 to [`ClientCommand::MAX_AMOUNT`] times, a move
     /// between two different slots of at most that many items, an
-    /// inventory to take from or deposit into, and a slot to equip from or
-    /// trash.
+    /// inventory to take from or deposit into, a slot to equip from or
+    /// trash, and a chat line of 1 to [`ClientCommand::MAX_CHAT`] bytes.
     ///
     /// # Examples
     ///
@@ -595,6 +601,7 @@ impl ClientCommand {
             }
             Self::TAKE_ALL | Self::DEPOSIT_ALL => self.entity.0 != 0,
             Self::EQUIP | Self::TRASH => self.slot != 0,
+            Self::CHAT => (1..=Self::MAX_CHAT).contains(&self.text.len()),
             _ => true,
         }
     }

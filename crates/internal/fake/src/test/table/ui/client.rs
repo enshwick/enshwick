@@ -42,7 +42,7 @@ entries! {
                 unsafe { id.write(spec.cancels) };
                 return Status::OK;
             }
-            if !(Spec::OPEN_SCREEN..=Spec::TRASH).contains(&spec.kind) || !spec.in_bounds() {
+            if !(Spec::OPEN_SCREEN..=Spec::CHAT).contains(&spec.kind) || !spec.in_bounds() {
                 return Status::BAD_ARGS;
             }
             // As the loader: an answer goes to the dialog it names while that
@@ -244,7 +244,8 @@ fn reflects(host: &crate::test::FakeHost, ty: &str, name: &str) -> bool {
 
 /// Whether `spec`'s target and expected screen are ones the loader takes:
 /// an open of a screen the game opens from the world, a tab the menu has,
-/// and a look or move that expects only the world's screen.
+/// a look or move that expects only the world's screen, and a chat line of
+/// UTF-8 text, which the loader copies as text.
 fn named_as_the_loader_takes(spec: &enshwick_core::abi::ClientCommand) -> bool {
     // SAFETY: the mod's spec, its target borrowed for the call.
     let target = unsafe { spec.target.as_str() };
@@ -260,6 +261,9 @@ fn named_as_the_loader_takes(spec: &enshwick_core::abi::ClientCommand) -> bool {
             | enshwick_core::abi::ClientCommand::WINDOW_PICK
             | enshwick_core::abi::ClientCommand::WINDOW_TEXT
     );
+    if spec.kind == enshwick_core::abi::ClientCommand::CHAT && text.is_none() {
+        return false;
+    }
     if window_kind {
         return target
             .zip(item)
@@ -370,5 +374,36 @@ entries! {
             Ok(slots) => crate::test::table::base::io::list(&slots, out, entry_size, capacity, count),
             Err(status) => status,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use enshwick_core::abi::{ClientCommand as Spec, Str};
+
+    #[test]
+    fn a_chat_line_that_is_not_utf8_is_refused_as_the_loader_refuses_it() {
+        #[repr(C)]
+        struct View {
+            ptr: *const u8,
+            len: usize,
+        }
+        let bytes = [0xff_u8, 0xfe, 0xfd];
+        // SAFETY: `Str` is `repr(C)` with a pointer and then a length, as its
+        // golden layout fixes; the view borrows `bytes`, alive for the test.
+        let broken = unsafe {
+            core::mem::transmute::<View, Str>(View {
+                ptr: bytes.as_ptr(),
+                len: bytes.len(),
+            })
+        };
+        let chat = |text| Spec {
+            kind: Spec::CHAT,
+            text,
+            ..Spec::EMPTY
+        };
+        assert!(named_as_the_loader_takes(&chat(Str::new("hello"))));
+        assert!(!named_as_the_loader_takes(&chat(broken)));
     }
 }

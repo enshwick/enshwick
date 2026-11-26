@@ -435,6 +435,13 @@ const ROUTED_ONLY: &[(&str, &str, u64)] = &[
     // 26430625, the older clients' by the same routes and checks.
     ("1.0 client (26430625)", "input.client_build", 0x24_77d0),
     ("1.0 client (26430625)", "ui.toggle_hud_screen", 0xd7_4850),
+    // The chat window's poster of the player's line; read in the
+    // decompiler on 26430625 (2026-11-26), the older clients' by the same
+    // route and check.
+    ("1.0 client (26430625)", "ui.post_chat", 0xd7_2d90),
+    ("1.0 client (26320373)", "ui.post_chat", 0xd7_2cd0),
+    ("1.0 client (26082781)", "ui.post_chat", 0xd5_e8f0),
+    ("1.0 client (1269579)", "ui.post_chat", 0xd5_ce70),
     ("1.0 client (26430625)", "ui.recipe_directory", 0xc7_5660),
     ("1.0 client (26430625)", "ui.menu_tab", 0x3_1e88),
     ("1.0 client (26320373)", "input.client_build", 0x24_76f0),

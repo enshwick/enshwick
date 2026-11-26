@@ -109,6 +109,10 @@ pub(crate) const POST_BACK: Symbol = Symbol::new("ui.post_back");
 pub(crate) const POST_JOIN: Symbol = Symbol::new("ui.post_join");
 pub(crate) const POST_PASSWORD: Symbol = Symbol::new("ui.post_password");
 pub(crate) const POST_START_PLAY: Symbol = Symbol::new("ui.post_start_play");
+/// The chat line's poster (0x74): `post(ui context, &text, type, a u32, a
+/// u32) -> bool`, which copies the text, at most 0x400 bytes, into its
+/// command (client 26430625).
+pub(crate) const POST_CHAT: Symbol = Symbol::new("ui.post_chat");
 /// The posters a host uses: the character (0x11), the world (0x16), the
 /// session's kind (0x27) and the play of the chosen world (0x28).
 pub(crate) const POST_CHARACTER: Symbol = Symbol::new("ui.post_character");

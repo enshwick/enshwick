@@ -9,6 +9,7 @@
 //! recipe to highlight or a window's item to the code that acts on it (see
 //! [`Handoff`]). Until a mod queues, each runs nothing but one atomic load.
 
+mod chat;
 pub(crate) mod dialogs;
 mod handoff;
 mod play;
@@ -93,6 +94,9 @@ pub(crate) enum Kind {
     /// Answers the loader's dialog of one number with the raw answer,
     /// through [`dialogs`].
     Answer(dialogs::Ask),
+    /// Sends a chat line as the local player's own; its line lives in
+    /// [`chat`] from the queue on.
+    Chat,
 }
 
 impl Kind {
@@ -126,6 +130,7 @@ impl Kind {
             Self::Window(windows::Act::Pick) => Spec::WINDOW_PICK,
             Self::Window(windows::Act::Text) => Spec::WINDOW_TEXT,
             Self::Answer(_) => Spec::ANSWER_DIALOG,
+            Self::Chat => Spec::CHAT,
         }
     }
 
@@ -156,14 +161,15 @@ impl Kind {
         matches!(self, Self::Look(_) | Self::Move(..) | Self::Press(..))
     }
 
-    /// The screen change the interface frame applies for it; `None` for a
-    /// kind a detour of the game's own code runs through a [`Handoff`].
-    const fn screen_change(self) -> Option<ScreenChange> {
+    /// The change the interface frame applies for it; `None` for a kind a
+    /// detour of the game's own code runs through a [`Handoff`], and for a
+    /// chat, whose line the frame borrows from [`chat`].
+    const fn frame_change(self) -> Option<FrameChange<'static>> {
         match self {
-            Self::Open(screen) => Some(ScreenChange::Open(screen)),
-            Self::Close(screen) => Some(ScreenChange::Close(screen)),
-            Self::Tab(tab) => Some(ScreenChange::Tab(tab)),
-            Self::Mods(ask) => Some(ScreenChange::Mods(ask)),
+            Self::Open(screen) => Some(FrameChange::Open(screen)),
+            Self::Close(screen) => Some(FrameChange::Close(screen)),
+            Self::Tab(tab) => Some(FrameChange::Tab(tab)),
+            Self::Mods(ask) => Some(FrameChange::Mods(ask)),
             _ => None,
         }
     }
@@ -171,7 +177,7 @@ impl Kind {
     /// Whether a detour of the game's own code runs it, through a
     /// [`Handoff`], rather than the interface frame.
     const fn handed(self) -> bool {
-        self.screen_change().is_none()
+        self.frame_change().is_none() && !matches!(self, Self::Chat)
     }
 
     /// Whether it joins or leaves play, at the game's own pace once handed:
@@ -195,7 +201,7 @@ impl Kind {
 /// What the interface frame applies for a command, the only kinds it runs
 /// itself; every other kind runs in a detour.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum ScreenChange {
+pub(crate) enum FrameChange<'a> {
     /// Opens the screen byte.
     Open(u8),
     /// Closes the open screen, to the world's screen byte.
@@ -204,6 +210,8 @@ pub(crate) enum ScreenChange {
     Tab(MenuTab),
     /// Shows a page of the loader's own Mods screen.
     Mods(ModsAsk),
+    /// Posts the line as the local player's own chat line.
+    Chat(&'a str),
 }
 
 /// A page of the loader's Mods screen a command asks for: the list, or a
@@ -292,7 +300,8 @@ impl Command {
             | Kind::Open(_)
             | Kind::Close(_)
             | Kind::Tab(_)
-            | Kind::Mods(_) => None,
+            | Kind::Mods(_)
+            | Kind::Chat => None,
         };
         Some(progress.unwrap_or(Progress::Waiting))
     }
@@ -319,7 +328,8 @@ impl Command {
             | Kind::Open(_)
             | Kind::Close(_)
             | Kind::Tab(_)
-            | Kind::Mods(_) => false,
+            | Kind::Mods(_)
+            | Kind::Chat => false,
         }
     }
 
@@ -329,6 +339,12 @@ impl Command {
         if let Kind::Window(_) = self.kind {
             // Its ask was parked at the queue, handed or not.
             windows::release(self.id);
+            return;
+        }
+        if self.kind == Kind::Chat {
+            // Its line was parked at the queue; the frame posts it, no
+            // detour holds it.
+            chat::release(self.id);
             return;
         }
         if self.handed.is_none() {
@@ -344,7 +360,12 @@ impl Command {
             Kind::Mark(_) => client_input::unmark(self.id),
             Kind::Act(_) => client_input::unact(self.id),
             Kind::Answer(_) => dialogs::release(self.id),
-            Kind::Open(_) | Kind::Close(_) | Kind::Tab(_) | Kind::Mods(_) | Kind::Window(_) => {}
+            Kind::Open(_)
+            | Kind::Close(_)
+            | Kind::Tab(_)
+            | Kind::Mods(_)
+            | Kind::Window(_)
+            | Kind::Chat => {}
         }
     }
 }
@@ -440,7 +461,8 @@ fn next(
         | Kind::Mark(_)
         | Kind::Act(_)
         | Kind::Window(_)
-        | Kind::Answer(_) => false,
+        | Kind::Answer(_)
+        | Kind::Chat => false,
     };
     if shows {
         return Next::End(Status::OBSERVED, 0);
@@ -478,8 +500,9 @@ fn next(
         if elsewhere {
             return cancel(Status::OTHER_SCREEN);
         }
-        // A waypoint or ping drives none of the player's input to give way.
-        if pressed && !matches!(command.kind, Kind::Mark(_) | Kind::Act(_)) {
+        // A waypoint, a ping or a chat line drives none of the player's
+        // input to give way.
+        if pressed && !matches!(command.kind, Kind::Mark(_) | Kind::Act(_) | Kind::Chat) {
             return cancel(Status::PLAYER_INPUT);
         }
         let ready = match command.kind {
@@ -498,7 +521,8 @@ fn next(
             | Kind::Mark(_)
             | Kind::Act(_)
             | Kind::Window(_)
-            | Kind::Answer(_) => true,
+            | Kind::Answer(_)
+            | Kind::Chat => true,
         };
         // One that waits for its detour, such as for a press's slot, times
         // out as one that waits for its effect.
@@ -636,6 +660,7 @@ fn runs(kind: Kind) -> bool {
         Kind::Act(_) => client_input::acts_run(),
         Kind::Window(_) => windows::runs(),
         Kind::Answer(_) => dialogs::runs(),
+        Kind::Chat => groups.chat.get().is_some(),
     }
 }
 
@@ -673,6 +698,12 @@ pub(crate) fn queue(loader: &Loader, owner: ModIndex, spec: &Spec) -> Result<u64
         Kind::Window(_) => Some(window_ask(spec, unsafe { text(spec.target) }?)?),
         _ => None,
     };
+    let line = match kind {
+        // SAFETY: the mod's spec, its text borrowed for the call; the park
+        // copies it.
+        Kind::Chat => Some(unsafe { text(spec.text) }?.to_owned()),
+        _ => None,
+    };
     crate::actions::client_snapshot::ask();
     if !runs(kind) {
         return Err(CommandError::Unavailable);
@@ -708,6 +739,9 @@ pub(crate) fn queue(loader: &Loader, owner: ModIndex, spec: &Spec) -> Result<u64
     }
     if let Some(ask) = window {
         windows::park(id, ask);
+    }
+    if let Some(line) = line {
+        chat::park(id, line);
     }
     commands.next_id += 1;
     commands.kept.push_back(Command {
@@ -783,7 +817,7 @@ pub(crate) fn status(owner: ModIndex, id: u64) -> Option<Status> {
 pub(crate) fn frame(
     game: impl FnOnce() -> Option<Seen>,
     menu: impl FnOnce() -> Seen,
-    apply: impl FnMut(ScreenChange) -> Applied,
+    apply: impl FnMut(FrameChange<'_>) -> Applied,
 ) {
     if !STATE.open.load(Ordering::Acquire) {
         return;
@@ -830,7 +864,7 @@ fn run(
     game: Option<Seen>,
     menu: Option<Seen>,
     now: u64,
-    mut apply: impl FnMut(ScreenChange) -> Applied,
+    mut apply: impl FnMut(FrameChange<'_>) -> Applied,
 ) -> bool {
     let commanded = commanded(commands);
     for command in commands.kept.iter_mut().filter(|c| c.open()) {
@@ -861,14 +895,29 @@ fn run(
         };
         match next {
             Next::Wait => {}
-            Next::Apply => match command.kind.screen_change() {
-                None => command.handed = command.hand().then_some(now),
-                Some(change) => match apply(change) {
-                    Applied::Taken => command.state = Status::APPLIED,
-                    Applied::Busy => {}
-                    Applied::Unavailable => command.state = Status::UNAVAILABLE,
-                },
-            },
+            Next::Apply => {
+                let applied = match command.kind {
+                    Kind::Chat => {
+                        chat::with_line(command.id, |line| apply(FrameChange::Chat(line)))
+                    }
+                    kind => kind.frame_change().map(&mut apply),
+                };
+                match applied {
+                    None => command.handed = command.hand().then_some(now),
+                    // The line is in the game's own queue, as the chat
+                    // window's Enter leaves it: nothing later shows it.
+                    Some(Applied::Taken) if command.kind == Kind::Chat => {
+                        command.release(false);
+                        command.state = Status::OBSERVED;
+                    }
+                    Some(Applied::Taken) => command.state = Status::APPLIED,
+                    Some(Applied::Busy) => {}
+                    Some(Applied::Unavailable) => {
+                        command.release(false);
+                        command.state = Status::UNAVAILABLE;
+                    }
+                }
+            }
             Next::Applied => command.state = Status::APPLIED,
             Next::End(state, reason) => {
                 command.release(false);

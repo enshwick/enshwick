@@ -539,7 +539,7 @@ export type ChunkData = {
 
 --- `ClientCommand` as Luau gives it; its `Debug` shows none of the password.
 export type ClientCommand = {
-	--- `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`, `"move"`, `"highlight_recipe"`, `"join"`, `"leave"`, `"press"`, `"set_waypoint"`, `"clear_waypoint"`, `"ping"`, `"host"`, `"open_mods"`, `"open_mod"`, `"open_mod_settings"`, `"press_window_item"`, `"pick_window_item"`, `"set_window_text"` or `"answer_dialog"`, `"craft"`, `"move_item"`, `"equip"`, `"take_all"`, `"deposit_all"` or `"trash"`.
+	--- `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`, `"move"`, `"highlight_recipe"`, `"join"`, `"leave"`, `"press"`, `"set_waypoint"`, `"clear_waypoint"`, `"ping"`, `"host"`, `"open_mods"`, `"open_mod"`, `"open_mod_settings"`, `"press_window_item"`, `"pick_window_item"`, `"set_window_text"` or `"answer_dialog"`, `"craft"`, `"move_item"`, `"equip"`, `"take_all"`, `"deposit_all"`, `"trash"` or `"chat"`.
 	kind: string,
 	--- The session, as `client_snapshot().session` gives it.
 	session: string,
@@ -571,7 +571,7 @@ export type ClientCommand = {
 	window: string?,
 	--- A window command's item, by its id in the window.
 	item: string?,
-	--- The option a pick picks or the text a window's field takes.
+	--- The option a pick picks, the text a window's field takes or the line a chat sends.
 	text: string?,
 	--- The response a dialog's answer gives.
 	answer: Response?,

@@ -665,6 +665,7 @@ abi::ClientCommand
 abi::ClientCommand::ANSWER_DIALOG
 abi::ClientCommand::BORN
 abi::ClientCommand::CANCEL
+abi::ClientCommand::CHAT
 abi::ClientCommand::CHOOSE_TAB
 abi::ClientCommand::CLEAR_WAYPOINT
 abi::ClientCommand::CLOSE_SCREEN
@@ -678,6 +679,7 @@ abi::ClientCommand::JOIN
 abi::ClientCommand::LEAVE
 abi::ClientCommand::LOOK
 abi::ClientCommand::MAX_AMOUNT
+abi::ClientCommand::MAX_CHAT
 abi::ClientCommand::MAX_HOLD_MS
 abi::ClientCommand::MAX_LOOK
 abi::ClientCommand::MAX_PASSWORD
@@ -5515,6 +5517,7 @@ input::ClientWindowItem::shown unstable
 input::ClientWindowItem::window unstable
 input::CommandAction unstable
 input::CommandAction::AnswerDialog unstable
+input::CommandAction::Chat unstable
 input::CommandAction::ChooseTab unstable
 input::CommandAction::ClearWaypoint unstable
 input::CommandAction::CloseScreen unstable
@@ -5526,6 +5529,7 @@ input::CommandAction::Host unstable
 input::CommandAction::Join unstable
 input::CommandAction::Leave unstable
 input::CommandAction::Look unstable
+input::CommandAction::MAX_CHAT unstable
 input::CommandAction::Move unstable
 input::CommandAction::MoveItem unstable
 input::CommandAction::OpenMod unstable

@@ -17,7 +17,7 @@ pub(super) struct LuauCommand {
     /// `"open_mods"`, `"open_mod"`, `"open_mod_settings"`,
     /// `"press_window_item"`, `"pick_window_item"`, `"set_window_text"` or
     /// `"answer_dialog"`, `"craft"`, `"move_item"`, `"equip"`, `"take_all"`,
-    /// `"deposit_all"` or `"trash"`.
+    /// `"deposit_all"`, `"trash"` or `"chat"`.
     pub kind: String,
     /// The session, as `client_snapshot().session` gives it.
     pub session: u64,
@@ -52,7 +52,8 @@ pub(super) struct LuauCommand {
     pub window: Option<String>,
     /// A window command's item, by its id in the window.
     pub item: Option<String>,
-    /// The option a pick picks or the text a window's field takes.
+    /// The option a pick picks, the text a window's field takes or the
+    /// line a chat sends.
     pub text: Option<String>,
     /// The response a dialog's answer gives.
     pub answer: Option<Response>,
@@ -182,6 +183,7 @@ impl TryFrom<LuauCommand> for ClientCommand {
                 dialog: luau.dialog.ok_or_else(|| missing("a dialog"))?,
                 response: luau.answer.ok_or_else(|| missing("an answer"))?,
             },
+            "chat" => CommandAction::Chat(luau.text.clone().ok_or_else(|| missing("a text"))?),
             "craft" | "move_item" | "equip" | "take_all" | "deposit_all" | "trash" => {
                 item_action(&luau)?
             }

@@ -724,6 +724,7 @@ entries = [
   "ui.popup_title",
   "ui.popup_window",
   "ui.popup_window_len",
+  "ui.post_chat",
   "ui.progress",
   "ui.recipe_directory",
   "ui.recipe_highlighted",

@@ -38,7 +38,7 @@
 // A loader loads mods built for its minor or an older one, and reads a
 // field appended after the mod's minor only where
 // the header's `size` covers it.
-#define ENSHWICK_ABI_MINOR 28
+#define ENSHWICK_ABI_MINOR 29
 
 // How many level zones an `EnshwickAltarInfo` has room for: a bound of the ABI,
 // above the levels the game gives an altar in its reflected
@@ -1038,7 +1038,7 @@ typedef uint32_t EnshwickRecipeId;
 typedef struct EnshwickClientCommand {
   // Size and version of this struct.
   struct EnshwickHeader header;
-  // What to do: `EnshwickClientCommand_OPEN_SCREEN` to `EnshwickClientCommand_TRASH`.
+  // What to do: `EnshwickClientCommand_OPEN_SCREEN` to `EnshwickClientCommand_CHAT`.
   uint32_t kind;
   // A move's hold in milliseconds, 1 to `EnshwickClientCommand_MAX_HOLD_MS`;
   // a press's, 1 to `EnshwickClientCommand_MAX_PRESS_MS`.
@@ -1097,9 +1097,10 @@ typedef struct EnshwickClientCommand {
   // borrowed for the call. ABI 12.24.
   struct EnshwickStr item;
   // The option `EnshwickClientCommand_WINDOW_PICK` picks, by the name the
-  // window shows, or the text `EnshwickClientCommand_WINDOW_TEXT` sets, at
-  // most `EnshwickClientCommand_MAX_TEXT` bytes; borrowed for the call.
-  // ABI 12.24.
+  // window shows, the text `EnshwickClientCommand_WINDOW_TEXT` sets, at
+  // most `EnshwickClientCommand_MAX_TEXT` bytes, or the line
+  // `EnshwickClientCommand_CHAT` sends, 1 to `EnshwickClientCommand_MAX_CHAT`
+  // bytes (ABI 12.29); borrowed for the call. ABI 12.24.
   struct EnshwickStr text;
   // The answer `EnshwickClientCommand_ANSWER_DIALOG` gives, such as
   // `EnshwickUiDialog_OK`: a button of the dialog that
@@ -1199,10 +1200,15 @@ typedef struct EnshwickClientCommand {
 #define EnshwickClientCommand_DEPOSIT_ALL 26
 // Destroys the stack in `slot`, as the game's trash does. ABI 12.28.
 #define EnshwickClientCommand_TRASH 27
+// Sends `text` to the world's chat as the local player's own line, as
+// the chat window's Enter does, in a world. ABI 12.29.
+#define EnshwickClientCommand_CHAT 28
 // The most crafts or items one command asks for. ABI 12.28.
 #define EnshwickClientCommand_MAX_AMOUNT 65535
 // The longest text, in bytes, a window's field takes. ABI 12.24.
 #define EnshwickClientCommand_MAX_TEXT 255
+// The longest chat line, in bytes, the game's chat takes. ABI 12.29.
+#define EnshwickClientCommand_MAX_CHAT 1024
 // How many worlds and characters the main menu lists at most.
 // ABI 12.23.
 #define EnshwickClientCommand_MAX_SLOTS 16
