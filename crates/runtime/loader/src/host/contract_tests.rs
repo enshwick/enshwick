@@ -1,13 +1,15 @@
 //! The loader's half of its contract with the fake host: each entry's caller
 //! kind and its answer to a call with zeroed arguments under each
-//! precondition, written as the table `crates/internal/fake/contract/loader.snap`
-//! that the fake host's own `contract_tests` hold the fake to, on its own
-//! feature set.
+//! precondition, written as the table `crates/internal/fake/contract/loader.snap`,
+//! and its answer to the calls of [`VALID`] with arguments a host takes, as
+//! `loader-valid.snap` beside it, which the fake host's own `contract_tests`
+//! hold the fake to, on its own feature set.
 
 use std::sync::atomic::Ordering;
 
 use enshwick_abi::contract::{
-    self, CallerKind, ENTRIES, Entry, ME, PACK, PRECONDITIONS, Precondition, Row, UNKNOWN,
+    self, CallerKind, ENTRIES, Entry, ME, MOD_ID, PACK, PRECONDITIONS, Precondition, Row, UNKNOWN,
+    VALID,
 };
 use enshwick_core::abi::{ModHandle, Status};
 
@@ -25,8 +27,9 @@ macro_rules! callers {
 enshwick_abi::__host_entries!(callers);
 
 /// The ids of the loader's mod and data pack, in the order that gives them
-/// [`ME`] and [`PACK`].
-const IDS: [&str; 2] = ["you.probe", "you.probe-pack"];
+/// [`ME`] and [`PACK`]: the mod's is the fake's, whose namespace [`VALID`]
+/// names.
+const IDS: [&str; 2] = [MOD_ID, "test.fake-pack"];
 
 /// A fresh loader with no game running the mod [`ME`] and the server's data
 /// pack [`PACK`].
@@ -65,6 +68,9 @@ fn loader_answers(entry: Entry, precondition: Precondition) -> Status {
 
 /// The child test that writes the table.
 const WRITTEN: &str = "host::contract_tests::the_table_is_written_in_a_process_of_its_own";
+/// The child test that writes the table of [`VALID`].
+const WRITTEN_VALID: &str =
+    "host::contract_tests::the_valid_table_is_written_in_a_process_of_its_own";
 
 #[test]
 fn the_loader_s_answer_and_caller_of_every_entry_match_the_contract_table() {
@@ -74,25 +80,39 @@ fn the_loader_s_answer_and_caller_of_every_entry_match_the_contract_table() {
 }
 
 #[test]
+fn the_loader_s_answer_to_every_valid_call_matches_the_valid_table() {
+    // As the zeroed calls: they fill and seal the process's registries.
+    contract::run_apart(WRITTEN_VALID).unwrap();
+}
+
+#[test]
 #[ignore = "runs only as that test's child, in a process of its own"]
 fn the_table_is_written_in_a_process_of_its_own() {
-    if !contract::apart() {
-        return;
+    if contract::apart() {
+        write("loader", ENTRIES);
     }
-    let mut rows: Vec<Row> = ENTRIES
+}
+
+#[test]
+#[ignore = "runs only as that test's child, in a process of its own"]
+fn the_valid_table_is_written_in_a_process_of_its_own() {
+    if contract::apart() {
+        write("loader-valid", VALID);
+    }
+}
+
+/// Writes the snapshot `name` of the loader's answers to `entries`.
+fn write(name: &str, entries: &[(&str, Entry)]) {
+    let mut rows: Vec<Row> = entries
         .iter()
-        .zip(CALLERS)
-        .map(|(&(entry, _), &(named, caller))| {
-            assert_eq!(entry, named);
-            Row {
-                entry: entry.to_owned(),
-                caller,
-                answers: [Status::OK; PRECONDITIONS.len()],
-            }
+        .map(|&(entry, _)| Row {
+            entry: entry.to_owned(),
+            caller: caller_of(entry),
+            answers: [Status::OK; PRECONDITIONS.len()],
         })
         .collect();
     for (column, precondition) in PRECONDITIONS.into_iter().enumerate() {
-        for (row, &(_, entry)) in rows.iter_mut().zip(ENTRIES) {
+        for (row, &(_, entry)) in rows.iter_mut().zip(entries) {
             row.answers[column] = loader_answers(entry, precondition);
         }
     }
@@ -102,6 +122,21 @@ fn the_table_is_written_in_a_process_of_its_own() {
         snapshot_path => "../../../../internal/fake/contract",
         prepend_module_to_snapshot => false,
     }, {
-        insta::assert_snapshot!("loader", contract::render(&rows));
+        insta::assert_snapshot!(name, contract::render(&rows));
     });
+}
+
+/// The caller kind of the entry named `entry`.
+fn caller_of(entry: &str) -> CallerKind {
+    ENTRIES
+        .iter()
+        .zip(CALLERS)
+        .find(|((name, _), _)| *name == entry)
+        .map_or_else(
+            || panic!("{entry} is no entry"),
+            |(&(name, _), &(named, caller))| {
+                assert_eq!(name, named);
+                caller
+            },
+        )
 }

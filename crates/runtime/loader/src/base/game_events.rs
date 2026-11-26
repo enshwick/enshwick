@@ -432,7 +432,13 @@ fn by_world(sealed: &'static [Subscriber]) -> (Wanted, Wanted) {
     (Wanted::of(server), Wanted::of(client))
 }
 
-/// Seals the subscriptions and links the event move when a mod subscribed.
+/// Seals the subscriptions in the seal phase, so no link sees them open.
+pub(crate) fn seal(_loader: &'static Loader) {
+    let _sealed = SUBSCRIBERS.seal_with(server_first);
+}
+
+/// Links the event move when a mod subscribed; the subscriptions sealed in
+/// [`seal`], or here for a test that links alone.
 pub(crate) fn link(loader: &'static Loader) {
     let subscribers = SUBSCRIBERS.seal_with(server_first);
     let (server, client) = by_world(subscribers);

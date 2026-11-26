@@ -7,8 +7,8 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use enshwick_gamedata::catalogue;
-use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
+use crate::engine::clock::now_ms;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 
@@ -26,7 +26,7 @@ const WINDOW_HOLD_MS: u64 = 250;
 
 /// A loader or mod window over the world, as the interface notes it.
 struct WindowShown {
-    /// Until when, in `GetTickCount64` milliseconds, a window or dialog holds
+    /// Until when, by [`now_ms`], a window or dialog holds
     /// the cursor and the player's look and move; 0 for none. Each frame that
     /// showed one moves it on, so it lapses once the interface stops drawing.
     until: AtomicU64,
@@ -35,11 +35,6 @@ struct WindowShown {
 static WINDOW: WindowShown = WindowShown {
     until: AtomicU64::new(0),
 };
-
-fn now_ms() -> u64 {
-    // SAFETY: `GetTickCount64` takes no arguments and has no preconditions.
-    unsafe { GetTickCount64() }
-}
 
 /// Notes, once a frame on the interface thread, whether a loader or mod
 /// window or dialog showed in the last frame.

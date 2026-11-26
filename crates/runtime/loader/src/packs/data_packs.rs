@@ -221,16 +221,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_loader_s_tests_run_packs_on_the_game_s_clock_and_not_the_fake_host_s() {
-        assert!(
-            !enshwick_base::__internal::fake_clock(),
-            "enshwick-base counts time by a fake host's steps in the loader's tests, \
-             where no fake host is installed, so a pack's timed task here would never \
-             see time pass"
-        );
-    }
-
-    #[test]
     fn discovery_keeps_each_pack_named_for_its_folder_with_its_files_hash() {
         let mods = std::env::temp_dir().join(format!("enshwick-discover-{}", std::process::id()));
         let _stale = std::fs::remove_dir_all(&mods);

@@ -314,19 +314,18 @@ mod tests {
         assert_eq!(texts.text(1, 99, read), Some("Balthazar"));
     }
 
-    /// On the client `ENSH_CLIENT_EXE` names, with its archive beside it
-    /// (skipped without them): every interaction verb's id has the text the
+    /// On the client `ENSH_CLIENT_EXE` names, with its archive beside it: every interaction verb's id has the text the
     /// developers wrote that its row gives, and its name is that text in
     /// Rust casing.
     #[test]
+    #[ignore = "needs ENSH_CLIENT_EXE"]
     #[cfg(windows)]
     fn every_verb_is_the_game_s_text_of_its_id() {
         use enshwick_core::interactions::Verb;
         use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 
-        let Ok(path) = std::env::var("ENSH_CLIENT_EXE") else {
-            return;
-        };
+        let path =
+            std::env::var("ENSH_CLIENT_EXE").expect("ENSH_CLIENT_EXE names the game executable");
         let path = std::path::PathBuf::from(path);
         let Some(archive) = path
             .parent()
@@ -360,10 +359,10 @@ mod tests {
     /// folder (build 1269579): the Alchemist's staff names him in English
     /// and in Ukrainian.
     #[test]
+    #[ignore = "needs ENSHWICK_CLIENT_DIR"]
     fn the_client_archive_names_the_alchemist() {
-        let Ok(dir) = std::env::var("ENSHWICK_CLIENT_DIR") else {
-            return;
-        };
+        let dir = std::env::var("ENSHWICK_CLIENT_DIR")
+            .expect("ENSHWICK_CLIENT_DIR names the client folder");
         let archive =
             crate::engine::archive::Archive::open(std::path::Path::new(&dir), "enshrouded")
                 .unwrap();

@@ -82,9 +82,11 @@ pub(crate) fn seal(loader: &'static Loader) {
 /// Links the loader's own features, in the order of the parts; the client
 /// links the server's too, for the games it hosts.
 fn link_features(loader: &'static Loader) {
-    for link in loader.parts.iter().filter_map(|part| part.link) {
-        link(loader);
-    }
+    crate::engine::registry::linking(|| {
+        for link in loader.parts.iter().filter_map(|part| part.link) {
+            link(loader);
+        }
+    });
 }
 
 pub(crate) fn start(missing_forwards: u32, release: extern "system" fn() -> u32) {

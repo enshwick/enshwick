@@ -585,29 +585,9 @@ const MAX_NAME: u64 = 250;
 const MAX_FIELDS: u32 = 1024;
 const MAX_LIST: u64 = 64;
 
-/// FNV-1a over 32 bits, the hash the engine keys names and ids with.
-///
-/// A descriptor carries the hash of its full name; ids of templates, items
-/// and survivors are the same hash over a GUID's bytes.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick_gamedata::reflect::fnv1a32;
-///
-/// assert_eq!(fnv1a32(b""), 0x811c_9dc5);
-/// assert_eq!(fnv1a32(b"foobar"), 0xbf9c_f968);
-/// ```
-#[must_use]
-pub const fn fnv1a32(bytes: &[u8]) -> u32 {
-    let mut hash = 0x811c_9dc5_u32;
-    let mut i = 0;
-    while i < bytes.len() {
-        hash = (hash ^ bytes[i] as u32).wrapping_mul(0x0100_0193);
-        i += 1;
-    }
-    hash
-}
+// A descriptor carries the hash of its full name; ids of templates, items
+// and survivors are the same hash over a GUID's bytes.
+pub use enshwick_base::resources::fnv1a32;
 
 /// Every reflected type and ECS system of an image, looked up by name.
 ///

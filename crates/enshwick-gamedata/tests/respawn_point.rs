@@ -1,6 +1,6 @@
 //! The respawn point's catalogue rows against the real server binary, which
-//! never enters the repository: these run only where `ENSH_SERVER_EXE` points
-//! at a local copy, and pass trivially elsewhere.
+//! never enters the repository: these need `ENSH_SERVER_EXE` to point at a
+//! local copy and are ignored by default.
 
 #[cfg(test)]
 mod tests {
@@ -9,15 +9,15 @@ mod tests {
     use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 
     fn with_server(check: impl FnOnce(&Reflection<'_>)) {
-        let Ok(path) = std::env::var("ENSH_SERVER_EXE") else {
-            return;
-        };
+        let path =
+            std::env::var("ENSH_SERVER_EXE").expect("ENSH_SERVER_EXE names the game executable");
         let bytes = std::fs::read(path).unwrap();
         let image = Image::parse(&bytes, Layout::File, None).unwrap();
         check(&Reflection::scan(&image));
     }
 
     #[test]
+    #[ignore = "needs ENSH_SERVER_EXE"]
     fn the_spawn_point_target_s_entity_is_where_the_game_writes_it() {
         with_server(|reflection| {
             let at = |id| constant(id, reflection).unwrap_or_else(|| panic!("{id}"));
@@ -32,6 +32,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "needs ENSH_SERVER_EXE"]
     fn the_spawn_types_and_the_change_event_match_the_game_s_code() {
         with_server(|reflection| {
             let at = |id| constant(id, reflection).unwrap_or_else(|| panic!("{id}"));

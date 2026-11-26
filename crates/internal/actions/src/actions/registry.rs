@@ -87,6 +87,9 @@ pub(super) struct Registry {
     /// Set once a handler panicked during a command: the mod's commands
     /// stay off, its actions keep their other paths.
     pub(super) commands_off: core::sync::atomic::AtomicBool,
+    /// Set once the registry watches for the world's load to read the
+    /// template names aside, at its first action that takes a template.
+    pub(super) templates_watched: core::sync::atomic::AtomicBool,
 }
 
 impl Registry {

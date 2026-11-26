@@ -484,14 +484,14 @@ mod tests {
         assert_eq!(Layout::from_table(password), Err(LayoutError::TooLong(far)));
     }
 
-    /// On the client `ENSH_CLIENT_EXE` names (skipped without it), its table
+    /// On the client `ENSH_CLIENT_EXE` names, its table
     /// and every client table carried to it by patterns give the layout the
     /// check was written against.
     #[test]
+    #[ignore = "needs ENSH_CLIENT_EXE"]
     fn the_client_s_tables_give_the_join_target_layout() {
-        let Ok(path) = std::env::var("ENSH_CLIENT_EXE") else {
-            return;
-        };
+        let path =
+            std::env::var("ENSH_CLIENT_EXE").expect("ENSH_CLIENT_EXE names the game executable");
         let bytes = std::fs::read(path).unwrap();
         let image = enshwick_gamedata::reflect::Image::parse(
             &bytes,

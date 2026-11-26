@@ -43,7 +43,6 @@ fake = [
     "enshwick-base/fake",
     "enshwick-content/fake",
     "enshwick-world/fake",
-    "enshwick-knowledge/fake",
     "enshwick-actions/fake",
     "enshwick-ui/fake",
 ]

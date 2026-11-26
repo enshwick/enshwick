@@ -231,6 +231,18 @@ mod tests {
     }
 
     #[test]
+    fn the_names_read_aside_as_the_world_loads_name_the_templates_on_the_console() {
+        let loader = start_named();
+        assert_eq!(loader.raise::<enshwick::events::WorldLoaded>(&()), 1);
+        let chat = |line: &str| loader.type_in_chat(&root(), 0, line);
+        assert_eq!(
+            chat("/m summon Enemy_Wildbeast_Wolf").as_deref(),
+            Some("1ok")
+        );
+        assert_eq!(runs(), [vec![Value::Template(WOLF), Value::Number(1.0)]]);
+    }
+
+    #[test]
     fn the_console_names_a_vanilla_template_in_any_case_when_one_template_has_it() {
         let loader = start_named();
         let chat = |line: &str| loader.type_in_chat(&root(), 0, line);

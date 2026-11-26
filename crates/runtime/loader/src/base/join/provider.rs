@@ -371,14 +371,14 @@ mod tests {
         );
     }
 
-    /// On the client `ENSH_CLIENT_EXE` names (skipped without it), its own
+    /// On the client `ENSH_CLIENT_EXE` names, its own
     /// table's pins pass against the executable, and every client table
     /// carried to it by patterns finds the same join in the provider's table.
     #[test]
+    #[ignore = "needs ENSH_CLIENT_EXE"]
     fn the_client_s_tables_pass_on_its_executable() {
-        let Ok(path) = std::env::var("ENSH_CLIENT_EXE") else {
-            return;
-        };
+        let path =
+            std::env::var("ENSH_CLIENT_EXE").expect("ENSH_CLIENT_EXE names the game executable");
         let bytes = std::fs::read(path).unwrap();
         let image = enshwick_gamedata::reflect::Image::parse(
             &bytes,

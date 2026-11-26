@@ -754,17 +754,16 @@ mod tests {
         assert_eq!(prompts, [first]);
     }
 
-    /// On the server `ENSH_SERVER_EXE` names, with its archive beside it
-    /// (skipped without them): the game's data has exactly one empty
+    /// On the server `ENSH_SERVER_EXE` names, with its archive beside it: the game's data has exactly one empty
     /// interaction, the sequence the research found (servers 1269579 to
     /// 26430253).
     #[test]
+    #[ignore = "needs ENSH_SERVER_EXE"]
     fn the_server_archive_has_one_empty_interaction() {
         use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 
-        let Ok(path) = std::env::var("ENSH_SERVER_EXE") else {
-            return;
-        };
+        let path =
+            std::env::var("ENSH_SERVER_EXE").expect("ENSH_SERVER_EXE names the game executable");
         let path = std::path::PathBuf::from(path);
         let Some(archive) = path
             .parent()

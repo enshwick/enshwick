@@ -539,7 +539,9 @@ impl FromScript for &'static [u8] {
             return Err(Error::new("expected a buffer"));
         };
         // shortcut: an icon's PNG from a script lives for the process, as an
-        // embedded one does; icons are few and given while the mod starts.
+        // embedded one does, without the one copy `enshwick_base::intern`
+        // keeps, since this crate sits below its lock; icons are few and
+        // given while the mod starts.
         Ok(Box::leak(bytes.into_boxed_slice()))
     }
 }

@@ -425,10 +425,7 @@ impl Registry {
         let Some(vanilla) = crate::content::vanilla::Vanilla::game() else {
             return Err(unknown(Vec::new()));
         };
-        // shortcut: the first name read lists every template on this thread,
-        // about 139 ms on a dedicated server (26083076), once per process;
-        // read them off-thread at the first declared template argument if a
-        // console run ever has to stay within a frame.
+        // Read aside as the world loaded (`template_names::watch`).
         match enshwick_content::__internal::template(vanilla, text) {
             Ok(template) => Ok(Value::Template(template)),
             Err(VanillaError::AmbiguousTemplate { templates, .. }) => {

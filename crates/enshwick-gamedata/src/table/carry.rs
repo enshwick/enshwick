@@ -99,14 +99,18 @@ fn every_held_operand_value_has_a_witness_or_a_reason() {
 /// to it finds no entry at another value than its own table pins: what a
 /// carry cannot confirm is missing, never wrong.
 #[test]
-#[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 fn a_carried_table_finds_no_wrong_value_on_any_kept_build() {
     let mut paths: Vec<(std::path::PathBuf, Side)> = [
         ("ENSH_SERVER_EXE", Side::Server),
         ("ENSH_CLIENT_EXE", Side::Client),
     ]
     .into_iter()
-    .filter_map(|(var, side)| Some((std::env::var_os(var)?.into(), side)))
+    .map(|(var, side)| {
+        let path =
+            std::env::var_os(var).unwrap_or_else(|| panic!("{var} names the game executable"));
+        (path.into(), side)
+    })
     .collect();
     if let Some(list) = std::env::var_os("ENSH_EXES") {
         paths.extend(std::env::split_paths(&list).map(|path| {

@@ -191,6 +191,13 @@ pub fn template(
     vanilla.template_named(name, false, true)
 }
 
+/// Reads the vanilla templates' names into `vanilla` once, without a mod's
+/// warning, so the console's first [`template`] finds them read; a later
+/// call costs a lookup.
+pub fn read_template_names(vanilla: &Vanilla) {
+    let _read = vanilla.template_names(false);
+}
+
 /// The vanilla item an admin's console names by its debug name `name`, as
 /// `Vanilla::item` finds it but also in another case.
 ///

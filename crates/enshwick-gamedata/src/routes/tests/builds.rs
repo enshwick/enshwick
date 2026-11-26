@@ -1,5 +1,5 @@
 //! The routes and the anchors on the kept game executables, each test
-//! skipped without the variables that name them.
+//! ignored by default, since it needs the variables that name them.
 
 use super::super::{Routed, Routes};
 use super::empty;
@@ -752,7 +752,7 @@ fn executables() -> Vec<(std::path::PathBuf, Side)> {
         ("ENSH_CLIENT_EXE", Side::Client),
     ]
     .into_iter()
-    .filter_map(|(var, side)| Some((std::env::var_os(var)?.into(), side)))
+    .map(|(var, side)| (std::env::var_os(var).expect(var).into(), side))
     .collect();
     if let Some(list) = std::env::var_os("ENSH_EXES") {
         for path in std::env::split_paths(&list) {
@@ -779,7 +779,7 @@ fn tables() -> Vec<Table> {
 /// else the value the newest table's patterns find there, or is one of
 /// [`UNPINNED_UNCHECKED`].
 #[test]
-#[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 fn every_route_holds_on_every_kept_build() {
     let tables = tables();
     let routes = Routes::embedded().unwrap();
@@ -856,7 +856,7 @@ fn every_route_holds_on_every_kept_build() {
 /// the values leave, fails with the row the kept values propose, for a
 /// person to review.
 #[test]
-#[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 fn every_kept_build_s_constant_lies_in_its_route_s_range() {
     let routes = Routes::embedded().unwrap();
     let mut seen = std::collections::BTreeMap::<&str, (u64, u64)>::default();
@@ -931,7 +931,7 @@ fn every_routed_only_row_names_a_kept_table_and_a_route() {
 /// which the loader reads from the archive, the `.bytes` of a symbol whose
 /// route checks its code and the [`NOT_NEEDED`] entries are left out.
 #[test]
-#[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 fn the_anchors_and_routes_find_every_pinned_entry_without_a_table() {
     let tables = tables();
     let routes = Routes::embedded().unwrap();

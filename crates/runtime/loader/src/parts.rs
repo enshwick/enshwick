@@ -305,61 +305,6 @@ mod tests {
         );
     }
 
-    /// Every registry seals in the seal phase, before any link, so no link
-    /// sees an open registry whatever the order the parts link in.
-    #[test]
-    fn no_part_seals_a_registry_in_its_link() {
-        // shortcut: a scan of each `fn link*` body, which misses a seal in a
-        // helper the link calls; a check in the registry's seal would see
-        // it, once registries know the phase they are sealed in.
-        let mut sealing = Vec::new();
-        for part in parts().iter().filter(|part| part.link.is_some()) {
-            if link_bodies(&sources(part.name)).any(|body| body.contains(".seal()")) {
-                sealing.push(part.name);
-            }
-        }
-        assert!(
-            sealing.is_empty(),
-            "parts that seal in their link: {sealing:?}"
-        );
-    }
-
-    /// The bodies of the `fn link*` functions in `text`, each up to the
-    /// closing brace at its own indent, inside an `impl` or `mod` too.
-    fn link_bodies(text: &str) -> impl Iterator<Item = String> + '_ {
-        let lines: Vec<&str> = text.lines().collect();
-        let starts: Vec<usize> = (0..lines.len())
-            .filter(|&at| {
-                let line = lines[at].trim_start();
-                !line.starts_with("//")
-                    && (line.starts_with("fn link") || line.contains(" fn link"))
-            })
-            .collect();
-        starts.into_iter().map(move |at| {
-            let indent = lines[at].len() - lines[at].trim_start().len();
-            let close = format!("{}}}", &lines[at][..indent]);
-            lines[at..]
-                .iter()
-                .take_while(|line| line.trim_end() != close)
-                .copied()
-                .collect::<Vec<_>>()
-                .join("\n")
-        })
-    }
-
-    #[test]
-    fn a_link_s_body_ends_at_its_own_closing_brace() {
-        let text = "impl A {\n    fn link() {\n        open();\n    }\n    fn later() {\n        R.seal();\n    }\n}\n\
-                    pub(crate) fn link_seam() {\n    if x {\n    }\n    S.seal();\n}\n";
-        let bodies: Vec<_> = link_bodies(text).collect();
-        assert_eq!(bodies.len(), 2);
-        assert!(
-            !bodies[0].contains(".seal()"),
-            "a later function is not the link"
-        );
-        assert!(bodies[1].contains("S.seal()"), "{bodies:?}");
-    }
-
     #[test]
     fn the_layers_follow_the_order_of_domains_toml() {
         let domains: toml::Table = include_str!("../../../internal/core/domains.toml")

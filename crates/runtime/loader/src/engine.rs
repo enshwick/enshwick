@@ -8,6 +8,11 @@ pub mod builds;
 #[cfg(windows)]
 pub(crate) mod catalogue;
 pub mod chains;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game's timers read it")
+)]
+pub(crate) mod clock;
 #[cfg(windows)]
 pub(crate) mod code;
 pub mod code_watch;

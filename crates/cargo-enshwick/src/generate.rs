@@ -490,11 +490,11 @@ mod tests {
     /// executable's name and its Steam build given; it needs the server
     /// executable (`ENSH_SERVER_EXE`).
     #[test]
-    #[cfg_attr(miri, ignore = "scans a game executable")]
+    #[ignore = "needs ENSH_SERVER_EXE"]
     fn from_an_executable_without_a_table_snapshots_it_and_writes_its_api() {
-        let Some(exe) = std::env::var_os("ENSH_SERVER_EXE").map(PathBuf::from) else {
-            return;
-        };
+        let exe = std::env::var_os("ENSH_SERVER_EXE")
+            .map(PathBuf::from)
+            .expect("ENSH_SERVER_EXE names the game executable");
         let root = repo("from");
         rule(
             &root,
@@ -534,11 +534,11 @@ mod tests {
     /// `--from` an executable whose kept table ranks below the newest only
     /// adds its snapshot: the API stays the newest build's.
     #[test]
-    #[cfg_attr(miri, ignore = "scans a game executable")]
+    #[ignore = "needs ENSH_SERVER_EXE"]
     fn from_an_older_build_snapshots_it_and_keeps_the_newest_builds_api() {
-        let Some(exe) = std::env::var_os("ENSH_SERVER_EXE").map(PathBuf::from) else {
-            return;
-        };
+        let exe = std::env::var_os("ENSH_SERVER_EXE")
+            .map(PathBuf::from)
+            .expect("ENSH_SERVER_EXE names the game executable");
         let root = repo("older");
         let data = data(&root);
         let bytes = std::fs::read(&exe).unwrap();

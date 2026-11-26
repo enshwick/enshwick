@@ -289,13 +289,8 @@ const _: () = {
 /// FNV-1a over `id`, spread by the splitmix64 finaliser so that sums of
 /// hashes of similar ids do not cancel.
 const fn id_hash(id: &str) -> u64 {
-    let bytes = id.as_bytes();
-    let mut hash = 0xcbf2_9ce4_8422_2325u64;
-    let mut i = 0;
-    while i < bytes.len() {
-        hash = (hash ^ bytes[i] as u64).wrapping_mul(0x0100_0000_01b3);
-        i += 1;
-    }
+    use enshwick_values::fnv::{BASIS64, fnv1a64};
+    let mut hash = fnv1a64(BASIS64, id.as_bytes());
     hash = (hash ^ (hash >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
     hash = (hash ^ (hash >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
     hash ^ (hash >> 31)
@@ -672,16 +667,15 @@ mod tests {
         );
     }
 
-    /// With either executable `ENSH_SERVER_EXE` or `ENSH_CLIENT_EXE` names
-    /// (skipped without them), an item's tags are a blob array of tag
-    /// entries, each holding its tag as a 16-byte GUID, and every slot of
+    /// On each executable `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name, an
+    /// item's tags are a blob array of tag entries, each holding its tag as a 16-byte GUID, and every slot of
     /// the tag kinds resolves.
     #[test]
+    #[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
     fn the_item_tags_are_reflected_as_guids() {
         for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
-            let Ok(path) = std::env::var(var) else {
-                continue;
-            };
+            let path =
+                std::env::var(var).unwrap_or_else(|_| panic!("{var} names the game executable"));
             let bytes = std::fs::read(path).unwrap();
             let image =
                 crate::reflect::Image::parse(&bytes, crate::reflect::Layout::File, None).unwrap();
@@ -709,16 +703,15 @@ mod tests {
         }
     }
 
-    /// With either executable `ENSH_SERVER_EXE` or `ENSH_CLIENT_EXE` names
-    /// (skipped without them), the marker type registry keeps its types as
-    /// a blob array of marker types, and each marker type sorting resolves
+    /// On each executable `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name, the
+    /// marker type registry keeps its types as a blob array of marker types, and each marker type sorting resolves
     /// to a value of its own.
     #[test]
+    #[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
     fn the_marker_type_registry_is_reflected_as_a_blob_array_of_marker_types() {
         for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
-            let Ok(path) = std::env::var(var) else {
-                continue;
-            };
+            let path =
+                std::env::var(var).unwrap_or_else(|_| panic!("{var} names the game executable"));
             let bytes = std::fs::read(path).unwrap();
             let image =
                 crate::reflect::Image::parse(&bytes, crate::reflect::Layout::File, None).unwrap();
@@ -766,15 +759,14 @@ mod tests {
         }
     }
 
-    /// With either executable `ENSH_SERVER_EXE` or `ENSH_CLIENT_EXE` names
-    /// (skipped without them), every slot constant of the kinds resolves,
-    /// each to a value of its own.
+    /// On each executable `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name, every
+    /// slot constant of the kinds resolves, each to a value of its own.
     #[test]
+    #[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
     fn every_recipe_kind_s_slot_is_reflected() {
         for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
-            let Ok(path) = std::env::var(var) else {
-                continue;
-            };
+            let path =
+                std::env::var(var).unwrap_or_else(|_| panic!("{var} names the game executable"));
             let bytes = std::fs::read(path).unwrap();
             let image =
                 crate::reflect::Image::parse(&bytes, crate::reflect::Layout::File, None).unwrap();
@@ -788,17 +780,15 @@ mod tests {
         }
     }
 
-    /// With both executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` named
-    /// (skipped without them), every API name the game names itself stands
-    /// for a type, field or enum constant one of them reflects.
+    /// With both executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` named,
+    /// every API name the game names itself stands for a type, field or enum constant one of them reflects.
     #[test]
+    #[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
     fn every_api_game_name_is_reflected() {
-        let (Ok(server), Ok(client)) = (
-            std::env::var("ENSH_SERVER_EXE"),
-            std::env::var("ENSH_CLIENT_EXE"),
-        ) else {
-            return;
-        };
+        let server =
+            std::env::var("ENSH_SERVER_EXE").expect("ENSH_SERVER_EXE names the game executable");
+        let client =
+            std::env::var("ENSH_CLIENT_EXE").expect("ENSH_CLIENT_EXE names the game executable");
         let bytes = [
             std::fs::read(server).unwrap(),
             std::fs::read(client).unwrap(),
@@ -822,18 +812,16 @@ mod tests {
         }
     }
 
-    /// With both executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name
-    /// (skipped without them), every type and offset of the catalogue
-    /// resolves in the reflection of at least one: the client alone has
+    /// With both executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` named,
+    /// every type and offset of the catalogue resolves in the reflection of at least one: the client alone has
     /// its interface.
     #[test]
+    #[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
     fn every_fact_resolves_in_a_game_executable() {
-        let (Ok(server), Ok(client)) = (
-            std::env::var("ENSH_SERVER_EXE"),
-            std::env::var("ENSH_CLIENT_EXE"),
-        ) else {
-            return;
-        };
+        let server =
+            std::env::var("ENSH_SERVER_EXE").expect("ENSH_SERVER_EXE names the game executable");
+        let client =
+            std::env::var("ENSH_CLIENT_EXE").expect("ENSH_CLIENT_EXE names the game executable");
         let bytes = [
             std::fs::read(server).unwrap(),
             std::fs::read(client).unwrap(),
@@ -868,11 +856,16 @@ mod tests {
     /// states, the next step's type or the last type, wherever that build
     /// reflects the field: the client alone has its interface.
     #[test]
-    #[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
+    #[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
     fn every_offset_and_path_step_holds_its_stated_type_on_every_kept_build() {
         let named = ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
             .into_iter()
-            .filter_map(|var| std::env::var_os(var).map(std::path::PathBuf::from));
+            .map(|var| {
+                std::env::var_os(var).map_or_else(
+                    || panic!("{var} names the game executable"),
+                    std::path::PathBuf::from,
+                )
+            });
         let listed: Vec<std::path::PathBuf> = std::env::var_os("ENSH_EXES")
             .map_or_default(|list| std::env::split_paths(&list).collect());
         for path in named.chain(listed) {

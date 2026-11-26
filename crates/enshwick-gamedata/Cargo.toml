@@ -19,6 +19,7 @@ test = []
 [dependencies]
 enshwick-base.workspace = true
 enshwick-content.workspace = true
+enshwick-values.workspace = true
 ed25519-dalek.workspace = true
 iced-x86.workspace = true
 memchr.workspace = true

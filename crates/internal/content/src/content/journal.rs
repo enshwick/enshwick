@@ -500,8 +500,7 @@ fn fill_owned(
             });
         }
         if step.done_when.is_none() {
-            // shortcut: a step's part name lives for the process; a mod adds few quests, once, during init.
-            let part: &'static str = Box::leak(format!("step-{at}.done").into_boxed_str());
+            let part = enshwick_base::intern::text(&format!("step-{at}.done"));
             step.done_when = Some(own(part)?);
         }
         before = step.done_when;
@@ -528,8 +527,7 @@ fn count_objectives(
         objectives::check(new.id, at, &step.objectives)?;
         let mut counters = Vec::with_capacity(step.objectives.len());
         for (m, objective) in step.objectives.iter().enumerate() {
-            // shortcut: a counter's part name lives for the process; a mod adds few quests, once, during init.
-            let part: &'static str = Box::leak(format!("step-{at}.obj-{m}").into_boxed_str());
+            let part = enshwick_base::intern::text(&format!("step-{at}.obj-{m}"));
             let counter = own(part, KnowledgeType::Counter)?;
             step.progress
                 .push(KnowledgeQuery::at_least(counter, scope, objective.count()));

@@ -9,6 +9,10 @@ use core::fmt::Write as _;
 
 use crate::abi::{HostApi, ModHandle, Status};
 
+mod valid;
+
+pub use valid::VALID;
+
 /// An entry called by `me` with every other argument zero: null pointers,
 /// no callbacks, zero ids and counts.
 pub trait Zeroed {
@@ -153,6 +157,9 @@ pub const UNKNOWN: ModHandle = ModHandle(9);
 pub const ME: ModHandle = ModHandle(1);
 /// The handle of the data pack on each host.
 pub const PACK: ModHandle = ModHandle(2);
+/// The id of the mod each host runs as [`ME`], whose namespace the calls of
+/// [`VALID`] name.
+pub const MOD_ID: &str = "test.fake";
 
 /// Every status by its constant's name, so the table reads as the ABI does.
 pub const STATUS_NAMES: [(Status, &str); 18] = [
@@ -438,5 +445,13 @@ mod tests {
             .position(|pair| pair[0] >= pair[1])
             .map(|at| ENTRIES[at + 1].0);
         assert_eq!(early, None, "listed before a field it follows");
+    }
+
+    #[test]
+    fn the_valid_calls_name_entries_once_each_in_field_order() {
+        let at = |name: &str| ENTRIES.iter().position(|&(entry, _)| entry == name);
+        let places: Vec<Option<usize>> = VALID.iter().map(|&(name, _)| at(name)).collect();
+        assert!(places.iter().all(Option::is_some), "{places:?}");
+        assert!(places.is_sorted_by(|a, b| a < b), "{places:?}");
     }
 }

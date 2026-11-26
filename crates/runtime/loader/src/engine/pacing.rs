@@ -429,9 +429,9 @@ mod tests {
 
     /// In each executable `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name, the
     /// division and the waits found by their patterns alone, as on a build
-    /// without its own table, still have each wait after the division;
-    /// skipped without them.
+    /// without its own table, still have each wait after the division.
     #[test]
+    #[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
     fn the_patterns_find_the_division_before_each_wait_in_the_game_s_executables() {
         use enshwick_gamedata::reflect::{Image, Layout};
 
@@ -440,9 +440,8 @@ mod tests {
             ("ENSH_SERVER_EXE", Side::SERVER),
             ("ENSH_CLIENT_EXE", Side::CLIENT),
         ] {
-            let Some(path) = std::env::var_os(variable) else {
-                continue;
-            };
+            let path = std::env::var_os(variable)
+                .unwrap_or_else(|| panic!("{variable} names the game executable"));
             let bytes = std::fs::read(path).unwrap();
             let image = Image::parse(&bytes, Layout::File, None).unwrap();
             let text = image.section(".text").unwrap();

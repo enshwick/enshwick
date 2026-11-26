@@ -125,15 +125,14 @@ mod tests {
         assert_eq!(why.to_string(), "is not reflected");
     }
 
-    /// In each executable `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name (each
-    /// skipped without it), the slot's fields read by name where the loot
+    /// In each executable `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name, the slot's fields read by name where the loot
     /// rate has always found them.
     #[test]
+    #[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
     fn the_slot_fields_read_by_name_on_each_executable() {
         for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
-            let Ok(path) = std::env::var(var) else {
-                continue;
-            };
+            let path =
+                std::env::var(var).unwrap_or_else(|_| panic!("{var} names the game executable"));
             let bytes = std::fs::read(path).unwrap();
             let image = enshwick_gamedata::reflect::Image::parse(
                 &bytes,

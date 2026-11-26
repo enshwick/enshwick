@@ -86,6 +86,7 @@ mod fake_per_test;
 mod fake_reach;
 mod fake_refusals;
 mod fake_second_install;
+mod fake_turned_off;
 mod features;
 #[cfg(feature = "unstable")]
 mod fog;
@@ -165,6 +166,7 @@ mod language_of;
 mod lifecycle;
 mod live_changes;
 mod live_changes_join;
+mod load_methods;
 mod loader_off;
 #[cfg(feature = "unstable")]
 mod local_input_status;

@@ -224,10 +224,10 @@ mod tests {
     /// folder (build 1269579): every slot the client table names by its
     /// attribute reads as the table pins it.
     #[test]
+    #[ignore = "needs ENSHWICK_CLIENT_DIR"]
     fn the_client_archive_holds_the_table_slots() {
-        let Ok(dir) = std::env::var("ENSHWICK_CLIENT_DIR") else {
-            return;
-        };
+        let dir = std::env::var("ENSHWICK_CLIENT_DIR")
+            .expect("ENSHWICK_CLIENT_DIR names the client folder");
         let archive =
             crate::engine::archive::Archive::open(std::path::Path::new(&dir), "enshrouded")
                 .unwrap();

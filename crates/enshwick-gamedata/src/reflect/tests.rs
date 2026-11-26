@@ -61,13 +61,6 @@ fn rdata(offset: u64) -> u64 {
 }
 
 #[test]
-fn fnv1a32_matches_the_reference_values() {
-    assert_eq!(fnv1a32(b""), 0x811c_9dc5);
-    assert_eq!(fnv1a32(b"a"), 0xe40c_292c);
-    assert_eq!(fnv1a32(b"foobar"), 0xbf9c_f968);
-}
-
-#[test]
 fn bytes_that_are_not_pe_are_refused() {
     assert_eq!(
         Image::parse(b"MZ", Layout::File, None).unwrap_err(),

@@ -113,14 +113,7 @@ impl Guid {
     /// See [`Guid`].
     #[must_use]
     pub const fn fnv1a(self) -> u32 {
-        let mut hash: u32 = 0x811c_9dc5;
-        let mut i = 0;
-        while i < 16 {
-            hash ^= self.0[i] as u32;
-            hash = hash.wrapping_mul(0x0100_0193);
-            i += 1;
-        }
-        hash
+        crate::fnv::fnv1a32(&self.0)
     }
 
     /// The key of the resource whose type has the hash `type_hash` with

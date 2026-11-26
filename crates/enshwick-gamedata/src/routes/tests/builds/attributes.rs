@@ -316,7 +316,7 @@ fn the_push_route_looks_through_every_group_s_builder() {
 /// On every kept client each builder but Primary, which pushes inline,
 /// finds the push alone, so the push holds while any of them holds.
 #[test]
-#[cfg_attr(miri, ignore = "reading a game executable takes hours under Miri")]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 fn every_builder_but_primary_finds_the_push_alone_on_every_kept_client() {
     let mut routes = Routes::embedded().unwrap();
     let (push, builders) = push_and_builders(&routes);

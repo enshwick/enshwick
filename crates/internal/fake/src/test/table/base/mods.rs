@@ -91,6 +91,41 @@ impl ManifestFacts {
     }
 }
 
+/// The id the loader would name handle `me` by, kept for the process: the
+/// mod under test's own, else `test.mod-<handle>` for a data pack or another
+/// mod, which the fake knows by handle alone; `None` for a handle it never
+/// gave out.
+pub(crate) fn id_of(s: &State, me: ModHandle) -> Option<&'static str> {
+    if me == s.host.base.handle {
+        let own = s
+            .base
+            .manifest
+            .as_ref()
+            .map_or(crate::test::MOD_ID, |manifest| manifest.id.as_str());
+        return Some(enshwick_base::intern::text(own));
+    }
+    s.host
+        .base
+        .loads(me)
+        .then(|| enshwick_base::intern::text(&format!("test.mod-{}", me.0)))
+}
+
+/// Whether `me`, a caller other than the mod under test, names `id` in
+/// the mod's namespace, which the loader refuses: each mod and data pack
+/// names only its own. The fake knows no pack's id, and its tests' `id!`
+/// names the test crate, so this is the one foreign namespace it refuses.
+pub(crate) fn in_another_s_namespace(s: &State, me: ModHandle, id: &str) -> bool {
+    let own = s
+        .base
+        .manifest
+        .as_ref()
+        .map_or(crate::test::MOD_ID, |manifest| manifest.id.as_str());
+    me != s.host.base.handle
+        && id
+            .split_once(':')
+            .is_some_and(|(namespace, _)| namespace == own)
+}
+
 /// Logs the loader's warning for a mod refused the `kind` `id`,
 /// `<owner>:<what>`, whose owner does not export it.
 pub(crate) fn warn_unexported(s: &mut State, kind: enshwick_core::schema_section::Kind, id: &str) {
@@ -371,15 +406,18 @@ fn write_setting(file: String, key: &str, value: &str) -> Status {
         if !serving || s.host.base.world_key.is_none() {
             return Err(Status::UNAVAILABLE);
         }
-        // shortcut: no list element keys (`per_level[2]`), which the loader
-        // takes; add them when a test needs one.
         let schema = s
             .base
             .config_schemas
             .get(&file)
             .and_then(|text| enshwick_core::config::Schema::parse(text).ok())
             .ok_or(Status::MISSING)?;
-        let field = schema.field(key).ok_or(Status::MISSING)?;
+        let (base, index) = enshwick_core::config::__element(key);
+        let mut field = schema.field(base).ok_or(Status::MISSING)?.clone();
+        let list_default = field.default.clone();
+        if index.is_some() {
+            field.kind = field.element_kind();
+        }
         let mut parsed = format!("v = {value}")
             .parse::<toml::Table>()
             .ok()
@@ -406,7 +444,22 @@ fn write_setting(file: String, key: &str, value: &str) -> Status {
                 |text| text.parse::<toml::Table>(),
             )
             .map_err(|_| Status::REFUSED)?;
-        if !set_dotted(&mut table, key, parsed) {
+        if let Some(index) = index {
+            // As the loader: the element of the list in the file, else of
+            // its default; a missing element is a bad request.
+            let current = dotted(&table, base).cloned().or_else(|| {
+                format!("v = {list_default}")
+                    .parse::<toml::Table>()
+                    .ok()
+                    .and_then(|mut table| table.remove("v"))
+            });
+            let Some(toml::Value::Array(mut items)) = current else {
+                return Err(Status::BAD_ARGS);
+            };
+            *items.get_mut(index).ok_or(Status::BAD_ARGS)? = parsed;
+            parsed = toml::Value::Array(items);
+        }
+        if !set_dotted(&mut table, base, parsed) {
             return Err(Status::REFUSED);
         }
         Ok(table.to_string())
@@ -460,6 +513,18 @@ fn set_dotted(table: &mut toml::Table, key: &str, value: toml::Value) -> bool {
         here = next;
     }
     false
+}
+
+/// The value at the dotted `key` in `table`.
+fn dotted<'a>(table: &'a toml::Table, key: &str) -> Option<&'a toml::Value> {
+    let (path, last) = key
+        .rsplit_once('.')
+        .map_or(("", key), |(path, last)| (path, last));
+    let mut here = table;
+    for part in path.split('.').filter(|part| !part.is_empty()) {
+        here = here.get(part)?.as_table()?;
+    }
+    here.get(last)
 }
 
 entries! {

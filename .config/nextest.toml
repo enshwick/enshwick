@@ -1,0 +1,8 @@
+# Names a slow test as it runs and keeps every test's time in
+# target/nextest/<profile>/junit.xml.
+
+[profile.default]
+slow-timeout = { period = "30s" }
+
+[profile.default.junit]
+path = "junit.xml"

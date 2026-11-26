@@ -52,6 +52,17 @@ mod tests {
         Some(unsafe { core::mem::transmute_copy(&any) })
     }
 
+    /// A well-formed change, so only the phase refuses it.
+    fn stack_size() -> DataChange {
+        enshwick::abi::headed!(DataChange {
+            entry: Guid([0x3a; 16]),
+            field: enshwick::abi::DataField::MAX_STACK,
+            op: enshwick::abi::ChangeOp::SET,
+            value: 999.0,
+            ..spec::<DataChange>()
+        })
+    }
+
     /// A headed struct of zeros with its own header.
     fn spec<T: Headed>() -> T {
         // SAFETY: `Headed` requires `Zeroable`: all-zero bytes are a valid `T`.
@@ -192,7 +203,7 @@ mod tests {
             ("rate", (api.rate)(me, RateId(1))),
             (
                 "change_data",
-                (api.change_data)(me, &spec::<DataChange>(), null_mut()),
+                (api.change_data)(me, &stack_size(), null_mut()),
             ),
             (
                 "loop_wait",

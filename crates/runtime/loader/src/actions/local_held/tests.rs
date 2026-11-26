@@ -194,12 +194,12 @@ fn the_local_player_word_comes_from_the_routed_frame_and_a_reshuffled_one_turns_
 }
 
 #[test]
+#[ignore = "needs ENSH_CLIENT_EXE"]
 fn the_held_read_s_iterator_layout_matches_player_ui_on_the_installed_client() {
     use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 
-    let Some(exe) = std::env::var_os("ENSH_CLIENT_EXE") else {
-        return;
-    };
+    let exe =
+        std::env::var_os("ENSH_CLIENT_EXE").expect("ENSH_CLIENT_EXE names the game executable");
     let bytes = std::fs::read(exe).unwrap();
     let image = Image::parse(&bytes, Layout::File, None).unwrap();
     let reflection = Reflection::scan(&image);

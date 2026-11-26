@@ -49,9 +49,7 @@ impl crate::test::FakeHost {
 /// The type hash a preset gives `id`: its FNV-1a, so presets never share a
 /// hash and a test's own small hashes stay clear of them.
 fn preset_hash(id: &str) -> u32 {
-    id.bytes().fold(0x811c_9dc5, |hash, byte| {
-        (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193)
-    })
+    enshwick_core::resources::fnv1a32(id.as_bytes())
 }
 
 impl Fact {

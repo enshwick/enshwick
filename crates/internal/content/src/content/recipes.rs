@@ -30,12 +30,12 @@ pub use derive::{Derived, RecipeView, derived_guid};
 pub use kind::RecipeKind;
 pub use rules::{Name, RecipeRule, disable, enable, is_disabled};
 
-#[cfg(feature = "unstable")]
-use add::fnv1a;
 pub(crate) use derive::list;
 use derive::menu_entry;
 #[cfg(feature = "unstable")]
 use derive::{derived_entries, recipe_guids, vanilla_registry};
+#[cfg(feature = "unstable")]
+use enshwick_values::fnv::fnv1a32 as fnv1a;
 
 /// `Load`'s methods of this module on the base handle, which core's
 /// forwarders call.

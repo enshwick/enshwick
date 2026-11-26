@@ -54,6 +54,8 @@ pub mod hook;
 pub mod host;
 pub mod i18n;
 #[doc(hidden)]
+pub mod intern;
+#[doc(hidden)]
 pub mod load;
 #[doc(hidden)]
 pub mod locks;

@@ -1,13 +1,14 @@
 //! The fake host's half of its contract with the loader: each entry takes
 //! the loader's caller kind and answers a call with zeroed arguments as the
-//! loader does under each precondition, by the table the loader's own
+//! loader does under each precondition, and a call with arguments a host
+//! takes of each entry of [`VALID`], by the tables the loader's own
 //! `host::contract_tests` write from the bare loader.
 
 use std::cell::Cell;
 use std::path::Path;
 
 use enshwick_abi::contract::{
-    self, CallerKind, ENTRIES, Entry, ME, PACK, PRECONDITIONS, Precondition, UNKNOWN,
+    self, CallerKind, ENTRIES, Entry, ME, PACK, PRECONDITIONS, Precondition, UNKNOWN, VALID,
 };
 use enshwick_core::abi::{HostApi, ModHandle, Side, Status};
 
@@ -24,6 +25,12 @@ enshwick_abi::__host_entries!(callers);
 
 /// The loader's table, from this crate's folder.
 const TABLE: &str = "contract/loader.snap";
+/// The loader's table of [`VALID`], from this crate's folder.
+const VALID_TABLE: &str = "contract/loader-valid.snap";
+
+/// The differences the hosts keep on purpose on [`VALID`] besides
+/// [`no_game`].
+const KEPT_VALID: &[Kept] = &[];
 
 /// A difference the hosts keep on purpose: the entry, the precondition,
 /// the loader's answer, the fake's, and why.
@@ -141,35 +148,66 @@ fn every_entry_takes_the_loader_s_caller_and_answers_as_the_loader_s_table_says(
 #[test]
 #[ignore = "runs only as that test's child, in a process of its own"]
 fn every_entry_is_compared_in_a_process_of_its_own() {
-    if !contract::apart() {
-        return;
+    if contract::apart() {
+        compare(TABLE, ENTRIES, KEPT);
     }
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(TABLE);
+}
+
+/// The child test that compares the hosts on [`VALID`].
+const COMPARED_VALID: &str = "contract_tests::every_valid_call_is_compared_in_a_process_of_its_own";
+
+#[test]
+fn every_valid_call_answers_as_the_loader_s_valid_table_says() {
+    assert_eq!(
+        crate::test::MOD_ID,
+        contract::MOD_ID,
+        "the hosts run one mod id"
+    );
+    contract::run_apart(COMPARED_VALID).unwrap();
+}
+
+#[test]
+#[ignore = "runs only as that test's child, in a process of its own"]
+fn every_valid_call_is_compared_in_a_process_of_its_own() {
+    if contract::apart() {
+        compare(VALID_TABLE, VALID, KEPT_VALID);
+    }
+}
+
+/// Holds the fake's answers to `entries` to the loader's table at `table`,
+/// past the differences `kept` and [`no_game`].
+fn compare(table: &str, entries: &[(&str, Entry)], kept: &[Kept]) {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(table);
     let rows = contract::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
     let listed: Vec<&str> = rows.iter().map(|row| row.entry.as_str()).collect();
-    let entries: Vec<&str> = ENTRIES.iter().map(|&(name, _)| name).collect();
+    let names: Vec<&str> = entries.iter().map(|&(name, _)| name).collect();
     assert_eq!(
         listed,
-        entries,
+        names,
         "{} lists every entry once, in field order",
         path.display()
     );
     let mut differences = Vec::new();
-    for (row, &(name, fake)) in rows.iter().zip(CALLERS) {
-        if row.caller != fake {
+    for row in &rows {
+        let fake = CALLERS
+            .iter()
+            .find(|&&(name, _)| name == row.entry)
+            .map(|&(_, caller)| caller);
+        if fake != Some(row.caller) {
             differences.push(format!(
-                "{name} caller: loader {}, fake {}",
+                "{} caller: loader {}, fake {:?}",
+                row.entry,
                 row.caller.name(),
-                fake.name()
+                fake.map(CallerKind::name)
             ));
         }
     }
     for (column, precondition) in PRECONDITIONS.into_iter().enumerate() {
-        for (row, &(name, entry)) in rows.iter().zip(ENTRIES) {
+        for (row, &(name, entry)) in rows.iter().zip(entries) {
             let loader = row.answers[column];
             let fake = fake_answers(entry, precondition);
             let kept = no_game(loader)
-                || KEPT
+                || kept
                     .iter()
                     .any(|kept| *kept == (name, precondition, loader, fake, kept.4));
             if loader != fake && !kept {

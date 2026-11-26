@@ -824,19 +824,16 @@ fn malformed_tables_are_refused() {
     assert!(Table::parse(&unknown).is_err());
 }
 
-/// On the executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name (each
-/// skipped without it), the patterns of their own table find every
+/// On the executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name, the patterns of their own table find every
 /// patterned entry where the table pins it.
 #[test]
-#[cfg_attr(miri, ignore = "parsing every kept table takes minutes under Miri")]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 fn patterns_find_their_entries_on_their_own_build() {
     for (var, side) in [
         ("ENSH_SERVER_EXE", Side::Server),
         ("ENSH_CLIENT_EXE", Side::Client),
     ] {
-        let Ok(path) = std::env::var(var) else {
-            continue;
-        };
+        let path = std::env::var(var).unwrap_or_else(|_| panic!("{var} names the game executable"));
         let bytes = std::fs::read(path).unwrap();
         let image = reflect::Image::parse(&bytes, reflect::Layout::File, None).unwrap();
         let fingerprint = image.fingerprint().unwrap();

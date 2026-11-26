@@ -792,6 +792,7 @@ mod tests {
     /// the map of client 26430625 stores cut to 24 bits, reads as long as
     /// its own header says it is.
     #[test]
+    #[ignore = "needs ENSHWICK_CLIENT_DIR"]
     #[cfg_attr(miri, ignore = "unpacking archive chunks takes minutes under Miri")]
     fn the_client_s_temperature_volume_reads_as_long_as_its_header_says() {
         use enshwick::typed::{Named, VoxelTemperatureResource};
@@ -800,9 +801,8 @@ mod tests {
         /// field, and the data's length in bytes.
         const DATA: usize = 0x24;
         const DATA_LEN: usize = 0x28;
-        let Ok(dir) = std::env::var("ENSHWICK_CLIENT_DIR") else {
-            return;
-        };
+        let dir = std::env::var("ENSHWICK_CLIENT_DIR")
+            .expect("ENSHWICK_CLIENT_DIR names the client folder");
         let archive = Archive::open(Path::new(&dir), "enshrouded").unwrap();
         let name = crate::catalogue::type_name(VoxelTemperatureResource::ID);
         let key = ResourceKey {
@@ -830,11 +830,11 @@ mod tests {
     /// folder (build 1269579): the Blacksmith's staff icon reads whole and
     /// decodes, and the item registry lists the Workbench.
     #[test]
+    #[ignore = "needs ENSHWICK_CLIENT_DIR"]
     #[cfg_attr(miri, ignore = "unpacking archive chunks takes minutes under Miri")]
     fn the_client_archive_reads() {
-        let Ok(dir) = std::env::var("ENSHWICK_CLIENT_DIR") else {
-            return;
-        };
+        let dir = std::env::var("ENSHWICK_CLIENT_DIR")
+            .expect("ENSHWICK_CLIENT_DIR names the client folder");
         let archive = Archive::open(Path::new(&dir), "enshrouded").unwrap();
         let icon = archive
             .content(&[0x1_5570, 0xfa5b_71ba, 0x1c35_6c97, 0x170c_1f07])

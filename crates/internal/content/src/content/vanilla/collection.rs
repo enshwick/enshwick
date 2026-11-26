@@ -100,7 +100,7 @@ impl Vanilla {
 
     /// The template names, read once; a mod that reads them first after
     /// init is warned when `warn`.
-    fn template_names(&self, warn: bool) -> Result<&Names, VanillaError> {
+    pub(crate) fn template_names(&self, warn: bool) -> Result<&Names, VanillaError> {
         self.template_names
             .get_or_init(|| {
                 if warn && crate::__private::initialised() {

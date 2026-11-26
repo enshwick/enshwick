@@ -27,6 +27,8 @@ extern crate self as enshwick;
 #[doc(hidden)]
 pub mod abi;
 pub mod content;
+#[doc(hidden)]
+pub mod fnv;
 mod off;
 #[doc(hidden)]
 pub mod reason;

@@ -355,6 +355,18 @@ pub fn __file_name(name: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
 }
 
+/// The setting a key names and the element of a list it names, if any:
+/// `per_level[2]` is element 2 of `per_level`, as the loader and the fake
+/// host read a key a mod or a person writes.
+#[doc(hidden)]
+#[must_use]
+pub fn __element(key: &str) -> (&str, Option<usize>) {
+    key.strip_suffix(']')
+        .and_then(|rest| rest.rsplit_once('['))
+        .and_then(|(base, index)| Some((base, Some(index.parse().ok()?))))
+        .unwrap_or((key, None))
+}
+
 /// A settings type declared `#[enshwick::config(group)]`, a table of another
 /// settings type's file.
 #[doc(hidden)]

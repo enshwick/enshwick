@@ -566,7 +566,7 @@ pub fn pinning(ids: &[&str], constants: &[(&str, u64)]) -> KnownBuild {
 }
 
 /// What `ids` read on the executables `ENSH_SERVER_EXE` and
-/// `ENSH_CLIENT_EXE` name, each skipped without its variable: by the
+/// `ENSH_CLIENT_EXE` name: by the
 /// executable's own table, then by every table of its side carried to it by
 /// patterns, each row named after its table.
 #[cfg(test)]
@@ -635,9 +635,7 @@ fn constants_on_executables_by(
         ("ENSH_SERVER_EXE", tables::Side::Server),
         ("ENSH_CLIENT_EXE", tables::Side::Client),
     ] {
-        let Ok(path) = std::env::var(var) else {
-            continue;
-        };
+        let path = std::env::var(var).unwrap_or_else(|_| panic!("{var} names the game executable"));
         let bytes = std::fs::read(path).unwrap();
         let image = enshwick_gamedata::reflect::Image::parse(
             &bytes,

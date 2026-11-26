@@ -179,14 +179,6 @@ impl RecipeLayout {
     }
 }
 
-/// FNV-1a over `bytes`.
-#[cfg(feature = "unstable")]
-pub(super) fn fnv1a(bytes: &[u8]) -> u32 {
-    bytes.iter().fold(0x811c_9dc5_u32, |hash, &b| {
-        (hash ^ u32::from(b)).wrapping_mul(0x0100_0193)
-    })
-}
-
 /// Builds in `out` the recipe registry with `recipe` after the others, unless
 /// its workshop already holds `limit` recipes.
 ///

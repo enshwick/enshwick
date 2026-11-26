@@ -1,7 +1,7 @@
 //! The lore categories `enshwick::content::journal::lore_category` names are
 //! the ones the pages of the real journal are listed under, on both sides.
 //! The archives sit beside the executables `ENSH_SERVER_EXE` and
-//! `ENSH_CLIENT_EXE` name; without them the tests pass trivially.
+//! `ENSH_CLIENT_EXE` name; the tests are ignored by default.
 
 #[cfg(test)]
 mod tests {
@@ -23,9 +23,9 @@ mod tests {
     }
 
     /// The categories the pages of the journal beside `var`'s executable
-    /// name, the tutorial pages' 0 left out; `None` without the executable.
-    fn held(var: &str) -> Option<BTreeSet<u32>> {
-        let exe = std::env::var(var).ok()?;
+    /// name, the tutorial pages' 0 left out.
+    fn held(var: &str) -> BTreeSet<u32> {
+        let exe = std::env::var(var).unwrap_or_else(|_| panic!("{var} names the game executable"));
         let exe = Path::new(&exe);
         let bytes = std::fs::read(exe).unwrap();
         let image = Image::parse(&bytes, Layout::File, None).unwrap();
@@ -41,7 +41,7 @@ mod tests {
         let Some(Value::List(pages)) = journal.field("collections") else {
             panic!("no collections")
         };
-        Some(pages.iter().filter_map(key).filter(|&k| k != 0).collect())
+        pages.iter().filter_map(key).filter(|&k| k != 0).collect()
     }
 
     fn named() -> BTreeSet<u32> {
@@ -54,16 +54,14 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "needs ENSH_SERVER_EXE"]
     fn the_server_s_journal_lists_its_pages_under_the_named_categories() {
-        if let Some(held) = held("ENSH_SERVER_EXE") {
-            assert_eq!(held, named());
-        }
+        assert_eq!(held("ENSH_SERVER_EXE"), named());
     }
 
     #[test]
+    #[ignore = "needs ENSH_CLIENT_EXE"]
     fn the_client_s_journal_lists_its_pages_under_the_named_categories() {
-        if let Some(held) = held("ENSH_CLIENT_EXE") {
-            assert_eq!(held, named());
-        }
+        assert_eq!(held("ENSH_CLIENT_EXE"), named());
     }
 }
