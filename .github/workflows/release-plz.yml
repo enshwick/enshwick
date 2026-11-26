@@ -77,8 +77,8 @@ jobs:
           GITHUB_TOKEN: ${{ steps.token.outputs.token }}
 
   release-pr:
-    # After `release`: run first, release-pr would open a new release pull
-    # request for versions the merged one has not tagged yet.
+    # After `release`, the order the action keeps when given no command;
+    # skipped when `release` failed.
     needs: release
     if: >-
       !cancelled() && needs.release.result != 'failure' &&

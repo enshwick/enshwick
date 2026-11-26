@@ -170,7 +170,11 @@ Alphas go to GitHub only, never to crates.io. Real releases come from
 [release-plz workflow](.github/workflows/release-plz.yml). It runs by hand
 until the first real release; from then on, the repository variable
 `RELEASE_ON_MERGE` set to `true` runs it on every merge to `main` that
-changes the crates, `release` first and then `release-pr`:
+changes the crates, `release` first and then `release-pr`. The variable
+belongs to the repository, not to the `release` environment, whose
+variables the switch does not see. `release` acts only on the merge commit
+of a release pull request, so a failed release is redone by re-running that
+run, not by a new run from a later `main`:
 
 1. `release-pr` reads the conventional commits since each crate's last
    release, checks the public API with cargo-semver-checks, and opens or
