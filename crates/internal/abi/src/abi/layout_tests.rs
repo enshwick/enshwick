@@ -444,11 +444,11 @@ fn wrong_bump(was: Version, old: &Snapshot, new: &Snapshot, now: Version) -> Opt
     let (major, minor) = was;
     let rewrite = "then run the tests with ENSHWICK_ABI_LAYOUT=update";
     let stable = major == *ALPHA_MAJORS.end() && now.0 == 1;
+    let next = next_major(major);
     if now.0 != major {
-        if now.0 != major + 1 && !stable {
+        if now.0 != next && !stable {
             return Some(format!(
-                "the ABI major after {major} is {}: set ABI_MAJOR to it, {rewrite}",
-                major + 1
+                "the ABI major after {major} is {next}: set ABI_MAJOR to it, {rewrite}"
             ));
         }
         if now.1 != 0 {
@@ -465,8 +465,7 @@ fn wrong_bump(was: Version, old: &Snapshot, new: &Snapshot, now: Version) -> Opt
     } else {
         return Some(format!(
             "the layout changed past an append to ABI {major}.{minor}: \
-             set ABI_MAJOR to {} and ABI_MINOR to 0, {rewrite}",
-            major + 1
+             set ABI_MAJOR to {next} and ABI_MINOR to 0, {rewrite}"
         ));
     };
     if now.1 != needed {
@@ -476,6 +475,16 @@ fn wrong_bump(was: Version, old: &Snapshot, new: &Snapshot, now: Version) -> Opt
         ));
     }
     wrong_born(old, new, false)
+}
+
+/// The major after `major`: the next number, past the [`ALPHA_MAJORS`] a
+/// stable major never takes.
+fn next_major(major: u16) -> u16 {
+    if major + 1 == *ALPHA_MAJORS.start() {
+        ALPHA_MAJORS.end() + 1
+    } else {
+        major + 1
+    }
 }
 
 /// Why a headed type's [`Headed::BORN`](crate::abi::Headed::BORN) in `new`
@@ -764,6 +773,16 @@ fn the_last_alpha_major_steps_back_once_to_the_stable_one() {
     );
     assert!(wrong_bump((2, 0), &old, &grown, (1, 0)).is_some());
     assert_eq!(wrong_bump((1, 0), &old, &grown, (2, 0)), None);
+}
+
+#[test]
+fn a_stable_major_steps_over_the_alpha_majors() {
+    let old = layout(&[("Fixture", shape!(Headed { header, value }))]);
+    let below = *ALPHA_MAJORS.start() - 1;
+    let past = *ALPHA_MAJORS.end() + 1;
+    let why = wrong_bump((below, 3), &old, &old, (below + 1, 0)).unwrap();
+    assert!(why.contains(&format!("is {past}")), "{why}");
+    assert_eq!(wrong_bump((below, 3), &old, &old, (past, 0)), None);
 }
 
 #[test]

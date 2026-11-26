@@ -7,7 +7,7 @@ use core::ops::RangeInclusive;
 /// another major.
 ///
 /// The interface is stable from major 1: a mod built for major 1 loads on
-/// every loader of major 1. Any change to the layout other than an append is
+/// every loader of major 1 at its minor or a newer one. Any change to the layout other than an append is
 /// a new major, with [`ABI_MINOR`] back at 0; the layout tests of this crate
 /// hold the pair to the committed layout.
 ///
@@ -41,7 +41,8 @@ pub const ABI_MINOR: u16 = 0;
 /// at major 1: a mod built for one of them needs a rebuild, not a newer
 /// Enshwick.
 ///
-/// [`check_major`] reads them so only while [`ABI_MAJOR`] is below them.
+/// A stable major never takes one of them, so a loader never mistakes an
+/// alpha's mod for one of its own major: the major after 4 is 13.
 ///
 /// # Examples
 ///
@@ -52,6 +53,11 @@ pub const ABI_MINOR: u16 = 0;
 /// assert_eq!(check_major(alpha), Err(CheckAbiError::OtherMajor { major: alpha }));
 /// ```
 pub const ALPHA_MAJORS: RangeInclusive<u16> = 5..=12;
+
+const _: () = assert!(
+    ABI_MAJOR < *ALPHA_MAJORS.start() || ABI_MAJOR > *ALPHA_MAJORS.end(),
+    "a stable ABI major never takes one of ALPHA_MAJORS"
+);
 
 /// Why a loader or its tools refuse a mod built for another ABI, naming the
 /// mod's version, this build's and what to do.
@@ -122,7 +128,7 @@ pub enum CheckAbiError {
 /// assert_eq!(check_major(ABI_MAJOR + 1), Err(CheckAbiError::NewerMajor { major: ABI_MAJOR + 1 }));
 /// ```
 pub fn check_major(major: u16) -> Result<(), CheckAbiError> {
-    let alpha = ABI_MAJOR < *ALPHA_MAJORS.start() && ALPHA_MAJORS.contains(&major);
+    let alpha = ALPHA_MAJORS.contains(&major);
     match major {
         ABI_MAJOR => Ok(()),
         newer if newer > ABI_MAJOR && !alpha => Err(CheckAbiError::NewerMajor { major: newer }),
