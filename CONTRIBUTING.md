@@ -194,7 +194,9 @@ run, not by a new run from a later `main`:
 Every crate release-plz releases keeps a `CHANGELOG.md`, the loader and the
 stub included, since a crate without one gets a GitHub release with no
 notes; `cargo xtask check` refuses a released crate without one, or with
-its changelog turned off in [release-plz.toml](release-plz.toml). A change
+its changelog turned off in [release-plz.toml](release-plz.toml). A version
+whose section is empty, since none of its commits added a change file for the
+crate, gets a release that says it lists no changes of its own. A change
 to the loader or the stub that players and admins see takes a change file
 beside the loader's or the stub's changelog, and what mod authors see of
 it, one beside the changelog of `enshwick`.
