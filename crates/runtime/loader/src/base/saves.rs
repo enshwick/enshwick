@@ -330,17 +330,35 @@ fn remember(path: &str, side: Side, steam: impl FnOnce() -> Option<&'static Path
         now.is_some() && now != before
     });
     if changed && let Some(loader) = crate::engine::loader::loader() {
-        arrive(key);
+        if !FOLDERS_FUSE.is_off() {
+            arrive(key);
+        }
+        // Holds read from folders that may be another world's stop the game
+        // on the safe side.
         crate::base::holds::enforce_world(loader, key);
     }
 }
 
+/// The worlds' mod folders: off once a world's folders could not be set
+/// aside whole, so no world has mod settings or data until the game
+/// restarts, rather than one reading another world's.
+static FOLDERS_FUSE: Fuse = Fuse::new("world mod folders");
+
 /// The world `key` appears: its folders are set aside when they belong to
 /// another world, before anything reads them.
 fn arrive(key: &str) {
-    use crate::base::world_folders::{Identity, check};
     let stamp = crate::engine::early::stamp(crate::engine::diag::now());
-    match check(key, &stamp) {
+    settle(key, crate::base::world_folders::check(key, &stamp));
+}
+
+/// Logs what the check of the world `key`'s folders found; when they may
+/// still be another world's, turns [`FOLDERS_FUSE`] off.
+fn settle(
+    key: &str,
+    checked: Result<crate::base::world_folders::Identity, crate::base::world_folders::CheckError>,
+) {
+    use crate::base::world_folders::Identity;
+    match checked {
         Ok(Identity::Renamed { suffix }) => crate::log!(
             WARN,
             "world {key}: the mod settings and data beside its save belonged to another world, \
@@ -352,6 +370,13 @@ fn arrive(key: &str) {
              without checking they belong to it"
         ),
         Ok(_) => {}
+        // Another program holding the folders is no fault of the loader's.
+        Err(e) if e.foreign() => FOLDERS_FUSE.report_off_with(
+            &format!(
+                "world {key}: its mod folders belong to another world and were not set aside: {e}"
+            ),
+            "so mods keep no settings or data for any world until the game restarts",
+        ),
         Err(e) => crate::log!(
             WARN,
             "world {key}: its mod folders were not checked against its save: {e}"
@@ -507,8 +532,17 @@ pub(crate) fn worlds() -> u64 {
     STATE.worlds.load(Ordering::Relaxed)
 }
 
-/// The key of the world the server runs, once the engine has built its path.
+/// The key of the world the server runs, once the engine has built its
+/// path, while its mod folders are on ([`FOLDERS_FUSE`]): what every reader
+/// or writer of a world's folders asks.
 pub(crate) fn world_key(loader: &Loader) -> Option<&'static str> {
+    save_key(loader).filter(|_| !FOLDERS_FUSE.is_off())
+}
+
+/// The key of the world the server runs, once the engine has built its
+/// path, even while the worlds' mod folders are off: for what reads only
+/// the save or names the world.
+pub(crate) fn save_key(loader: &Loader) -> Option<&'static str> {
     let key = STATE.keys.relock().pick(loader.side);
     if let Some(key) = key {
         crate::log!(DEBUG, "world key {key}");
@@ -625,7 +659,7 @@ pub(crate) fn info(
     loader: &Loader,
 ) -> Result<Option<crate::base::world_folders::SaveInfo>, SaveError> {
     static UNREAD: crate::base::wire::Drops = crate::base::wire::Drops::new();
-    let key = world_key(loader).ok_or(SaveError::NoWorld)?;
+    let key = save_key(loader).ok_or(SaveError::NoWorld)?;
     crate::base::world_folders::save_info(key).map_err(|e| {
         if let Some(total) = UNREAD.add(1) {
             crate::log!(
@@ -772,6 +806,36 @@ mod tests {
         assert_eq!(
             STATE.keys.relock().pick(Side::CLIENT),
             Some(r"C:\Steam\userdata\487707326\1203620\remote\world4")
+        );
+        forget();
+    }
+
+    #[test]
+    fn folders_that_may_be_another_world_s_turn_every_world_s_folders_off() {
+        use crate::base::world_folders::{CheckError, Identity};
+        settle("w", Ok(Identity::Kept));
+        settle("w", Err(CheckError::Io(std::io::Error::other("locked"))));
+        assert!(
+            !FOLDERS_FUSE.is_off(),
+            "an unread record leaves the folders as they were"
+        );
+        let split = CheckError::NotRenamed {
+            folder: PathBuf::from("w-mod-data"),
+            error: std::io::Error::other("in use"),
+        };
+        settle("w", Err(split));
+        assert!(FOLDERS_FUSE.is_off());
+        let listed = crate::engine::diag::parts_off();
+        assert!(
+            listed.iter().any(|p| p.part == FOLDERS_FUSE.feature()),
+            "{listed:?}"
+        );
+        hosting_begins();
+        remember(r"D:\saves\world1.ksd", Side::CLIENT, || None);
+        assert_eq!(
+            STATE.keys.relock().pick(Side::CLIENT),
+            Some(r"D:\saves\world1"),
+            "the save is still named, for its identity and holds"
         );
         forget();
     }

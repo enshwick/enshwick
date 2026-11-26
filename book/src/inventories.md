@@ -308,7 +308,7 @@ operation when the request ran, and are empty otherwise.
 | --- | --- |
 | `Committed` | Every operation succeeded; the change is made. |
 | `RolledBack` | An operation failed or fell short; nothing changed. |
-| `Unavailable` | The build lacks a piece, the loader's hook is not in place, or a client hosts no game; nothing changed. |
+| `Unavailable` | The build lacks a piece, the loader's hook is not in place, a client hosts no game, or 4096 requests already wait; nothing changed. A full queue passes again once the game runs the waiting requests. |
 | `TimedOut` | The game did not run its inventory system within 30 seconds; nothing changed. |
 | `Refused(BatchError)` | The batch broke a limit and never reached the game. |
 

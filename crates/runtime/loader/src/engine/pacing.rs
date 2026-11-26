@@ -98,8 +98,9 @@ unsafe extern "system" fn on_handles(registers: *mut Registers, user: *mut c_voi
     // SAFETY: the user pointer is the leaked handler, never freed.
     let handler = unsafe { *user.cast::<Handler<LoopWaitFn>>() };
     let wait = wait_of(registers.r9, registers.rbx);
-    // SAFETY: the mod's callback with its own pointer; the safe layer
-    // catches its panics.
+    // SAFETY: the mod's registered callback of this type, in its DLL, which
+    // stays loaded, with its own pointer and a wait that lives for the call;
+    // by the callback contract of `HostApi` it does not unwind into the loader.
     unsafe {
         (handler.callback)(
             &raw const wait,
@@ -120,8 +121,9 @@ unsafe extern "system" fn on_messages(registers: *mut Registers, user: *mut c_vo
     // SAFETY: the user pointer is the leaked handler, never freed.
     let handler = unsafe { *user.cast::<Handler<LoopWaitFn>>() };
     let wait = wait_of(registers.r8, registers.rbx);
-    // SAFETY: the mod's callback with its own pointer; the safe layer
-    // catches its panics.
+    // SAFETY: the mod's registered callback of this type, in its DLL, which
+    // stays loaded, with its own pointer and a wait that lives for the call;
+    // by the callback contract of `HostApi` it does not unwind into the loader.
     unsafe {
         (handler.callback)(
             &raw const wait,
@@ -144,8 +146,9 @@ unsafe extern "system" fn on_server_wait(registers: *mut Registers, user: *mut c
     let registers = unsafe { &mut *registers };
     // SAFETY: the user pointer is the leaked handler, never freed.
     let handler = unsafe { *user.cast::<Handler<ServerWaitFn>>() };
-    // SAFETY: the mod's callback with its own pointer; the safe layer
-    // catches its panics.
+    // SAFETY: the mod's registered callback of this type, in its DLL, which
+    // stays loaded, with its own pointer and a wait that lives for the call;
+    // by the callback contract of `HostApi` it does not unwind into the loader.
     unsafe {
         (handler.callback)(
             &raw mut registers.r9,

@@ -75,12 +75,14 @@ impl Refusal for crate::content::recipes::RecipeRuleError {
     }
 }
 
-/// Bad bytes are a bad argument; content the archive lacks missing.
+/// Bad bytes are a bad argument; content the archive lacks missing; content
+/// past the loader's limit refused, for the rest of the process.
 impl Refusal for crate::content::textures::TextureError {
     fn status(&self) -> Status {
         match self {
             Self::BadData => Status::BAD_ARGS,
             Self::NotInArchive => Status::MISSING,
+            Self::Full => Status::REFUSED,
         }
     }
 }

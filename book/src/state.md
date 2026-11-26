@@ -43,8 +43,16 @@ were (client 26320373). So the loader records the world's GUID from the
 save's header in `<stem>-mod-data/enshwick/world.toml`. As a world loads,
 its save may hold another GUID, or the recorded world's save may be gone.
 In either case the loader renames both folders to `<name>.old-<date>-<time>` and logs one
-line. The world starts from each mod's defaults. Nothing is deleted. A copy of
-a save keeps its GUID, so a copied world keeps its folders.
+line. When that name is taken, the folders get `-2`, `-3` and on after it. The
+world starts from each mod's defaults. Nothing is deleted. A copy of a save
+keeps its GUID, so a copied world keeps its folders.
+
+A folder that another program holds is tried again for about a second. When
+one of the two folders still cannot be renamed, the loader renames the first
+folder back. Then no world has mod settings or data until the game restarts,
+and players read that "world mod folders" are off. A world never reads one
+folder of its own and one of another world's. [Holds](#holds) on a world
+still stop the game, and mods still read its save.
 
 ## The data folder
 

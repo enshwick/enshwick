@@ -17,7 +17,7 @@
 use core::ffi::c_void;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use enshwick_core::abi::{BuildingData, Event, Header, HookFlags, PlayerData, Side, TickData};
 use enshwick_core::raw::read_at;
@@ -609,8 +609,8 @@ fn periodic_ticks((step, entering): (u64, bool), now: u64, time: StepTime, game:
                 || {
                     // SAFETY: the handler lives in the mod's DLL, which stays
                     // loaded, with the pointer it was subscribed with; `data`
-                    // lives for the call, and the safe layer catches the
-                    // handler's panics.
+                    // lives for the call, and by the callback contract of
+                    // `HostApi` the handler does not unwind into the loader.
                     unsafe {
                         (tick.callback())(
                             Event::TICKED,
@@ -759,6 +759,7 @@ fn state_changed(loader: &'static Loader, old: u8, state: u8) {
             // (server 26430253).
             crate::base::saves::shut_down(loader, || {
                 loader.emit(Event::SHUTDOWN_STARTED, None, core::ptr::null());
+                let _written = crate::engine::log::settle(SHUTDOWN_LOG_WAIT);
             });
             if loader.side == Side::CLIENT {
                 end_session(loader);
@@ -778,11 +779,9 @@ crate::engine::chains::chain_detour! {
         if held {
             onward.before(&SAVE_FUSE, "the save link", || world::transactions::saving(true));
         }
-        onward.run(&SAVE_FUSE, "the save link", |onward| {
+        then_off(held, |stash_off| onward.run(&SAVE_FUSE, "the save link", |onward| {
             let result = onward.call();
-            if held {
-                world::transactions::saving(false);
-            }
+            stash_off();
             // SAFETY: `out` is non-null by the check before it and is the
             // save step's result, whose first byte the game has just written.
             let done = !out.is_null() && unsafe { read_at::<u8>(out, 0) } == 0;
@@ -791,8 +790,33 @@ crate::engine::chains::chain_detour! {
                 loader.emit(Event::WORLD_SAVED, None, core::ptr::null());
             }
             result
-        })
+        }), || world::transactions::saving(false))
     }
+}
+
+/// The longest the shutdown waits for the log to write the lines the parts
+/// and mods sent as the game shuts down, since the process may end soon
+/// after with the writer's queue unwritten.
+const SHUTDOWN_LOG_WAIT: Duration = Duration::from_millis(500);
+
+/// Turns the held chests' Quick Stash off again after a save that a panic
+/// cut short, so they never stay open to deposits.
+static STASH_FUSE: Fuse = Fuse::new("held chests after a save");
+
+/// Runs `save`, which calls the function it gets once the game saved, and
+/// when `held` calls `off` through it, or after `save` under
+/// [`STASH_FUSE`] when `save` did not, as when its fuse caught a panic;
+/// `off` runs once at most.
+fn then_off<R>(held: bool, save: impl FnOnce(&dyn Fn()) -> R, off: impl Fn()) -> R {
+    let pending = core::cell::Cell::new(held);
+    let once = || {
+        if pending.replace(false) {
+            off();
+        }
+    };
+    let result = save(&once);
+    let _late = STASH_FUSE.run("the held chests after a save", once);
+    result
 }
 
 crate::engine::chains::chain_detour! {

@@ -14,7 +14,7 @@ use enshwick_gamedata::reflect::fnv1a32;
 use super::table::{self, Adopted};
 use super::{
     Host, Material, Palette, Played, Session, TerrainMaterialError, add_rules, copy_effects,
-    copy_looks, held_of, held_text, moved_by, moved_text, name_in, orphans, pads, place, prefer,
+    copy_looks, held, held_of, moved_by, moved_text, name_in, orphans, pads, place, prefer,
     saves_folder, serving, untaken_text,
 };
 use crate::content::served::{Builder, mod_on};
@@ -454,7 +454,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
         return;
     };
     let path = crate::base::world_folders::loader_data(key, HELD_FILE);
-    if let Err(error) = enshwick_core::files::write_atomically(&path, held_text(&session())) {
+    if let Err(error) = crate::base::world_folders::write_toml(&path, "", &held(&session())) {
         crate::log!(
             WARN,
             "the terrain materials of world {key} were not recorded: {error}"

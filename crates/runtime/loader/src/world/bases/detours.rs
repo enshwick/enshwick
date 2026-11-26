@@ -111,8 +111,8 @@ pub(super) fn chain_limit<'a>(
         crate::engine::filters::ask(filters, crate::engine::profile::Feature::Altars, |filter| {
             // SAFETY: the owner runs, so the mod's DLL that holds the filter
             // stays loaded; the filter gets the user pointer its mod
-            // registered and a limit valid for the call, and the safe layer
-            // catches its panics.
+            // registered and a limit valid for the call, and by the callback
+            // contract of `HostApi` it does not unwind into the loader.
             filter.call(|filter, user| unsafe { filter(&raw mut limit, user) });
             limit = AltarLimit {
                 allowed: limit.allowed,

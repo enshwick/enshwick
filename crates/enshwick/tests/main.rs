@@ -278,6 +278,7 @@ mod screen_extensions;
 mod screen_hosts;
 #[cfg(feature = "unstable")]
 mod screen_placements;
+mod served_content;
 mod served_panic;
 #[cfg(feature = "typed")]
 mod served_reads;

@@ -201,6 +201,27 @@ fn saved_modifiers_round_trip() {
 }
 
 #[test]
+fn a_failed_write_of_the_saved_modifiers_leaves_them_for_the_next_save() {
+    let mut world = World {
+        saved_changed: true,
+        ..World::default()
+    };
+    assert_eq!(world.take_changed(), None, "no world key to write to");
+    assert!(world.saved_changed, "kept until a key names the file");
+    world.key = Some("world0".into());
+    assert!(world.take_changed().is_some());
+    assert!(!world.saved_changed);
+    world.unwritten("world1");
+    assert!(!world.saved_changed, "another world's write");
+    world.unwritten("world0");
+    assert!(world.saved_changed);
+    assert!(
+        world.take_changed().is_some(),
+        "written again at the next save"
+    );
+}
+
+#[test]
 fn one_mod_stopping_its_watch_leaves_another_mods_watch() {
     let (a, b) = (ModIndex::new(1), ModIndex::new(2));
     let mut watched = Watched::default();

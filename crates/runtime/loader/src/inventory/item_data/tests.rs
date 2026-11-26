@@ -2,7 +2,7 @@
 
 use super::attach::attach;
 use super::carried::*;
-use super::world_file::{last_write, read_file, read_world, unwritten, write_file};
+use super::world_file::{last_write, read_file, read_world, swept, unwritten, write_file};
 use super::*;
 use crate::inventory::item_records::anchor::{CharacterId, Index};
 
@@ -55,30 +55,35 @@ fn a_destroyed_entity_loses_its_records_and_an_unloaded_one_keeps_them() {
     values.insert(key(0, 901), record(7));
     requests.note(Entity(900));
     requests.note(Entity(0));
-    let destroyed = requests.take();
-    assert!(requests.take().is_empty(), "each request is taken once");
+    let (destroyed, overflowed) = requests.take();
+    assert!(!overflowed);
+    assert!(requests.take().0.is_empty(), "each request is taken once");
     let mut gone = prune_destroyed(&mut values, &destroyed);
     gone.sort_unstable();
     assert_eq!(gone, [key(0, 900), key(1, 900)]);
     // 901 is merely not loaded: no destroy request names it.
     assert_eq!(values.len(), 1);
     assert!(values.contains_key(&key(0, 901)));
-    // Past the cap in one step, requests are left for the save.
+    // Past the cap in one step, the requests that fit are taken and the
+    // overflow says the step's end checks every record against the world.
     for entity in 1..=u32::try_from(DESTROYED_CAP).unwrap() + 10 {
         requests.note(Entity(entity));
     }
-    let destroyed = requests.take();
+    let (destroyed, overflowed) = requests.take();
+    assert!(overflowed);
     assert_eq!(destroyed.len(), DESTROYED_CAP);
     assert!(!destroyed.contains(&(u32::try_from(DESTROYED_CAP).unwrap() + 1)));
+    requests.note(Entity(3));
+    assert!(!requests.take().1, "the next step starts below the cap");
     // A request filled after its round was taken never reaches a later
     // one, where its slot is still being filled.
     requests.note(Entity(1));
     let late = requests.reserve();
-    assert_eq!(requests.take().into_iter().collect::<Vec<_>>(), [1]);
+    assert_eq!(requests.take().0.into_iter().collect::<Vec<_>>(), [1]);
     requests.fill(late, Entity(5));
     requests.note(Entity(2));
     let _filling = requests.reserve();
-    assert_eq!(requests.take().into_iter().collect::<Vec<_>>(), [2]);
+    assert_eq!(requests.take().0.into_iter().collect::<Vec<_>>(), [2]);
 }
 
 /// The kinds these tests share, sealed once per process: `a:charges`
@@ -130,6 +135,47 @@ fn a_client_keeps_at_most_its_cap_of_a_server_s_records() {
     encode(&mut removal, "a:charges", 1, 0, &[]);
     assert!(keep(&mut values, &removal));
     assert_eq!(values.len(), MAX_CLIENT_RECORDS - 1);
+}
+
+#[test]
+fn the_check_after_an_overflowing_step_waits_for_the_next_step_s_end() {
+    let state = State::new();
+    assert!(!state.sweep_now(true), "its destroys are still queued");
+    assert!(
+        state.sweep_now(false),
+        "they played back by the next step's end"
+    );
+    assert!(!state.sweep_now(false), "checked once");
+    assert!(!state.sweep_now(true));
+    assert!(state.sweep_now(true), "two overflows in a row check twice");
+    state.start_server(server(Vec::new(), Vec::new()));
+    assert!(
+        !state.sweep_now(false),
+        "a new world checks nothing of the last"
+    );
+}
+
+#[test]
+fn a_sweep_after_an_overflowing_step_names_each_value_it_took_for_the_clients() {
+    let record = || Record {
+        item: 7,
+        anchor: None,
+        value: Box::new([1]),
+    };
+    let mut world = server(Vec::new(), Vec::new());
+    for pide in [900, 901, 902] {
+        world.values.insert(key(0, pide), record());
+    }
+    let mut gone = swept(&mut world, |world| {
+        world.values.remove(&key(0, 900));
+        world.values.remove(&key(0, 902));
+    });
+    gone.sort_unstable();
+    assert_eq!(gone, [key(0, 900), key(0, 902)]);
+    assert!(
+        swept(&mut world, |_| {}).is_empty(),
+        "a sweep that takes none"
+    );
 }
 
 fn server(pending: Vec<Pending>, unopened: Vec<String>) -> Server {

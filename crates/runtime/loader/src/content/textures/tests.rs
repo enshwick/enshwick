@@ -136,6 +136,70 @@ fn a_served_hash_carries_its_size_and_the_mark() {
 }
 
 #[test]
+fn requests_are_read_only_when_inside_one_readable_region() {
+    use windows_sys::Win32::System::Memory::{
+        MEM_COMMIT, MEM_PRIVATE, PAGE_NOACCESS, PAGE_READWRITE,
+    };
+    let region = |protect| crate::engine::pages::Region {
+        base: 0x1000,
+        end: 0x3000,
+        allocation: 0x1000,
+        state: MEM_COMMIT,
+        kind: MEM_PRIVATE,
+        protect,
+    };
+    let readable = |_| Some(region(PAGE_READWRITE));
+    assert!(requests_read(0x1000, 2, 0x1000, readable));
+    assert!(
+        !requests_read(0x1000, 3, 0x1000, readable),
+        "past the region"
+    );
+    assert!(!requests_read(0x1000, 1, 0x40, |_| Some(region(
+        PAGE_NOACCESS
+    ))));
+    assert!(!requests_read(0x1000, 1, 0x40, |_| None));
+    assert!(
+        requests_read(0x1000, 5000, 1, readable),
+        "any count the region holds"
+    );
+    assert!(!requests_read(0x1000, 0, 0x40, readable), "none to read");
+    assert!(!requests_read(0, 1, 0x40, readable), "no array");
+    assert!(
+        !requests_read(usize::MAX - 8, 2, 0x40, readable),
+        "an end that overflows"
+    );
+}
+
+#[test]
+fn served_content_stops_at_its_limit_and_the_same_bytes_serve_again() {
+    let store = Box::new(store::Store::new());
+    let hash = |n: u32| [4, n, n.wrapping_mul(7), MARK];
+    assert!(store.is_empty());
+    assert_eq!(store.insert(hash(1), b"abcd"), Ok(()));
+    assert_eq!(store.get(&hash(1)), Some(&b"abcd"[..]));
+    assert_eq!(store.get(&hash(2)), None);
+    assert_eq!(store.insert(hash(1), b"wxyz"), Ok(()), "served once");
+    assert_eq!(store.get(&hash(1)), Some(&b"abcd"[..]));
+    let big = vec![0u8; store::MAX_BYTES];
+    assert_eq!(
+        store.insert(hash(2), &big),
+        Err(store::Full),
+        "past the bytes"
+    );
+    for n in 2..=u32::try_from(store::MAX_ENTRIES).unwrap() {
+        assert_eq!(store.insert(hash(n), &[1]), Ok(()), "entry {n}");
+    }
+    assert_eq!(
+        store.insert(hash(0), &[1]),
+        Err(store::Full),
+        "past the entries"
+    );
+    for n in 1..=u32::try_from(store::MAX_ENTRIES).unwrap() {
+        assert!(store.get(&hash(n)).is_some(), "entry {n} still found");
+    }
+}
+
+#[test]
 fn the_images_showing_is_announced_once_and_only_after_every_link_ran() {
     let textures = Textures::new();
     textures.relisted.store(true, Ordering::Release);

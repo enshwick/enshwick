@@ -70,7 +70,10 @@ pub(crate) fn write_for_world() {
             }
         }
         if old.as_ref() != Some(taken)
-            && let Err(e) = enshwick_core::files::write_atomically(&path, taken.render())
+            && let Err(e) = taken
+                .render()
+                .map_err(std::io::Error::other)
+                .and_then(|text| enshwick_core::files::write_atomically(&path, text))
         {
             crate::log!(WARN, "{} not written: {e}", record::RECORD_FILE);
         }

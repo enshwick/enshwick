@@ -2,6 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
+use enshwick_core::Entity;
 use enshwick_core::abi::Event;
 use rustc_hash::FxHashSet;
 
@@ -256,6 +257,27 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
     server.pending.append(&mut gone);
     server.changed |= server.values.len() != before;
     anchorless
+}
+
+/// [`refresh`] between saves, after a step whose destroy requests did not
+/// all fit: the keys of the values it took away, which clients still hold.
+pub(super) fn sweep(loader: &Loader, server: &mut Server) -> Vec<(KindIndex, Entity)> {
+    swept(server, |server| {
+        let _anchorless = refresh(loader, server);
+    })
+}
+
+/// The keys of `server`'s values that `check` took away.
+pub(super) fn swept(
+    server: &mut Server,
+    check: impl FnOnce(&mut Server),
+) -> Vec<(KindIndex, Entity)> {
+    let before: Vec<(KindIndex, Entity)> = server.values.keys().copied().collect();
+    check(server);
+    before
+        .into_iter()
+        .filter(|key| !server.values.contains_key(key))
+        .collect()
 }
 
 /// Reads afresh, at shutdown, the anchor of each value whose item a player

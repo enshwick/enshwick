@@ -307,12 +307,11 @@ struct Held {
     held: Vec<String>,
 }
 
-/// The text of a world's record for a world served `materials`.
-fn held_text(materials: &[Material]) -> String {
-    let held = Held {
+/// A world's record for a world served `materials`.
+fn held(materials: &[Material]) -> Held {
+    Held {
         held: materials.iter().map(|m| m.guid.to_string()).collect(),
-    };
-    toml::to_string(&held).unwrap_or_default()
+    }
 }
 
 /// The GUIDs a world's record names; none for a file that does not read, and

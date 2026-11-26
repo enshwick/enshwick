@@ -121,15 +121,50 @@ pub fn write_atomically(path: &Path, contents: impl AsRef<[u8]>) -> io::Result<(
         .and_then(|()| keep_backup(path))
         .and_then(|()| while_busy(|| std::fs::rename(&temporary, path)));
     if placed.is_err() {
-        let _gone = while_busy(|| std::fs::remove_file(&temporary));
+        remove_temporary(temporary);
     }
     placed
+}
+
+/// Removes the temporary file of a write that failed. On a thread that
+/// waits briefly, a removal refused as the rename was goes on with the full
+/// wait on a thread of its own, so no temporary file is left.
+fn remove_temporary(temporary: PathBuf) {
+    let removed = while_busy(|| std::fs::remove_file(&temporary));
+    if removed.is_err_and(|e| busy(&e)) && tries_here() < BUSY_TRIES {
+        let _waits = std::thread::Builder::new()
+            .name("enshwick temporary file".to_owned())
+            .spawn(move || while_busy_fully(|| std::fs::remove_file(&temporary)));
+    }
 }
 
 /// How often [`while_busy`] tries a step: about a second of waiting per step,
 /// since on a machine under load a writer that holds the file may not run
 /// again for tens of milliseconds.
 const BUSY_TRIES: u32 = 32;
+
+/// How often [`while_busy`] tries a step on a thread that must not stall,
+/// such as the game's: about 30 ms of waiting per step. A write refused
+/// past it fails, and its caller keeps the data for the next write.
+const QUICK_TRIES: u32 = 6;
+
+std::thread_local! {
+    /// How often [`while_busy`] tries a step on this thread.
+    static TRIES: core::cell::Cell<u32> = const { core::cell::Cell::new(BUSY_TRIES) };
+}
+
+/// Makes every write of [`files`](self) from the calling thread wait at
+/// most [`QUICK_TRIES`] tries per step for a file another handle holds when
+/// `briefly`, else [`BUSY_TRIES`] again.
+pub(crate) fn wait_briefly(briefly: bool) {
+    let tries = if briefly { QUICK_TRIES } else { BUSY_TRIES };
+    let _set = TRIES.try_with(|cell| cell.set(tries));
+}
+
+/// How often [`while_busy`] tries a step on this thread.
+fn tries_here() -> u32 {
+    TRIES.try_with(core::cell::Cell::get).unwrap_or(BUSY_TRIES)
+}
 
 /// Windows' `ERROR_SHARING_VIOLATION` and `ERROR_LOCK_VIOLATION`, which
 /// `io::ErrorKind` leaves uncategorized.
@@ -147,11 +182,22 @@ fn busy(error: &io::Error) -> bool {
 /// Windows refuses to delete, link or rename over a file that another handle
 /// holds open without delete sharing, as a virus scanner, an indexer or a
 /// second writer's backup copy briefly does.
-fn while_busy<T>(mut step: impl FnMut() -> io::Result<T>) -> io::Result<T> {
+fn while_busy<T>(step: impl FnMut() -> io::Result<T>) -> io::Result<T> {
+    tried(tries_here(), step)
+}
+
+/// [`while_busy`] with the full [`BUSY_TRIES`], whatever this thread's
+/// budget: for a step whose failure costs more than its wait.
+pub(crate) fn while_busy_fully<T>(step: impl FnMut() -> io::Result<T>) -> io::Result<T> {
+    tried(BUSY_TRIES, step)
+}
+
+/// `step`, tried up to `most` times while it is refused for access.
+fn tried<T>(most: u32, mut step: impl FnMut() -> io::Result<T>) -> io::Result<T> {
     let mut tries = 1;
     loop {
         match step() {
-            Err(e) if busy(&e) && tries < BUSY_TRIES => {
+            Err(e) if busy(&e) && tries < most => {
                 std::thread::sleep(std::time::Duration::from_millis(u64::from(tries) * 2));
                 tries += 1;
             }
@@ -451,5 +497,71 @@ mod tests {
             (held.unwrap_err().kind(), calls),
             (io::ErrorKind::PermissionDenied, BUSY_TRIES)
         );
+    }
+
+    /// How often `retry` tries a step that is always refused for access.
+    fn tries_of(retry: fn(&mut dyn FnMut() -> io::Result<()>) -> io::Result<()>) -> u32 {
+        let mut calls = 0;
+        let held = retry(&mut || {
+            calls += 1;
+            Err(io::ErrorKind::PermissionDenied.into())
+        });
+        assert!(held.is_err());
+        calls
+    }
+
+    #[test]
+    fn a_thread_that_must_not_stall_gives_up_on_a_held_file_after_its_few_tries() {
+        let tries = std::thread::spawn(|| {
+            wait_briefly(true);
+            let started = std::time::Instant::now();
+            let quick = tries_of(|step| while_busy(step));
+            assert!(started.elapsed() < std::time::Duration::from_millis(500));
+            let full = tries_of(|step| while_busy_fully(step));
+            wait_briefly(false);
+            (quick, full, tries_of(|step| while_busy(step)))
+        })
+        .join()
+        .unwrap();
+        assert_eq!(
+            tries,
+            (QUICK_TRIES, BUSY_TRIES, BUSY_TRIES),
+            "a one-off step and the shutdown wait the full time"
+        );
+        assert_eq!(
+            TRIES.with(core::cell::Cell::get),
+            BUSY_TRIES,
+            "other threads wait on"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_held_temporary_file_is_removed_once_let_go_even_from_a_thread_that_must_not_stall() {
+        use std::os::windows::fs::OpenOptionsExt as _;
+        let dir = dir("held-temporary");
+        let temporary = dir.join("settings.toml.1-2.tmp");
+        std::fs::write(&temporary, "new").unwrap();
+        // No sharing at all, as a scanner holds a file it reads.
+        let hold = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(&temporary)
+            .unwrap();
+        let left = temporary.clone();
+        std::thread::spawn(move || {
+            wait_briefly(true);
+            remove_temporary(left);
+        })
+        .join()
+        .unwrap();
+        assert!(temporary.exists(), "held past the brief wait");
+        drop(hold);
+        let started = std::time::Instant::now();
+        while temporary.exists() && started.elapsed() < std::time::Duration::from_secs(5) {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(!temporary.exists(), "removed once let go");
+        let _gone = std::fs::remove_dir_all(&dir);
     }
 }

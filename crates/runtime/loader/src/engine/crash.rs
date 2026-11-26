@@ -59,6 +59,10 @@ const LINE: usize = 768;
 const CRASH_SOURCE: &str = "enshwick-crash";
 /// Crash files kept; older ones are deleted at start.
 const KEPT_CRASHES: usize = 10;
+/// The longest a crash report waits for the log to write the lines sent
+/// before the crash, so they come before the report in the loader's file;
+/// a crash on the writer's own thread waits it out.
+const CRASH_LOG_WAIT: core::time::Duration = core::time::Duration::from_millis(250);
 /// The longest crash file path, in UTF-16 units with its NUL.
 const CRASH_PATH: usize = 1024;
 /// The longest mapped file path the crash line reads a module's name from, in
@@ -836,6 +840,7 @@ unsafe fn report(pointers: *const EXCEPTION_POINTERS, thread: u32) {
     // SAFETY: the caller's contract, passed on: the fault's valid pointers,
     // and `thread` stopped in the fault or running this.
     unsafe { record(state, pointers, thread, line) };
+    let _written = crate::engine::log::settle(CRASH_LOG_WAIT);
     write(state.log, line.as_bytes());
     let mut time = SYSTEMTIME {
         wYear: 0,

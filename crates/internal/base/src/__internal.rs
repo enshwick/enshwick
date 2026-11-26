@@ -12,7 +12,9 @@ use crate::game_events::CraftRecipeEvent;
 use crate::{Entity, Host, RecipeId};
 
 mod builds;
+pub mod inventory_queue;
 pub mod renames;
+pub mod served_content;
 pub mod waypoints;
 
 pub use crate::game_events::notify::NotifyLayout;
@@ -29,6 +31,31 @@ pub use builds::{
 #[must_use]
 pub fn fake_clock() -> bool {
     crate::schedule::fake_clock()
+}
+
+/// Makes the calling thread's atomic file writes wait about 30 ms per step
+/// for a held file when `briefly`, not a second, and a second again when
+/// not.
+///
+/// For the game thread while a world runs: a stall there freezes the game,
+/// and the caller keeps what a failed write held for its next write. Its
+/// writes at the shutdown, which no later save follows, wait the full time.
+pub fn wait_briefly_on_this_thread(briefly: bool) {
+    crate::files::wait_briefly(briefly);
+}
+
+/// Runs `step` again for up to about a second while another handle holds
+/// its file.
+///
+/// The wait is the full one whatever the calling thread's: for a one-off
+/// step, such as renaming a world's folders, whose failure costs more than
+/// the stall.
+///
+/// # Errors
+///
+/// `step`'s error once it is not refused for access, or the tries run out.
+pub fn while_busy<T>(step: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
+    crate::files::while_busy_fully(step)
 }
 
 /// Makes `host` the answer of [`crate::host`]; the first call wins.

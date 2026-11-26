@@ -71,7 +71,7 @@ pub mod bench {
         base::game_events::bench_server_copy,
         content::recipes::live::bench_recipe_filter,
         content::served::{bench_served_build, bench_text_lookup},
-        content::textures::bench_texture_request,
+        content::textures::{bench_request_reads, bench_texture_request},
         engine::world::accounts::bench_accounts,
         knowledge::quest_events::bench_quest_change,
         ui::interface::tooltips::bench_tooltip_lines,

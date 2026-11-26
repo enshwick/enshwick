@@ -150,8 +150,9 @@ fn ask(
         crate::engine::profile::Feature::Actions,
         |callback| {
             // SAFETY: the callback lives in the mod's DLL, which stays loaded
-            // while its mod runs; the safe layer catches its panics.
-            // `written` outlives the call.
+            // while its mod runs; `call` and `reply` outlive the call, and by
+            // the callback contract of `HostApi` it does not unwind into the
+            // loader.
             callback.call(|callback, user| unsafe {
                 callback(&raw const call, user, &raw mut reply);
             });

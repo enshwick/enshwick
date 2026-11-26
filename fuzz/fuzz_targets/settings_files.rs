@@ -12,7 +12,11 @@ use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|text: &str| {
     if let Some(record) = Record::parse(text) {
-        assert!(Record::parse(&record.render()).is_some());
+        assert!(
+            record
+                .render()
+                .is_ok_and(|text| Record::parse(&text).is_some())
+        );
     }
     if let Ok(schema) = Schema::parse(text) {
         drop(schema.to_text());

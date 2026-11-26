@@ -74,8 +74,9 @@ fn lines_of(sources: &[Source], owner: ModIndex) -> Vec<String> {
         .filter(|s| s.owner == owner)
         .flat_map(|source| {
             let mut out = Str::EMPTY;
-            // SAFETY: the source lives in the mod's DLL, which stays loaded;
-            // the safe layer catches its panics.
+            // SAFETY: the source lives in the mod's DLL, which stays loaded,
+            // and writes `out`, which lives for the call; by the callback
+            // contract of `HostApi` it does not unwind into the loader.
             crate::engine::profile::call(
                 source.owner,
                 crate::engine::profile::Feature::Status,

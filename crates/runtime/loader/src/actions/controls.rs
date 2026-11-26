@@ -495,9 +495,8 @@ fn fire(control: &Declared, kind: u32, player: Option<&PlayerInfo>) {
         player: player.map_or(core::ptr::null(), core::ptr::from_ref),
     };
     // SAFETY: the callback lives in the mod's DLL, which stays loaded, and
-    // gets a live event and the pointer its mod declared it with; the safe
-    // layer catches its panics, and an `extern "system"` function aborts
-    // rather than unwinds.
+    // gets a live event and the pointer its mod declared it with; by the
+    // callback contract of `HostApi` it does not unwind into the loader.
     crate::engine::profile::call(
         control.owner,
         crate::engine::profile::Feature::Controls,

@@ -359,7 +359,8 @@ fn deliver(channel: u32, peer: u64, data: &[u8]) {
         reserved_tail: 0,
     };
     // SAFETY: the handler lives in the mod's DLL, which stays loaded, and
-    // takes the pointer it registered; the safe layer catches its panics.
+    // takes the pointer it registered and a message that lives for the call;
+    // by the callback contract of `HostApi` it does not unwind into the loader.
     crate::engine::profile::call(
         target.handler.owner,
         crate::engine::profile::Feature::Messages,

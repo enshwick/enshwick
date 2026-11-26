@@ -400,7 +400,11 @@ entries! {
             if enshwick_core::__fake::rules::inventory_checks::refused(ops) {
                 return Status::BAD_ARGS;
             }
-            s.inventory.inventory_requests.push(OpenRequest {
+            let waiting = &mut s.inventory.inventory_requests;
+            if waiting.len() >= enshwick_base::__internal::inventory_queue::MAX_QUEUED {
+                return Status::BUSY;
+            }
+            waiting.push(OpenRequest {
                 request: SubmittedRequest {
                     ops: ops.to_vec(),
                     flags: request.flags,
@@ -468,6 +472,17 @@ mod tests {
         );
         assert_eq!(submit(&[give(0)]), Status::BAD_ARGS, "a give of nothing");
         assert_eq!(submit(&[give(1)]), Status::OK);
+    }
+
+    #[test]
+    fn the_fake_answers_busy_past_the_requests_the_loader_lets_wait() {
+        use enshwick_base::__internal::inventory_queue::MAX_QUEUED;
+        let _loader = FakeHost::new().install();
+        for n in 0..MAX_QUEUED {
+            assert_eq!(submit(&[give(1)]), Status::OK, "request {n}");
+        }
+        assert_eq!(submit(&[give(1)]), Status::BUSY);
+        assert_eq!(submit(&[give(0)]), Status::BAD_ARGS, "the ops come first");
     }
 
     unsafe extern "system" fn keep(check: *mut DamageCheck, _: *mut c_void) {

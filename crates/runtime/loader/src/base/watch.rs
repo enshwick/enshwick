@@ -9,6 +9,7 @@ use std::time::{Duration, SystemTime};
 
 use enshwick_core::abi::Event;
 
+use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
 use crate::engine::settings::{FILE, Settings};
@@ -115,6 +116,13 @@ fn stamp(path: &Path) -> Stamp {
     Some((meta.modified().ok()?, meta.len()))
 }
 
+/// The watch of the loader's own settings file; a panic in it leaves the
+/// world settings watched.
+static OWN_FUSE: Fuse = Fuse::new("loader settings watch");
+/// The watch of the mods' settings files of the running world; a panic in
+/// it leaves the loader's own settings watched.
+static WORLDS_FUSE: Fuse = Fuse::new("world settings watch");
+
 /// Starts watching on a thread of its own.
 pub(crate) fn start(loader: &'static Loader) {
     let own = loader.mods_dir.with_file_name(FILE);
@@ -127,52 +135,73 @@ pub(crate) fn start(loader: &'static Loader) {
     let _started = crate::engine::off_thread::start("settings watch", move || {
         loop {
             std::thread::sleep(PERIOD);
-            for file in &mut files {
-                let now = stamp(&file.path);
-                if now == file.seen {
-                    continue;
-                }
-                file.seen = now;
-                if now.is_none() || ours(&file.path, now) {
-                    continue;
-                }
-                changed(loader, file.owner);
-            }
-            // A mod may declare a settings file after the watch started.
-            for (owner, record) in loader.mods.iter().enumerate() {
-                for declared in &crate::base::worlds::settings_files(record) {
-                    let known = worlds
-                        .iter()
-                        .any(|w| w.owner.get() == owner && w.file == declared.file);
-                    if !known {
-                        worlds.push(WorldWatched {
-                            owner: ModIndex::new(owner),
-                            file: declared.file.clone(),
-                            key: None,
-                            seen: None,
-                        });
-                    }
-                }
-            }
-            let key = crate::base::worlds::current();
-            let mut edited = Vec::new();
-            for file in &mut worlds {
-                let path = key.as_deref().and_then(|key| {
-                    let record = loader.mods.get(file.owner.get())?;
-                    Some(crate::base::worlds::world_file(&record.id, &file.file, key))
-                });
-                let now = path.as_deref().and_then(stamp);
-                if file.changed(key.as_deref(), path.as_deref(), now) {
-                    edited.push(file.owner.get());
-                }
-            }
-            edited.dedup();
-            for index in edited {
-                crate::base::worlds::changed(loader, index);
-            }
+            round(
+                || watch_own(loader, &mut files),
+                || watch_worlds(loader, &mut worlds),
+            );
             loader.parts.poll(loader);
         }
     });
+}
+
+/// One look of the watch: `own` and `worlds` each under its own fuse, so a
+/// panic turns off only the watch it came from and the thread goes on.
+fn round(own: impl FnOnce(), worlds: impl FnOnce()) {
+    let _own = OWN_FUSE.run("the loader settings watch", own);
+    let _worlds = WORLDS_FUSE.run("the world settings watch", worlds);
+}
+
+/// Raises the change of each of `files` that changed since the last look,
+/// unless the loader wrote it.
+fn watch_own(loader: &Loader, files: &mut [Watched]) {
+    for file in files {
+        let now = stamp(&file.path);
+        if now == file.seen {
+            continue;
+        }
+        file.seen = now;
+        if now.is_none() || ours(&file.path, now) {
+            continue;
+        }
+        changed(loader, file.owner);
+    }
+}
+
+/// Raises the change of each mod whose settings file of the running world
+/// someone else edited since the last look; `worlds` takes the files mods
+/// declared since.
+fn watch_worlds(loader: &Loader, worlds: &mut Vec<WorldWatched>) {
+    for (owner, record) in loader.mods.iter().enumerate() {
+        for declared in &crate::base::worlds::settings_files(record) {
+            let known = worlds
+                .iter()
+                .any(|w| w.owner.get() == owner && w.file == declared.file);
+            if !known {
+                worlds.push(WorldWatched {
+                    owner: ModIndex::new(owner),
+                    file: declared.file.clone(),
+                    key: None,
+                    seen: None,
+                });
+            }
+        }
+    }
+    let key = crate::base::worlds::current();
+    let mut edited = Vec::new();
+    for file in worlds {
+        let path = key.as_deref().and_then(|key| {
+            let record = loader.mods.get(file.owner.get())?;
+            Some(crate::base::worlds::world_file(&record.id, &file.file, key))
+        });
+        let now = path.as_deref().and_then(stamp);
+        if file.changed(key.as_deref(), path.as_deref(), now) {
+            edited.push(file.owner.get());
+        }
+    }
+    edited.dedup();
+    for index in edited {
+        crate::base::worlds::changed(loader, index);
+    }
 }
 
 fn changed(loader: &Loader, owner: Option<usize>) {
@@ -227,6 +256,20 @@ mod tests {
             .is_err()
         );
         let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_panic_in_one_watch_turns_off_only_that_watch_and_the_next_round_runs_the_other() {
+        let mut own = 0;
+        round(|| own += 1, || panic!("a settings file that does not read"));
+        assert!(WORLDS_FUSE.is_off() && !OWN_FUSE.is_off());
+        round(|| own += 1, || unreachable!("its watch is off"));
+        assert_eq!(own, 2, "the loader's own settings are still watched");
+        let listed = crate::engine::diag::parts_off();
+        assert!(
+            listed.iter().any(|p| p.part == WORLDS_FUSE.feature()),
+            "{listed:?}"
+        );
     }
 
     #[test]

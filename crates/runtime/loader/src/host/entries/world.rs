@@ -109,7 +109,7 @@ entries! {
     }
 
     fn world_key(loader as Caller, out as Out<Str>) -> Status {
-        let key = crate::base::saves::world_key(loader).ok_or(Status::UNAVAILABLE)?;
+        let key = crate::base::saves::save_key(loader).ok_or(Status::UNAVAILABLE)?;
         out.put(Str::new(crate::base::saves::stem(key)))
     }
 

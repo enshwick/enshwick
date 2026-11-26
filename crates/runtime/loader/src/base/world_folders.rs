@@ -7,8 +7,10 @@
 //! game leaves the folders behind (client 26320373). So the loader records
 //! the world's GUID in `<stem>-mod-data/enshwick/world.toml` and, when a
 //! save in the slot holds another GUID or is gone, renames both folders to
-//! `<name>.old-<date>-<time>`, so the new world starts from the mods'
-//! defaults and nothing is deleted.
+//! `<name>.old-<date>-<time>` (`-2` on when that name is taken), so the new
+//! world starts from the mods' defaults and nothing is deleted. A rename
+//! that fails renames back the folder renamed before it, so a world never
+//! reads one folder of its own and one of another world's.
 //!
 //! Every `.ksd` starts with a 0x30-byte `SV2C` header whose bytes 0x0C to
 //! 0x1C are the world's random GUID, the same across saves and new for each
@@ -112,6 +114,21 @@ pub fn loader_data(key: &str, name: &str) -> PathBuf {
         .join(name)
 }
 
+/// Writes `value` as TOML after `prefix` to `path`, atomically; a value that
+/// does not serialize writes nothing, so no empty file replaces the last one.
+///
+/// # Errors
+///
+/// When `value` does not serialize or the file is not written.
+pub(crate) fn write_toml(
+    path: &Path,
+    prefix: &str,
+    value: &impl serde::Serialize,
+) -> io::Result<()> {
+    let body = toml::to_string(value).map_err(io::Error::other)?;
+    enshwick_core::files::write_atomically(path, format!("{prefix}{body}"))
+}
+
 /// What the check found.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -127,34 +144,83 @@ pub enum Identity {
     Unreadable,
 }
 
+/// Why [`check`] failed.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum CheckError {
+    /// The record or the save did not read, or the record was not written;
+    /// the folders are as they were, or renamed together.
+    #[error(transparent)]
+    Io(#[from] io::Error),
+    /// A folder was not renamed, or no free name was left for it, and the
+    /// folders renamed before it were renamed back, so both still belong to
+    /// the other world.
+    #[error("{} was not renamed ({error}), and no folder of the world was left renamed", folder.display())]
+    NotRenamed {
+        /// The folder that kept its name.
+        folder: PathBuf,
+        /// Why.
+        error: io::Error,
+    },
+    /// A folder was not renamed, and one renamed before it was not renamed
+    /// back either: the world's folders are split between two names.
+    #[error("{} was not renamed ({error}), and {} was not renamed back ({undo})", folder.display(), stuck.display())]
+    Split {
+        /// The folder that kept its name.
+        folder: PathBuf,
+        /// Why.
+        error: io::Error,
+        /// The folder left under its new name.
+        stuck: PathBuf,
+        /// Why it was not renamed back.
+        undo: io::Error,
+    },
+}
+
+impl CheckError {
+    /// Whether the folders under the world's name may belong to another
+    /// world, so no mod may use them.
+    #[must_use]
+    pub fn foreign(&self) -> bool {
+        !matches!(self, Self::Io(_))
+    }
+}
+
 /// Checks that the folders of the world `key` belong to the world in its
 /// save, renaming them with `stamp` (`<date>-<time>`) when they do not, and
 /// records the save's GUID when none is recorded yet.
 ///
 /// # Errors
 ///
-/// When the record or the save cannot be read, or a folder not renamed or
-/// the record not written; what was renamed stays renamed.
-pub fn check(key: &str, stamp: &str) -> io::Result<Identity> {
+/// When the record or the save cannot be read, the record not written, or a
+/// folder not renamed; then the folders renamed before it are renamed back
+/// ([`CheckError::foreign`]).
+pub fn check(key: &str, stamp: &str) -> Result<Identity, CheckError> {
+    check_with(key, stamp, &mut |from, to| std::fs::rename(from, to))
+}
+
+/// [`check`], renaming through `rename`, each rename tried again for about a
+/// second while another program holds a file in the folder.
+fn check_with(
+    key: &str,
+    stamp: &str,
+    rename: &mut dyn FnMut(&Path, &Path) -> io::Result<()>,
+) -> Result<Identity, CheckError> {
     let recorded = recorded(key)?;
     let save = match guid_of(&Path::new(key).with_extension(SAVE_EXTENSION)) {
         Ok(Some(guid)) => Some(guid),
         Ok(None) => return Ok(Identity::Unreadable),
         Err(e) if e.kind() == io::ErrorKind::NotFound => None,
-        Err(e) => return Err(e),
+        Err(e) => return Err(e.into()),
     };
     let identity = match (recorded, save) {
         (Some(old), Some(new)) if old == new => return Ok(Identity::Kept),
         (Some(_), _) => {
-            let suffix = format!(".old-{stamp}");
-            for folder in [settings_of(key), data_of(key)] {
-                if folder.exists() {
-                    let mut to = folder.into_os_string();
-                    let from = PathBuf::from(&to);
-                    to.push(&suffix);
-                    std::fs::rename(&from, &to)?;
-                }
-            }
+            let folders = [settings_of(key), data_of(key)];
+            let suffix = free_suffix(&folders, stamp)?;
+            set_aside(&folders, &suffix, &mut |from, to| {
+                enshwick_base::__internal::while_busy(|| rename(from, to))
+            })?;
             Identity::Renamed { suffix }
         }
         (None, _) => Identity::Kept,
@@ -163,6 +229,77 @@ pub fn check(key: &str, stamp: &str) -> io::Result<Identity> {
         write_record(key, guid)?;
     }
     Ok(identity)
+}
+
+/// The most suffixes tried for one stamp, `.old-<stamp>` then
+/// `.old-<stamp>-2` on.
+const SUFFIXES: u16 = 1000;
+
+/// The first suffix of `stamp` that no folder of `folders` carries yet.
+///
+/// # Errors
+///
+/// [`CheckError::NotRenamed`] naming the first folder when every suffix is
+/// taken, as the folders then stay another world's.
+fn free_suffix(folders: &[PathBuf], stamp: &str) -> Result<String, CheckError> {
+    (1..=SUFFIXES)
+        .map(|n| match n {
+            1 => format!(".old-{stamp}"),
+            n => format!(".old-{stamp}-{n}"),
+        })
+        .find(|suffix| {
+            folders
+                .iter()
+                .all(|folder| !renamed(folder, suffix).exists())
+        })
+        .ok_or_else(|| CheckError::NotRenamed {
+            folder: folders.first().cloned().unwrap_or_default(),
+            error: io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!("every suffix of .old-{stamp} is taken"),
+            ),
+        })
+}
+
+/// `folder` with `suffix` after its name.
+fn renamed(folder: &Path, suffix: &str) -> PathBuf {
+    let mut to = folder.as_os_str().to_owned();
+    to.push(suffix);
+    PathBuf::from(to)
+}
+
+/// Renames each of `folders` that exists with `suffix`; when one fails, the
+/// ones renamed before it are renamed back, so the folders keep one name.
+fn set_aside(
+    folders: &[PathBuf],
+    suffix: &str,
+    rename: &mut dyn FnMut(&Path, &Path) -> io::Result<()>,
+) -> Result<(), CheckError> {
+    let mut moved: Vec<(&Path, PathBuf)> = Vec::with_capacity(folders.len());
+    for folder in folders.iter().filter(|folder| folder.exists()) {
+        let to = renamed(folder, suffix);
+        let Err(error) = rename(folder, &to) else {
+            moved.push((folder, to));
+            continue;
+        };
+        let mut stuck = None;
+        for (from, to) in moved.iter().rev() {
+            if let Err(undo) = rename(to, from) {
+                stuck.get_or_insert((to.clone(), undo));
+            }
+        }
+        let folder = folder.clone();
+        return Err(match stuck {
+            None => CheckError::NotRenamed { folder, error },
+            Some((stuck, undo)) => CheckError::Split {
+                folder,
+                error,
+                stuck,
+                undo,
+            },
+        });
+    }
+    Ok(())
 }
 
 /// Records the GUID of the world `key` after it saved, when none is
@@ -227,8 +364,7 @@ fn write_record(key: &str, guid: Guid) -> io::Result<()> {
         let _written = write!(hex, "{b:02x}");
         hex
     });
-    let text = toml::to_string(&Record { guid }).map_err(io::Error::other)?;
-    enshwick_core::files::write_atomically(&record_path(key), text)
+    write_toml(&record_path(key), "", &Record { guid })
 }
 
 fn parse_hex(text: &str) -> Option<Guid> {
@@ -371,6 +507,149 @@ mod tests {
             recorded(&key).unwrap(),
             Some([3; 16]),
             "a save of another world"
+        );
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A world in `dir` whose folders hold another world's record.
+    fn foreign_world(dir: &Path) -> String {
+        let key = dir.join("world3").to_string_lossy().into_owned();
+        save(&key, 1);
+        put(&data_of(&key).join("you.lockers/owners.toml"));
+        put(&settings_of(&key).join("you.lockers/settings.toml"));
+        assert_eq!(check(&key, "s").unwrap(), Identity::Kept);
+        save(&key, 2);
+        key
+    }
+
+    #[test]
+    fn a_taken_old_name_gets_the_next_number_for_both_folders() {
+        let dir = scratch("taken");
+        let key = foreign_world(&dir);
+        std::fs::create_dir_all(dir.join("world3-mod-data.old-s")).unwrap();
+        std::fs::create_dir_all(dir.join("world3-mod-settings.old-s-2")).unwrap();
+        assert_eq!(
+            check(&key, "s").unwrap(),
+            Identity::Renamed {
+                suffix: ".old-s-3".to_owned()
+            }
+        );
+        assert!(
+            dir.join("world3-mod-data.old-s-3/you.lockers/owners.toml")
+                .exists()
+        );
+        assert!(
+            dir.join("world3-mod-settings.old-s-3/you.lockers/settings.toml")
+                .exists()
+        );
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_failed_rename_renames_the_folder_before_it_back() {
+        let dir = scratch("undo");
+        let key = foreign_world(&dir);
+        let mut rename = |from: &Path, to: &Path| {
+            if from.ends_with("world3-mod-data") {
+                return Err(io::Error::other("in use"));
+            }
+            std::fs::rename(from, to)
+        };
+        let error = check_with(&key, "s", &mut rename).unwrap_err();
+        assert!(
+            matches!(error, CheckError::NotRenamed { .. }) && error.foreign(),
+            "{error}"
+        );
+        assert!(settings_of(&key).join("you.lockers/settings.toml").exists());
+        assert!(data_of(&key).join("you.lockers/owners.toml").exists());
+        assert!(!dir.join("world3-mod-settings.old-s").exists());
+        assert_eq!(
+            recorded(&key).unwrap(),
+            Some([1; 16]),
+            "the next check sees it again"
+        );
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_rename_back_that_fails_too_names_the_folder_left_split() {
+        let dir = scratch("split");
+        let key = foreign_world(&dir);
+        let mut rename = |from: &Path, to: &Path| {
+            if from.ends_with("world3-mod-settings") {
+                return std::fs::rename(from, to);
+            }
+            Err(io::Error::other("in use"))
+        };
+        let error = check_with(&key, "s", &mut rename).unwrap_err();
+        let CheckError::Split { stuck, .. } = &error else {
+            panic!("{error}");
+        };
+        assert_eq!(stuck, &dir.join("world3-mod-settings.old-s"));
+        assert!(error.foreign());
+        assert!(!CheckError::Io(io::Error::other("x")).foreign());
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_folder_another_program_holds_for_a_moment_is_still_set_aside() {
+        let dir = scratch("held");
+        let key = foreign_world(&dir);
+        let mut refusals = 0;
+        let mut rename = |from: &Path, to: &Path| {
+            if from.ends_with("world3-mod-data") && refusals < 3 {
+                refusals += 1;
+                return Err(io::ErrorKind::PermissionDenied.into());
+            }
+            std::fs::rename(from, to)
+        };
+        assert_eq!(
+            check_with(&key, "s", &mut rename).unwrap(),
+            Identity::Renamed {
+                suffix: ".old-s".to_owned()
+            }
+        );
+        assert!(
+            dir.join("world3-mod-data.old-s/you.lockers/owners.toml")
+                .exists()
+        );
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn folders_with_every_old_name_taken_stay_another_world_s() {
+        let dir = scratch("every-name");
+        let key = foreign_world(&dir);
+        for n in 1..=SUFFIXES {
+            let suffix = if n == 1 {
+                ".old-s".to_owned()
+            } else {
+                format!(".old-s-{n}")
+            };
+            std::fs::create_dir(renamed(&data_of(&key), &suffix)).unwrap();
+        }
+        let error = check(&key, "s").unwrap_err();
+        assert!(
+            matches!(error, CheckError::NotRenamed { .. }) && error.foreign(),
+            "{error}"
+        );
+        assert!(data_of(&key).join("you.lockers/owners.toml").exists());
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_value_that_does_not_serialize_leaves_the_last_file_as_it_was() {
+        let dir = scratch("toml");
+        let path = dir.join("held.toml");
+        write_toml(&path, "# kept\n", &Record { guid: "ab".into() }).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "# kept\nguid = \"ab\"\n"
+        );
+        assert!(write_toml(&path, "# new\n", &7u8).is_err(), "no table");
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "# kept\nguid = \"ab\"\n"
         );
         let _gone = std::fs::remove_dir_all(&dir);
     }

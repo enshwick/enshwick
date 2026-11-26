@@ -298,8 +298,9 @@ pub(crate) fn check_settings(
         return Ok(());
     };
     let mut why = Str::EMPTY;
-    // SAFETY: the mod's check with its own pointer; the text lives for the
-    // call, and the safe layer catches its panics.
+    // SAFETY: the mod's check in its DLL, which stays loaded, with its own
+    // pointer; the text lives for the call, and by the callback contract of
+    // `HostApi` the check does not unwind into the loader.
     let status = crate::engine::profile::call(
         ModIndex::new(index),
         crate::engine::profile::Feature::Events,

@@ -42,6 +42,7 @@ use crate::engine::pinned;
 use crate::engine::pinned::{Constant, Symbol};
 use crate::engine::registry::JoinFeatureError;
 use crate::engine::world::ServerAccess;
+use enshwick_base::__internal::inventory_queue::MAX_QUEUED;
 use enshwick_base::Relock;
 
 /// The build table ids this part of the loader names.
@@ -283,10 +284,17 @@ impl Queue {
         }
     }
 
-    fn push(&self, request: Request) {
+    /// Queues `request`; false, and nothing queued, once [`MAX_QUEUED`]
+    /// wait.
+    #[must_use]
+    fn push(&self, request: Request) -> bool {
         let mut requests = self.requests.relock();
+        if requests.len() >= MAX_QUEUED {
+            return false;
+        }
         requests.push_back(request);
         self.pending.store(true, Ordering::Release);
+        true
     }
 
     /// Takes the oldest request; each is handed out exactly once, whichever
@@ -678,6 +686,9 @@ pub(crate) enum SubmitInventoryError {
     /// The operations do not read or break the request rules.
     #[error("the request's operations are malformed")]
     BadOps,
+    /// [`MAX_QUEUED`] requests wait already.
+    #[error("{MAX_QUEUED} inventory requests wait already")]
+    Full,
 }
 
 /// Links the row hook when a mod asked for inventories, and always on a
@@ -717,8 +728,8 @@ pub(crate) fn end() {
 ///
 /// # Errors
 ///
-/// [`SubmitInventoryError`] where inventories do not run or for
-/// operations the request rules refuse.
+/// [`SubmitInventoryError`] where inventories do not run, for operations
+/// the request rules refuse, or while the queue is full.
 pub(crate) fn submit(
     loader: &Loader,
     owner: ModIndex,
@@ -746,7 +757,7 @@ pub(crate) fn submit(
         return Err(SubmitInventoryError::BadOps);
     }
     let ops = ops.to_vec();
-    STATE.queue.push(Request {
+    let queued = STATE.queue.push(Request {
         owner,
         flags: request.flags,
         actor: request.actor.0,
@@ -755,6 +766,9 @@ pub(crate) fn submit(
         user: user.expose_provenance(),
         queued: Instant::now(),
     });
+    if !queued {
+        return Err(SubmitInventoryError::Full);
+    }
     Ok(())
 }
 
@@ -834,8 +848,8 @@ pub(crate) fn deliver(now: Instant) {
         };
         // SAFETY: the request's `InventoryResultFn` lives in the mod's DLL,
         // which stays loaded for the process, and takes the `user` word the
-        // mod passed; `data` and its results outlive the call, and the mod's
-        // safe layer catches its panics.
+        // mod passed; `data` and its results outlive the call, and by the
+        // callback contract of `HostApi` it does not unwind into the loader.
         crate::engine::profile::call(
             result.owner,
             crate::engine::profile::Feature::Inventory,

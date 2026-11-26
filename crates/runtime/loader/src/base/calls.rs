@@ -432,7 +432,8 @@ pub(crate) fn run(
     // SAFETY: the handler lives in the server's DLL, which stays loaded; the
     // seal matched the caller's input and answer to the server's field by
     // field and in size, the caller passes both as large as its declaration
-    // says, and the safe layer catches the handler's panics.
+    // says, and by the callback contract of `HostApi` the handler does not
+    // unwind into the loader.
     Ok(crate::engine::profile::call(
         server.owner,
         crate::engine::profile::Feature::Calls,
