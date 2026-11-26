@@ -67,8 +67,9 @@ rules the hooks enforce, and the ones they cannot, are in this file:
   branch merges, so the fix goes first;
 - code follows the style of the code around it, unsafe code included;
 - a pull request adds its changelog entries as a file of its own,
-  `changes/<branch>.md` beside the `CHANGELOG.md` of each crate it changes,
-  named after its branch, so parallel pull requests never edit one file. The file holds the Keep a Changelog headings it needs
+  `changes/<branch>.md` beside the `CHANGELOG.md` of the crate whose readers
+  see the change (see Releases for the loader and the stub), named after its
+  branch, so parallel pull requests never edit one file. The file holds the Keep a Changelog headings it needs
   (`### Added`, `### Changed`, `### Deprecated`, `### Removed`, `### Fixed`,
   `### Security`), each once, with a list of entries under each;
   `cargo xtask check` refuses a file that does not read so, an edit to a
@@ -184,10 +185,19 @@ run, not by a new run from a later `main`:
    the workflow runs `cargo xtask close --date <today> --package <crate>`
    for each crate the pull request releases, so their change files join
    that section at the crate's own version and go, and pushes the result to
-   the release pull request. A crate without a `CHANGELOG.md` keeps none:
-   [release-plz.toml](release-plz.toml) turns its changelog off.
+   the release pull request.
 2. Once that pull request merges, `release` tags each released crate
    `<package>-v<version>`, such as `enshwick-v1.0.0-alpha.3`, makes its
    GitHub release with the crate's joined changelog section as its notes,
    and publishes the public crates to crates.io. The loader
    and the stub are tagged only; they never go to crates.io.
+
+Every crate release-plz releases keeps a `CHANGELOG.md`, the loader and the
+stub included, since a crate without one gets a GitHub release with no
+notes; `cargo xtask check` refuses a released crate without one, or with
+its changelog turned off in [release-plz.toml](release-plz.toml). A version
+whose section is empty, since none of its commits added a change file for the
+crate, gets a release that says it lists no changes of its own. Each
+entry goes into one changelog only, since the alpha notes join them all:
+what players and admins see, the loader's or the stub's; what only mod
+authors see, that of `enshwick`. A change nobody sees needs no change file.
