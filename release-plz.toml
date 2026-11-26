@@ -1,20 +1,20 @@
 # release-plz: versions from conventional commits and cargo-semver-checks,
-# changelogs, tags `<package>-v<version>`. Runs through the release-plz
-# workflow, by hand or on each merge to main once RELEASE_ON_MERGE is on; the
-# alpha releases of the loader come from alpha.yml.
+# changelogs, tags `<package>-v<version>` and crates.io. Runs through the
+# release-plz workflow, by hand or on each merge to main once
+# RELEASE_ON_MERGE is on. It makes no GitHub release: the release workflow
+# (release.yml) makes the one release of each version, `v<version>`, with
+# `enshwick.zip`, `cargo-enshwick` and the notes of every crate; the
+# release-plz workflow calls it when the loader releases, and an alpha runs
+# it by hand.
 
 [workspace]
 # `release` acts only when the newest commit on main is a merged release pull
 # request, so a stray run publishes nothing.
 release_always = false
-# A version with a prerelease part (`1.0.0-alpha.3`) makes a GitHub prerelease.
-git_release_type = "auto"
-# A release's notes are its changelog section; a version without change files
-# of its own says so instead of an empty body, and points to `enshwick`'s
-# changelog only from another package.
-git_release_body = """
-{% if changelog | trim %}{{ changelog }}{% else %}This version lists no changes of its own.{% if package != "enshwick" %} The changelog of `enshwick` lists what mod authors see.{% endif %}{% endif %}
-"""
+# One release per version, the release workflow's: a release per crate
+# would bury the loader's among some twenty, and the update check reads the
+# newest twenty releases.
+git_release_enable = false
 # Only our own crates move in a release pull request; Renovate moves the rest.
 dependencies_update = false
 pr_labels = ["release"]
@@ -32,10 +32,10 @@ Each package's `CHANGELOG.md` in this pull request lists what changed.
 # A package's changelog is its change files, joined by `cargo xtask close` in
 # the release pull request after release-plz writes it: release-plz adds only
 # the version's heading, never entries of its own from the commits, and
-# `release` takes the joined section as the GitHub release's notes. Every
-# package it releases keeps a CHANGELOG.md, since without one the release
-# carries no notes; `cargo xtask check` refuses a package that lacks it or
-# turns its changelog off.
+# `cargo xtask notes` joins every package's section into the release's
+# notes. Every package it releases keeps a CHANGELOG.md; `cargo xtask check`
+# refuses a package that lacks it, turns its changelog off or gets a GitHub
+# release of its own.
 [changelog]
 body = """
 ## [{{ version }}] - {{ timestamp | date(format="%Y-%m-%d") }}
@@ -103,17 +103,28 @@ version_group = "api"
 name = "enshwick-fake"
 version_group = "api"
 
-# The loader DLL and the proxy stub are not published to crates.io: their
-# versions live in git tags.
+# The loader, the stub and `cargo enshwick` ship in one GitHub release,
+# `v<version>`: `enshwick.zip` holds the loader and the stub, and the tool
+# installs the loader of its own version and binstalls from that tag. The
+# loader's tag is that release's, which alphas carry too and the mods'
+# release tooling reads. The loader and the stub are not published to
+# crates.io: their versions live in git tags.
 [[package]]
 name = "enshwick-loader"
+version_group = "release"
+git_only = true
+publish = false
+git_tag_name = "v{{ version }}"
+
+[[package]]
+name = "enshwick-loader-stub"
+version_group = "release"
 git_only = true
 publish = false
 
 [[package]]
-name = "enshwick-loader-stub"
-git_only = true
-publish = false
+name = "cargo-enshwick"
+version_group = "release"
 
 # The start contract, built into the loader and the stub, examples and
 # tools never release.

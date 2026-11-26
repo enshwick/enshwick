@@ -1,8 +1,8 @@
 # A development build of the commit it runs on: `cargo xtask dist` on a
 # fresh GitHub-hosted runner, its files kept as the run's artefact and its
 # archive scanned on VirusTotal. Every push to main that changes what the
-# archive builds from runs it, and so saves the Windows SDK cache the alpha
-# releases (alpha.yml) restore; players download the alphas.
+# archive builds from runs it, and so saves the Windows SDK cache the
+# releases (release.yml) restore; players download the releases.
 name: dev-build
 
 on:
@@ -41,7 +41,7 @@ jobs:
     env:
       HAS_VIRUSTOTAL_KEY: ${{ secrets.VIRUSTOTAL_API_KEY != '' }}
       # The loader states it is a development build of this commit, a
-      # version no release takes; the alpha releases build without it.
+      # version no release takes; the releases build without it.
       ENSHWICK_COMMIT: ${{ github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

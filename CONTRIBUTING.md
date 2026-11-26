@@ -148,15 +148,25 @@ that players, admins or mod authors get, at most one a day:
    `cargo xtask tag-lines` moves the install and dependency lines of the
    Markdown (`--tag v…`, `tag = "v…"`) to the new tag; `cargo xtask check`
    fails a line that names another one.
-2. Once it merges, the [alpha workflow](.github/workflows/alpha.yml), run by
-   hand on `main`, makes the GitHub prerelease `v1.0.0-alpha.N`:
-   `enshwick.zip` with the PDB and CycloneDX SBOM of each DLL and their build
-   provenance. `cargo xtask notes` writes its notes: a warning that anything
-   may change before 1.0, the game version
-   the alpha was checked against, each crate's changelog section and the known
-   issues the run is given. A version on GitHub or crates.io already is
-   refused, and so is one whose changelogs lack its section or whose change
-   files are not joined yet. The workflow scans the archive on VirusTotal.
+2. Once it merges, the [release workflow](.github/workflows/release.yml),
+   run by hand on `main`, makes the GitHub prerelease `v1.0.0-alpha.N`,
+   never marked latest. Its files and notes are those of every release,
+   described below. An alpha that crates.io already knows, from the early
+   alphas that went there, is refused.
+
+Every version of the loader has one GitHub release, `v<version>`, which the
+release workflow makes. It carries `enshwick.zip` with the PDB and CycloneDX
+SBOM of each DLL, the C header `enshwick.h`, `cargo-enshwick` for Windows
+and Linux, `SHA256SUMS` and the build provenance of each file.
+`cargo xtask notes` writes its notes: for an alpha a warning that anything
+may change before 1.0, then how to install, the game version it was checked
+against, each crate's changelog section and the known issues the run is
+given. A version released already is refused, and so is one whose
+changelogs lack its section or whose change files are not joined yet. The
+workflow scans the archive on VirusTotal. With `publish` off it runs from
+any branch that carries a version not released yet with its changelogs
+closed, builds without signing and shows the notes and the files in the
+run's summary, publishing nothing.
 
 The 1.0 release moves every crate to `1.0.0`. From that version on,
 `cargo xtask check` accepts install and dependency lines that take the
@@ -173,8 +183,8 @@ archive into `target/dist` on any machine with `cargo-xwin`; the
 push to `main` that changes the crates or the tools and keeps it as the
 run's artefact.
 
-Alphas go to GitHub only, never to crates.io. Real releases come from
-[release-plz](https://release-plz.dev), set up in
+Alphas go to GitHub only; crates.io holds only some early ones. Stable
+releases come from [release-plz](https://release-plz.dev), set up in
 [release-plz.toml](release-plz.toml) and run through the
 [release-plz workflow](.github/workflows/release-plz.yml). It runs by hand
 until the first real release; from then on, the repository variable
@@ -189,23 +199,37 @@ run, not by a new run from a later `main`:
    release, checks the public API with cargo-semver-checks, and opens or
    updates one release pull request with the new versions. The change files
    are the changelog, never the commits: release-plz writes only each
-   released crate's `## [<version>] - <date>` heading, and the next step of
-   the workflow runs `cargo xtask close --date <today> --package <crate>`
-   for each crate the pull request releases, so their change files join
-   that section at the crate's own version and go, and pushes the result to
-   the release pull request.
-2. Once that pull request merges, `release` tags each released crate
-   `<package>-v<version>`, such as `enshwick-v1.0.0-alpha.3`, makes its
-   GitHub release with the crate's joined changelog section as its notes,
-   and publishes the public crates to crates.io. The loader
-   and the stub are tagged only; they never go to crates.io.
+   released crate's `## [<version>] - <date>` heading. The next job runs
+   `cargo xtask close --date <today> --package <crate>` for each crate the
+   pull request releases, so their change files join that section at the
+   crate's own version and go. It runs with no token, since `close`
+   compiles the workspace, and a last job pushes its change to the release
+   pull request.
+2. Once that pull request merges, `release` publishes the public crates to
+   crates.io, tags each released crate `<package>-v<version>`, such as
+   `enshwick-v1.0.0`, and tags the loader `v<version>`. It makes no GitHub
+   release: when the loader is among the released crates, the release
+   workflow makes the version's one release on that tag, marked latest.
+   The loader, the stub and `cargo-enshwick` share one version, since that
+   release ships all three; the loader and the stub never go to crates.io.
+
+The first stable release publishes with the `CRATES_IO_TOKEN` secret of the
+`release` environment, since crates.io takes trusted publishing only for a
+crate it knows, and most of the crates are new to it. After that release,
+each crate on crates.io names the release-plz workflow as its trusted
+publisher and the secret goes; from then on every release publishes through
+trusted publishing. The [publish workflow](.github/workflows/publish.yml),
+run by hand, publishes the crates alone by the same rule.
+
+Every published crate carries the repository's `LICENSE` in its folder,
+since crates.io ships only that folder; `cargo xtask check` refuses a
+published crate without it or with a copy that differs.
 
 Every crate release-plz releases keeps a `CHANGELOG.md`, the loader and the
-stub included, since a crate without one gets a GitHub release with no
-notes; `cargo xtask check` refuses a released crate without one, or with
-its changelog turned off in [release-plz.toml](release-plz.toml). A version
-whose section is empty, since none of its commits added a change file for the
-crate, gets a release that says it lists no changes of its own. Each
-entry goes into one changelog only, since the alpha notes join them all:
+stub included, since the release notes join their sections; `cargo xtask
+check` refuses a released crate without one, with its changelog turned off
+in [release-plz.toml](release-plz.toml), or with a GitHub release of its
+own. Each entry goes into one changelog only, since the release notes join
+them all:
 what players and admins see, the loader's or the stub's; what only mod
 authors see, that of `enshwick`. A change nobody sees needs no change file.
