@@ -454,12 +454,13 @@ impl Refusal for crate::world::rights::RightsError {
 }
 
 /// Where inventories do not run, unavailable; malformed operations, a bad
-/// argument.
+/// argument; a full queue, busy.
 impl Refusal for crate::inventory::transactions::SubmitInventoryError {
     fn status(&self) -> Status {
         match self {
             Self::Unavailable => Status::UNAVAILABLE,
             Self::BadOps => Status::BAD_ARGS,
+            Self::Full => Status::BUSY,
         }
     }
 }

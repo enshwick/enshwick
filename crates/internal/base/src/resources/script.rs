@@ -367,7 +367,8 @@ impl Resources {
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader refuses the content.
+    /// [`Off`] when the loader refuses the content, as it does for the rest
+    /// of the process once 3072 contents or 512 MiB in all are served.
     #[script]
     pub fn serve_content(self, bytes: &Bytes) -> Result<Data, Off> {
         let hash = self.host.serve_content(&bytes.0)?;

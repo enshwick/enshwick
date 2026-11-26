@@ -489,7 +489,8 @@ pub(crate) fn send(
         }
         // SAFETY: the handler lives in the mod's DLL, which stays loaded; the
         // seal checked the sender's layout starts with the subscriber's, and
-        // the safe layer catches the handler's panics.
+        // by the callback contract of `HostApi` the handler does not unwind
+        // into the loader.
         crate::engine::profile::call(
             subscriber.owner,
             crate::engine::profile::Feature::ModEvents,

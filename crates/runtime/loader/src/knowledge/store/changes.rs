@@ -528,15 +528,14 @@ fn write_queue(key: &str, waiting: &[Waiting]) {
             _ => Ok(()),
         }
     } else {
-        let text = format!(
+        crate::base::world_folders::write_toml(
+            &path,
             "# Knowledge changes waiting for accounts that were not in the game;\n\
-             # each applies once the account's character has loaded in this world.\n{}",
-            toml::to_string(&WaitingFile {
-                waiting: waiting.to_vec()
-            })
-            .unwrap_or_default()
-        );
-        enshwick_core::files::write_atomically(&path, text)
+             # each applies once the account's character has loaded in this world.\n",
+            &WaitingFile {
+                waiting: waiting.to_vec(),
+            },
+        )
     };
     if let Err(error) = written {
         crate::log!(WARN, "knowledge: {} not written: {error}", path.display());

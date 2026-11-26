@@ -796,10 +796,22 @@ entries! {
             bytes.iter().map(|&b| u32::from(b)).sum(),
             1,
         ];
-        with(Status::MISSING, |s| {
-            s.content.served_archive.insert(hash, bytes);
+        let kept = with(Status::OK, |s| {
+            use enshwick_base::__internal::served_content::{MAX_BYTES, MAX_ENTRIES};
+            let served = &mut s.content.served_archive;
+            if served.contains_key(&hash) {
+                return Status::OK;
+            }
+            let total: usize = served.values().map(Vec::len).sum();
+            if served.len() >= MAX_ENTRIES || total + bytes.len() > MAX_BYTES {
+                return Status::REFUSED;
+            }
+            served.insert(hash, bytes);
             Status::OK
         });
+        if kept != Status::OK {
+            return kept;
+        }
         found(Some(hash), out)
     }
 

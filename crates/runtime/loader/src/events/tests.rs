@@ -341,3 +341,33 @@ fn a_player_leaving_reaches_the_parts_that_hear_it_with_no_mod_subscribed() {
     let parts = crate::parts::parts();
     assert!(parts.iter().any(|part| part.left.is_some()));
 }
+
+#[test]
+fn the_held_chests_close_once_after_a_save_even_when_the_save_link_panics() {
+    static CUT: Fuse = Fuse::new("a save link that panics");
+    let closed = core::cell::Cell::new(0);
+    let off = || closed.set(closed.get() + 1);
+    let saved = then_off(
+        true,
+        |stash_off| {
+            stash_off();
+            7
+        },
+        off,
+    );
+    assert_eq!((saved, closed.get()), (7, 1), "closed in the link, once");
+    let cut = then_off(
+        true,
+        |stash_off| {
+            CUT.run("the save", || {
+                assert!(closed.get() > 1, "the save step's result does not read");
+                stash_off();
+            })
+            .map_or(0, |()| 1)
+        },
+        off,
+    );
+    assert_eq!((cut, closed.get()), (0, 2), "closed after the cut save");
+    then_off(false, |_| (), off);
+    assert_eq!(closed.get(), 2, "no chest held, none to close");
+}

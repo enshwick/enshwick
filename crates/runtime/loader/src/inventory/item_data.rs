@@ -64,8 +64,8 @@ const MESSAGE_BYTES: usize = 680;
 /// The most records a client keeps from one server: what a server sends
 /// past it is dropped, so a server cannot fill the client's memory.
 const MAX_CLIENT_RECORDS: usize = 1 << 16;
-/// Destroy requests noted in one step at most; past it an entity keeps its
-/// record until its id holds something else.
+/// Destroy requests noted in one step at most; past it the step's end
+/// checks every record against the world, as a save does.
 const DESTROYED_CAP: usize = 1024;
 
 /// One entity's value of one kind, and what the entity was: the item id an
@@ -204,7 +204,7 @@ impl State {
         self.unread.store(false, Ordering::Relaxed);
         self.finding
             .store(!server.pending.is_empty(), Ordering::Relaxed);
-        drop(self.destroyed.take());
+        let _stale = self.destroyed.take();
         *self.server.relock() = Some(server);
     }
 
@@ -216,7 +216,7 @@ impl State {
         let finding = self.finding.swap(false, Ordering::Relaxed);
         self.kept.store(false, Ordering::Relaxed);
         self.unread.store(false, Ordering::Relaxed);
-        drop(self.destroyed.take());
+        let _stale = self.destroyed.take();
         last.map(|server| (server, finding))
     }
 
@@ -270,27 +270,26 @@ impl Destroyed {
         self.count.load(Ordering::Acquire) & 0xffff_ffff != 0
     }
 
-    /// The entities noted since the last call. A request filled after the
-    /// call that counted it is dropped, never taken in a later round, as its
-    /// entity id may be another's by then.
-    fn take(&self) -> FxHashSet<u32> {
+    /// The entities noted since the last call, and whether more were noted
+    /// than [`DESTROYED_CAP`] holds. A request filled after the call that
+    /// counted it is dropped, never taken in a later round, as its entity id
+    /// may be another's by then.
+    fn take(&self) -> (FxHashSet<u32>, bool) {
         let count = self
             .count
             .try_update(Ordering::AcqRel, Ordering::Acquire, |count| {
                 Some(((count >> 32) + 1) << 32)
             })
             .unwrap_or_else(|count| count);
-        let (taken, round) = (
-            ((count & 0xffff_ffff) as usize).min(DESTROYED_CAP),
-            count >> 32,
-        );
-        self.slots[..taken]
+        let (noted, round) = ((count & 0xffff_ffff) as usize, count >> 32);
+        let taken = self.slots[..noted.min(DESTROYED_CAP)]
             .iter()
             .map(|slot| slot.swap(0, Ordering::AcqRel))
             .filter(|&noted| noted >> 32 == round)
             .map(|noted| (noted & 0xffff_ffff) as u32)
             .filter(|&entity| entity != 0)
-            .collect()
+            .collect();
+        (taken, noted > DESTROYED_CAP)
     }
 }
 
@@ -522,7 +521,9 @@ fn prune_destroyed(values: &mut Values, destroyed: &FxHashSet<u32>) -> Vec<(Kind
 /// After the server's step: after a load's first, finds the file's records'
 /// entities; every [`JOIN_LOOK_EVERY`] steps, looks for joined characters'
 /// carried items; after every step, drops the records of the entities
-/// destroyed in it, and tells the clients.
+/// destroyed in it, and tells the clients. A step with more destroy
+/// requests than [`DESTROYED_CAP`] checks every record against the world,
+/// so none stays on an id the game gives to a new entity.
 pub(crate) fn after_step(loader: &Loader) {
     if STATE.finding() {
         find_pending(loader);
@@ -533,17 +534,20 @@ pub(crate) fn after_step(loader: &Loader) {
     if !STATE.kept.load(Ordering::Relaxed) || !STATE.destroyed.any() {
         return;
     }
-    let destroyed = STATE.destroyed.take();
+    let (destroyed, overflowed) = STATE.destroyed.take();
     let gone = {
         let mut server = STATE.server.relock();
         let Some(server) = server.as_mut() else {
             return;
         };
-        let gone = prune_destroyed(&mut server.values, &destroyed);
+        let mut gone = prune_destroyed(&mut server.values, &destroyed);
         server
             .cleared
             .retain(|(_, pide, _)| !destroyed.contains(&pide.0));
         server.changed |= !gone.is_empty();
+        if overflowed && !STATE.finding() {
+            gone.extend(world_file::sweep(loader, server));
+        }
         gone
     };
     send(&removals(&gone));

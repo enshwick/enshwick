@@ -103,7 +103,8 @@ fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
 /// When the folder, the temporary file, the backup or the rename fails; the
 /// old file then stays as it was and no temporary file is left. A backup or
 /// rename refused for access, as while another program or writer briefly
-/// holds the file, is tried again for up to about a second per step first.
+/// holds the file, is tried again for up to about a second per step first,
+/// or about 30 ms on the loader's game thread, which must not stall.
 ///
 /// # Examples
 ///
@@ -131,6 +132,22 @@ pub fn write_atomically(path: &Path, contents: impl AsRef<[u8]>) -> io::Result<(
 /// again for tens of milliseconds.
 const BUSY_TRIES: u32 = 32;
 
+/// How often [`while_busy`] tries a step on a thread that must not stall,
+/// such as the game's: about 30 ms of waiting per step. A write refused
+/// past it fails, and its caller keeps the data for the next write.
+const QUICK_TRIES: u32 = 6;
+
+std::thread_local! {
+    /// How often [`while_busy`] tries a step on this thread.
+    static TRIES: core::cell::Cell<u32> = const { core::cell::Cell::new(BUSY_TRIES) };
+}
+
+/// Makes every write of [`files`](self) from the calling thread wait at
+/// most [`QUICK_TRIES`] tries per step for a file another handle holds.
+pub(crate) fn wait_briefly() {
+    let _set = TRIES.try_with(|tries| tries.set(QUICK_TRIES));
+}
+
 /// Windows' `ERROR_SHARING_VIOLATION` and `ERROR_LOCK_VIOLATION`, which
 /// `io::ErrorKind` leaves uncategorized.
 const BUSY_CODES: [i32; 2] = [32, 33];
@@ -148,10 +165,11 @@ fn busy(error: &io::Error) -> bool {
 /// holds open without delete sharing, as a virus scanner, an indexer or a
 /// second writer's backup copy briefly does.
 fn while_busy<T>(mut step: impl FnMut() -> io::Result<T>) -> io::Result<T> {
+    let most = TRIES.try_with(core::cell::Cell::get).unwrap_or(BUSY_TRIES);
     let mut tries = 1;
     loop {
         match step() {
-            Err(e) if busy(&e) && tries < BUSY_TRIES => {
+            Err(e) if busy(&e) && tries < most => {
                 std::thread::sleep(std::time::Duration::from_millis(u64::from(tries) * 2));
                 tries += 1;
             }
@@ -450,6 +468,30 @@ mod tests {
         assert_eq!(
             (held.unwrap_err().kind(), calls),
             (io::ErrorKind::PermissionDenied, BUSY_TRIES)
+        );
+    }
+
+    #[test]
+    fn a_thread_that_must_not_stall_gives_up_on_a_held_file_after_its_few_tries() {
+        let tries = std::thread::spawn(|| {
+            wait_briefly();
+            let mut calls = 0;
+            let started = std::time::Instant::now();
+            let held = while_busy::<()>(|| {
+                calls += 1;
+                Err(io::ErrorKind::PermissionDenied.into())
+            });
+            assert!(held.is_err());
+            assert!(started.elapsed() < std::time::Duration::from_millis(500));
+            calls
+        })
+        .join()
+        .unwrap();
+        assert_eq!(tries, QUICK_TRIES);
+        assert_eq!(
+            TRIES.with(core::cell::Cell::get),
+            BUSY_TRIES,
+            "other threads wait on"
         );
     }
 }

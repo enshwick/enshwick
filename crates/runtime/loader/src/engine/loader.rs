@@ -624,7 +624,9 @@ impl Loader {
                 subscription.owner,
                 crate::engine::profile::Feature::Events,
                 // SAFETY: the handler lives in the mod's DLL, which stays
-                // loaded; the safe layer catches its panics.
+                // loaded, with the pointer it subscribed with and `data`
+                // live for the call; by the callback contract of `HostApi`
+                // it does not unwind into the loader.
                 || unsafe {
                     (subscription.callback)(
                         event,

@@ -369,7 +369,10 @@ fn the_rules_come_out_one_size_whichever_materials_a_session_serves() {
 #[test]
 fn a_world_s_record_of_its_materials_reads_back_and_a_bad_one_reads_as_none() {
     let (added, _) = add_all(&[request(150), request(151)]);
-    assert_eq!(held_of(&held_text(&added)), [guid(150), guid(151)]);
+    assert_eq!(
+        held_of(&toml::to_string(&held(&added)).unwrap()),
+        [guid(150), guid(151)]
+    );
     assert_eq!(held_of("held = [\"no guid\"]"), []);
     assert_eq!(held_of("not toml ["), []);
 }

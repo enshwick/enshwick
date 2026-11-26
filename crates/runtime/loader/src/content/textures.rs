@@ -17,22 +17,21 @@
 //! and items keep their vanilla icons; once they have, every served key
 //! whose build asked before is built again with its icons.
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+mod store;
 
-use arc_swap::ArcSwapOption;
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use enshwick_core::abi::{HookFlags, Side};
 use enshwick_core::raw::{
     read_at, read_bytes_at, read_ptr_at, write_at, write_bytes_at, write_ptr_at,
 };
-use rustc_hash::FxHashMap;
 
 use crate::engine::catalogue::types::{TEMPLATE, UI_IMAGE};
 use crate::engine::chains::{Next, Onward};
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
-use enshwick_base::Relock;
 use enshwick_core::content::Guid;
 
 /// The build table ids this part of the loader names.
@@ -71,10 +70,8 @@ pub(crate) use crate::engine::archive::ContentHash;
 /// images. The game's UI registry lives for the process, so nothing here
 /// ends with a hosted game.
 struct Textures {
-    /// The content by hash, swapped whole so requests read it without a
-    /// lock; `serving` orders the writers.
-    content: ArcSwapOption<FxHashMap<ContentHash, &'static [u8]>>,
-    serving: Mutex<()>,
+    /// The content by hash, which requests read without a lock.
+    content: store::Store,
     /// Whether the content link ran, so served pixels reach the GPU.
     linked: AtomicBool,
     /// Whether the listing link handed the served UI images to the registry.
@@ -275,6 +272,14 @@ pub(crate) enum TextureError {
     /// The game's archive has no such content.
     #[error("the archive has no such content")]
     NotInArchive,
+    /// The content served this session reached the loader's limit, which
+    /// lasts the process, as served content is never freed.
+    #[error(
+        "the served content reached its limit of {} entries or {} MiB",
+        store::MAX_ENTRIES,
+        store::MAX_BYTES >> 20
+    )]
+    Full,
 }
 
 /// Serves `data` as content and returns its hash; the same bytes give the
@@ -284,29 +289,17 @@ pub(crate) fn serve(data: &[u8]) -> Result<ContentHash, TextureError> {
         return Err(TextureError::BadData);
     }
     let hash = hash_of(data);
-    let _serving = TEXTURES.serving.relock();
-    let current = TEXTURES.content.load_full();
-    if current.as_ref().is_some_and(|map| map.contains_key(&hash)) {
-        return Ok(hash);
-    }
-    let mut map = current.map_or_else(FxHashMap::default, |map| (*map).clone());
-    map.insert(hash, Box::leak(data.to_vec().into_boxed_slice()));
-    TEXTURES.content.store(Some(Arc::new(map)));
+    TEXTURES
+        .content
+        .insert(hash, data)
+        .map_err(|store::Full| TextureError::Full)?;
     Ok(hash)
-}
-
-fn served(
-    content: &FxHashMap<ContentHash, &'static [u8]>,
-    hash: &ContentHash,
-) -> Option<&'static [u8]> {
-    content.get(hash).copied()
 }
 
 impl Textures {
     const fn new() -> Self {
         Self {
-            content: ArcSwapOption::const_empty(),
-            serving: Mutex::new(()),
+            content: store::Store::new(),
             linked: AtomicBool::new(false),
             listed: AtomicBool::new(false),
             relisted: AtomicBool::new(false),
@@ -430,17 +423,14 @@ fn link_keys(loader: &Loader) -> bool {
 /// requests it did not answer.
 unsafe extern "system" fn request(requester: *mut u8, requests: *mut Requests) {
     TEXTURES.linked.store(true, Ordering::Release);
-    let content = TEXTURES.content.load();
+    let content = &TEXTURES.content;
     let layout = LAYOUT.get().copied().flatten();
-    let Some(content) = content
-        .as_ref()
-        .filter(|m| !m.is_empty() && !TEXTURES_FUSE.is_off() && !TEMPLATES_FUSE.is_off())
-    else {
+    if content.is_empty() || TEXTURES_FUSE.is_off() || TEMPLATES_FUSE.is_off() {
         // SAFETY: this detour runs only as the `textures.request` link, so
         // the slot holds the next function of that signature; the game's
         // arguments pass unchanged.
         return unsafe { REQUEST_NEXT.get()(requester, requests) };
-    };
+    }
     if requests.is_null() || requester.is_null() {
         // SAFETY: this detour runs only as the `textures.request` link, so
         // the slot holds the next function of that signature; the game's
@@ -470,6 +460,12 @@ unsafe extern "system" fn request(requester: *mut u8, requests: *mut Requests) {
         )
     };
     let size = layout.request_size;
+    if !requests_read(data.addr(), count, size, crate::engine::pages::query) {
+        // SAFETY: this detour runs only as the `textures.request` link, so
+        // the slot holds the next function of that signature; the game's
+        // arguments pass unchanged.
+        return unsafe { REQUEST_NEXT.get()(requester, requests) };
+    }
     let mut kept: Vec<u8> = Vec::new();
     let mut ours = 0usize;
     for index in 0..count {
@@ -479,7 +475,7 @@ unsafe extern "system" fn request(requester: *mut u8, requests: *mut Requests) {
         // content hash sits at the build table's `textures.request_hash`
         // offset.
         let hash: ContentHash = unsafe { read_at(at, layout.request_hash) };
-        let answered = served(content, &hash).and_then(|data| {
+        let answered = content.get(&hash).and_then(|data| {
             TEXTURES_FUSE.run("the request", || {
                 // SAFETY: `at` is a live request of `requester`'s, both
                 // non-null hooked function's arguments, and this runs on the
@@ -515,6 +511,31 @@ unsafe extern "system" fn request(requester: *mut u8, requests: *mut Requests) {
     // requests answered nowhere here, byte for byte as the game laid them
     // out, and lives until the call returns.
     unsafe { REQUEST_NEXT.get()(requester, &raw mut rest) };
+}
+
+/// The most requests one content request is read for; past it the call
+/// passes on unread.
+const MAX_REQUESTS: usize = 4096; // bound, not a game offset: the loader's limit on a count it reads
+
+/// Whether the `count` requests of `size` bytes at `data`, counts read from
+/// the game's memory, are few enough and lie in one region that reads, as
+/// `query` reports it, so the loop over them reads nothing else.
+fn requests_read(
+    data: usize,
+    count: usize,
+    size: usize,
+    query: impl FnOnce(usize) -> Option<crate::engine::pages::Region>,
+) -> bool {
+    if count == 0 || count > MAX_REQUESTS || data == 0 {
+        return false;
+    }
+    let Some(end) = count
+        .checked_mul(size)
+        .and_then(|len| data.checked_add(len))
+    else {
+        return false;
+    };
+    query(data).is_some_and(|region| region.reads() && end <= region.end)
 }
 
 /// Copies the range a request asks for into its buffer and posts the

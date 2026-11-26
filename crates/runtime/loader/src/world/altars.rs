@@ -436,8 +436,9 @@ fn chain(vanilla: AltarZone, sizers: &[&Sizer]) -> Option<(i64, i64)> {
     let _none: Option<(_, ())> =
         crate::engine::filters::ask(sizers.iter().copied(), Feature::Altars, |sizer| {
             let before = zone;
-            // SAFETY: the mod's filter with its own pointer and a zone valid
-            // for the call; the safe layer catches its panics.
+            // SAFETY: the mod's filter in its DLL, which stays loaded, with
+            // its own pointer and a zone valid for the call; by the callback
+            // contract of `HostApi` it does not unwind into the loader.
             sizer.call(|callback, user| unsafe { callback(&raw mut zone, user) });
             zone.header = before.header;
             zone.altar = before.altar;

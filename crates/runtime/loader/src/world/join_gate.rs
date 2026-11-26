@@ -258,8 +258,8 @@ fn refuser<'a>(
         };
         // SAFETY: the rule is the mod's registered `JoinRuleFn` in its DLL,
         // which stays loaded for the process, called with a `JoinCall` that
-        // outlives the call and the mod's own `user` word; the mod's safe
-        // layer catches its panics.
+        // outlives the call and the mod's own `user` word; by the callback
+        // contract of `HostApi` it does not unwind into the loader.
         rules
             .refuser(|rule, user| unsafe { rule(&raw const call, user) } != enshwick_core::abi::FILTER_REFUSE)
             .map(|r| (r, player))

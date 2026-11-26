@@ -146,7 +146,9 @@ fn online() -> Option<Vec<enshwick_core::abi::PlayerInfo>> {
 /// from `world_offset` and `entities`.
 pub(crate) fn capture(server: usize, thread: u32, world_offset: usize, entities: usize) {
     STATE.server.publish(server);
-    STATE.game_thread.store(thread, Ordering::Release);
+    if thread != 0 && STATE.game_thread.swap(thread, Ordering::AcqRel) != thread {
+        enshwick_base::__internal::wait_briefly_on_this_thread();
+    }
     let world = if server == 0 {
         0
     } else {

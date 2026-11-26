@@ -437,19 +437,30 @@ pub fn write(level: Level, source: &str, message: &str) {
     }
 }
 
-/// Waits until the writer keeps every line sent before this call among the
-/// latest, so [`recent`] holds them, or `longest` passes; whether it did.
-/// Never on a game thread: it sleeps.
+/// Waits until the writer wrote every line sent before this call, or
+/// `longest` passes; whether it did.
+///
+/// A written line is also among the latest, so [`recent`] holds it. It
+/// sleeps and allocates nothing, so a game thread calls it only as the game
+/// ends or crashes.
 pub fn settle(longest: Duration) -> bool {
-    let sent = STATE.counts.sent.load(Ordering::Relaxed);
-    let started = Instant::now();
-    while STATE.counts.taken.load(Ordering::Acquire) < sent {
-        if started.elapsed() >= longest {
-            return false;
+    STATE.counts.settle(longest)
+}
+
+impl Counts {
+    /// [`settle`] on these counts: true once the writer took every line sent
+    /// before the call, false once `longest` passed without it.
+    fn settle(&self, longest: Duration) -> bool {
+        let sent = self.sent.load(Ordering::Relaxed);
+        let started = Instant::now();
+        while self.taken.load(Ordering::Acquire) < sent {
+            if started.elapsed() >= longest {
+                return false;
+            }
+            std::thread::sleep(SETTLE_POLL);
         }
-        std::thread::sleep(SETTLE_POLL);
+        true
     }
-    true
 }
 
 /// Keeps `line` among the latest lines.
@@ -595,6 +606,25 @@ mod tests {
         write(Level::WARN, LOADER_ID, "the test's own line");
         let lines: Vec<String> = captured().into_iter().map(|(_, _, line)| line).collect();
         assert_eq!(lines, ["carried work's line", "the test's own line"]);
+    }
+
+    #[test]
+    fn settling_gives_up_at_its_limit_when_the_writer_takes_no_line() {
+        let counts = Counts {
+            dropped: AtomicU64::new(0),
+            sent: AtomicU64::new(3),
+            taken: AtomicU64::new(2),
+            stopped: AtomicBool::new(false),
+        };
+        let started = Instant::now();
+        assert!(!counts.settle(Duration::from_millis(30)));
+        let waited = started.elapsed();
+        assert!(
+            waited >= Duration::from_millis(30) && waited < Duration::from_secs(2),
+            "{waited:?}"
+        );
+        counts.taken.store(3, Ordering::Release);
+        assert!(counts.settle(Duration::ZERO), "every line taken");
     }
 
     #[test]

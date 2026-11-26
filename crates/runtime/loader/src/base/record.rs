@@ -71,12 +71,13 @@ impl Record {
     }
 
     /// The record as its file holds it.
-    #[must_use]
-    pub fn render(&self) -> String {
-        format!(
-            "{RECORD_HEADER}\n{}",
-            toml::to_string(self).unwrap_or_default()
-        )
+    ///
+    /// # Errors
+    ///
+    /// When the record does not write as TOML, so no empty file replaces the
+    /// last one.
+    pub fn render(&self) -> Result<String, toml::ser::Error> {
+        Ok(format!("{RECORD_HEADER}\n{}", toml::to_string(self)?))
     }
 
     /// What changed from `old` to this record, one line each.
@@ -155,13 +156,13 @@ mod tests {
             ("you.trading-post", "0.3.0", "01"),
             ("you.lockers", "1.0.0", "02"),
         ]);
-        insta::assert_snapshot!("record", record.render());
+        insta::assert_snapshot!("record", record.render().unwrap());
     }
 
     #[test]
     fn the_record_reads_back_and_names_what_changed() {
         let old = record(&[("you.trading-post", "0.3.0", "01"), ("gone", "1.0.0", "02")]);
-        let text = old.render();
+        let text = old.render().unwrap();
         assert!(text.starts_with("# Written by Enshwick"));
         assert!(text.contains("[[mod]]\nid = \"you.trading-post\""));
         assert_eq!(Record::parse(&text), Some(old.clone()));

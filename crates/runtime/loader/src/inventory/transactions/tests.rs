@@ -44,7 +44,7 @@ fn a_transaction_commits_only_when_every_op_ran_and_finished() {
 fn each_request_is_claimed_exactly_once_across_threads() {
     let queue = Arc::new(Queue::new());
     for user in 1..=1000 {
-        queue.push(request(user));
+        assert!(queue.push(request(user)));
     }
     let seen: Arc<Vec<AtomicU32>> = Arc::new((0..=1000).map(|_| AtomicU32::new(0)).collect());
     let workers: Vec<_> = (0..8)
@@ -152,13 +152,28 @@ fn one_turn_at_a_time() {
 fn late_requests_drain_and_the_rest_stay_in_order() {
     let queue = Queue::new();
     for user in 1..=4 {
-        queue.push(request(user));
+        assert!(queue.push(request(user)));
     }
     let gone = queue.drain(|r| r.user % 2 == 0);
     assert_eq!(gone.iter().map(|r| r.user).collect::<Vec<_>>(), [2, 4]);
     assert_eq!(queue.claim().unwrap().user, 1);
     assert_eq!(queue.claim().unwrap().user, 3);
     assert!(queue.claim().is_none());
+}
+
+#[test]
+fn a_full_queue_refuses_the_next_request_and_takes_one_again_once_a_row_claims() {
+    let queue = Queue::new();
+    for user in 0..MAX_QUEUED {
+        assert!(queue.push(request(user)));
+    }
+    assert!(!queue.push(request(MAX_QUEUED)), "full");
+    assert_eq!(queue.claim().unwrap().user, 0);
+    assert!(queue.push(request(MAX_QUEUED)));
+    assert_eq!(
+        SubmitInventoryError::Full.to_string(),
+        format!("{MAX_QUEUED} inventory requests wait already")
+    );
 }
 
 /// The outcome `state`'s results hold for the request with `user`, taking
@@ -175,7 +190,7 @@ fn outcome_of(state: &State, user: usize) -> Option<u32> {
 #[test]
 fn requests_queued_when_the_feature_turns_off_are_answered_unavailable_at_the_next_step() {
     let state = State::new();
-    state.queue.push(request(7));
+    assert!(state.queue.push(request(7)));
     INVENTORY_FUSE.blow("a test");
     state.expire(Instant::now());
     assert!(
@@ -189,7 +204,7 @@ fn requests_queued_when_the_feature_turns_off_are_answered_unavailable_at_the_ne
 fn a_wanted_row_hook_that_did_not_arm_turns_the_requests_off_and_answers_the_queue() {
     let state = State::new();
     state.wanted.store(true, Ordering::Release);
-    state.queue.push(request(9));
+    assert!(state.queue.push(request(9)));
     state.settle(&crate::start::tests::bare_loader(), []);
     assert!(
         INVENTORY_FUSE.is_off(),
@@ -213,7 +228,7 @@ fn a_hosted_game_s_end_answers_its_requests_and_drops_its_registry() {
     let state = State::new();
     state.wanted.store(true, Ordering::Release);
     state.registry.store(0x1000, Ordering::Release);
-    state.queue.push(request(5));
+    assert!(state.queue.push(request(5)));
     state.end();
     assert_eq!(outcome_of(&state, 5), Some(InventoryResult::UNAVAILABLE));
     assert_eq!(

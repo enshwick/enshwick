@@ -322,6 +322,10 @@ fn remember(path: &str, side: Side, steam: impl FnOnce() -> Option<&'static Path
     let Some(key) = key_of(&path) else {
         return;
     };
+    if FOLDERS_FUSE.is_off() {
+        STATE.rekey(|keys| keys.unplace(side));
+        return;
+    }
     let key = intern(&key, &path);
     let changed = STATE.rekey(|keys| {
         let before = keys.pick(side);
@@ -330,17 +334,35 @@ fn remember(path: &str, side: Side, steam: impl FnOnce() -> Option<&'static Path
         now.is_some() && now != before
     });
     if changed && let Some(loader) = crate::engine::loader::loader() {
-        arrive(key);
+        if !arrive(key) {
+            STATE.rekey(|keys| keys.unplace(side));
+            return;
+        }
         crate::base::holds::enforce_world(loader, key);
     }
 }
 
+/// The worlds' mod folders: off once a world's folders could not be set
+/// aside whole, so no world has mod settings or data until the game
+/// restarts, rather than one reading another world's.
+static FOLDERS_FUSE: Fuse = Fuse::new("world mod folders");
+
 /// The world `key` appears: its folders are set aside when they belong to
-/// another world, before anything reads them.
-fn arrive(key: &str) {
-    use crate::base::world_folders::{Identity, check};
+/// another world, before anything reads them. Whether mods may use them.
+fn arrive(key: &str) -> bool {
     let stamp = crate::engine::early::stamp(crate::engine::diag::now());
-    match check(key, &stamp) {
+    settle(key, crate::base::world_folders::check(key, &stamp))
+}
+
+/// Logs what the check of the world `key`'s folders found; when they may
+/// still be another world's, turns [`FOLDERS_FUSE`] off. Whether mods may
+/// use them.
+fn settle(
+    key: &str,
+    checked: Result<crate::base::world_folders::Identity, crate::base::world_folders::CheckError>,
+) -> bool {
+    use crate::base::world_folders::Identity;
+    match checked {
         Ok(Identity::Renamed { suffix }) => crate::log!(
             WARN,
             "world {key}: the mod settings and data beside its save belonged to another world, \
@@ -352,11 +374,23 @@ fn arrive(key: &str) {
              without checking they belong to it"
         ),
         Ok(_) => {}
+        Err(e) if e.foreign() => {
+            let reason = format!(
+                "world {key}: its mod folders belong to another world and were not set aside: \
+                 {e}; mods keep no settings or data for any world until the game restarts"
+            );
+            FOLDERS_FUSE.turn_off(&crate::engine::fuse::Off::fault(
+                FOLDERS_FUSE.feature(),
+                &reason,
+            ));
+            return false;
+        }
         Err(e) => crate::log!(
             WARN,
             "world {key}: its mod folders were not checked against its save: {e}"
         ),
     }
+    true
 }
 
 /// The world saved: a new world's GUID is recorded once it has a save.
@@ -773,6 +807,32 @@ mod tests {
             STATE.keys.relock().pick(Side::CLIENT),
             Some(r"C:\Steam\userdata\487707326\1203620\remote\world4")
         );
+        forget();
+    }
+
+    #[test]
+    fn folders_that_may_be_another_world_s_turn_every_world_s_folders_off() {
+        use crate::base::world_folders::{CheckError, Identity};
+        assert!(settle("w", Ok(Identity::Kept)));
+        assert!(
+            settle("w", Err(CheckError::Io(std::io::Error::other("locked")))),
+            "an unread record leaves the folders as they were"
+        );
+        assert!(!FOLDERS_FUSE.is_off());
+        let split = CheckError::NotRenamed {
+            folder: PathBuf::from("w-mod-data"),
+            error: std::io::Error::other("in use"),
+        };
+        assert!(!settle("w", Err(split)));
+        assert!(FOLDERS_FUSE.is_off());
+        let listed = crate::engine::diag::parts_off();
+        assert!(
+            listed.iter().any(|p| p.part == FOLDERS_FUSE.feature()),
+            "{listed:?}"
+        );
+        hosting_begins();
+        remember(r"D:\saves\world1.ksd", Side::CLIENT, || None);
+        assert_eq!(STATE.keys.relock().pick(Side::CLIENT), None);
         forget();
     }
 

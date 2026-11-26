@@ -413,7 +413,9 @@ impl Host {
     ///
     /// # Errors
     ///
-    /// [`Off`] outside the game and when the loader refuses the content.
+    /// [`Off`] outside the game and when the loader refuses the content, as
+    /// it does for the rest of the process once 3072 contents or 512 MiB in
+    /// all are served: served content is never freed.
     ///
     /// # Examples
     ///

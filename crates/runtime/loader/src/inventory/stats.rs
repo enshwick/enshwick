@@ -24,6 +24,7 @@ mod affixes;
 mod equipment;
 mod error;
 mod own;
+mod saved;
 mod shown;
 mod vitals;
 
@@ -31,17 +32,18 @@ use affixes::{Affix, pool};
 pub(crate) use affixes::{RollAffixesError, affix_info, item_lines, open_affix, roll};
 pub(crate) use error::StatsError;
 pub(crate) use own::{hello, own_value};
+use saved::Saved;
+pub(crate) use saved::world_event;
 pub(crate) use shown::{group_kinds, item_line_texts, shown_kind};
 
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
 use enshwick_core::abi::{
-    Event, Header, PlayerData, StatChange, StatChangeFn, StatModifier, StatModify, StatRef,
-    StatSource, StatSpec, Str,
+    Header, PlayerData, StatChange, StatChangeFn, StatModifier, StatModify, StatRef, StatSource,
+    StatSpec, Str,
 };
 use enshwick_core::affixes::lines_of;
 use enshwick_core::content::Id;
@@ -70,8 +72,6 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 
 /// Steps between two looks at what watched entities wear and have.
 const LOOK_EVERY: u64 = 30;
-/// The file of a world's saved modifiers.
-const FILE: &str = "stats.bin";
 /// The damage types of a hit and the healing entry among them.
 const TYPES: usize = enshwick_core::abi::DAMAGE_TYPES;
 const HEALING: usize = enshwick_core::damage::DamageTypeNew::Healing.index();
@@ -155,18 +155,6 @@ impl Watched {
             _ => {}
         }
     }
-}
-
-/// A saved modifier, kept by the player's account, the mod's id and the
-/// stat's id, so it reads back whatever the load order.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-struct Saved {
-    player: u64,
-    owner: String,
-    key: u32,
-    stat: String,
-    op: u8,
-    value: f32,
 }
 
 /// The server's watched entities and saved modifiers.
@@ -269,26 +257,6 @@ impl State {
     fn with_world<R>(&self, f: impl FnOnce(&mut World) -> R) -> R {
         let mut world = self.world.relock();
         f(world.get_or_insert_with(World::default))
-    }
-
-    /// Writes the saved modifiers when they changed since the last write.
-    fn save(&self) {
-        let Some((key, bytes)) = self.with_world(|world| {
-            if !world.saved_changed {
-                return None;
-            }
-            world.saved_changed = false;
-            Some((
-                world.key.clone()?,
-                postcard::to_allocvec(&world.saved).ok()?,
-            ))
-        }) else {
-            return;
-        };
-        let path = file(&key);
-        if let Err(error) = enshwick_core::files::write_atomically(&path, &bytes) {
-            crate::log!(WARN, "stats: {} not written: {error}", path.display());
-        }
     }
 
     /// Saves what changed in a hosted game that stopped and drops its
@@ -912,7 +880,8 @@ pub(crate) fn after_step(loader: &Loader, step: u64, now: Instant) {
             |handler| {
                 // SAFETY: the handler lives in the mod's DLL, which stays
                 // loaded, and takes the pointer it registered; the change is
-                // valid for the call; the safe layer catches its panics.
+                // valid for the call; by the callback contract of `HostApi`
+                // it does not unwind into the loader.
                 handler.call(|handler, user| unsafe { handler(change, user) });
                 core::ops::ControlFlow::Continue(())
             },
@@ -934,57 +903,6 @@ fn publish(sealed: &Sealed, state: &World) -> Snapshot {
         next.values.insert(entity, watched.values.clone());
     }
     next
-}
-
-/// The file of world `key`'s saved modifiers.
-fn file(key: &str) -> PathBuf {
-    crate::base::world_folders::loader_data(key, FILE)
-}
-
-/// Follows the server's world: reads the saved modifiers once it has
-/// loaded, writes them when it saves and when it shuts down.
-pub(crate) fn world_event(loader: &Loader, event: Event) {
-    if !wanted() || !serves() {
-        return;
-    }
-    match event {
-        Event::WORLD_LOADED => {
-            let mut key = crate::base::saves::world_key(loader).map(str::to_owned);
-            let read = key.as_deref().map_or(Ok(None), |key| {
-                let path = file(key);
-                enshwick_core::files::read_if_present(&path)
-                    .map_err(|e| e.to_string())
-                    .and_then(|bytes| {
-                        bytes
-                            .map(|bytes| postcard::from_bytes::<Vec<Saved>>(&bytes))
-                            .transpose()
-                            .map_err(|e| e.to_string())
-                    })
-                    .map_err(|why| format!("{}: {why}", path.display()))
-            });
-            let saved = match read {
-                Ok(saved) => saved.unwrap_or_default(),
-                // With no world to write to, the file stays as it is.
-                Err(why) => {
-                    crate::log!(
-                        WARN,
-                        "stats: saved modifiers do not read and stay as they are: {why}"
-                    );
-                    key = None;
-                    Vec::new()
-                }
-            };
-            crate::log!(INFO, "stats: {} saved modifiers", saved.len());
-            *STATE.world.relock() = Some(World {
-                saved,
-                key,
-                ..World::default()
-            });
-            STATE.swap_in(Snapshot::default());
-        }
-        Event::WORLD_SAVED | Event::SHUTDOWN_STARTED => STATE.save(),
-        _ => {}
-    }
 }
 
 /// The hosted game stopped: saves what changed and drops its world's

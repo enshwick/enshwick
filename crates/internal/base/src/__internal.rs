@@ -13,6 +13,7 @@ use crate::{Entity, Host, RecipeId};
 
 mod builds;
 pub mod renames;
+pub mod served_content;
 pub mod waypoints;
 
 pub use crate::game_events::notify::NotifyLayout;
@@ -29,6 +30,15 @@ pub use builds::{
 #[must_use]
 pub fn fake_clock() -> bool {
     crate::schedule::fake_clock()
+}
+
+/// Makes the calling thread's atomic file writes wait about 30 ms per step
+/// for a held file, not a second, for the game thread.
+///
+/// A stall on the game thread freezes the game; the caller keeps what a
+/// failed write held for its next write.
+pub fn wait_briefly_on_this_thread() {
+    crate::files::wait_briefly();
 }
 
 /// Makes `host` the answer of [`crate::host`]; the first call wins.

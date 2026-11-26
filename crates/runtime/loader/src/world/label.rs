@@ -364,8 +364,8 @@ unsafe fn refused(text: *const [usize; 2]) -> bool {
     };
     // SAFETY: the filter is the mod's registered `RenameFilterFn` in its DLL,
     // which stays loaded for the process, called with a `RenameCall` that
-    // outlives the call and the mod's own `user` word; the mod's safe layer
-    // catches its panics.
+    // outlives the call and the mod's own `user` word; by the callback
+    // contract of `HostApi` it does not unwind into the loader.
     let refused = FILTERS
         .refuser(|filter, user| unsafe { filter(&raw const call, user) } != enshwick_core::abi::FILTER_REFUSE)
         .is_some();
