@@ -677,6 +677,81 @@ side = "both""#
     }
 
     #[test]
+    fn another_mod_queues_a_kind_this_mod_holds_and_neither_sees_or_cancels_the_other_s() {
+        use enshwick::abi::{ModHandle, Status as Code, Str};
+        const OTHER: ModHandle = ModHandle(2);
+        let (loader, input) = started(
+            enshwick::test::FakeHost::new()
+                .side(Side::CLIENT)
+                .player_input()
+                .other_mod(OTHER),
+        );
+        let mine = input.client_command(&open_backpack()).unwrap();
+        let waypoint = ClientCommand::new(CommandAction::SetWaypoint([10.0, 5.0, 20.0]), 1);
+        let my_waypoint = input.client_command(&waypoint).unwrap();
+        // SAFETY: the fake's table is a static.
+        let api = unsafe { &*loader.api() };
+        let queue = |spec: Raw| {
+            let mut id = 0;
+            (
+                (api.client_command)(OTHER, &raw const spec, &raw mut id),
+                id,
+            )
+        };
+        let open = Raw {
+            kind: Raw::OPEN_SCREEN,
+            session: 1,
+            target: Str::new("Backpack"),
+            expected_screen: Str::new("InGame"),
+            ..Raw::EMPTY
+        };
+        let (status, theirs) = queue(open);
+        assert_eq!(status, Code::OK, "one of a kind per mod, as the loader");
+        let ping = Raw {
+            kind: Raw::PING,
+            session: 1,
+            position: [10.0, 5.0, 20.0],
+            ..Raw::EMPTY
+        };
+        assert_eq!(queue(ping).0, Code::OK, "a waypoint or ping per mod");
+        assert_eq!(queue(open).0, Code::REFUSED, "its own still waits");
+        assert!(
+            matches!(
+                input.client_command(&open_backpack()),
+                Err(WorldError::Refused)
+            ),
+            "and so does this mod's"
+        );
+        let mut status = Status::EMPTY;
+        assert_eq!(
+            (api.client_command_status)(OTHER, mine.as_u64(), &raw mut status),
+            Code::UNAVAILABLE,
+            "another mod's command is not its to read"
+        );
+        assert!(
+            input
+                .command_status(enshwick::input::CommandId::new(theirs))
+                .is_err(),
+            "nor this mod the other's"
+        );
+        let cancel = Raw {
+            kind: Raw::CANCEL,
+            cancels: mine.as_u64(),
+            ..Raw::EMPTY
+        };
+        let _cancelled = queue(cancel);
+        assert_eq!(
+            input.command_status(mine).unwrap().state,
+            CommandState::Pending,
+            "nor to cancel"
+        );
+        assert_eq!(
+            input.command_status(my_waypoint).unwrap().state,
+            CommandState::Pending
+        );
+    }
+
+    #[test]
     fn a_waypoint_and_a_ping_wait_one_at_a_time_and_end_observed() {
         let (loader, input) = input(Side::CLIENT);
         let set = ClientCommand::new(CommandAction::SetWaypoint([10.0, 5.0, 20.0]), 1);

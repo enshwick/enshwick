@@ -28,15 +28,16 @@ entries! {
             if s.host.base.side == Side::SERVER {
                 return Status::UNAVAILABLE;
             }
-            let open = |status: &Raw| status.state == Raw::PENDING || status.state == Raw::APPLIED;
             if spec.kind == Spec::CANCEL {
-                if let Some((.., status)) =
-                    s.ui.client_commands
-                        .iter_mut()
-                        .find(|(queued, .., status)| *queued == spec.cancels && open(status))
+                // As the loader: a mod cancels only its own command.
+                if let Some(command) = s
+                    .ui
+                    .client_commands
+                    .iter_mut()
+                    .find(|c| c.id == spec.cancels && c.owner == me && c.open())
                 {
-                    status.state = Raw::CANCELLED;
-                    status.reason = Raw::BY_MOD;
+                    command.status.state = Raw::CANCELLED;
+                    command.status.reason = Raw::BY_MOD;
                 }
                 // SAFETY: the safe layer passes a writable `u64`, non-null above.
                 unsafe { id.write(spec.cancels) };
@@ -76,22 +77,15 @@ entries! {
             {
                 return Status::BAD_ARGS;
             }
-            if marks(spec.kind)
-                && s.ui
-                    .client_commands
-                    .iter()
-                    .any(|(_, kind, _, status)| marks(*kind) && open(status))
-            {
+            // As the loader: the caller's own open commands decide whether one
+            // more of a kind waits; another mod's never do.
+            let mine = || s.ui.client_commands.iter().filter(|c| c.owner == me && c.open());
+            if marks(spec.kind) && mine().any(|c| marks(c.kind)) {
                 return Status::REFUSED;
             }
             // As the loader: one crafting or item request at a time.
             let acts = |kind: u32| (Spec::CRAFT..=Spec::TRASH).contains(&kind);
-            if acts(spec.kind)
-                && s.ui
-                    .client_commands
-                    .iter()
-                    .any(|(_, kind, _, status)| acts(*kind) && open(status))
-            {
+            if acts(spec.kind) && mine().any(|c| acts(c.kind)) {
                 return Status::REFUSED;
             }
             // As the loader: an equip names a member of the build's
@@ -147,38 +141,33 @@ entries! {
             }
             // One of each kind waits, one press of each action, and a mod's
             // presses up to the loader's limit.
-            let presses =
-                s.ui.client_commands
-                    .iter()
-                    .filter(|(_, kind, _, status)| *kind == Spec::PRESS && open(status))
-                    .count();
-            if s.ui.client_commands.iter().any(|(_, kind, queued, status)| {
-                *kind == spec.kind && open(status) && (spec.kind != Spec::PRESS || *queued == target)
+            let presses = mine().filter(|c| c.kind == Spec::PRESS).count();
+            if mine().any(|c| {
+                c.kind == spec.kind && (spec.kind != Spec::PRESS || c.target == target)
             }) || (spec.kind == Spec::PRESS
                 && presses >= enshwick_core::__fake::rules::PRESSES_PER_MOD)
             {
                 return Status::REFUSED;
             }
-            // One join or leave at a time; a join from the main menu, outside a
-            // world, which the snapshot's session names, and a leave inside one.
+            // One join or leave at a time across all mods, as the loader's
+            // play runs one; a join from the main menu, outside a world, which
+            // the snapshot's session names, and a leave inside one.
             let plays = |kind: u32| matches!(kind, Spec::JOIN | Spec::LEAVE | Spec::HOST);
             if plays(spec.kind) {
                 let in_world = s.ui.client_snapshot.session != 0;
-                let running =
-                    s.ui.client_commands
-                        .iter()
-                        .any(|(_, kind, _, status)| plays(*kind) && open(status));
+                let running = s.ui.client_commands.iter().any(|c| plays(c.kind) && c.open());
                 let from_menu = matches!(spec.kind, Spec::JOIN | Spec::HOST);
                 if running || in_world == from_menu {
                     return Status::REFUSED;
                 }
             }
             let next = s.ui.client_commands.len() as u64 + 1;
-            s.ui.client_commands.push((
-                next,
-                spec.kind,
+            s.ui.client_commands.push(super::QueuedCommand {
+                id: next,
+                owner: me,
+                kind: spec.kind,
                 target,
-                Raw {
+                status: Raw {
                     kind: spec.kind,
                     // As the loader queues them: a join waits for its server's
                     // answer, a leave starts in the world.
@@ -190,7 +179,7 @@ entries! {
                     },
                     ..Raw::EMPTY
                 },
-            ));
+            });
             // SAFETY: the safe layer passes a writable `u64`, non-null above.
             unsafe { id.write(next) };
             Status::OK
@@ -278,7 +267,8 @@ fn named_as_the_loader_takes(spec: &enshwick_core::abi::ClientCommand) -> bool {
 }
 
 entries! {
-    /// Where a queued client command stands, as the test set it.
+    /// Where a queued client command stands, as the test set it; as the
+    /// loader, unavailable for another mod's.
     pub(crate) fn client_command_status(
         me as Mod,
         id: u64,
@@ -292,9 +282,9 @@ entries! {
                 .ui
                 .client_commands
                 .iter()
-                .find(|(queued, ..)| *queued == id)
+                .find(|c| c.id == id && c.owner == me)
             {
-                Some((.., status)) => crate::test::table::put_headed(out, *status),
+                Some(command) => crate::test::table::put_headed(out, command.status),
                 None => Status::UNAVAILABLE,
             }
         })

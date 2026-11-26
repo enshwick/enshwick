@@ -1,6 +1,11 @@
 //! A prop a transaction places or removes: the game's placed entity of an item.
 
+use core::ops::ControlFlow;
+
+use enshwick_core::__private::inventory_links::{self, SetupLayout};
+use enshwick_core::Entity;
 use enshwick_core::abi::TransactionInfo;
+use enshwick_core::inventory::InventoryCategory;
 
 use super::cover::{BRICK, Bricks};
 
@@ -79,8 +84,7 @@ impl StateReads {
     }
 }
 
-/// Links an `InventorySetup` holds and stacks a sub-inventory holds.
-pub(crate) const LINKS: usize = enshwick_core::__private::INVENTORY_LINKS;
+/// Stacks a sub-inventory holds.
 pub(crate) const SLOTS: usize = enshwick_core::__private::INVENTORY_SLOTS as usize;
 
 /// Whether an `InventorySetup` has its inventories filled: its
@@ -97,51 +101,50 @@ pub(crate) unsafe fn setup_initialized(setup: *const u8, initialized: usize) -> 
     // `bool`.
     unsafe { enshwick_core::raw::read_at::<u8>(setup, initialized) != 0 }
 }
-/// How deep virtual links nest before the walk stops.
-const MAX_DEPTH: u32 = 4;
-/// The category of a link that leads to more links.
-const VIRTUAL: u8 = enshwick_core::inventory::InventoryCategory::VIRTUAL.0;
-
-/// An entity's `InventorySetup` as read: whether the game set it up, and
-/// its linked entities with their categories.
-pub(crate) struct Setup {
-    pub(crate) initialized: bool,
-    pub(crate) links: [(u32, u8); LINKS],
-}
+/// How deep virtual links nest before the walk stops: three below the
+/// prop's own setup.
+const MAX_DEPTH: u32 = 3;
 
 /// Whether any slot of `root`'s inventory, its linked and virtual
-/// inventories included, holds an item: `setup` reads an entity's setup,
+/// inventories included, holds an item: `setup` finds an entity's setup,
 /// `slots` the item of each stack of a sub-inventory. Virtual links nested
-/// deeper than the walk goes count as holding items.
-pub(crate) fn holds_items(
+/// deeper than the walk goes count as holding items, so stopping keeps the
+/// prop.
+///
+/// # Safety
+///
+/// Every pointer `setup` returns is a live `InventorySetup` laid out as
+/// `layout` says, readable for its links and categories and its
+/// initialised byte, with no concurrent writer until the call returns.
+pub(crate) unsafe fn holds_items(
     root: u32,
-    setup: &mut dyn FnMut(u32) -> Option<Setup>,
+    layout: &SetupLayout,
+    setup: &mut dyn FnMut(Entity) -> Option<*const u8>,
     slots: &mut dyn FnMut(u32) -> Option<[u32; SLOTS]>,
 ) -> bool {
-    walk(root, 0, setup, slots)
-}
-
-fn walk(
-    entity: u32,
-    depth: u32,
-    setup: &mut dyn FnMut(u32) -> Option<Setup>,
-    slots: &mut dyn FnMut(u32) -> Option<[u32; SLOTS]>,
-) -> bool {
-    let Some(found) = setup(entity) else {
-        return false;
-    };
-    if !found.initialized {
-        return false;
-    }
-    found.links.iter().any(|&(link, category)| {
-        if link == 0 {
-            false
-        } else if category == VIRTUAL {
-            depth + 1 >= MAX_DEPTH || walk(link, depth + 1, setup, slots)
+    let mut visit = |link: Entity, category| {
+        let holds = category == InventoryCategory::VIRTUAL
+            || slots(link.0).is_some_and(|items| items.iter().any(|&item| item != 0));
+        if holds {
+            ControlFlow::Break(())
         } else {
-            slots(link).is_some_and(|items| items.iter().any(|&item| item != 0))
+            ControlFlow::Continue(())
         }
-    })
+    };
+    // SAFETY: every pointer `setup` returns is a live `InventorySetup` of
+    // `layout`, readable and unwritten during the walk (this function's
+    // `# Safety`), which is all `walk` asks.
+    unsafe {
+        inventory_links::walk(
+            Entity(root),
+            MAX_DEPTH,
+            Entity::NONE,
+            layout,
+            setup,
+            &mut visit,
+        )
+    }
+    .is_break()
 }
 
 /// Whether a prop's `Fuel` holds more charges than a fresh one starts
@@ -291,6 +294,8 @@ impl Prop {
 
 #[cfg(test)]
 mod tests {
+    use enshwick_core::__private::INVENTORY_LINKS as LINKS;
+
     use super::*;
 
     #[test]
@@ -412,50 +417,85 @@ mod tests {
         assert_eq!(plate.holds(), HOLDS_LOGIC_GRAPH_TRIGGER);
     }
 
-    /// A setup set up with `links`, the rest empty.
-    fn setup(links: &[(u32, u8)]) -> Setup {
-        let mut all = [(0, 0); LINKS];
-        all[..links.len()].copy_from_slice(links);
-        Setup {
-            initialized: true,
-            links: all,
+    const LAYOUT: SetupLayout = SetupLayout {
+        links: 0,
+        categories: 4 * LINKS,
+        initialized: 5 * LINKS,
+    };
+    const VIRTUAL: u8 = InventoryCategory::VIRTUAL.0;
+
+    /// The bytes of a set-up `InventorySetup` with `links`, the rest empty.
+    fn setup(links: &[(u32, u8)]) -> [u8; 6 * LINKS] {
+        let mut bytes = [0u8; 6 * LINKS];
+        for (i, &(link, category)) in links.iter().enumerate() {
+            bytes[4 * i..4 * i + 4].copy_from_slice(&link.to_ne_bytes());
+            bytes[4 * LINKS + i] = category;
         }
+        bytes[5 * LINKS] = 1;
+        bytes
+    }
+
+    /// Whether `root` holds items over the setups `setups` and the stacks
+    /// `slots` hands.
+    fn holds(
+        setups: &[(u32, [u8; 6 * LINKS])],
+        root: u32,
+        slots: &mut dyn FnMut(u32) -> Option<[u32; SLOTS]>,
+    ) -> bool {
+        let mut find = |entity: Entity| {
+            setups
+                .iter()
+                .find(|(at, _)| *at == entity.0)
+                .map(|(_, bytes)| bytes.as_ptr())
+        };
+        // SAFETY: every pointer `find` returns is a whole setup of `LAYOUT`,
+        // kept by `setups` and not written during the walk.
+        unsafe { holds_items(root, &LAYOUT, &mut find, slots) }
+    }
+
+    /// A chain of virtual links from 1 down to `last`, each to the next.
+    fn chain(last: u32) -> Vec<(u32, [u8; 6 * LINKS])> {
+        (1..=last)
+            .map(|entity| (entity, setup(&[(entity + 1, VIRTUAL)])))
+            .collect()
     }
 
     #[test]
     fn an_item_in_any_linked_slot_is_found() {
-        let mut setups = |entity| (entity == 1).then(|| setup(&[(1, 0), (2, 0)]));
+        let setups = [(1, setup(&[(1, 0), (2, 0)]))];
         let mut slots = |entity| match entity {
             2 => Some([0, 0, 0, 7, 0, 0, 0, 0]),
             _ => Some([0; SLOTS]),
         };
-        assert!(holds_items(1, &mut setups, &mut slots));
-        let mut empty = |_| Some([0; SLOTS]);
-        assert!(!holds_items(1, &mut setups, &mut empty));
+        assert!(holds(&setups, 1, &mut slots));
+        assert!(!holds(&setups, 1, &mut |_| Some([0; SLOTS])));
+    }
+
+    #[test]
+    fn an_item_behind_an_empty_link_keeps_the_prop() {
+        let setups = [(1, setup(&[(10, 0), (0, 0), (11, 0)]))];
+        let mut slots = |entity| match entity {
+            11 => Some([0, 4, 0, 0, 0, 0, 0, 0]),
+            _ => Some([0; SLOTS]),
+        };
+        assert!(holds(&setups, 1, &mut slots));
     }
 
     #[test]
     fn virtual_links_are_followed_and_too_deep_ones_count_as_items() {
         let mut empty = |_| Some([0; SLOTS]);
-        let mut shallow = |entity: u32| (entity < 3).then(|| setup(&[(entity + 1, VIRTUAL)]));
-        assert!(!holds_items(1, &mut shallow, &mut empty));
-        let mut deep = |entity: u32| Some(setup(&[(entity + 1, VIRTUAL)]));
+        assert!(!holds(&chain(2), 1, &mut empty));
         assert!(
-            holds_items(1, &mut deep, &mut empty),
+            holds(&chain(8), 1, &mut empty),
             "the walk stops, and stopping keeps the prop"
         );
     }
 
     #[test]
     fn a_setup_the_game_has_not_set_up_holds_nothing() {
-        let mut setups = |_| {
-            Some(Setup {
-                initialized: false,
-                ..setup(&[(1, 0)])
-            })
-        };
-        let mut full = |_| Some([5; SLOTS]);
-        assert!(!holds_items(1, &mut setups, &mut full));
+        let mut unset = setup(&[(1, 0)]);
+        unset[5 * LINKS] = 0;
+        assert!(!holds(&[(1, unset)], 1, &mut |_| Some([5; SLOTS])));
     }
 
     #[test]

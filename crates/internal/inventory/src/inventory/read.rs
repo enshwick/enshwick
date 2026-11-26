@@ -1,4 +1,5 @@
 use core::ffi::c_void;
+use core::ops::ControlFlow;
 
 use crate::abi::{Header, InventoryOp, InventoryRequest};
 use crate::ecs::{ComponentType, Components};
@@ -8,10 +9,11 @@ use crate::schedule::Scheduler;
 use crate::{BaseLoad, Host, Off};
 use crate::{Entity, ItemId};
 
+use super::links::{SetupLayout, walk};
 use super::ops::{Batch, Op};
 use super::results::{Done, OpError, OpErrors, Outcome, Pending, Ticket, deliver};
 use super::slots::{Bar, Fill, InventoryCategory, ItemInfo, Slot, SlotRef};
-use super::{LINKS, MAX_DEPTH, MAX_OWNERS, SLOTS};
+use super::{MAX_DEPTH, MAX_OWNERS, SLOTS};
 
 /// Reflected layouts the reads use.
 #[derive(Clone, Copy, Debug)]
@@ -21,9 +23,7 @@ pub(super) struct Layout {
     durability: ComponentType,
     fuel: ComponentType,
     owner: ComponentType,
-    links: usize,
-    categories: usize,
-    initialized: usize,
+    links: SetupLayout,
     stack: usize,
     stack_count: usize,
     stack_pide: usize,
@@ -113,9 +113,11 @@ impl Inventories {
             durability: ComponentType::resolve(load, ids::DURABILITY)?,
             fuel: ComponentType::resolve(load, ids::FUEL)?,
             owner: ComponentType::resolve(load, ids::OWNER)?,
-            links: offset(ids::INVENTORY_SETUP_LINKS)?,
-            categories: offset(ids::INVENTORY_SETUP_CATEGORIES)?,
-            initialized: offset(ids::INVENTORY_SETUP_INITIALIZED)?,
+            links: SetupLayout {
+                links: offset(ids::INVENTORY_SETUP_LINKS)?,
+                categories: offset(ids::INVENTORY_SETUP_CATEGORIES)?,
+                initialized: offset(ids::INVENTORY_SETUP_INITIALIZED)?,
+            },
             stack: usize::try_from(load.type_size(ids::ITEM_STACK)?)
                 .map_err(|_| Off::new(ids::ITEM_STACK))?,
             stack_count: offset(ids::ITEM_STACK_COUNT)?,
@@ -577,49 +579,33 @@ impl Reader<'_> {
             unsafe { read_at::<u32>(core::ptr::with_exposed_provenance(layout.skip), 0) }
         };
         let mut out = Vec::new();
-        self.walk(root, 0, skip, &mut out);
-        out
-    }
-
-    fn walk(&self, root: Entity, depth: u32, skip: u32, out: &mut Vec<Slot>) {
-        let layout = &self.inventories.layout;
-        let Some(setup) = self.component(root, layout.setup) else {
-            return;
-        };
-        // SAFETY: `component` returned the entity's live InventorySetup, whose
-        // `isInitialized` byte sits at the reflected offset `initialized`.
-        if unsafe { read_at::<u8>(setup, layout.initialized) } == 0 {
-            return;
-        }
-        for i in 0..LINKS {
-            // SAFETY: `setup` is the live InventorySetup, whose `LINKS` u32
-            // `linksEntities` start at the reflected offset `links`, and
-            // `i < LINKS`.
-            let link: u32 = unsafe { read_at(setup, layout.links + i * size_of::<u32>()) };
-            if link == 0 {
-                break;
-            }
-            if link == skip {
-                continue;
-            }
-            // SAFETY: `setup` is the live InventorySetup, whose `LINKS`
-            // `linksCategories` bytes start at the reflected offset
-            // `categories`, and `i < LINKS`.
-            let category = InventoryCategory(unsafe { read_at(setup, layout.categories + i) });
-            if category == InventoryCategory::VIRTUAL {
-                if depth < MAX_DEPTH {
-                    self.walk(Entity(link), depth + 1, skip, out);
-                }
-                continue;
-            }
-            if let Some(slots) = self.component(Entity(link), layout.inventory) {
+        let mut setup = |entity| self.component(entity, layout.setup);
+        let mut visit = |link, category| {
+            if category != InventoryCategory::VIRTUAL
+                && let Some(slots) = self.component(link, layout.inventory)
+            {
                 out.extend((0..SLOTS).map(|index| {
                     // SAFETY: `component` returned the link's live Inventory,
                     // which holds `SLOTS` stacks, and `index < SLOTS`.
-                    unsafe { self.stack(slots, Entity(link), index, category) }
+                    unsafe { self.stack(slots, link, index, category) }
                 }));
             }
-        }
+            ControlFlow::<()>::Continue(())
+        };
+        // SAFETY: `component` returns only the entity's live InventorySetup,
+        // laid out as the reflected `layout.links` says, read while no
+        // inventory changes (the reader's contract).
+        let _walked = unsafe {
+            walk(
+                root,
+                MAX_DEPTH,
+                Entity(skip),
+                &layout.links,
+                &mut setup,
+                &mut visit,
+            )
+        };
+        out
     }
 
     /// The stack `index` of the `Inventory` at `slots`.

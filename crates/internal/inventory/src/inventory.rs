@@ -74,6 +74,10 @@ impl LoadMethods for crate::BaseLoad {
 pub(crate) mod checks;
 #[cfg(feature = "unstable")]
 pub mod containers;
+// Hidden so the Luau parity scan, which reads attributes and not
+// visibility, leaves the loader's walk out of the API.
+#[doc(hidden)]
+pub(crate) mod links;
 mod ops;
 mod read;
 mod results;

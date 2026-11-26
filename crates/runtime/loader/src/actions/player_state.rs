@@ -10,6 +10,7 @@
 
 use std::sync::atomic::{AtomicU16, AtomicU64, Ordering};
 
+use enshwick_core::__private::inventory_links::{self, SetupLayout};
 use enshwick_core::__private::{INVENTORY_LINKS as LINKS, INVENTORY_SLOTS as SLOTS};
 use enshwick_core::Entity;
 use enshwick_core::abi::ClientSlot;
@@ -38,8 +39,6 @@ pub(crate) static SLOTS_FUSE: Fuse = Fuse::new(SLOTS_FEATURE);
 pub(crate) const MAX_SLOTS: usize = 2 * LINKS * SLOTS as usize;
 /// How deep the slot walk follows virtual links, as the server's reads do.
 const MAX_DEPTH: u32 = 4;
-/// The category of a link that holds further links, not slots.
-const VIRTUAL: u8 = InventoryCategory::VIRTUAL.0;
 /// The watch entry for the local player's own inventory, which the steps
 /// know and a command may not yet.
 pub(crate) const PLAYER: u32 = u32::MAX;
@@ -255,9 +254,7 @@ fn slots_wanted(now: u64) -> bool {
 struct SlotLayout {
     setup: u32,
     inventory: u32,
-    links: usize,
-    categories: usize,
-    initialized: usize,
+    links: SetupLayout,
     stack: usize,
     stack_count: usize,
     stack_pide: usize,
@@ -308,9 +305,11 @@ impl Layout {
             Ok::<_, &'static str>(SlotLayout {
                 setup: hash(catalogue::ids::INVENTORY_SETUP)?,
                 inventory: hash(catalogue::ids::INVENTORY)?,
-                links: at(catalogue::ids::INVENTORY_SETUP_LINKS)?,
-                categories: at(catalogue::ids::INVENTORY_SETUP_CATEGORIES)?,
-                initialized: at(catalogue::ids::INVENTORY_SETUP_INITIALIZED)?,
+                links: SetupLayout {
+                    links: at(catalogue::ids::INVENTORY_SETUP_LINKS)?,
+                    categories: at(catalogue::ids::INVENTORY_SETUP_CATEGORIES)?,
+                    initialized: at(catalogue::ids::INVENTORY_SETUP_INITIALIZED)?,
+                },
                 stack: crate::engine::catalogue::size(loader, catalogue::ids::ITEM_STACK)
                     .ok_or(catalogue::ids::ITEM_STACK)?,
                 stack_count: at(catalogue::ids::ITEM_STACK_COUNT)?,
@@ -441,7 +440,7 @@ fn read_slots(
     let mut words = [0u64; SLOT_WORDS];
     let mut count = 0;
     let mut dropped = false;
-    walk(component, slots, player, 0, &mut |slot| {
+    walk(component, slots, player, &mut |slot| {
         let inventory = u32::try_from(slot.slot & 0xffff_ffff).unwrap_or(0);
         let slot = ClientSlot {
             flags: if bar.contains(&inventory) {
@@ -473,9 +472,11 @@ fn read_slots(
 const TEST_SLOTS: SlotLayout = SlotLayout {
     setup: 1,
     inventory: 2,
-    links: 0,
-    categories: 4 * LINKS,
-    initialized: 5 * LINKS,
+    links: SetupLayout {
+        links: 0,
+        categories: 4 * LINKS,
+        initialized: 5 * LINKS,
+    },
     stack: 12,
     stack_count: 4,
     stack_pide: 8,
@@ -497,7 +498,13 @@ pub fn bench_slot_read(watching: bool) -> impl FnMut() -> u64 {
         bytes[5 * LINKS] = 1;
         bytes
     };
-    let player = setup(&[(70, 0), (71, 0), (72, 0), (73, 0), (60, VIRTUAL)]);
+    let player = setup(&[
+        (70, 0),
+        (71, 0),
+        (72, 0),
+        (73, 0),
+        (60, InventoryCategory::VIRTUAL.0),
+    ]);
     let equipment = setup(&[(80, 0), (81, 0)]);
     let stacks = vec![7u8; 12 * usize::from(SLOTS)];
     watch(if watching { [PLAYER, 0] } else { [0, 0] }, 1);
@@ -549,7 +556,7 @@ fn read_watch(
         }
         let mut mix = |slot: ClientSlot| print = mixed(print, &pack_slot(&slot));
         if component(entity, at_layout.setup).is_some() {
-            walk(component, at_layout, entity, 0, &mut mix);
+            walk(component, at_layout, entity, &mut mix);
         } else {
             stacks(component, at_layout, entity, 0, &mut mix);
         }
@@ -596,36 +603,28 @@ fn walk(
     component: &dyn Fn(u32, u32) -> Option<*const u8>,
     at: &SlotLayout,
     root: u32,
-    depth: u32,
     out: &mut dyn FnMut(ClientSlot),
 ) {
-    use enshwick_core::raw::read_at;
-    let Some(setup) = component(root, at.setup) else {
-        return;
+    let mut setup = |entity: Entity| component(entity.0, at.setup);
+    let mut visit = |link: Entity, category: InventoryCategory| {
+        if category != InventoryCategory::VIRTUAL {
+            stacks(component, at, link.0, category.0, out);
+        }
+        core::ops::ControlFlow::<()>::Continue(())
     };
-    // SAFETY: `setup` is the entity's live `InventorySetup`, whose
-    // `isInitialized` byte sits at the reflected offset.
-    if unsafe { read_at::<u8>(setup, at.initialized) } == 0 {
-        return;
-    }
-    for i in 0..LINKS {
-        // SAFETY: the live `InventorySetup`, whose `LINKS` u32
-        // `linksEntities` start at the reflected offset, and `i < LINKS`.
-        let link: u32 = unsafe { read_at(setup, at.links + i * size_of::<u32>()) };
-        if link == 0 {
-            break;
-        }
-        // SAFETY: the live `InventorySetup`, whose `LINKS` category bytes
-        // start at the reflected offset, and `i < LINKS`.
-        let category: u8 = unsafe { read_at(setup, at.categories + i) };
-        if category == VIRTUAL {
-            if depth < MAX_DEPTH {
-                walk(component, at, link, depth + 1, out);
-            }
-            continue;
-        }
-        stacks(component, at, link, category, out);
-    }
+    // SAFETY: `component` hands only an entity's live component of the
+    // type asked for, on the thread that reads it (the callers' context),
+    // and the setup's layout is the build's reflected one.
+    let _walked = unsafe {
+        inventory_links::walk(
+            Entity(root),
+            MAX_DEPTH,
+            Entity::NONE,
+            &at.links,
+            &mut setup,
+            &mut visit,
+        )
+    };
 }
 
 /// Hands `out` the slots of the sub-inventory `link`, of `category`; none

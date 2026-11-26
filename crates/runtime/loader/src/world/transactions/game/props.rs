@@ -12,8 +12,9 @@ use crate::engine::world::WorldError;
 use crate::world::prop_holds::Stash;
 use crate::world::transactions::TransactionError;
 use crate::world::transactions::props::{
-    FactoryRead, LINKS, Prop, SLOTS, Setup, StateReads, fuel_held, holds_items, wired,
+    FactoryRead, Prop, SLOTS, StateReads, fuel_held, holds_items, wired,
 };
+use enshwick_core::__private::inventory_links::SetupLayout;
 
 /// The offset the catalogue id `id` names on this build.
 fn offset(loader: &Loader, id: &str) -> Result<usize, TransactionError> {
@@ -182,9 +183,7 @@ pub(super) fn spawn(loader: &Loader, prop: &Prop, actor: u32) -> Result<u32, Tra
 /// together: one missing turns removal and undo off on this build.
 struct Facts {
     setup: u32,
-    setup_initialized: usize,
-    setup_links: usize,
-    setup_categories: usize,
+    setup_layout: SetupLayout,
     inventory: u32,
     stack: usize,
     level: u32,
@@ -234,10 +233,12 @@ impl Facts {
         let ty = |id: &str| type_of(loader, id);
         Ok(Self {
             setup: ty(catalogue::ids::INVENTORY_SETUP)?,
-            setup_initialized: crate::engine::catalogue::setup_initialized_at(loader)
-                .ok_or(TransactionError::Unavailable)?,
-            setup_links: at(catalogue::ids::INVENTORY_SETUP_LINKS)?,
-            setup_categories: at(catalogue::ids::INVENTORY_SETUP_CATEGORIES)?,
+            setup_layout: SetupLayout {
+                links: at(catalogue::ids::INVENTORY_SETUP_LINKS)?,
+                categories: at(catalogue::ids::INVENTORY_SETUP_CATEGORIES)?,
+                initialized: crate::engine::catalogue::setup_initialized_at(loader)
+                    .ok_or(TransactionError::Unavailable)?,
+            },
             inventory: ty(catalogue::ids::INVENTORY)?,
             stack: type_size(loader, catalogue::ids::ITEM_STACK)?,
             level: ty(catalogue::ids::LEVEL)?,
@@ -527,34 +528,12 @@ fn state(loader: &Loader, facts: &Facts, entity: u32) -> Result<StateReads, Tran
         false
     };
     let unreadable = core::cell::Cell::new(None);
-    let mut setup = |link: u32| {
-        let found = match inline(loader, link, facts.setup) {
-            Ok(found) => found?,
-            Err(reason) => {
-                unreadable.set(Some(reason));
-                return None;
-            }
-        };
-        // SAFETY: `found` is the link's own live `InventorySetup`, kept in
-        // its row (checked by `inline`), with its `isInitialized` byte at the
-        // reflected offset.
-        let initialized = unsafe {
-            crate::world::transactions::props::setup_initialized(found, facts.setup_initialized)
-        };
-        let mut links = [(0, 0); LINKS];
-        for (i, slot) in links.iter_mut().enumerate() {
-            // SAFETY: `found` is the live `InventorySetup`, whose `LINKS`
-            // `u32` linked entities start at the reflected offset, and
-            // `i < LINKS`.
-            let link: u32 =
-                unsafe { enshwick_core::raw::read_at(found, facts.setup_links + 4 * i) };
-            // SAFETY: `found` is the live `InventorySetup`, whose `LINKS`
-            // category bytes start at the reflected offset, and `i < LINKS`.
-            let category: u8 =
-                unsafe { enshwick_core::raw::read_at(found, facts.setup_categories + i) };
-            *slot = (link, category);
+    let mut setup = |link: Entity| match inline(loader, link.0, facts.setup) {
+        Ok(found) => found,
+        Err(reason) => {
+            unreadable.set(Some(reason));
+            None
         }
-        Some(Setup { initialized, links })
     };
     let mut slots = |link: u32| {
         let found = match inline(loader, link, facts.inventory) {
@@ -574,7 +553,10 @@ fn state(loader: &Loader, facts: &Facts, entity: u32) -> Result<StateReads, Tran
         }
         Some(items)
     };
-    let items = holds_items(entity, &mut setup, &mut slots);
+    // SAFETY: `inline` returns only an entity's own live `InventorySetup`,
+    // kept in its row, on the game thread, laid out as the reflected
+    // `setup_layout` says.
+    let items = unsafe { holds_items(entity, &facts.setup_layout, &mut setup, &mut slots) };
     if let Some(reason) = unreadable.get() {
         return Err(reason);
     }
