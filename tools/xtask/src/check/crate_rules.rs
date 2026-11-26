@@ -6,9 +6,10 @@
 //! platform crate depends on the API crate only for its tests, features
 //! name what they add, `anyhow` stays in binaries, `rust-version` is the
 //! pinned toolchain's, a published crate's path dependencies carry
-//! versions, release-plz versions the API crate and every crate of
-//! `crates/internal` as one group, and every crate it releases keeps a
-//! changelog for its release notes.
+//! versions and its license text, release-plz versions the API crate and
+//! every crate of `crates/internal` as one group and the packages of the
+//! loader's release as another, and every crate it releases keeps a
+//! changelog for the release notes and gets no GitHub release of its own.
 
 use std::path::Path;
 use std::process::Command;
@@ -18,6 +19,7 @@ use cargo_enshwick::rules::TEST;
 
 use crate::FACADE;
 use crate::affected::Package;
+use crate::commands::notes::LOADER;
 
 /// The problems of the workspace's crates, one line each; `packages` says
 /// where each one lies.
@@ -37,6 +39,7 @@ pub(crate) fn check(packages: &[Package]) -> Result<Vec<String>, String> {
         .map_err(|error| format!("reading cargo metadata: {error}"))?;
     let toolchain = toolchain(&read(&crate::workspace_root().join("rust-toolchain.toml"))?)?;
     let root = Path::new(metadata["workspace_root"].as_str().unwrap_or_default());
+    let workspace_license = read(&root.join(LICENSE))?;
     let mut api_crates = Vec::new();
     let mut releasables = Vec::new();
     let mut problems = Vec::new();
@@ -47,12 +50,16 @@ pub(crate) fn check(packages: &[Package]) -> Result<Vec<String>, String> {
         if is_api_crate(name, dir.strip_prefix(root).unwrap_or(dir)) {
             api_crates.push(name.to_owned());
         }
+        // release-plz's reading: no `publish` publishes, `false` is `[]`.
+        let publishable = package["publish"]
+            .as_array()
+            .is_none_or(|registries| !registries.is_empty());
+        if publishable {
+            problems.extend(license(name, dir, &workspace_license));
+        }
         releasables.push(Releasable {
             name,
-            // release-plz's reading: no `publish` publishes, `false` is `[]`.
-            publishable: package["publish"]
-                .as_array()
-                .is_none_or(|registries| !registries.is_empty()),
+            publishable,
             changelog: dir.join(CHANGELOG).is_file(),
         });
         problems.extend(cargo_enshwick::rules::check(package).map_err(|e| e.to_string())?);
@@ -68,6 +75,7 @@ pub(crate) fn check(packages: &[Package]) -> Result<Vec<String>, String> {
     let release_plz = release_plz_table(&read(&root.join("release-plz.toml"))?)?;
     problems.extend(release_group(&api_crates, &release_plz));
     problems.extend(release_notes(&releasables, &release_plz));
+    problems.extend(release_packages(&release_plz));
     Ok(problems)
 }
 
@@ -321,8 +329,9 @@ fn release_notes(releasables: &[Releasable<'_>], release_plz: &toml::Table) -> V
                 .or_else(|| workspace.and_then(|workspace| workspace.get(key)))
                 .and_then(toml::Value::as_bool)
         };
+        // As release-plz weighs it: a crate that cannot publish and is not
+        // `git_only` is never released (`takes_part_in_release`, 0.4).
         let released = setting("release") != Some(false)
-            && setting("git_release_enable") != Some(false)
             && (package.publishable || setting("git_only") == Some(true));
         if !released {
             continue;
@@ -330,16 +339,89 @@ fn release_notes(releasables: &[Releasable<'_>], release_plz: &toml::Table) -> V
         let name = package.name;
         if !package.changelog {
             problems.push(format!(
-                "{name}: release-plz releases it, so it keeps a {CHANGELOG} whose section is its GitHub release's notes"
+                "{name}: release-plz releases it, so it keeps a {CHANGELOG} whose section joins the release's notes"
             ));
         }
         if setting("changelog_update") == Some(false) {
             problems.push(format!(
-                "{name}: release-plz.toml turns its changelog off, so its GitHub release would carry no notes"
+                "{name}: release-plz.toml turns its changelog off, so the release's notes would leave it out"
+            ));
+        }
+        if setting("git_release_enable") != Some(false) {
+            problems.push(format!(
+                "{name}: release-plz.toml gives it a GitHub release; the release workflow makes the one release of each version"
             ));
         }
     }
     problems
+}
+
+/// The release-plz version group of the packages one GitHub release ships:
+/// the loader and the stub in `enshwick.zip`, and `cargo enshwick`, which
+/// installs the loader of its own version.
+const RELEASE_GROUP: &str = "release";
+/// The packages of [`RELEASE_GROUP`].
+const RELEASE_PACKAGES: [&str; 3] = [LOADER, "enshwick-loader-stub", "cargo-enshwick"];
+/// The tag of the loader's version, which its GitHub release carries.
+const LOADER_TAG: &str = "v{{ version }}";
+
+/// The problems of `release_plz`, the parsed `release-plz.toml`, with the
+/// packages one GitHub release ships: one of [`RELEASE_PACKAGES`] outside
+/// [`RELEASE_GROUP`], another package in it, or the loader tagged other than
+/// [`LOADER_TAG`], which the release, `cargo enshwick` and the mods' release
+/// tooling read.
+fn release_packages(release_plz: &toml::Table) -> Vec<String> {
+    let mut problems = Vec::new();
+    let entry = |name: &str| {
+        package_entries(release_plz)
+            .find(|entry| entry.get("name").and_then(toml::Value::as_str) == Some(name))
+    };
+    for name in RELEASE_PACKAGES {
+        let group = entry(name).and_then(|e| e.get("version_group")?.as_str());
+        if group != Some(RELEASE_GROUP) {
+            problems.push(format!(
+                "{name}: release-plz.toml puts it in the `{RELEASE_GROUP}` version group, since one GitHub release ships it"
+            ));
+        }
+    }
+    for package in package_entries(release_plz) {
+        let name = package
+            .get("name")
+            .and_then(toml::Value::as_str)
+            .unwrap_or_default();
+        if package.get("version_group").and_then(toml::Value::as_str) == Some(RELEASE_GROUP)
+            && !RELEASE_PACKAGES.contains(&name)
+        {
+            problems.push(format!(
+                "{name}: the `{RELEASE_GROUP}` version group holds only what the loader's release ships"
+            ));
+        }
+    }
+    if entry(LOADER).and_then(|e| e.get("git_tag_name")?.as_str()) != Some(LOADER_TAG) {
+        problems.push(format!(
+            "{LOADER}: release-plz.toml tags it `{LOADER_TAG}`, the tag of its GitHub release"
+        ));
+    }
+    problems
+}
+
+/// The file every published crate carries, the same text as the
+/// workspace's own.
+const LICENSE: &str = "LICENSE";
+
+/// The problem of the publishable crate in `dir` with the license: crates.io
+/// ships only the files in a crate's folder, so the folder holds the
+/// workspace's `license` text.
+fn license(name: &str, dir: &Path, license: &str) -> Option<String> {
+    match std::fs::read_to_string(dir.join(LICENSE)) {
+        Ok(text) if text == license => None,
+        Ok(_) => Some(format!(
+            "{name}: its {LICENSE} differs from the workspace's; copy that one"
+        )),
+        Err(_) => Some(format!(
+            "{name}: it publishes without a {LICENSE}; copy the workspace's into its folder"
+        )),
+    }
 }
 
 /// `release-plz.toml` parsed from `text`.
@@ -582,10 +664,9 @@ mod tests {
     #[test]
     fn a_released_crate_without_its_changelog_or_with_it_turned_off_is_a_problem() {
         let release_plz = release_plz_table(
-            "[workspace]\nchangelog_update = true\n\n\
+            "[workspace]\nchangelog_update = true\ngit_release_enable = false\n\n\
              [[package]]\nname = \"loader\"\ngit_only = true\nchangelog_update = false\n\n\
-             [[package]]\nname = \"tool\"\nrelease = false\n\n\
-             [[package]]\nname = \"crates-only\"\ngit_release_enable = false\nchangelog_update = false\n",
+             [[package]]\nname = \"tool\"\nrelease = false\n",
         )
         .unwrap();
         let package = |name, publishable, changelog| Releasable {
@@ -599,23 +680,91 @@ mod tests {
             package("loader", false, false),
             package("tool", true, false),
             package("example", false, false),
-            package("crates-only", true, false),
         ];
         assert_eq!(
             release_notes(&packages, &release_plz),
             [
-                "abi: release-plz releases it, so it keeps a CHANGELOG.md whose section is its GitHub release's notes",
-                "loader: release-plz releases it, so it keeps a CHANGELOG.md whose section is its GitHub release's notes",
-                "loader: release-plz.toml turns its changelog off, so its GitHub release would carry no notes",
+                "abi: release-plz releases it, so it keeps a CHANGELOG.md whose section joins the release's notes",
+                "loader: release-plz releases it, so it keeps a CHANGELOG.md whose section joins the release's notes",
+                "loader: release-plz.toml turns its changelog off, so the release's notes would leave it out",
             ]
         );
-        let off = release_plz_table("[workspace]\nchangelog_update = false\n").unwrap();
+        let off = release_plz_table(
+            "[workspace]\nchangelog_update = false\ngit_release_enable = false\n",
+        )
+        .unwrap();
         assert_eq!(
             release_notes(&packages[..1], &off),
             [
-                "api: release-plz.toml turns its changelog off, so its GitHub release would carry no notes"
+                "api: release-plz.toml turns its changelog off, so the release's notes would leave it out"
             ]
         );
+    }
+
+    #[test]
+    fn a_released_crate_with_a_github_release_of_its_own_is_a_problem() {
+        let release_plz = release_plz_table(
+            "[workspace]\ngit_release_enable = false\n\n\
+             [[package]]\nname = \"loader\"\ngit_only = true\ngit_release_enable = true\n\n\
+             [[package]]\nname = \"tool\"\nrelease = false\ngit_release_enable = true\n",
+        )
+        .unwrap();
+        let package = |name, publishable| Releasable {
+            name,
+            publishable,
+            changelog: true,
+        };
+        let packages = [
+            package("api", true),
+            package("loader", false),
+            package("tool", true),
+        ];
+        let one_release = "release-plz.toml gives it a GitHub release; the release workflow makes the one release of each version";
+        assert_eq!(
+            release_notes(&packages, &release_plz),
+            [format!("loader: {one_release}")]
+        );
+        let default = release_plz_table("[workspace]\n").unwrap();
+        assert_eq!(
+            release_notes(&packages[..1], &default),
+            [format!("api: {one_release}")]
+        );
+    }
+
+    #[test]
+    fn the_loaders_release_packages_share_a_group_and_the_loader_its_tag() {
+        let good = "[[package]]\nname = \"enshwick-loader\"\nversion_group = \"release\"\ngit_tag_name = \"v{{ version }}\"\n\n\
+                    [[package]]\nname = \"enshwick-loader-stub\"\nversion_group = \"release\"\n\n\
+                    [[package]]\nname = \"cargo-enshwick\"\nversion_group = \"release\"\n";
+        assert!(release_packages(&release_plz_table(good).unwrap()).is_empty());
+        let bad = "[[package]]\nname = \"enshwick-loader\"\nversion_group = \"release\"\ngit_tag_name = \"enshwick-v{{ version }}\"\n\n\
+                   [[package]]\nname = \"enshwick-loader-stub\"\nversion_group = \"release\"\n\n\
+                   [[package]]\nname = \"enshwick\"\nversion_group = \"release\"\n";
+        assert_eq!(
+            release_packages(&release_plz_table(bad).unwrap()),
+            [
+                "cargo-enshwick: release-plz.toml puts it in the `release` version group, since one GitHub release ships it",
+                "enshwick: the `release` version group holds only what the loader's release ships",
+                "enshwick-loader: release-plz.toml tags it `v{{ version }}`, the tag of its GitHub release",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_published_crate_carries_the_workspaces_license() {
+        let dir = crate::scratch::Scratch::new("license").unwrap();
+        let text = "MIT License\n";
+        assert_eq!(
+            license("a", &dir, text).as_deref(),
+            Some("a: it publishes without a LICENSE; copy the workspace's into its folder")
+        );
+        std::fs::write(dir.join(LICENSE), "Apache\n").unwrap();
+        assert_eq!(
+            license("a", &dir, text).as_deref(),
+            Some("a: its LICENSE differs from the workspace's; copy that one")
+        );
+        std::fs::write(dir.join(LICENSE), text).unwrap();
+        assert_eq!(license("a", &dir, text), None);
     }
 
     #[test]

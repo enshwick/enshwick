@@ -1,7 +1,7 @@
-//! `cargo xtask notes`: the notes of an alpha release of the loader, the
-//! version the workspace carries: the warning that anything may change, the
-//! game version it was checked against, each crate's changelog section of that
-//! version and the known issues.
+//! `cargo xtask notes`: the notes of the loader's GitHub release, the
+//! version the workspace carries: for an alpha the warning that anything may
+//! change, then how to install, the game version it was checked against,
+//! each crate's changelog section of that version and the known issues.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -19,7 +19,6 @@ const MAX_BODY: usize = 125_000;
 const INSTALL: &str = "Extract `enshwick.zip` into the folder that holds \
 `enshrouded.exe` or `enshrouded_server.exe`. It holds the loader and no mod: \
 each mod ships in its own archive.";
-const NO_KNOWN_ISSUES: &str = "None reported for this alpha.";
 
 /// The command line `notes` takes.
 #[derive(Debug, clap::Args)]
@@ -212,13 +211,18 @@ fn notes(
     known_issues: &str,
 ) -> Result<String, String> {
     let semver = semver::Version::parse(version).map_err(|e| format!("{version}: {e}"))?;
-    if semver.pre.is_empty() {
+    if !semver.build.is_empty() {
         return Err(format!(
-            "{version} is not a prerelease; alpha notes need one"
+            "{version} carries build metadata, which only development builds state"
         ));
     }
+    let (warning, kind) = if semver.pre.is_empty() {
+        (String::new(), "release")
+    } else {
+        (format!("{ALPHA_WARNING}\n"), "alpha")
+    };
     let mut text = format!(
-        "{ALPHA_WARNING}\n{INSTALL}\n\n## Game version\n\nThis alpha was checked against {}.\n",
+        "{warning}{INSTALL}\n\n## Game version\n\nThis {kind} was checked against {}.\n",
         checked(builds)?
     );
     text.push_str("\n## What changed\n");
@@ -240,9 +244,10 @@ fn notes(
             text.push('\n');
         }
     }
+    let none = format!("None reported for this {kind}.");
     let known_issues = Some(known_issues.trim())
         .filter(|s| !s.is_empty())
-        .unwrap_or(NO_KNOWN_ISSUES);
+        .unwrap_or(&none);
     let _infallible = writeln!(text, "\n## Known issues\n\n{known_issues}");
     let length = text.chars().count();
     if length > MAX_BODY {
@@ -306,7 +311,7 @@ mod tests {
         ));
         assert!(!text.contains("26430253"));
         assert!(text.contains("### `enshwick`\n\n#### Added\n\n- controls (#930)\n"));
-        assert!(text.ends_with(&format!("## Known issues\n\n{NO_KNOWN_ISSUES}\n")));
+        assert!(text.ends_with("## Known issues\n\nNone reported for this alpha.\n"));
         Ok(())
     }
 
@@ -493,9 +498,35 @@ mod tests {
     }
 
     #[test]
-    fn a_release_version_gets_no_alpha_notes() {
-        assert!(notes("1.0.0", &[], &[], "").is_err());
-        assert!(notes("1.0.0+build-1", &[], &[], "").is_err());
+    fn a_release_gets_notes_without_the_alpha_warning() -> Result<(), String> {
+        let text = notes(
+            "1.0.0",
+            &[side("server", 1_287_369, 1)],
+            &[("enshwick".to_owned(), "- a".to_owned())],
+            "",
+        )?;
+        assert!(text.starts_with(INSTALL), "{text}");
+        assert!(!text.contains("alpha"), "{text}");
+        assert!(
+            text.contains("This release was checked against game version 1287369 on the server.\n")
+        );
+        assert!(text.ends_with("## Known issues\n\nNone reported for this release.\n"));
+        Ok(())
+    }
+
+    #[test]
+    fn a_version_with_build_metadata_gets_no_notes() {
+        let refused = notes("1.0.0+build-1", &[side("server", 1, 1)], &[], "").unwrap_err();
+        assert!(refused.contains("build metadata"), "{refused}");
+        assert!(
+            notes(
+                "1.0.0-alpha.12+dev.5f647f46",
+                &[side("server", 1, 1)],
+                &[],
+                ""
+            )
+            .is_err()
+        );
     }
 
     #[test]

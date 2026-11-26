@@ -1,13 +1,17 @@
-# An alpha release of the loader, run by hand on main until 1.0.0: the
-# version the workspace carries, `1.0.0-alpha.N`, becomes the GitHub
-# prerelease `v1.0.0-alpha.N` with `enshwick.zip`, the C header
-# `enshwick.h`, `cargo-enshwick` for Windows and Linux, their PDBs, SBOMs,
-# SHA-256 checksums and build provenance, and notes from `cargo xtask
-# notes`. The pull request before it moves the crates to that version and
-# joins their change files into each changelog with `cargo xtask close`; a
-# version already released is refused.
-# Nothing goes to crates.io.
-name: alpha
+# The GitHub release of the loader, the version the workspace carries:
+# `v<version>` with `enshwick.zip`, the C header `enshwick.h`,
+# `cargo-enshwick` for Windows and Linux, their PDBs, SBOMs, SHA-256
+# checksums and build provenance, and notes from `cargo xtask notes`. It is
+# the one GitHub release of each version: release-plz makes none. A stable
+# version is marked latest; an alpha (`1.0.0-alpha.N`) is a prerelease that
+# never is. The release-plz workflow calls it once release-plz has
+# published the crates and tagged the loader `v<version>`; an alpha runs it
+# by hand on main, after a pull request moved the crates to that version and
+# joined their change files with `cargo xtask close`, and tags it here. A
+# version released already is refused. With `publish` off it runs from any
+# branch, builds unsigned without the release environment and shows the
+# notes and the files in the run's summary, publishing nothing.
+name: release
 
 on:
   workflow_dispatch:
@@ -17,30 +21,41 @@ on:
         type: string
         default: ""
       publish:
-        description: Make the prerelease; off builds and shows the notes in the run's summary only
+        description: Make the release; off builds and shows the notes in the run's summary only
+        type: boolean
+        default: true
+  workflow_call:
+    inputs:
+      known_issues:
+        description: Known issues, as Markdown; empty says none are reported
+        type: string
+        default: ""
+      publish:
+        description: Make the release; off builds and shows the notes in the run's summary only
         type: boolean
         default: true
 
 permissions: {}
 
 concurrency:
-  group: alpha
+  group: release
   cancel-in-progress: false
 
-# Players download alphas, so every job runs only on main. Each runs on a
-# fresh machine: what ships is built and published without the caches that
-# branch builds write to.
+# Players download releases, so a run that publishes runs only on main. Each
+# job runs on a fresh machine: what ships is built and published without the
+# caches that branch builds write to.
 jobs:
-  # A version released already, or one whose changelogs are not closed,
-  # fails this job in seconds.
+  # A version released already, a loader tag on another commit, or a
+  # version whose changelogs are not closed, fails this job in seconds.
   version:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || !inputs.publish
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       contents: read
     outputs:
       version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -56,19 +71,33 @@ jobs:
         run: |
           version=$(cargo pkgid --locked -p enshwick-loader)
           version=${version##*[#@]}
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$version" > /dev/null 2>&1; then
-            echo "::error title=alpha::v$version is released already; move the crates to the next alpha first"
+          tag="v$version"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error title=release::$tag is released already; move the crates to the next version first"
             exit 1
           fi
-          # The alphas before these releases went to crates.io.
-          crate=$(curl -sS --proto '=https' --retry 3 -A 'enshwick (https://github.com/enshwick)' \
-            -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/enshwick/$version")
-          if [ "$crate" != 404 ]; then
-            echo "::error title=alpha::crates.io answers $crate for enshwick $version; only a version it does not know is new"
+          # release-plz tags the loader before it calls this workflow, on the
+          # commit it released.
+          if tagged=$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha 2> /dev/null) &&
+            [ "$tagged" != "$GITHUB_SHA" ]; then
+            echo "::error title=release::$tag names $tagged, not this run's commit $GITHUB_SHA"
             exit 1
+          fi
+          prerelease=false
+          if [[ "$version" == *-* ]]; then
+            prerelease=true
+            # Alphas never go to crates.io, but the ones before these
+            # releases did, so a version it knows is an old one.
+            crate=$(curl -sS --proto '=https' --retry 3 -A 'enshwick (https://github.com/enshwick)' \
+              -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/enshwick/$version")
+            if [ "$crate" != 404 ]; then
+              echo "::error title=release::crates.io answers $crate for enshwick $version; only an alpha it does not know is new"
+              exit 1
+            fi
           fi
           cargo xtask notes --out "$RUNNER_TEMP/notes.md" --known-issues "$KNOWN_ISSUES"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
           cat "$RUNNER_TEMP/notes.md" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -80,10 +109,10 @@ jobs:
 
   # The archive, and the PDB and SBOM of every DLL.
   loader:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || !inputs.publish
     # The signing key is a release secret, and the release environment
-    # admits main only.
-    environment: release
+    # admits main only; a run that publishes nothing builds unsigned.
+    environment: ${{ inputs.publish && 'release' || '' }}
     runs-on: ubuntu-26.04
     # Room for a Windows SDK cache miss, which downloads for 7 to 9 minutes.
     timeout-minutes: 30
@@ -107,18 +136,18 @@ jobs:
 
       - uses: ./.github/actions/release-files
         with:
-          out: ${{ runner.temp }}/alpha
+          out: ${{ runner.temp }}/release
           signing-key: ${{ secrets.ENSHWICK_SIGNING_KEY }}
-          signed: "true"
+          signed: ${{ inputs.publish }}
 
       # The C header of this release's ABI, for mods in C and C++.
       - name: C header
-        run: cp crates/enshwick/include/enshwick.h "$RUNNER_TEMP/alpha/"
+        run: cp crates/enshwick/include/enshwick.h "$RUNNER_TEMP/release/"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: files-loader
-          path: ${{ runner.temp }}/alpha/*
+          path: ${{ runner.temp }}/release/*
           if-no-files-found: error
           retention-days: 7
 
@@ -127,7 +156,7 @@ jobs:
   # target. Linux gets a static musl build, which runs on any
   # distribution's glibc; cargo-binstall takes it on a gnu host too.
   cargo-enshwick:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || !inputs.publish
     strategy:
       matrix:
         include:
@@ -167,7 +196,7 @@ jobs:
 
       - name: Build
         env:
-          OUT: ${{ runner.temp }}/alpha
+          OUT: ${{ runner.temp }}/release
           BUILD: ${{ matrix.build }}
           BINARY: ${{ matrix.binary }}
           ASSET: ${{ matrix.asset }}
@@ -187,18 +216,52 @@ jobs:
       - name: Run it
         if: matrix.target == 'x86_64-unknown-linux-musl'
         env:
-          BINARY: ${{ runner.temp }}/alpha/${{ matrix.asset }}
+          BINARY: ${{ runner.temp }}/release/${{ matrix.asset }}
         run: '"$BINARY" enshwick --version'
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: files-${{ matrix.target }}
-          path: ${{ runner.temp }}/alpha/*
+          path: ${{ runner.temp }}/release/*
           if-no-files-found: error
           retention-days: 7
 
+  # What a run that publishes nothing would release, in its summary.
+  preview:
+    needs: [version, loader, cargo-enshwick]
+    if: ${{ !inputs.publish }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: files-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/release
+
+      - name: What a release would carry
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        working-directory: ${{ runner.temp }}/release
+        run: |
+          sha256sum -- * > SHA256SUMS
+          kind="the latest release"
+          [ "$PRERELEASE" != true ] || kind="a prerelease, not the latest"
+          {
+            echo "### Files of v$VERSION, $kind"
+            echo
+            echo "| File | Bytes | SHA-256 |"
+            echo "| --- | ---: | --- |"
+            for file in *; do
+              echo "| $file | $(stat -c %s "$file") | \`$(sha256sum "$file" | cut -d' ' -f1)\` |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
   publish:
     needs: [version, loader, cargo-enshwick]
+    if: inputs.publish
     # The release environment admits main only.
     environment: release
     runs-on: ubuntu-26.04
@@ -210,6 +273,8 @@ jobs:
       # The build provenance attestations of the archives.
       id-token: write
       attestations: write
+    env:
+      PRERELEASE: ${{ needs.version.outputs.prerelease }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -219,7 +284,7 @@ jobs:
         with:
           pattern: files-*
           merge-multiple: true
-          path: ${{ runner.temp }}/alpha
+          path: ${{ runner.temp }}/release
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: notes
@@ -228,14 +293,13 @@ jobs:
       # `cargo enshwick install --with-loader` checks enshwick.zip against
       # this list before it unpacks it.
       - name: Checksums
-        working-directory: ${{ runner.temp }}/alpha
+        working-directory: ${{ runner.temp }}/release
         run: sha256sum -- * > SHA256SUMS
 
       - name: Build provenance
-        if: inputs.publish
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: ${{ runner.temp }}/alpha/*
+          subject-path: ${{ runner.temp }}/release/*
 
       # GitHub refuses to point a new tag at a commit whose workflows differ
       # from main's head without the workflows permission, which the job
@@ -243,7 +307,6 @@ jobs:
       # tags with the app's token.
       - name: Token for the tag
         id: token
-        if: inputs.publish
         uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
           client-id: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
@@ -252,24 +315,26 @@ jobs:
           permission-contents: write
           permission-workflows: write
 
+      # One call makes the release whole, so players never see it without
+      # its files.
       - name: Publish
-        if: inputs.publish
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           VERSION: ${{ needs.version.outputs.version }}
-        working-directory: ${{ runner.temp }}/alpha
+        working-directory: ${{ runner.temp }}/release
         run: |
           assets=(*.zip *.h *.pdb *.cdx.json cargo-enshwick-* SHA256SUMS)
+          kind=(--latest)
+          [ "$PRERELEASE" != true ] || kind=(--prerelease --latest=false)
           gh release create "v$VERSION" "${assets[@]}" --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --title "Enshwick $VERSION" --notes-file "$RUNNER_TEMP/notes.md" \
-            --prerelease --latest=false
+            "${kind[@]}"
 
-      # The site's download links point at the newest alpha, read when it
+      # The site's download links point at the newest release, read when it
       # builds. It builds on Cloudflare Workers Builds, whose deploy hook
-      # builds its main again. The alpha is out by now and a rerun refuses its
-      # version, so a failed start only warns, within two minutes.
+      # builds its main again. The release is out by now and a rerun refuses
+      # its version, so a failed start only warns, within two minutes.
       - name: Start the docs site build
-        if: inputs.publish
         env:
           DOCS_DEPLOY_HOOK: ${{ secrets.DOCS_DEPLOY_HOOK }}
         run: |
@@ -281,7 +346,7 @@ jobs:
   # an analysis still running after eight minutes leaves its link.
   virustotal:
     needs: [version, loader]
-    environment: release
+    environment: ${{ inputs.publish && 'release' || '' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     permissions:
@@ -297,7 +362,7 @@ jobs:
         if: env.HAS_VIRUSTOTAL_KEY == 'true'
         with:
           name: files-loader
-          path: ${{ runner.temp }}/alpha
+          path: ${{ runner.temp }}/release
       # The step's own limit, under the job's, so a stalled scan never turns
       # the run red.
       - name: VirusTotal
@@ -306,6 +371,6 @@ jobs:
         timeout-minutes: 10
         uses: ./.github/actions/virustotal
         with:
-          dir: ${{ runner.temp }}/alpha
+          dir: ${{ runner.temp }}/release
           api-key: ${{ secrets.VIRUSTOTAL_API_KEY }}
           minutes: 8

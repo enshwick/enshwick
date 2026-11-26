@@ -58,8 +58,9 @@ one:
   when an append moves it within a major.
 
 A mod keeps loading across every release of its major, so a mod author
-rebuilds only for a new major. Alphas are not on crates.io, so a mod pins
-`enshwick` to an alpha's tag from git, as `cargo enshwick new` writes it:
+rebuilds only for a new major. Alphas are GitHub prereleases, and
+crates.io holds only some early ones. So a mod pins `enshwick` to an
+alpha's tag from git, as `cargo enshwick new` writes it:
 
 ```toml
 [dependencies]

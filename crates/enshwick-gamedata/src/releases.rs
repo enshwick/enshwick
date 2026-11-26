@@ -6,14 +6,15 @@ use semver::{BuildMetadata, Version};
 
 /// The page of a release, without its tag.
 const PAGE: &str = "https://github.com/enshwick/enshwick/releases/tag/";
-/// The tag prefixes of a loader release: an alpha's, and release-plz's for
-/// the loader package.
-pub const LOADER_TAGS: &[&str] = &["v", "enshwick-loader-v"];
-/// The tag prefixes of a `cargo enshwick` release: an alpha's, and
-/// release-plz's for its package.
-pub const TOOL_TAGS: &[&str] = &["v", "cargo-enshwick-v"];
-/// What a prerelease asks GitHub: the newest releases, among which the next
-/// alpha always is.
+/// The tag prefixes of a loader release: every release, alpha or not, is
+/// `v<version>`, the one GitHub release of that version.
+pub const LOADER_TAGS: &[&str] = &["v"];
+/// The tag prefixes of a `cargo enshwick` release, which ships in the
+/// loader's: release-plz's `cargo-enshwick-v<version>` tag carries no
+/// release and no binaries.
+pub const TOOL_TAGS: &[&str] = &["v"];
+/// What a prerelease asks GitHub: the newest releases, one per version,
+/// among which the next alpha always is.
 const RELEASES: &str = "/repos/enshwick/enshwick/releases?per_page=20";
 /// What a release asks GitHub: every tag, a few hundred bytes each and never
 /// paged, so a stable release under either prefix is found however many
@@ -200,8 +201,7 @@ pub fn version_line(version: &Version, major: u16, minor: u16) -> String {
 /// the list of releases an alpha reads also by GitHub's flag. A running
 /// release reads tags, so a tag with a release version counts as released.
 /// A tag under none of `prefixes` is skipped. One version under two
-/// prefixes takes the one other than `v`, release-plz's, which carries the
-/// GitHub release.
+/// prefixes takes the one listed first.
 ///
 /// # Errors
 ///
@@ -243,9 +243,10 @@ pub fn newer(
         })
         .filter(|release| release.version.cmp_precedence(running).is_gt())
         .max_by(|a, b| {
+            let rank = |release: &Release| prefixes.iter().position(|p| *p == release.prefix);
             a.version
                 .cmp_precedence(&b.version)
-                .then_with(|| (a.prefix != "v").cmp(&(b.prefix != "v")))
+                .then_with(|| rank(b).cmp(&rank(a)))
         }))
 }
 
@@ -268,7 +269,7 @@ mod tests {
         format!("[{}]", releases.join(",")).into_bytes()
     }
 
-    /// A listing of `(tag, draft)`, marked prerelease as the alpha workflow
+    /// A listing of `(tag, draft)`, marked prerelease as the release workflow
     /// marks it: by a prerelease part in the tag.
     fn listing(tags: &[(&str, bool)]) -> Vec<u8> {
         let flags: Vec<(&str, bool, bool)> = tags
@@ -329,59 +330,53 @@ mod tests {
 
     #[test]
     fn a_release_runs_ahead_of_alphas_but_ignores_them() {
-        let list = tags(&["enshwick-loader-v1.0.1", "enshwick-loader-v1.1.0-alpha.1"]);
+        let list = tags(&["v1.0.1", "v1.1.0-alpha.1"]);
         assert_eq!(found(&list, "1.0.0"), Some(version("1.0.1")));
-        let list = tags(&["enshwick-loader-v1.1.0-alpha.1"]);
+        let list = tags(&["v1.1.0-alpha.1"]);
         assert_eq!(found(&list, "1.0.0"), None);
     }
 
     #[test]
     fn a_running_release_finds_a_stable_release_whatever_came_after_it() {
-        let mut names: Vec<String> = (1..=40)
-            .map(|n| format!("enshwick-loader-v1.2.0-alpha.{n}"))
-            .collect();
-        names.extend([
-            "enshwick-loader-v1.0.0".into(),
-            "enshwick-loader-v1.1.0".into(),
-        ]);
+        let mut names: Vec<String> = (1..=40).map(|n| format!("v1.2.0-alpha.{n}")).collect();
+        names.extend(["v1.0.0".into(), "v1.1.0".into()]);
         names.sort();
         let names: Vec<&str> = names.iter().map(String::as_str).collect();
         assert_eq!(found(&tags(&names), "1.0.0"), Some(version("1.1.0")));
     }
 
     #[test]
-    fn a_running_release_finds_a_stable_release_under_either_prefix() {
-        let list = tags(&["enshwick-v3.0.0", "v1.0.0-alpha.13", "v1.0.2"]);
+    fn the_crates_release_plz_tags_carry_no_release_and_are_skipped() {
+        let list = tags(&[
+            "cargo-enshwick-v1.5.0",
+            "enshwick-loader-stub-v1.5.0",
+            "enshwick-v3.0.0",
+            "v1.0.0-alpha.13",
+            "v1.0.2",
+        ]);
         assert_eq!(found(&list, "1.0.0"), Some(version("1.0.2")));
-        let list = tags(&["enshwick-loader-v1.0.1", "v1.0.2-alpha.1"]);
-        assert_eq!(found(&list, "1.0.0"), Some(version("1.0.1")));
+        let tool = newer(&list, &version("1.0.0"), TOOL_TAGS).unwrap().unwrap();
+        assert_eq!(tool.page(), format!("{PAGE}v1.0.2"));
     }
 
     #[test]
-    fn a_version_under_both_prefixes_links_the_release_plz_tag() {
-        for names in [
-            ["enshwick-loader-v1.1.0", "v1.1.0"],
-            ["v1.1.0", "enshwick-loader-v1.1.0"],
-        ] {
-            let release = newer(&tags(&names), &version("1.0.0"), LOADER_TAGS)
+    fn a_version_under_two_prefixes_links_the_one_listed_first() {
+        const BOTH: &[&str] = &["v", "x-v"];
+        for names in [["x-v1.1.0", "v1.1.0"], ["v1.1.0", "x-v1.1.0"]] {
+            let release = newer(&tags(&names), &version("1.0.0"), BOTH)
                 .unwrap()
                 .unwrap();
-            assert_eq!(release.page(), format!("{PAGE}enshwick-loader-v1.1.0"));
+            assert_eq!(release.page(), format!("{PAGE}v1.1.0"));
         }
-    }
-
-    #[test]
-    fn each_side_reads_only_its_own_package_tags() {
-        let list = tags(&["enshwick-loader-v2.0.0", "cargo-enshwick-v1.5.0"]);
-        let tool = newer(&list, &version("1.0.0"), TOOL_TAGS).unwrap().unwrap();
-        assert_eq!(tool.version, version("1.5.0"));
-        assert_eq!(tool.page(), format!("{PAGE}cargo-enshwick-v1.5.0"));
-        assert_eq!(found(&list, "1.0.0"), Some(version("2.0.0")));
+        let release = newer(&tags(&["x-v1.2.0", "v1.1.0"]), &version("1.0.0"), BOTH)
+            .unwrap()
+            .unwrap();
+        assert_eq!(release.page(), format!("{PAGE}x-v1.2.0"));
     }
 
     #[test]
     fn a_reference_that_is_no_tag_is_skipped() {
-        let list = br#"[{"ref":"refs/heads/enshwick-loader-v9.0.0"}]"#;
+        let list = br#"[{"ref":"refs/heads/v9.0.0"}]"#;
         assert_eq!(found(list, "1.0.0"), None);
     }
 
@@ -404,18 +399,15 @@ mod tests {
     }
 
     #[test]
-    fn a_loader_release_tagged_by_release_plz_is_found_with_its_page() {
-        let list = listing(&[
-            ("enshwick-loader-v1.0.0", false),
-            ("enshwick-v1.2.0", false),
-        ]);
+    fn the_first_release_is_found_with_its_page_while_an_alpha_runs() {
+        let list = listing(&[("v1.0.0", false), ("enshwick-v1.2.0", false)]);
         let release = newer(&list, &version("1.0.0-alpha.12"), LOADER_TAGS)
             .unwrap()
             .unwrap();
         assert_eq!(release.version, version("1.0.0"));
         assert_eq!(
             release.page(),
-            "https://github.com/enshwick/enshwick/releases/tag/enshwick-loader-v1.0.0"
+            "https://github.com/enshwick/enshwick/releases/tag/v1.0.0"
         );
     }
 
@@ -472,7 +464,7 @@ mod tests {
 
     #[test]
     fn a_development_build_of_a_stable_release_is_offered_no_prerelease() {
-        let list = tags(&["enshwick-loader-v1.0.1", "enshwick-loader-v1.1.0-alpha.1"]);
+        let list = tags(&["v1.0.1", "v1.1.0-alpha.1"]);
         let running = stated(&version("1.0.0"), Some("5f647f46"));
         let found = newer(&list, &running, LOADER_TAGS).unwrap();
         assert_eq!(found.map(|r| r.version), Some(version("1.0.1")));

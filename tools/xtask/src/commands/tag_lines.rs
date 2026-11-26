@@ -240,7 +240,7 @@ fn quoted(value: &str) -> Option<&str> {
 
 /// `v` and the version of the package that names the release.
 ///
-/// Plain `v<version>` on purpose: alpha.yml tags each alpha so, and only
+/// Plain `v<version>` on purpose: release.yml tags each alpha so, and only
 /// alphas need a git tag in the text. release-plz's `<package>-v<version>`
 /// tags mark real releases, which go to crates.io, so their lines name a
 /// crates.io version and no tag.

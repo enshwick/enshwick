@@ -343,7 +343,7 @@ mod tests {
         assert_eq!(
             loader["package"]["version"].as_str(),
             Some(version()),
-            "alpha.yml tags the release by the loader's version"
+            "release.yml tags the release by the loader's version"
         );
     }
 
