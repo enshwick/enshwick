@@ -13,9 +13,20 @@ fn files(record: &ModRecord) -> Vec<SettingsFile> {
 
 /// The text of `path`; a file that does not read shows as absent.
 fn read(path: &Path) -> Option<String> {
-    enshwick_core::files::read_to_string_if_present(path)
-        .ok()
-        .flatten()
+    read_target(path).ok().flatten()
+}
+
+/// The text of the settings file `path`, a change still waiting for a held
+/// file included; `None` when no file is there.
+///
+/// # Errors
+///
+/// As [`read_to_string_if_present`](enshwick_core::files::read_to_string_if_present).
+pub(crate) fn read_target(path: &Path) -> std::io::Result<Option<String>> {
+    match crate::base::frame_writes::waiting(path) {
+        Some(text) => Ok(Some(text)),
+        None => enshwick_core::files::read_to_string_if_present(path),
+    }
 }
 
 /// Writes `text` to `path` atomically.
@@ -98,7 +109,7 @@ fn prepare(id: &str, version: &str, files: Vec<SettingsFile>, key: &str) {
     let who = format!("{id} {version}");
     for file in files {
         let path = world_file(id, &file.file, key);
-        let existing = match enshwick_core::files::read_to_string_if_present(&path) {
+        let existing = match read_target(&path) {
             Ok(existing) => existing,
             Err(e) => {
                 log(

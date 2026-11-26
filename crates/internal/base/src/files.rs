@@ -161,6 +161,24 @@ pub(crate) fn wait_briefly(briefly: bool) {
     let _set = TRIES.try_with(|cell| cell.set(tries));
 }
 
+/// `f`, with every write of [`files`](self) from the calling thread waiting
+/// at most [`QUICK_TRIES`] tries per step for a held file; the thread's own
+/// wait comes back after, also when `f` panics.
+pub(crate) fn briefly<T>(f: impl FnOnce() -> T) -> T {
+    struct Restore(u32);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let _set = TRIES.try_with(|cell| cell.set(self.0));
+        }
+    }
+    let _restore = Restore(
+        TRIES
+            .try_with(|cell| cell.replace(QUICK_TRIES))
+            .unwrap_or(BUSY_TRIES),
+    );
+    f()
+}
+
 /// How often [`while_busy`] tries a step on this thread.
 fn tries_here() -> u32 {
     TRIES.try_with(core::cell::Cell::get).unwrap_or(BUSY_TRIES)
@@ -171,7 +189,7 @@ fn tries_here() -> u32 {
 const BUSY_CODES: [i32; 2] = [32, 33];
 
 /// Whether `error` says another handle holds the file for now.
-fn busy(error: &io::Error) -> bool {
+pub(crate) fn busy(error: &io::Error) -> bool {
     error.kind() == io::ErrorKind::PermissionDenied
         || error
             .raw_os_error()
@@ -537,6 +555,21 @@ mod tests {
             BUSY_TRIES,
             "other threads wait on"
         );
+    }
+
+    #[test]
+    fn a_brief_write_gives_the_thread_its_own_wait_back_even_after_a_panic() {
+        let tries = std::thread::spawn(|| {
+            let inside = briefly(|| tries_of(|step| while_busy(step)));
+            let after = tries_of(|step| while_busy(step));
+            wait_briefly(true);
+            let panicked = std::panic::catch_unwind(|| briefly(|| panic!("a write panics")));
+            assert!(panicked.is_err());
+            (inside, after, tries_here())
+        })
+        .join()
+        .unwrap();
+        assert_eq!(tries, (QUICK_TRIES, BUSY_TRIES, QUICK_TRIES));
     }
 
     #[cfg(windows)]

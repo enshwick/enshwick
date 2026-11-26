@@ -171,7 +171,7 @@ fn write(
     let change = {
         let _file = WRITES.file.relock();
         inside.holding(true);
-        let text = enshwick_core::files::read_to_string_if_present(&path)
+        let text = crate::base::worlds::read_target(&path)
             .map_err(|source| ApplySettingError::Write {
                 path: path.clone(),
                 source,
@@ -179,8 +179,8 @@ fn write(
             .unwrap_or_else(|| settings.template.clone());
         let change = super::set(&shown, &settings.schema, &text, inner, value, changer)?;
         check_settings(index, file, &change.text)?;
-        crate::base::watch::write_noted(&path, || {
-            crate::base::worlds::write_target(&path, &change.text)
+        crate::base::frame_writes::write(&path, &change.text, |path, text| {
+            crate::base::watch::write_noted(path, || crate::base::worlds::write_target(path, text))
         })
         .map_err(|source| ApplySettingError::Write {
             path: path.clone(),

@@ -44,6 +44,24 @@ pub fn wait_briefly_on_this_thread(briefly: bool) {
     crate::files::wait_briefly(briefly);
 }
 
+/// Runs `f` with the calling thread's atomic file writes waiting about
+/// 30 ms per step for a held file, then gives the thread its own wait back.
+///
+/// For one write on a thread that must not stall, such as a client's main
+/// thread, whose caller keeps the text of a write refused for a held file,
+/// as [`held`] tells, and writes it again elsewhere.
+pub fn briefly<T>(f: impl FnOnce() -> T) -> T {
+    crate::files::briefly(f)
+}
+
+/// Whether `error`, from an atomic file write, says another handle holds
+/// the file for now, as a virus scanner or an indexer briefly does; Windows
+/// also refuses access so to a file that stays read-only.
+#[must_use]
+pub fn held(error: &std::io::Error) -> bool {
+    crate::files::busy(error)
+}
+
 /// Runs `step` again for up to about a second while another handle holds
 /// its file.
 ///
