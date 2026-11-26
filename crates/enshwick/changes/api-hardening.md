@@ -9,7 +9,8 @@
   `RefuseBecause` (#1295).
 - `Entity::from_raw` builds an entity from the engine's number and refuses 0
   (#1295).
-- The `console` and `services` modules are stable (#1295).
+- The `console` and `services` modules, `Load::limit_altar_level` and
+  `altars::set_base_limit` are stable (#1295).
 
 ### Changed
 
@@ -33,6 +34,9 @@
   `Into<Verdict>`, a `bool` and an `Option<bool>` included; `on_chat` takes
   anything `Into<ChatVerdict>`, a `bool` and a `Verdict` included.
   `BuildVerdict` is gone (#1295).
+- **Breaking:** in Luau, a filter of `on_craft`, `on_join`, `on_rename`,
+  `container_rule` or `on_skill` that answers a string or any value but
+  `true`, `false` and nil refuses; before, only `false` refused (#1295).
 - **Breaking:** `quests::Holder::Player` holds a `PlayerRef`;
   `Holder::player` builds one (#1295).
 - **Breaking:** `Entity`'s field is private and `Entity` has no `Default`
