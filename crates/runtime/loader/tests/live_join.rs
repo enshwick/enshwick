@@ -1,15 +1,15 @@
 //! The client's join check against a running server: `ENSH_JOIN_SERVER`
-//! names its query address, such as `127.0.0.1:15647`; without it the test
-//! passes untested. The server runs a mod of side both, which the crafted
+//! names its query address, such as `127.0.0.1:15647`; the test is ignored by
+//! default. The server runs a mod of side both, which the crafted
 //! client lacks.
 
 #[cfg(test)]
 mod tests {
     #[test]
+    #[ignore = "needs ENSH_JOIN_SERVER"]
     fn a_running_server_keeps_out_a_client_without_its_mods_and_the_list_names_them() {
-        let Some(address) = std::env::var_os("ENSH_JOIN_SERVER") else {
-            return;
-        };
+        let address = std::env::var_os("ENSH_JOIN_SERVER")
+            .expect("ENSH_JOIN_SERVER names a running server's query address");
         let address = address.to_string_lossy().parse().unwrap();
         let reply = enshwick_loader::base::join::query_rules(address).unwrap();
         let raw = String::from_utf8_lossy(&reply);

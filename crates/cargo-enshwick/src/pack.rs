@@ -387,10 +387,10 @@ pub(crate) mod tests {
     /// (build 1269579): vanilla names and a forge clone check against its
     /// data, and a misspelt name is explained.
     #[test]
+    #[ignore = "needs ENSHWICK_CLIENT_DIR"]
     fn the_game_s_data_checks_vanilla_names() {
-        let Ok(game) = std::env::var("ENSHWICK_CLIENT_DIR") else {
-            return;
-        };
+        let game = std::env::var("ENSHWICK_CLIENT_DIR")
+            .expect("ENSHWICK_CLIENT_DIR names the client folder");
         let vanilla = vanilla(Path::new(&game)).unwrap();
         let dir = pack(
             "names",

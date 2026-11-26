@@ -9,7 +9,9 @@
 //! versions and its license text, release-plz versions the API crate and
 //! every crate of `crates/internal` as one group and the packages of the
 //! loader's release as another, and every crate it releases keeps a
-//! changelog for the release notes and gets no GitHub release of its own.
+//! changelog for the release notes and gets no GitHub release of its own;
+//! and the loader's build, its tests' too, turns on no `fake` of the base
+//! crate, read from `cargo tree`.
 
 use std::path::Path;
 use std::process::Command;
@@ -76,7 +78,47 @@ pub(crate) fn check(packages: &[Package]) -> Result<Vec<String>, String> {
     problems.extend(release_group(&api_crates, &release_plz));
     problems.extend(release_notes(&releasables, &release_plz));
     problems.extend(release_packages(&release_plz));
+    problems.extend(loader_without_fake()?);
     Ok(problems)
+}
+
+/// The crate below core whose `fake` feature counts time by a fake host's
+/// steps, which the loader's packs must never do.
+const BASE: &str = "enshwick-base";
+
+/// The problem of the loader's build, its tests' too, when it turns on
+/// [`BASE`]'s `fake` feature: a dependency's own tests can bring it in by
+/// feature unification, and the loader's packs would then wait on a fake
+/// host's clock that no test moves.
+///
+/// # Errors
+///
+/// When `cargo tree` does not run.
+fn loader_without_fake() -> Result<Vec<String>, String> {
+    let output = Command::new(crate::cargo())
+        .args(["tree", "-p", LOADER, "-e", "features", "-i", BASE])
+        .args(["--target", "all", "--prefix", "none"])
+        .output()
+        .map_err(|error| format!("running cargo tree: {error}"))?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).into_owned());
+    }
+    Ok(fake_in_build(&String::from_utf8_lossy(&output.stdout)))
+}
+
+/// The problem of a `cargo tree -e features -i` output of the loader's
+/// build that lists [`BASE`]'s `fake` feature.
+fn fake_in_build(tree: &str) -> Vec<String> {
+    let fake = format!("{BASE} feature \"{FAKE_FEATURE}\"");
+    tree.lines()
+        .any(|line| line.trim() == fake)
+        .then(|| {
+            format!(
+                "{LOADER}: its build turns on {BASE}/{FAKE_FEATURE}, so its packs would count time by a fake host's steps; find the dependency that turns it on with cargo tree -p {LOADER} -e features -i {BASE}"
+            )
+        })
+        .into_iter()
+        .collect()
 }
 
 /// The fake loader's crate, which only [`FACADE`] depends on, through its
@@ -455,6 +497,21 @@ fn read(path: &Path) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_loader_s_build_with_base_s_fake_feature_is_a_problem_and_without_it_is_not() {
+        let clean = "enshwick-base feature \"default\"
+enshwick-base feature \"test\"
+";
+        assert!(fake_in_build(clean).is_empty());
+        let faked = format!(
+            "{clean}enshwick-base feature \"fake\"
+"
+        );
+        let problems = fake_in_build(&faked);
+        assert_eq!(problems.len(), 1);
+        assert!(problems[0].starts_with("enshwick-loader: its build turns on enshwick-base/fake"));
+    }
 
     #[test]
     fn the_facade_reaching_the_fake_through_test_and_the_fake_asking_core_for_fake_pass() {

@@ -145,8 +145,7 @@ pub trait LoadMethods {
 
 impl LoadMethods for crate::BaseLoad {
     fn writable_type_script(&mut self, name: &str) -> Result<WritableType, Off> {
-        // Resolved at start only, so each name leaks once per start.
-        WritableType::resolve(self, Box::leak(name.to_owned().into_boxed_str()))
+        WritableType::resolve(self, enshwick_base::intern::text(name))
     }
 }
 

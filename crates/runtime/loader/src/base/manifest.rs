@@ -118,7 +118,7 @@ unsafe fn own(mut manifest: Manifest) -> Manifest {
         // SAFETY: `text` runs only inside `own`, on strings of its manifest,
         // which `own`'s caller guarantees readable and unchanged for the call.
         match unsafe { s.as_str() } {
-            Some(text) => Str::new(Box::leak(text.to_owned().into_boxed_str())),
+            Some(text) => Str::new(enshwick_base::intern::text(text)),
             None => s,
         }
     }

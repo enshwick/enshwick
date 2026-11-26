@@ -135,6 +135,7 @@ pub(crate) static PARTS: &[&Part] = &[
     },
     &Part {
         table_ids: game_events::TABLE_IDS,
+        seal: Some(game_events::seal),
         link: Some(game_events::link),
         ..part!("game_events", game_events)
     },

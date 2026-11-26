@@ -330,12 +330,13 @@ mod tests {
 
     /// A mod with one build row for the server build in `ENSH_SERVER_EXE`
     /// ports it to the same build: its symbol stays, nothing needs a human,
-    /// and the new row is in the report; skipped without the executable.
+    /// and the new row is in the report.
     #[test]
+    #[ignore = "needs ENSH_SERVER_EXE"]
     fn a_mod_with_one_build_row_ports_it() {
-        let Some(path) = std::env::var_os("ENSH_SERVER_EXE").map(PathBuf::from) else {
-            return;
-        };
+        let path = std::env::var_os("ENSH_SERVER_EXE")
+            .map(PathBuf::from)
+            .expect("ENSH_SERVER_EXE names the game executable");
         let bytes = fs::read(&path).unwrap();
         let exe = Exe::parse(&bytes).unwrap();
         let fp = exe.fingerprint().unwrap();

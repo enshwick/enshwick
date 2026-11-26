@@ -815,6 +815,7 @@ dependencies = [
  "enshwick-gamedata",
  "enshwick-loader-start",
  "enshwick-luau",
+ "enshwick-values",
  "iced-x86",
  "insta",
  "loom",

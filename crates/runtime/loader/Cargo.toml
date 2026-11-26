@@ -24,6 +24,7 @@ enshwick-abi.workspace = true
 enshwick-base.workspace = true
 enshwick-core = { workspace = true, features = ["unstable", "typed"] }
 enshwick-gamedata.workspace = true
+enshwick-values.workspace = true
 postcard.workspace = true
 rustc-hash.workspace = true
 semver.workspace = true

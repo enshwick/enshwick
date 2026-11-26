@@ -387,12 +387,13 @@ mod tests {
     }
 
     /// On a machine whose `ENSH_CLIENT_EXE` is Steam's install, the search
-    /// finds that folder; it skips elsewhere.
+    /// finds that folder.
     #[test]
+    #[ignore = "needs ENSH_CLIENT_EXE"]
     fn the_game_steam_installed_on_this_machine_is_found() {
-        let Some(exe) = std::env::var_os("ENSH_CLIENT_EXE").map(PathBuf::from) else {
-            return;
-        };
+        let exe = std::env::var_os("ENSH_CLIENT_EXE")
+            .map(PathBuf::from)
+            .expect("ENSH_CLIENT_EXE names the game executable");
         let Some(folder) = exe.parent().filter(|dir| {
             dir.parent()
                 .is_some_and(|common| common.ends_with("steamapps/common"))

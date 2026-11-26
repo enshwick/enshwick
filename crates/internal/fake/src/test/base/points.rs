@@ -144,12 +144,14 @@ entries! {
             let named_after_the_mod = s.base.manifest.as_ref().is_none_or(|manifest| {
                 enshwick_core::__fake::rules::is_named_after(&declared.name, &manifest.id)
             });
+            let foreign =
+                crate::test::table::base::mods::in_another_s_namespace(s, me, &declared.name);
             let points = &mut s.base.points;
             let defined_twice = points
                 .defined
                 .iter()
                 .any(|d| d.declared.name == declared.name);
-            if !named_after_the_mod || defined_twice {
+            if !named_after_the_mod || defined_twice || foreign {
                 return Err(Status::REFUSED);
             }
             let live: &'static AtomicU32 = Box::leak(Box::new(AtomicU32::new(0)));

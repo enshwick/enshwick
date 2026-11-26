@@ -237,10 +237,10 @@ fn a_game_type_named_as_an_api_type_takes_its_namespace() {
 }
 
 #[test]
+#[ignore = "needs ENSH_SERVER_EXE"]
 fn every_game_type_keeps_clear_of_the_api_s_names() {
-    let Some(exe) = std::env::var_os("ENSH_SERVER_EXE") else {
-        return;
-    };
+    let exe =
+        std::env::var_os("ENSH_SERVER_EXE").expect("ENSH_SERVER_EXE names the game executable");
     let text = luau_definitions(Path::new(&exe)).unwrap();
     for name in cargo_enshwick::luau::type_names() {
         assert!(!text.contains(&format!("\nexport type {name} =")), "{name}");

@@ -42,7 +42,6 @@ required-features = ["typed"]
 
 # The features of `enshwick-core`, which turns each of them on here.
 [features]
-fake = []
 unstable = [
     "enshwick-base/unstable",
     "enshwick-content/unstable",

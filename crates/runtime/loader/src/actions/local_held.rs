@@ -11,7 +11,6 @@
 
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
-use std::time::Instant;
 
 use enshwick_core::Entity;
 use enshwick_core::abi::{HookFlags, Side};
@@ -139,13 +138,11 @@ impl HostRead {
 }
 
 /// The reads' state: the layout once linked, whether a mod asked yet, the
-/// last mask and when it was read, in milliseconds from `start` plus one,
-/// so 0 is never read.
+/// last mask and when it was read, by [`now_ms`], which never reads 0.
 struct State {
     layout: OnceLock<Layout>,
     asked: AtomicBool,
     linked: AtomicBool,
-    start: OnceLock<Instant>,
     bits: AtomicU64,
     /// The player's own keys of `bits`, without those the loader's presses
     /// wrote, taken in the same read so a reader never pairs two reads.
@@ -189,7 +186,6 @@ impl State {
             layout: OnceLock::new(),
             asked: AtomicBool::new(false),
             linked: AtomicBool::new(false),
-            start: OnceLock::new(),
             bits: AtomicU64::new(0),
             players: AtomicU64::new(0),
             player: AtomicU32::new(0),
@@ -267,10 +263,7 @@ static HOST_FUSE: Fuse = Fuse::new(HOST_FEATURE);
 /// linked.
 static LINK_FUSE: Fuse = Fuse::new("the local player's interface reads");
 
-pub(crate) fn now_ms() -> u64 {
-    let start = STATE.start.get_or_init(Instant::now);
-    u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX - 1) + 1
-}
+pub(crate) use crate::engine::clock::now_ms;
 
 fn layout(loader: &Loader) -> Result<Layout, &'static str> {
     let digital = catalogue::constant(

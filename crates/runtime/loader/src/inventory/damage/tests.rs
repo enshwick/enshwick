@@ -12,9 +12,9 @@ fn amounts_left_negative_or_not_finite_count_as_none() {
 /// No branch of a site's function lands inside the bytes its hook's
 /// jump replaces, so every site arms, on each executable
 /// `ENSH_SERVER_EXE`, `ENSH_CLIENT_EXE` and the opt-in `ENSH_EXES` path
-/// list name, a server when its file is `enshrouded_server.exe`;
-/// skipped without them.
+/// list name, a server when its file is `enshrouded_server.exe`.
 #[test]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 fn every_site_arms_on_the_game_executables() {
     use enshwick_gamedata::reflect::{Image, Layout};
     use enshwick_gamedata::{Side, exact};
@@ -23,8 +23,12 @@ fn every_site_arms_on_the_game_executables() {
     let list = std::env::var_os("ENSH_EXES");
     let paths = ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
         .into_iter()
-        .filter_map(std::env::var_os)
-        .map(std::path::PathBuf::from)
+        .map(|var| {
+            std::env::var_os(var).map_or_else(
+                || panic!("{var} names the game executable"),
+                std::path::PathBuf::from,
+            )
+        })
         .chain(list.iter().flat_map(std::env::split_paths));
     for path in paths {
         let server = path

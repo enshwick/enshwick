@@ -85,8 +85,12 @@ fn text_of(id: &str) -> Box<str> {
 }
 
 /// Whether the full id `id` is in the namespace of the mod the fake runs:
-/// its manifest's id once its init ran, else [`MOD_ID`](crate::test::MOD_ID).
-fn is_own(s: &crate::test::table::State, id: &str) -> bool {
+/// its manifest's id once its init ran, else [`MOD_ID`](crate::test::MOD_ID),
+/// and `me` is that mod.
+fn is_own(s: &crate::test::table::State, me: enshwick_core::abi::ModHandle, id: &str) -> bool {
+    if crate::test::table::base::mods::in_another_s_namespace(s, me, id) {
+        return false;
+    }
     let own = s
         .base
         .manifest
@@ -169,7 +173,7 @@ entries! {
                 );
                 return Err(Status::REFUSED);
             }
-            let own = is_own(s, &id);
+            let own = is_own(s, me, &id);
             let stats = state_stats(s);
             let index = index_of(stats, &id);
             if let Some(def) = parsed {
@@ -547,12 +551,15 @@ entries! {
         let Some(data) = crate::test::table::get_headed(def) else {
             return Status::BAD_ARGS;
         };
-        // shortcut: the loader reads the definition before the phase, so a malformed one after init answers BAD_ARGS there; match it when a test needs that order.
+        // As the loader: the id and its owner, then the phase, then the
+        // definition.
+        if !with(false, |s| is_own(s, me, &id)) {
+            return Status::REFUSED;
+        }
         if crate::test::table::late() {
             return Status::TOO_LATE;
         }
         let opened = with(Err(Status::MISSING), |s| {
-            let own = is_own(s, &id);
             let stats = state_stats(s);
             let stat = |index: u32| {
                 let kind = stats.kinds.get(index as usize)?;
@@ -566,7 +573,7 @@ entries! {
             let Some(parsed) = (unsafe { AffixDef::from_data(&data, stat) }) else {
                 return Err(Status::BAD_ARGS);
             };
-            if !own || stats.affixes.iter().any(|(known, _, _)| **known == *id) {
+            if stats.affixes.iter().any(|(known, _, _)| **known == *id) {
                 return Err(Status::REFUSED);
             }
             stats

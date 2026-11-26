@@ -2,8 +2,52 @@
 //! without a lock after.
 
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick_base::Relock;
+
+/// The registries' phase.
+struct State {
+    /// Whether the loader links its parts now: every registry sealed before,
+    /// in the seal phase, so no link sees an open one whatever the order the
+    /// parts link in, and a seal now is a part's mistake.
+    linking: AtomicBool,
+}
+
+static STATE: State = State {
+    linking: AtomicBool::new(false),
+};
+
+/// A registry first sealed while the parts link, at `at`: logged, and a
+/// failure in a debug build.
+#[cold]
+fn late_seal(at: &core::panic::Location<'_>) {
+    crate::log!(
+        WARN,
+        "a registry sealed while the parts link, at {at}: seal it in the part's seal"
+    );
+    debug_assert!(false, "a registry sealed while the parts link, at {at}");
+}
+
+/// Runs `link`, the start's linking of its parts, as the phase in which no
+/// registry may seal: a seal in it is logged with its caller, and fails a
+/// debug build there.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the Windows start links the parts")
+)]
+pub(crate) fn linking<R>(link: impl FnOnce() -> R) -> R {
+    /// Ends the phase however `link` returns.
+    struct Linked;
+    impl Drop for Linked {
+        fn drop(&mut self) {
+            STATE.linking.store(false, Ordering::Release);
+        }
+    }
+    STATE.linking.store(true, Ordering::Release);
+    let _linked = Linked;
+    link()
+}
 
 /// A registry is sealed: what mods ask for after init is refused.
 ///
@@ -179,6 +223,7 @@ impl<T> Registry<T> {
 
     /// Seals the registry and returns what was registered; later calls
     /// return the same slice.
+    #[track_caller]
     pub fn seal(&self) -> &[T] {
         self.seal_with(|items| items)
     }
@@ -188,7 +233,11 @@ impl<T> Registry<T> {
     /// wait while it runs and are refused after, so none falls between the
     /// items taken and the seal. `finish` must not use this registry, whose
     /// lock it runs under; it runs only on the first seal.
+    #[track_caller]
     pub fn seal_with(&self, finish: impl FnOnce(Vec<T>) -> Vec<T>) -> &[T] {
+        if STATE.linking.load(Ordering::Acquire) && self.sealed.get().is_none() {
+            late_seal(core::panic::Location::caller());
+        }
         let mut open = self.open.relock();
         self.sealed
             .get_or_init(|| finish(std::mem::take(&mut *open)).into_boxed_slice())
@@ -256,6 +305,22 @@ impl<T> Default for Registry<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[should_panic(expected = "a registry sealed while the parts link")]
+    #[cfg(debug_assertions)]
+    fn a_first_seal_while_the_parts_link_fails_a_debug_build_at_its_caller() {
+        static LATE: Registry<u32> = Registry::new();
+        linking(|| LATE.seal().len());
+    }
+
+    #[test]
+    fn a_registry_sealed_before_the_link_reads_again_while_the_parts_link() {
+        static EARLY: Registry<u32> = Registry::new();
+        EARLY.add(7).unwrap();
+        let _first = EARLY.seal();
+        assert_eq!(linking(|| EARLY.seal().to_vec()), [7]);
+    }
 
     #[test]
     fn a_sealed_registry_refuses_additions_and_keeps_its_items() {

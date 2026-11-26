@@ -11,7 +11,7 @@ fn the_relevance_rule_reads() {
 }
 
 /// The catalogue of the server executable `ENSH_SERVER_EXE` names, when it
-/// names one of `age`; `None` to skip.
+/// names one of `age`; `None` on another build.
 fn server(age: u32) -> Option<Catalogue> {
     let path = std::env::var("ENSH_SERVER_EXE").ok()?;
     let bytes = std::fs::read(path).unwrap();
@@ -23,6 +23,7 @@ fn server(age: u32) -> Option<Catalogue> {
 /// The API coverage count was made on server build 387: 648 components,
 /// 127 events and 211 resources.
 #[test]
+#[ignore = "needs ENSH_SERVER_EXE"]
 fn build_387_covers_the_counted_types() {
     let Some(catalogue) = server(387) else {
         return;
@@ -437,6 +438,7 @@ fn a_namespace_named_like_a_runtime_module_is_refused_at_any_depth() {
 /// when `ENSH_SERVER_EXE` names build 387; its counts go on the stability
 /// rules' ticket.
 #[test]
+#[ignore = "needs ENSH_SERVER_EXE"]
 fn the_previous_build_diffs_against_the_committed_one() {
     let (Some(old), Some((new, _))) = (server(387), committed()) else {
         return;

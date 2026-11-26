@@ -300,9 +300,7 @@ mod tests {
     ];
 
     fn fnv1a64(bytes: &[u8]) -> u64 {
-        bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &b| {
-            (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-        })
+        enshwick_values::fnv::fnv1a64(enshwick_values::fnv::BASIS64, bytes)
     }
 
     proptest! {

@@ -4,6 +4,7 @@ use super::*;
 /// copies its target to its stack and reads the address and ports from
 /// the copies.
 #[test]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 fn the_join_target_copies_read_on_each_client() {
     let ids = [
         "join.target_copy",
@@ -29,21 +30,19 @@ fn the_join_target_copies_read_on_each_client() {
     }
 }
 
-/// On the executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name (each
-/// skipped without it), their own table with every routed row it pins taken
+/// On the executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name, their own table with every routed row it pins taken
 /// out, and the `.bytes` check of each symbol whose route checks its code,
 /// gets each entry back from the engine routes, with the value the full
 /// table pins; only those routes stand for a check, and nothing goes missing.
 #[test]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
     let routes = tables::Routes::embedded().unwrap();
     for (var, side, running) in [
         ("ENSH_SERVER_EXE", tables::Side::Server, Side::SERVER),
         ("ENSH_CLIENT_EXE", tables::Side::Client, Side::CLIENT),
     ] {
-        let Ok(path) = std::env::var(var) else {
-            continue;
-        };
+        let path = std::env::var(var).unwrap_or_else(|_| panic!("{var} names the game executable"));
         let bytes = std::fs::read(path).unwrap();
         let image = enshwick_gamedata::reflect::Image::parse(
             &bytes,
@@ -111,8 +110,7 @@ fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
     }
 }
 
-/// On the executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name (each
-/// skipped without it), their own table without the join, the start of user
+/// On the executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name, their own table without the join, the start of user
 /// interactions, the division before the loop's waits and the workshop
 /// limit's stop block, nor their `.bytes`, heads and bodies, gets each back
 /// from its engine route with its code checked, and what each feature reads
@@ -121,6 +119,7 @@ fn a_table_without_its_routed_rows_gets_them_from_the_engine() {
 /// table's body's.
 #[cfg(windows)]
 #[test]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 #[expect(
     clippy::too_many_lines,
     reason = "one executable's four features, each a few lines over the same stripped build"
@@ -138,9 +137,7 @@ fn routed_symbols_without_table_checks_serve_their_features() {
         ("ENSH_SERVER_EXE", tables::Side::Server, Side::SERVER),
         ("ENSH_CLIENT_EXE", tables::Side::Client, Side::CLIENT),
     ] {
-        let Ok(path) = std::env::var(var) else {
-            continue;
-        };
+        let path = std::env::var(var).unwrap_or_else(|_| panic!("{var} names the game executable"));
         let bytes = std::fs::read(path).unwrap();
         let image = enshwick_gamedata::reflect::Image::parse(
             &bytes,
@@ -251,6 +248,7 @@ fn routed_symbols_without_table_checks_serve_their_features() {
 /// On each client executable, every client table reads the size of a
 /// texture ring's completion record and where it holds its context.
 #[test]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 fn the_texture_ring_record_reads_on_each_client() {
     let ids = ["textures.ring_record_size", "textures.ring_record_context"];
     let rows = constants_on_executables(&ids);
@@ -269,6 +267,7 @@ fn the_texture_ring_record_reads_on_each_client() {
 /// On each executable, every table that pins a column grid's pages
 /// reads where it holds its pages along x and along z.
 #[test]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 fn the_grid_depth_reads_on_each_executable() {
     let rows = pinned_constants_on_executables(&["voxel.grid_pages", "voxel.grid_depth"]);
     let unread = executables_without_rows(&rows, &named_executables());
@@ -281,6 +280,7 @@ fn the_grid_depth_reads_on_each_executable() {
 /// On each client executable, every client table reads where the
 /// slider's config fields end, before its stop list.
 #[test]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 fn the_slider_extent_reads_on_each_client() {
     let rows = constants_on_executables(&["ui.slider_extent"]);
     let clients: Vec<_> = rows
@@ -322,6 +322,7 @@ fn misreads(rows: &[(String, Vec<Option<u64>>)]) -> Vec<&str> {
 /// the builder's box keeps its lowest voxel and its turned size, how far
 /// it writes, and how far the undo write reads its record.
 #[test]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 fn the_block_box_and_undo_record_rows_read_on_each_executable() {
     let rows = pinned_constants_on_executables(&[
         "building.box_min",
@@ -344,6 +345,7 @@ fn the_block_box_and_undo_record_rows_read_on_each_executable() {
 /// On each client executable, every client table reads how many bytes
 /// a key of the texture database's tables takes.
 #[test]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 fn the_texture_key_size_reads_on_each_client() {
     let rows = constants_on_executables(&["textures.key_size"]);
     let clients: Vec<_> = rows
@@ -362,6 +364,7 @@ fn the_texture_key_size_reads_on_each_client() {
 /// handle that name its chat slot, and the bytes a chat line counts
 /// beyond its text.
 #[test]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 fn the_chat_handle_slot_and_line_overhead_read_on_each_executable() {
     let rows = constants_on_executables(&["chat.handle_slot", "chat.line_overhead"]);
     let named = named_executables().len();
@@ -374,6 +377,7 @@ fn the_chat_handle_slot_and_line_overhead_read_on_each_executable() {
 /// On each executable, every table reads where the zone size's answer
 /// holds its valid byte.
 #[test]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 fn the_zone_size_valid_byte_reads_on_each_executable() {
     let rows = constants_on_executables(&["balancing.zone_size_valid"]);
     let named = named_executables().len();
@@ -386,6 +390,7 @@ fn the_zone_size_valid_byte_reads_on_each_executable() {
 /// On each executable, every table that pins them reads where the sort
 /// into bases zeroes its answer's word and reads the entity's position.
 #[test]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 fn the_sort_answer_and_entity_read_on_each_executable() {
     let rows =
         pinned_constants_on_executables(&["bases.sort_answer_word", "bases.sort_entity_position"]);
@@ -400,6 +405,7 @@ fn the_sort_answer_and_entity_read_on_each_executable() {
 /// object keeps its first record and first stock slot, and a slot's
 /// stride.
 #[test]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 fn the_first_record_and_stock_slot_read_on_each_executable() {
     let rows = pinned_constants_on_executables(&["bases.records", "bases.slots", "bases.slot"]);
     let unread = executables_without_rows(&rows, &named_executables());
@@ -412,6 +418,7 @@ fn the_first_record_and_stock_slot_read_on_each_executable() {
 /// On each executable, every table reads the words of the offer test's
 /// out record a refused offer zeroes.
 #[test]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 fn the_offer_out_record_reads_on_each_executable() {
     let ids = [
         "access.offer_out_u32",
@@ -756,12 +763,11 @@ fn a_build_warns_only_when_entries_are_missing() {
 }
 
 /// Every symbol with a `.bytes` constant reads those bytes in the client
-/// `ENSH_CLIENT_EXE` names; skipped without it.
+/// `ENSH_CLIENT_EXE` names.
 #[test]
+#[ignore = "needs ENSH_CLIENT_EXE"]
 fn checked_symbols_read_their_bytes_in_the_client() {
-    let Ok(path) = std::env::var("ENSH_CLIENT_EXE") else {
-        return;
-    };
+    let path = std::env::var("ENSH_CLIENT_EXE").expect("ENSH_CLIENT_EXE names the game executable");
     let bytes = std::fs::read(path).unwrap();
     let image = enshwick_gamedata::reflect::Image::parse(
         &bytes,
@@ -821,14 +827,13 @@ fn checked_symbols_read_their_bytes_in_the_client() {
     assert!(moved.is_empty(), "{moved:#?}");
 }
 
-/// On the server `ENSH_SERVER_EXE` names (skipped without it), finding
+/// On the server `ENSH_SERVER_EXE` names, finding
 /// every entry by its pattern alone takes a small part of the 10 s the
 /// stub holds the server's code for the loader.
 #[test]
+#[ignore = "needs ENSH_SERVER_EXE"]
 fn the_pattern_fallback_fits_the_server_hold() {
-    let Ok(path) = std::env::var("ENSH_SERVER_EXE") else {
-        return;
-    };
+    let path = std::env::var("ENSH_SERVER_EXE").expect("ENSH_SERVER_EXE names the game executable");
     let bytes = std::fs::read(path).unwrap();
     let image = enshwick_gamedata::reflect::Image::parse(
         &bytes,
@@ -853,17 +858,16 @@ fn the_pattern_fallback_fits_the_server_hold() {
     assert!(took < std::time::Duration::from_secs(budget), "{took:?}");
 }
 
-/// On the server `ENSH_SERVER_EXE` names (skipped without it), another
+/// On the server `ENSH_SERVER_EXE` names, another
 /// program's jumps over the found functions hide them from a search of the
 /// changed code, and the code as shipped, read in its place, finds every
 /// entry again where it was.
 #[test]
+#[ignore = "needs ENSH_SERVER_EXE"]
 fn functions_hooked_before_the_search_are_found_in_the_code_as_shipped() {
     use enshwick_gamedata::reflect::{Image, Layout};
 
-    let Ok(path) = std::env::var("ENSH_SERVER_EXE") else {
-        return;
-    };
+    let path = std::env::var("ENSH_SERVER_EXE").expect("ENSH_SERVER_EXE names the game executable");
     let shipped = std::fs::read(path).unwrap();
     let search = |image: &Image<'_>| {
         let range = image.range(image.section(".text").unwrap());

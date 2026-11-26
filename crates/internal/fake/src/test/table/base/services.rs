@@ -119,7 +119,9 @@ entries! {
             return Status::BAD_ARGS;
         };
         let id = with(None, |s| {
-            if s.base.defined_events.iter().any(|d| d.0 == name) {
+            if s.base.defined_events.iter().any(|d| d.0 == name)
+                || crate::test::table::base::mods::in_another_s_namespace(s, me, &name)
+            {
                 return None;
             }
             s.base

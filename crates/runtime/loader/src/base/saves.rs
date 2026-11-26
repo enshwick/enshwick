@@ -131,10 +131,6 @@ struct State {
     /// How many times the world a side picks changed, read without the
     /// lock by the client's interface frame.
     worlds: AtomicU64,
-    /// Every world key seen, kept once for the process: a menu that builds
-    /// the paths of several worlds sees each key again and again. A game's
-    /// end keeps them, since each is leaked once.
-    seen: Mutex<Vec<&'static str>>,
     /// Whether a save was under way at the last step.
     under_way: AtomicBool,
     /// The folder where Steam keeps the running account's cloud files, once
@@ -147,7 +143,6 @@ impl State {
         Self {
             keys: Mutex::new(Keys::CLOSED),
             worlds: AtomicU64::new(0),
-            seen: Mutex::new(Vec::new()),
             under_way: AtomicBool::new(false),
             steam_folder: OnceLock::new(),
         }
@@ -400,13 +395,10 @@ pub(crate) fn saved(loader: &Loader) {
 
 /// `key`, kept for the process; logged the first time, from `path`.
 fn intern(key: &str, path: &str) -> &'static str {
-    let mut seen = STATE.seen.relock();
-    if let Some(&known) = seen.iter().find(|&&k| k == key) {
-        return known;
+    let (kept, first) = enshwick_base::intern::first_text(key);
+    if first {
+        crate::log!(INFO, "world key {key}, from {path}");
     }
-    crate::log!(INFO, "world key {key}, from {path}");
-    let kept: &'static str = Box::leak(key.into());
-    seen.push(kept);
     kept
 }
 
@@ -696,20 +688,18 @@ mod tests {
     }
 
     #[test]
-    fn a_hosted_game_s_end_forgets_its_key_and_save_but_keeps_the_keys_seen() {
+    fn a_hosted_game_s_end_forgets_its_key_and_save() {
         let state = State::new();
         {
             let mut keys = state.keys.relock();
             *keys = Keys::OPEN;
             keys.note(Side::CLIENT, "world1");
         }
-        state.seen.relock().push("world1");
         state.under_way.store(true, Ordering::Relaxed);
         state.forget();
         assert_eq!(state.keys.relock().pick(Side::CLIENT), None);
         assert!(!state.keys.relock().open, "the menu's paths name no world");
         assert!(!state.under_way.load(Ordering::Relaxed));
-        assert_eq!(*state.seen.relock(), ["world1"]);
     }
 
     #[test]
@@ -719,8 +709,6 @@ mod tests {
             let _other = intern("c3d4", "y");
             assert!(core::ptr::eq(intern("a1b2", "x"), first));
         }
-        let seen = STATE.seen.lock().unwrap();
-        assert_eq!(seen.iter().filter(|k| **k == "a1b2").count(), 1);
     }
 
     #[test]

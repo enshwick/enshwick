@@ -231,8 +231,9 @@ fn fake_offset(id: Constant) -> Option<usize> {
 /// game executable `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name, the
 /// cursor's body in its table holds, and its hash covers the altar flag
 /// test and the balancing load at the table's values, outside every
-/// open field; skipped without them and on a table without the cursor.
+/// open field; skipped on a table without the cursor.
 #[test]
+#[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
 fn the_cursor_s_body_fixes_the_offsets_its_detour_reads() {
     use enshwick_gamedata::reflect::{Image, Layout};
     use enshwick_gamedata::{Side, exact};
@@ -242,9 +243,8 @@ fn the_cursor_s_body_fixes_the_offsets_its_detour_reads() {
         ("ENSH_SERVER_EXE", Side::Server),
         ("ENSH_CLIENT_EXE", Side::Client),
     ] {
-        let Some(path) = std::env::var_os(variable) else {
-            continue;
-        };
+        let path = std::env::var_os(variable)
+            .unwrap_or_else(|| panic!("{variable} names the game executable"));
         let bytes = std::fs::read(path).unwrap();
         let image = Image::parse(&bytes, Layout::File, None).unwrap();
         let Some(own) = exact(&tables, side, image.fingerprint().unwrap()) else {

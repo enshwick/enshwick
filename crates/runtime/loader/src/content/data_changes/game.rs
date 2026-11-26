@@ -701,16 +701,16 @@ mod tests {
     }
 
     /// On each executable `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name, with
-    /// the archive beside it (each skipped without it), the selections by
+    /// the archive beside it, the selections by
     /// kind pick vanilla items.
     #[test]
+    #[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
     fn each_kind_of_selection_picks_vanilla_items_on_each_executable() {
         use enshwick_core::content::changes::Items;
         use enshwick_gamedata::reflect::{Image, Layout};
         for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
-            let Ok(path) = std::env::var(var) else {
-                continue;
-            };
+            let path =
+                std::env::var(var).unwrap_or_else(|_| panic!("{var} names the game executable"));
             let path = std::path::Path::new(&path);
             let bytes = std::fs::read(path).unwrap();
             let image = Image::parse(&bytes, Layout::File, None).unwrap();

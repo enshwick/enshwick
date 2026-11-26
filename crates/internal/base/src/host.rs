@@ -86,6 +86,20 @@ pub(crate) fn spawn(
         .spawn(move || running_as(running, body))
 }
 
+/// [`spawn`], for the API's domain crates: a thread that answers [`host`]
+/// as the calling thread does.
+///
+/// # Errors
+///
+/// When the system cannot start a thread.
+#[doc(hidden)]
+pub fn __spawn(
+    name: &str,
+    body: impl FnOnce() + Send + 'static,
+) -> std::io::Result<std::thread::JoinHandle<()>> {
+    spawn(name, body)
+}
+
 /// The answer of a filter that lets through or refuses: a mod that lets it
 /// through leaves the decision to the game and the filters after it.
 #[inline]

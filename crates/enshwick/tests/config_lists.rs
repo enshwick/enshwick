@@ -126,3 +126,85 @@ mod clamping {
         assert!(!warned.iter().any(|l| l.contains("40")), "{warned:?}");
     }
 }
+
+/// A mod writes one element of a list setting by its key, `per_level[1]`, as
+/// a person sets it on the console.
+#[cfg(test)]
+mod element_writes {
+    use enshwick::abi::Status;
+    use enshwick::config::{self, SetSettingError};
+
+    /// Altars allowed at each Flame level.
+    #[enshwick::config]
+    #[derive(Debug, PartialEq)]
+    struct Altars {
+        /// Altars at each level.
+        #[config(range = 1..=32)]
+        per_level: Vec<u16>,
+    }
+
+    impl Default for Altars {
+        fn default() -> Self {
+            Self {
+                per_level: vec![2, 4, 6],
+            }
+        }
+    }
+
+    struct Writes;
+
+    impl enshwick::Mod for Writes {
+        fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+            load.on_settings(|_: &Altars| {})?;
+            Ok(Self)
+        }
+    }
+
+    enshwick::test::declare_mod!(
+        Writes,
+        r#"
+        id = "you.writes"
+        side = "server"
+        "#
+    );
+
+    #[test]
+    fn an_element_key_writes_that_element_and_one_past_the_list_or_its_range_is_refused() {
+        let loader = enshwick::test::FakeHost::new()
+            .world_key("world0")
+            .install();
+        // SAFETY: the exports of `declare_mod!` above.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+
+        config::set::<Altars>("per_level[1]", 9).unwrap();
+        let text = loader.settings_text("settings").unwrap();
+        assert!(
+            text.contains("per_level = [2, 9, 6]"),
+            "the default's other elements: {text}"
+        );
+
+        config::set::<Altars>("per_level[0]", 3).unwrap();
+        let text = loader.settings_text("settings").unwrap();
+        assert!(text.contains("per_level = [3, 9, 6]"), "the file's: {text}");
+
+        assert_eq!(
+            config::set::<Altars>("per_level[3]", 5),
+            Err(SetSettingError::BadValue),
+            "past the list"
+        );
+        assert_eq!(
+            config::set::<Altars>("per_level[x]", 5),
+            Err(SetSettingError::NoSetting),
+            "no index, so no such key"
+        );
+        assert_eq!(
+            config::set::<Altars>("per_level[2]", 40),
+            Err(SetSettingError::BadValue),
+            "outside the range"
+        );
+        let text = loader.settings_text("settings").unwrap();
+        assert!(text.contains("per_level = [3, 9, 6]"), "unchanged: {text}");
+    }
+}

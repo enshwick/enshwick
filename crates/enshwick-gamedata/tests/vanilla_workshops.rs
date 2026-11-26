@@ -1,6 +1,6 @@
 //! The vanilla workshops the API names against the installed client's
-//! archive, which never enters the repository: these run only where
-//! `ENSH_CLIENT_EXE` names the client, and pass trivially elsewhere.
+//! archive, which never enters the repository: these need
+//! `ENSH_CLIENT_EXE` to name the client and are ignored by default.
 
 #[cfg(test)]
 mod tests {
@@ -10,10 +10,10 @@ mod tests {
     use enshwick_gamedata::archive::Archive;
 
     #[test]
+    #[ignore = "needs ENSH_CLIENT_EXE"]
     fn the_workshop_registry_holds_the_flame_altar_s_workshop() {
-        let Some(exe) = std::env::var_os("ENSH_CLIENT_EXE") else {
-            return;
-        };
+        let exe =
+            std::env::var_os("ENSH_CLIENT_EXE").expect("ENSH_CLIENT_EXE names the game executable");
         let dir = Path::new(&exe).parent().unwrap();
         let archive = Archive::open(dir, "enshrouded").unwrap();
         let key = archive

@@ -8,9 +8,8 @@
 //! server's step tells each player at most once a second, and the same
 //! reason again only after that player's refusals stopped for a second.
 
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
-use std::time::Instant;
 
 use enshwick_core::Entity;
 use enshwick_core::abi::Side;
@@ -76,12 +75,11 @@ struct Told {
 }
 
 struct State {
-    start: OnceLock<Instant>,
     /// Set once `seen` may hold a refusal, so an idle step takes no lock.
     any: AtomicBool,
     /// The step's refusals by player, filled on the cursor threads.
     seen: Mutex<[Option<Seen>; SLOTS]>,
-    /// When `local` last changed, in ms since `start` plus one, 0 before any
+    /// When `local` last changed, by [`now_ms`] plus one, 0 before any
     /// refusal, so a HUD frame with no recent one takes no lock.
     local_at: AtomicU64,
     /// The client's own latest refusal, for its HUD.
@@ -93,7 +91,6 @@ struct State {
 impl State {
     const fn new() -> Self {
         Self {
-            start: OnceLock::new(),
             any: AtomicBool::new(false),
             local_at: AtomicU64::new(0),
             seen: Mutex::new([None; SLOTS]),
@@ -128,10 +125,7 @@ pub(crate) fn forget() {
     STATE.forget();
 }
 
-fn now_ms() -> u64 {
-    let start = STATE.start.get_or_init(Instant::now);
-    u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX)
-}
+use crate::engine::clock::now_ms;
 
 /// Keeps mod `owner`'s refusal of `player`'s placement for `text`, on the
 /// cursor check's thread right after the filter returned: a check in the

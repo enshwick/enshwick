@@ -628,15 +628,14 @@ mod tests {
 
     /// A ported script on the real server archive beside `ENSH_SERVER_EXE`
     /// the balancing table's two-handed damage factor doubles.
-    /// Without the executable the test passes trivially.
     #[test]
+    #[ignore = "needs ENSH_SERVER_EXE"]
     fn a_ported_script_doubles_a_real_balancing_value_on_the_server_archive() {
         use enshwick_gamedata::archive::Archive;
         use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 
-        let Ok(exe) = std::env::var("ENSH_SERVER_EXE") else {
-            return;
-        };
+        let exe =
+            std::env::var("ENSH_SERVER_EXE").expect("ENSH_SERVER_EXE names the game executable");
         let exe = std::path::Path::new(&exe);
         let bytes: &'static [u8] = Box::leak(std::fs::read(exe).unwrap().into_boxed_slice());
         let image: &'static Image<'static> =

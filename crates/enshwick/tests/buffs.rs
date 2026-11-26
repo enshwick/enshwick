@@ -71,6 +71,10 @@ mod tests {
         assert_eq!(on.len(), 1, "renewed, not doubled");
         assert_eq!(on[0].life_time, Duration::from_mins(5));
         assert_eq!(buffs.has(player, BuffTypeId(7)), Ok(true));
+        let held = loader.buffs_of(player).expect("the player holds buffs");
+        assert_eq!(held.len(), 1, "the fake holds what the mod left");
+        assert_eq!(held[0].id, BuffTypeId(7));
+        assert_eq!(held[0].duration_ns, 300_000_000_000);
 
         assert_eq!(
             buffs.apply(player, BuffTypeId(8), Apply::new()),

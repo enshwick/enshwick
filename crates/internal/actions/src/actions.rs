@@ -463,6 +463,7 @@ impl Actions {
         if let Some(fault) = registry::optional_fault(&action.args) {
             return Err(Off::new(format!("action {id}: {fault}")));
         }
+        template_names::watch(&self.registry, &action.args);
         let mut declared = self.registry.declared.relock_write();
         if declared.iter().any(|d| d.action.id == id) {
             return Err(Off::new(format!("action {id}: the id is taken")));
@@ -930,6 +931,7 @@ impl LoadMethods for crate::BaseLoad {
             refused: RwLock::new(None),
             commands: core::sync::atomic::AtomicBool::new(false),
             commands_off: core::sync::atomic::AtomicBool::new(false),
+            templates_watched: core::sync::atomic::AtomicBool::new(false),
         });
         crate::load::hand_over(
             Arc::clone(&registry),
@@ -987,6 +989,7 @@ mod answer;
 mod registry;
 mod request;
 pub(crate) mod script;
+mod template_names;
 
 use registry::Registry;
 pub use request::*;

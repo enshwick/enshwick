@@ -2,7 +2,7 @@
 //! to the same bytes, and gives each blob header a block of its own, so a
 //! value written in place changes no other header's value. The archives sit
 //! beside the executables `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name;
-//! without them those tests pass trivially.
+//! those tests are ignored by default: run them with `--run-ignored` where they are.
 
 #[cfg(test)]
 #[path = "support/parallel.rs"]
@@ -269,9 +269,7 @@ mod tests {
     /// a count and the first error; then lists the resources whose blob
     /// headers share a block.
     fn round_trip(var: &str) {
-        let Ok(exe) = std::env::var(var) else {
-            return;
-        };
+        let exe = std::env::var(var).unwrap_or_else(|_| panic!("{var} names the game executable"));
         let exe = Path::new(&exe);
         let bytes = std::fs::read(exe).unwrap();
         let image = Image::parse(&bytes, Layout::File, None).unwrap();
@@ -352,11 +350,13 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "needs ENSH_SERVER_EXE"]
     fn every_server_resource_round_trips_and_shares_no_blob_block() {
         round_trip("ENSH_SERVER_EXE");
     }
 
     #[test]
+    #[ignore = "needs ENSH_CLIENT_EXE"]
     fn every_client_resource_round_trips_and_shares_no_blob_block() {
         round_trip("ENSH_CLIENT_EXE");
     }

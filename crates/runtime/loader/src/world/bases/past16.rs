@@ -584,8 +584,9 @@ mod tests {
     /// finds its one `mov edx, size` in its create, and the client's count
     /// getter is in the client only; on a build pinned before the window,
     /// whose table holds none of its functions, the window turns off on an
-    /// entry the table lacks. Skipped without them.
+    /// entry the table lacks.
     #[test]
+    #[ignore = "needs ENSH_SERVER_EXE and ENSH_CLIENT_EXE"]
     fn every_site_is_found_in_the_game_s_executables() {
         let window = [
             bases::SERVER_CREATE,
@@ -602,9 +603,8 @@ mod tests {
             ("ENSH_SERVER_EXE", TableSide::Server),
             ("ENSH_CLIENT_EXE", TableSide::Client),
         ] {
-            let Some(path) = std::env::var_os(variable) else {
-                continue;
-            };
+            let path = std::env::var_os(variable)
+                .unwrap_or_else(|| panic!("{variable} names the game executable"));
             let bytes = std::fs::read(path).unwrap();
             let image = Image::parse(&bytes, Layout::File, None).unwrap();
             let Some(table) = exact(&tables, side, image.fingerprint().unwrap()) else {
@@ -824,15 +824,15 @@ mod tests {
         }
     }
 
-    /// On the server `ENSH_SERVER_EXE` names (skipped without it), its own
+    /// On the server `ENSH_SERVER_EXE` names, its own
     /// table without the client's create, destroy and size, its base id
     /// list and the record's base id still finds every site of the window,
     /// since a dedicated server never runs that code.
     #[test]
+    #[ignore = "needs ENSH_SERVER_EXE"]
     fn a_server_table_without_the_client_s_rows_finds_the_window() {
-        let Some(path) = std::env::var_os("ENSH_SERVER_EXE") else {
-            return;
-        };
+        let path =
+            std::env::var_os("ENSH_SERVER_EXE").expect("ENSH_SERVER_EXE names the game executable");
         let bytes = std::fs::read(path).unwrap();
         let image = Image::parse(&bytes, Layout::File, None).unwrap();
         let tables = crate::engine::builds::load();

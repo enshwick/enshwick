@@ -337,12 +337,8 @@ impl crate::script::IntoScript for Order {
 impl crate::script::FromScript for Order {
     fn from_value(value: crate::script::Value) -> Result<Self, crate::script::Error> {
         let order = <script_order::Order as crate::script::FromScript>::from_value(value)?;
-        // shortcut: a script's mod ids leak their text for the process, as a
-        // script's content ids do; links are made only at start.
         let leaked = |ids: Vec<String>| -> Vec<&'static str> {
-            ids.into_iter()
-                .map(|id| &*Box::leak(id.into_boxed_str()))
-                .collect()
+            ids.iter().map(|id| crate::intern::text(id)).collect()
         };
         Ok(Self {
             before: leaked(order.before),

@@ -184,16 +184,10 @@ fn claim(s: &mut crate::test::table::State, me: ModHandle, guid: enshwick_core::
 }
 
 /// Whether content id `id` lies outside the namespace of mod `me`, which the
-/// loader refuses and turns the mod off for. The fake knows no pack's id, and
-/// its tests' `id!` names the test crate, not the mod under test, so it
-/// refuses only a pack declaring in the namespace of the mod under test.
+/// loader refuses and turns the mod off for, as far as the fake can tell.
 fn outside(me: ModHandle, id: &str) -> bool {
     with(false, |s| {
-        me != s.host.base.handle
-            && s.base.manifest.as_ref().is_some_and(|manifest| {
-                id.split_once(':')
-                    .is_some_and(|(namespace, _)| namespace == manifest.id)
-            })
+        crate::test::table::base::mods::in_another_s_namespace(s, me, id)
     })
 }
 
@@ -524,7 +518,24 @@ entries! {
         }) else {
             return Status::BAD_ARGS;
         };
-        // shortcut: the loader reads the change before the phase, so a malformed one after init answers BAD_ARGS there; match it when a test needs that order.
+        // As the loader: the change is read whole before the phase, so a
+        // malformed one after init is a bad request, not a late one.
+        let entry = raw.select == enshwick_core::abi::DataSelect::ENTRY;
+        let recipes = (!entry)
+            .then(|| enshwick_core::content::changes::RecipesChange::from_abi(&raw).ok().flatten())
+            .flatten();
+        #[cfg(feature = "unstable")]
+        let items = (!entry && recipes.is_none())
+            .then(|| enshwick_core::content::changes::ItemsChange::from_abi(&raw).ok().flatten())
+            .flatten();
+        #[cfg(not(feature = "unstable"))]
+        let items = None::<core::convert::Infallible>;
+        let one = entry
+            .then(|| enshwick_core::content::changes::Change::from_abi(&raw).ok().flatten())
+            .flatten();
+        if recipes.is_none() && items.is_none() && one.is_none() && unnamed(&raw) != Status::OK {
+            return Status::BAD_ARGS;
+        }
         if crate::test::table::late() {
             return Status::TOO_LATE;
         }
@@ -532,27 +543,17 @@ entries! {
         let source = unsafe { raw.source.as_str() }
             .unwrap_or_default()
             .to_owned();
-        if raw.select != enshwick_core::abi::DataSelect::ENTRY {
-            if let Ok(Some(change)) = enshwick_core::content::changes::RecipesChange::from_abi(&raw) {
-                return with(Status::MISSING, |s| {
-                    s.content.changes.recipes.push((change, source));
-                    Status::OK
-                });
-            }
-            #[cfg(feature = "unstable")]
-            if let Ok(Some(change)) = enshwick_core::content::changes::ItemsChange::from_abi(&raw) {
-                return with(Status::MISSING, |s| {
-                    s.content.changes.items.push((change, source));
-                    Status::OK
-                });
-            }
-            return unnamed(&raw);
-        }
-        let Ok(Some(change)) = enshwick_core::content::changes::Change::from_abi(&raw) else {
-            return unnamed(&raw);
-        };
         with(Status::MISSING, |s| {
-            s.content.changes.one.push((change, source));
+            if let Some(change) = recipes {
+                s.content.changes.recipes.push((change, source));
+            } else if let Some(change) = one {
+                s.content.changes.one.push((change, source));
+            } else {
+                #[cfg(feature = "unstable")]
+                if let Some(change) = items {
+                    s.content.changes.items.push((change, source));
+                }
+            }
             Status::OK
         })
     }

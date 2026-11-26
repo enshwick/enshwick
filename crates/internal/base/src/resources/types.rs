@@ -724,24 +724,4 @@ pub const fn crc64(bytes: &[u8]) -> u64 {
     crc
 }
 
-/// FNV-1a over 32 bits, the hash the engine keys type names, resource types
-/// and GUID-derived ids with.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::resources::fnv1a32;
-///
-/// assert_eq!(fnv1a32(b""), 0x811c_9dc5);
-/// assert_eq!(fnv1a32(b"foobar"), 0xbf9c_f968);
-/// ```
-#[must_use]
-pub const fn fnv1a32(bytes: &[u8]) -> u32 {
-    let mut hash = 0x811c_9dc5_u32;
-    let mut i = 0;
-    while i < bytes.len() {
-        hash = (hash ^ bytes[i] as u32).wrapping_mul(0x0100_0193);
-        i += 1;
-    }
-    hash
-}
+pub use enshwick_values::fnv::fnv1a32;

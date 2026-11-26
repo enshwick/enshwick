@@ -1,0 +1,25 @@
+---
+source: crates/runtime/loader/src/host/contract_tests.rs
+expression: "contract::render(&rows)"
+---
+entry caller UnknownMod ModOff InInit Pack Loader AfterInit
+log Writer BAD_ARGS OK OK OK OK OK
+settings AnyMod BAD_ARGS MISSING MISSING MISSING BAD_ARGS MISSING
+log_level Writer BAD_ARGS OK OK OK OK OK
+mods AnyMod BAD_ARGS OK OK OK BAD_ARGS OK
+status Mod BAD_ARGS FAULTED OK OK BAD_ARGS TOO_LATE
+texts Mod BAD_ARGS FAULTED OK OK BAD_ARGS OK
+define_event Mod BAD_ARGS FAULTED OK REFUSED BAD_ARGS TOO_LATE
+mod_dir AnyMod BAD_ARGS OK OK OK BAD_ARGS OK
+language Writer BAD_ARGS OK OK OK OK OK
+define_point Mod BAD_ARGS FAULTED OK REFUSED BAD_ARGS TOO_LATE
+feature Mod BAD_ARGS FAULTED OK OK BAD_ARGS OK
+loader_off AnyMod BAD_ARGS OK OK OK BAD_ARGS OK
+subscribe_tick Mod BAD_ARGS FAULTED OK OK BAD_ARGS TOO_LATE
+add_text Caller BAD_ARGS FAULTED OK OK OK TOO_LATE
+define_item_data Mod BAD_ARGS FAULTED OK OK BAD_ARGS TOO_LATE
+declare_content Mod BAD_ARGS FAULTED OK REFUSED BAD_ARGS TOO_LATE
+define_entity_data Mod BAD_ARGS FAULTED OK OK BAD_ARGS TOO_LATE
+change_data Mod BAD_ARGS FAULTED UNAVAILABLE UNAVAILABLE BAD_ARGS UNAVAILABLE
+define_stat Mod BAD_ARGS FAULTED OK REFUSED BAD_ARGS TOO_LATE
+define_affix Mod BAD_ARGS FAULTED BAD_ARGS REFUSED BAD_ARGS TOO_LATE

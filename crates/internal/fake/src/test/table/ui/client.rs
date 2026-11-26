@@ -196,21 +196,19 @@ entries! {
 /// are armed; else the oldest waiting one, numbered by the answers before
 /// it as the loader numbers dialogs as they show, 0 while none waits, its
 /// buttons, and whether the mod under test asked it.
-fn on_screen(s: &crate::test::table::State) -> Option<(u32, u32, bool)> {
+fn on_screen(
+    s: &crate::test::table::State,
+) -> Option<(u32, u32, Option<enshwick_core::abi::ModHandle>)> {
     if s.base.registration != crate::test::table::Registration::Closed {
         return None;
     }
-    Some(
-        s.ui.dialogs
-            .first()
-            .map_or((0, 0, false), |(shown, asked)| {
-                (
-                    s.ui.dialogs_answered % 65_535 + 1,
-                    shown.buttons,
-                    asked.owner() == Some(s.host.base.handle),
-                )
-            }),
-    )
+    Some(s.ui.dialogs.first().map_or((0, 0, None), |(shown, asked)| {
+        (
+            s.ui.dialogs_answered % 65_535 + 1,
+            shown.buttons,
+            asked.owner(),
+        )
+    }))
 }
 
 fn reflects_action(host: &crate::test::FakeHost, name: &str) -> bool {
@@ -310,21 +308,13 @@ entries! {
             } else {
                 enshwick_core::abi::ClientSnapshot::EMPTY
             };
-            if let Some((number, buttons, mine)) = on_screen(s) {
+            if let Some((number, buttons, owner)) = on_screen(s) {
                 snapshot.available |= enshwick_core::abi::ClientSnapshot::DIALOG;
                 snapshot.dialog = number;
                 snapshot.dialog_buttons = buttons;
-                // shortcut: the fake knows no id for a pack or another mod, so
-                // their dialogs name none; give them ids if a test needs one.
-                // The manifest's id lives as long as the fake.
-                snapshot.dialog_mod = s
-                    .base
-                    .manifest
-                    .as_ref()
-                    .filter(|_| mine)
-                    .map_or(enshwick_core::abi::Str::EMPTY, |manifest| {
-                        enshwick_core::abi::Str::new(&manifest.id)
-                    });
+                snapshot.dialog_mod = owner
+                    .and_then(|owner| crate::test::table::base::mods::id_of(s, owner))
+                    .map_or(enshwick_core::abi::Str::EMPTY, enshwick_core::abi::Str::new);
             }
             crate::test::table::put_headed(out, snapshot)
         })
@@ -397,5 +387,20 @@ mod tests {
         };
         assert!(named_as_the_loader_takes(&chat(Str::new("hello"))));
         assert!(!named_as_the_loader_takes(&chat(broken)));
+    }
+
+    #[test]
+    fn a_dialog_names_its_owner_by_an_id_for_every_handle_the_fake_gave_out() {
+        use enshwick_core::abi::ModHandle;
+
+        let fake = crate::test::FakeHost::new()
+            .other_mod(ModHandle(5))
+            .install();
+        let ids = with(Vec::new(), |s| {
+            [fake.handle(), ModHandle(5), ModHandle(9)]
+                .map(|me| crate::test::table::base::mods::id_of(s, me))
+                .to_vec()
+        });
+        assert_eq!(ids, [Some(crate::test::MOD_ID), Some("test.mod-5"), None]);
     }
 }
