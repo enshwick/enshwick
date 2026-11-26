@@ -45,10 +45,26 @@
     bytemuck::Zeroable,
     bytemuck::Pod,
     crate::Shape,
-    crate::Script,
 )]
 #[shape(api = "entity")]
 pub struct Entity(pub(crate) u32);
+
+impl crate::script::Typed for Entity {
+    const TY: &'static crate::script::Ty = <u32 as crate::script::Typed>::TY;
+}
+
+impl crate::script::IntoScript for Entity {
+    fn into_value(self) -> crate::script::Value {
+        crate::script::IntoScript::into_value(self.0)
+    }
+}
+
+impl crate::script::FromScript for Entity {
+    fn from_value(value: crate::script::Value) -> Result<Self, crate::script::Error> {
+        let raw = <u32 as crate::script::FromScript>::from_value(value)?;
+        Self::from_raw(raw).ok_or_else(|| crate::script::Error::new("0 is no entity"))
+    }
+}
 
 impl Entity {
     /// The engine's id for no entity.
@@ -558,6 +574,16 @@ const _: () = {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_script_names_an_entity_by_its_number_but_never_by_0() {
+        use crate::script::{FromScript, IntoScript, Value};
+
+        let entity = Entity::from_value(Value::Number(7.0));
+        assert_eq!(entity.map_err(|e| e.to_string()), Ok(Entity(7)));
+        assert!(Entity::from_value(Value::Number(0.0)).is_err());
+        assert!(matches!(Entity(9).into_value(), Value::Number(n) if n == 9.0));
+    }
 
     #[test]
     fn an_item_id_converts_to_and_from_its_number() {
