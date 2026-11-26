@@ -7,6 +7,8 @@ use crate::RecipeId;
 use crate::content::items::NewItem;
 use crate::content::props::{NewProp, PropId};
 #[cfg(feature = "unstable")]
+use crate::content::workshops::FLAME_ALTAR;
+#[cfg(feature = "unstable")]
 use crate::content::{recipes::RECIPE_REGISTRY, types};
 #[cfg(feature = "unstable")]
 use crate::resources::Value;
@@ -65,42 +67,46 @@ pub struct NewFlameAltar {
 }
 
 /// The ids of the altar upgrade recipes in `registry` that raise an altar
-/// from `max` or above. An upgrade recipe's level is the one it upgrades
-/// from (server 26430253); the Flame's own upgrades are upgrades too, in a
-/// workshop of their own (client 26430625).
+/// from `max` or above: the upgrades of the [`FLAME_ALTAR`] workshop. An
+/// upgrade recipe's level is the one it upgrades from (server 26430253);
+/// the Flame's own upgrades are upgrades too, in a workshop of their own
+/// (client 26430625).
 ///
 /// # Errors
 ///
-/// [`Off`] when the registry holds no upgrade recipe at level 0, the claim:
-/// its fields do not read as this build lays them out.
+/// [`Off`] when the registry holds no upgrade recipe of the altar's
+/// workshop at level 0, the claim: its fields do not read as this build
+/// lays them out.
 #[cfg(feature = "unstable")]
 fn upgrades_from(registry: &Value, max: u8) -> Result<Vec<RecipeId>, Off> {
-    let unread = || Off::new("altar level limit: the recipe registry has no altar claim recipe");
+    let unread = || {
+        Off::new(
+            "altar level limit: the recipe registry has no altar claim recipe in the Flame Altar workshop",
+        )
+    };
     let Some(Value::List(recipes)) = registry.field(RECIPES) else {
         return Err(unread());
+    };
+    let id = |recipe: &Value, field: &str| match recipe.field(field)?.field(ID_VALUE)? {
+        &Value::Uint(id) => u32::try_from(id).ok(),
+        _ => None,
     };
     let level = |recipe: &Value| match recipe.field(LEVEL) {
         Some(&Value::Uint(level)) => Some(level),
         _ => None,
     };
-    let upgrades = || {
-        recipes
-            .iter()
-            .filter(|recipe| recipe.field(IS_UPGRADE) == Some(&Value::Bool(true)))
-    };
-    // shortcut: the altar's workshop is the one with a level-0 upgrade, as only the claim is on
-    // the builds seen; upgrade to a catalogue workshop id once one names the altar's.
-    let altar = upgrades()
-        .find(|recipe| level(recipe) == Some(0))
-        .and_then(|claim| claim.field(WORKSHOP_ID))
-        .ok_or_else(unread)?;
-    Ok(upgrades()
-        .filter(|recipe| recipe.field(WORKSHOP_ID) == Some(altar))
+    let upgrades: Vec<&Value> = recipes
+        .iter()
+        .filter(|recipe| recipe.field(IS_UPGRADE) == Some(&Value::Bool(true)))
+        .filter(|recipe| id(recipe, WORKSHOP_ID) == Some(FLAME_ALTAR.id()))
+        .collect();
+    if !upgrades.iter().any(|recipe| level(recipe) == Some(0)) {
+        return Err(unread());
+    }
+    Ok(upgrades
+        .into_iter()
         .filter(|recipe| level(recipe).is_some_and(|level| level >= u64::from(max)))
-        .filter_map(|recipe| match recipe.field(RECIPE_ID)?.field(ID_VALUE)? {
-            &Value::Uint(id) => u32::try_from(id).ok().map(RecipeId),
-            _ => None,
-        })
+        .filter_map(|recipe| id(recipe, RECIPE_ID).map(RecipeId))
         .collect())
 }
 

@@ -1,3 +1,4 @@
+use std::cell::OnceCell;
 use std::sync::{Arc, RwLock};
 
 mod fit;
@@ -17,13 +18,34 @@ use crate::i18n::{Language, Texts};
 use crate::locks::RelockRw;
 use crate::world::Player;
 
-use super::request::{ActionTarget, Ask, Outcome, Refused, RefusedReason, Request, Value, Via};
+use super::request::{
+    ActionTarget, Ask, FindSubjectError, Outcome, Refused, RefusedReason, Request, Subject, Value,
+    Via,
+};
 use super::sheet::{ArgView, Entry};
 use super::{Action, Handler, MAX_KNOWN, MAX_PLAYERS, sheet};
 
 pub(super) struct Declared {
     pub(super) action: Action,
     pub(super) handler: Handler,
+}
+
+/// One run of an action as its steps ask about it: the player's question,
+/// and what the action's `at` answers, asked at most once however many
+/// steps need it, since a mod's `at` may act as well as answer.
+pub(super) struct Asked<'a> {
+    d: &'a Declared,
+    ask: Ask<'a>,
+    found: OnceCell<Option<Result<Subject, FindSubjectError>>>,
+}
+
+impl Asked<'_> {
+    /// What `at` found; `None` for an action without one.
+    fn found(&self) -> Option<&Result<Subject, FindSubjectError>> {
+        self.found
+            .get_or_init(|| self.d.action.at.as_ref().map(|at| at(&self.ask)))
+            .as_ref()
+    }
 }
 
 /// A line typed on the console, in chat or by a remote caller, as the
@@ -157,8 +179,9 @@ impl Registry {
             let outcome = Outcome::refused(self.say("actions.denied", language, &[]));
             return refused(&d.action.id, RefusedReason::NoRight, outcome);
         }
-        match self.console_args(d, player, line, rest, language) {
-            Ok(values) => self.run(d, player, &values, language, typed.via, None),
+        let asked = self.asked(d, player, language, None);
+        match self.console_args(&asked, line, rest) {
+            Ok(values) => self.run(&asked, &values, typed.via),
             Err(why) => {
                 let outcome = Outcome::refused(self.refusal(&why, &d.action, language));
                 refused(&d.action.id, why.reason(), outcome)
@@ -166,25 +189,35 @@ impl Registry {
         }
     }
 
-    /// The players a list switches on for `player` now, on the object
-    /// `target` names; none while the action has nothing at hand.
-    fn listed(
-        &self,
-        d: &Declared,
-        player: &Player,
+    /// One run of `d` for `player`, on the object `target` names.
+    fn asked<'a>(
+        &'a self,
+        d: &'a Declared,
+        player: &'a Player,
         language: Language,
         target: Option<ActionTarget>,
-    ) -> Vec<(PlayerKey, String)> {
-        let ask = self.ask(player, language, target);
-        let subject = match d.action.at.as_ref().map(|at| at(&ask)) {
+    ) -> Asked<'a> {
+        Asked {
+            d,
+            ask: self.ask(player, language, target),
+            found: OnceCell::new(),
+        }
+    }
+
+    /// The players a list switches on for the run's player now; none while
+    /// the action has nothing at hand.
+    fn listed(asked: &Asked<'_>) -> Vec<(PlayerKey, String)> {
+        let subject = match asked.found() {
             Some(Ok(subject)) => Some(subject),
             Some(Err(_)) => return Vec::new(),
             None => None,
         };
-        d.action
+        asked
+            .d
+            .action
             .on
             .as_ref()
-            .map_or_default(|on| on(&ask, subject.as_ref()))
+            .map_or_default(|on| on(&asked.ask, subject))
     }
 
     /// The accounts `d` knows for `ask`, bounded: at most [`MAX_KNOWN`],
@@ -206,30 +239,21 @@ impl Registry {
             && d.action.allow.as_ref().is_none_or(|allow| allow(player))
     }
 
-    /// Runs `d` for `player` with `values`, read at the boundary by a caller
-    /// that checked [`allowed`](Self::allowed) once already.
-    fn run(
-        &self,
-        d: &Declared,
-        player: &Player,
-        values: &[Value],
-        language: Language,
-        via: Via,
-        target: Option<ActionTarget>,
-    ) -> Outcome {
-        let ask = self.ask(player, language, target);
-        let subject = match d.action.at.as_ref().map(|at| at(&ask)) {
+    /// Runs the action of `asked` with `values`, read at the boundary by a
+    /// caller that checked [`allowed`](Self::allowed) once already.
+    fn run(&self, asked: &Asked<'_>, values: &[Value], via: Via) -> Outcome {
+        let subject = match asked.found() {
             Some(Ok(subject)) => Some(subject),
             Some(Err(why)) => return Outcome::refused(why.reason()),
             None => None,
         };
-        (d.handler)(&Request {
-            player,
-            subject: subject.as_ref(),
+        (asked.d.handler)(&Request {
+            player: asked.ask.player,
+            subject,
             args: values,
-            language,
+            language: asked.ask.language,
             via,
-            target,
+            target: asked.ask.target,
             texts: &self.texts,
         })
     }
@@ -442,9 +466,10 @@ impl Registry {
             let left_out = d.action.args.iter().skip(values.len());
             values.extend(left_out.map_while(|arg| arg.default.clone()));
         }
+        let asked = self.asked(d, player, language, target);
         let read = values.and_then(|mut values| {
             let read = self
-                .name_players(d, player, &mut values, language, target)
+                .name_players(&asked, &mut values)
                 .and_then(|()| self.values_fit(d, &values));
             match read {
                 Ok(()) => Ok(values),
@@ -452,7 +477,7 @@ impl Registry {
             }
         });
         match read {
-            Ok(values) => self.run(d, player, &values, language, Via::Interface, target),
+            Ok(values) => self.run(&asked, &values, Via::Interface),
             Err((why, values)) => {
                 let text = self.refusal(&why, &d.action, language);
                 refused(why.reason(), &values, text)

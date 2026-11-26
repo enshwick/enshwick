@@ -4,6 +4,7 @@
 #[cfg(test)]
 mod tests {
     use std::sync::OnceLock;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use enshwick::abi::{Header, PlayerInfo, Side, Status};
     use enshwick::actions::{Action, ActionTarget, Actions, Outcome, Subject};
@@ -11,6 +12,8 @@ mod tests {
     use enshwick::{Load, Mod, Off};
 
     static ACTIONS: OnceLock<Actions> = OnceLock::new();
+    /// How often the list action's `at` ran; each test runs in a process of its own.
+    static ASKED: AtomicUsize = AtomicUsize::new(0);
 
     struct Safes;
 
@@ -40,9 +43,12 @@ mod tests {
                         _ => Vec::new(),
                     }
                 })
-                .at(|ask| match ask.target {
-                    Some(_) => Ok(Subject::new(7, "The safe")),
-                    None => Err("Open a safe first".into()),
+                .at(|ask| {
+                    ASKED.fetch_add(1, Ordering::Relaxed);
+                    match ask.target {
+                        Some(_) => Ok(Subject::new(7, "The safe")),
+                        None => Err("Open a safe first".into()),
+                    }
                 }),
                 |request| match request.args {
                     [enshwick::actions::Value::Player { name, .. }, _] => {
@@ -122,6 +128,24 @@ mod tests {
                 .as_deref(),
             Some("1Olga switched")
         );
+    }
+
+    #[test]
+    fn one_run_finds_its_subject_once_from_the_panel_and_the_console() {
+        let loader = start(enshwick::test::FakeHost::new().player(owner()));
+        let safe = ActionTarget::entity(enshwick::Entity(4096));
+        let off = "p0000000000000063\tb0";
+        let ran = loader.ask_action_at(&owner(), 0, "access", off, safe);
+        assert_eq!(ran.as_deref(), Some("1Olga switched"));
+        assert_eq!(ASKED.swap(0, Ordering::Relaxed), 1, "from the panel");
+
+        let console = enshwick::abi::ActionCall::CONSOLE;
+        let ran = loader.ask_actions(console, &owner(), 0, "access Olga off", "");
+        assert!(
+            ran.is_some_and(|reply| reply.starts_with('0')),
+            "no safe at hand"
+        );
+        assert_eq!(ASKED.load(Ordering::Relaxed), 1, "from the console");
     }
 
     #[test]

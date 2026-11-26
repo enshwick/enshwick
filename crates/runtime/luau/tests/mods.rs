@@ -379,10 +379,11 @@ mod tests {
         );
         let kind = Guid::named("you.luau:wide.template");
         let upgrade = Guid([0xc1; 16]);
+        let altar = enshwick::content::workshops::FLAME_ALTAR.id();
         let host = FakeHost::new()
             .enemies()
             .props()
-            .upgrade_recipes(&[(Guid([0xc0; 16]), 7, 0), (upgrade, 7, 1)])
+            .upgrade_recipes(&[(Guid([0xc0; 16]), altar, 0), (upgrade, altar, 1)])
             .template(enshwick::Entity(10), kind);
         let (loader, status) = start_with(host, &main, Scripts::new(), None);
         assert_eq!(status, Status::OK, "{:?}", loader.logs());

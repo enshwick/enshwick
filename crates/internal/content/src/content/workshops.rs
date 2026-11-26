@@ -19,6 +19,20 @@ use crate::resources::Grow;
 /// The game's workshop registry resource.
 pub const WORKSHOP_REGISTRY: Guid = Guid::parse("3baba1c2-bc82-4ab7-b20e-16dec28208af");
 
+/// The Flame Altar's own workshop, where the recipes that claim an altar
+/// and raise its level are made; the Flame's upgrades have another
+/// (archive 1287369).
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::content::workshops::FLAME_ALTAR;
+///
+/// assert_eq!(FLAME_ALTAR.id(), 0xb326_e042);
+/// ```
+pub const FLAME_ALTAR: WorkshopId =
+    WorkshopId::new(Guid::parse("9b30b429-2c74-4336-bf13-97ed6acaffe3"));
+
 /// Vanilla stations to clone: the station item and the template it places.
 pub mod stations {
     use super::{Guid, Station};

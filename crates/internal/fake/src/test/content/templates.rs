@@ -617,15 +617,17 @@ impl FakeHost {
     /// The vanilla recipe registry in the archive holding one upgrade
     /// recipe per `(guid, workshop, level)`: a recipe of the workshop with
     /// game id `workshop` that upgrades its station from that level, beside
-    /// [`FakeHost::props`]. The altar's own upgrades share the workshop of
-    /// the one at level 0, the claim.
+    /// [`FakeHost::props`]. The altar's own upgrades, the claim at level 0
+    /// among them, are those of the workshop
+    /// [`FLAME_ALTAR`](enshwick_core::content::workshops::FLAME_ALTAR).
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick::content::Guid;
+    /// use enshwick::content::workshops::FLAME_ALTAR;
     ///
-    /// let claim = (Guid([1; 16]), 7, 0);
+    /// let claim = (Guid([1; 16]), FLAME_ALTAR.id(), 0);
     /// let _host = enshwick::test::FakeHost::new().props().upgrade_recipes(&[claim]);
     /// ```
     #[must_use]

@@ -143,6 +143,93 @@ impl CellBox {
         (self.max[0] - self.min[0]) * (self.max[2] - self.min[2])
     }
 
+    /// Whether the two footprints share a cell boundary or more, edges and
+    /// corners included, whatever the heights: as zones that grow sideways
+    /// meet. A box with no cells, flat ones included, has no footprint.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::altars::CellBox;
+    ///
+    /// let a = CellBox::new([0, 0, 0], [2, 1, 2]);
+    /// assert!(a.footprint_touches(&CellBox::new([2, 50, 2], [3, 51, 3])));
+    /// assert!(!a.footprint_touches(&CellBox::new([3, 0, 0], [4, 1, 1])));
+    /// ```
+    #[must_use]
+    pub fn footprint_touches(&self, other: &Self) -> bool {
+        !self.is_empty()
+            && !other.is_empty()
+            && [0, 2]
+                .iter()
+                .all(|&a| self.min[a] <= other.max[a] && other.min[a] <= self.max[a])
+    }
+
+    /// The box grown by `k` cells on every horizontal side, its height kept;
+    /// a negative `k` shrinks it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::altars::CellBox;
+    ///
+    /// let grown = CellBox::new([0, 0, 0], [2, 1, 2]).grown(1);
+    /// assert_eq!(grown, CellBox::new([-1, 0, -1], [3, 1, 3]));
+    /// ```
+    #[must_use]
+    pub const fn grown(&self, k: i64) -> Self {
+        let mut grown = *self;
+        grown.min[0] -= k;
+        grown.max[0] += k;
+        grown.min[2] -= k;
+        grown.max[2] += k;
+        grown
+    }
+
+    /// The area in cells that the footprints of `boxes` cover together,
+    /// overlaps counted once, at most `i64::MAX`; a box with no cells, flat
+    /// ones included, covers none.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::altars::CellBox;
+    ///
+    /// let a = CellBox::new([0, 0, 0], [2, 1, 2]);
+    /// let b = CellBox::new([1, 0, 1], [3, 1, 3]);
+    /// assert_eq!(CellBox::union_footprint_area(&[a, b]), 7);
+    /// ```
+    #[must_use]
+    pub fn union_footprint_area(boxes: &[Self]) -> i64 {
+        let boxes: Vec<&Self> = boxes.iter().filter(|b| !b.is_empty()).collect();
+        let mut xs: Vec<i64> = boxes.iter().flat_map(|b| [b.min[0], b.max[0]]).collect();
+        xs.sort_unstable();
+        xs.dedup();
+
+        let mut area: i128 = 0;
+        for strip in xs.windows(2) {
+            let (x0, x1) = (strip[0], strip[1]);
+            let mut spans: Vec<(i64, i64)> = boxes
+                .iter()
+                .filter(|b| b.min[0] <= x0 && x1 <= b.max[0])
+                .map(|b| (b.min[2], b.max[2]))
+                .collect();
+            spans.sort_unstable();
+
+            let mut covered = 0;
+            let mut reached = i64::MIN;
+            for (z0, z1) in spans {
+                let from = z0.max(reached);
+                if z1 > from {
+                    covered += i128::from(z1) - i128::from(from);
+                }
+                reached = reached.max(z1);
+            }
+            area += covered * (i128::from(x1) - i128::from(x0));
+        }
+        i64::try_from(area).unwrap_or(i64::MAX)
+    }
+
     const fn from_bounds(bounds: Bounds) -> Self {
         Self {
             min: bounds.min,
@@ -852,5 +939,60 @@ mod tests {
     fn cells_round_down() {
         assert_eq!(cell_of_metres([-0.1, 0.0, 0.49]), [-1, 0, 0]);
         assert_eq!(cell_of_fixed([-1, 0, (1 << 31) - 1]), [-1, 0, 0]);
+    }
+
+    #[test]
+    fn an_empty_box_has_no_footprint_to_touch_or_cover() {
+        let flat = CellBox::new([0, 0, 0], [4, 0, 4]);
+        let wide = CellBox::new([0, 0, 0], [4, 1, 4]);
+        assert!(!flat.footprint_touches(&wide));
+        assert_eq!(CellBox::union_footprint_area(&[flat]), 0);
+        assert_eq!(flat.grown(2).footprint_area(), 0, "growing keeps it empty");
+    }
+
+    #[test]
+    fn the_union_area_of_boxes_too_wide_to_count_stops_at_the_largest_area() {
+        let wide = CellBox::new([-(1 << 40), 0, -(1 << 40)], [1 << 40, 1, 1 << 40]);
+        assert_eq!(CellBox::union_footprint_area(&[wide]), i64::MAX);
+    }
+
+    /// A box near the origin, so that boxes often overlap; a zero size on
+    /// an axis gives an empty box.
+    fn small_box() -> impl proptest::strategy::Strategy<Value = CellBox> {
+        use proptest::prelude::*;
+        ([-6i64..6, -2..2, -6..6], [0i64..6, 0..3, 0..6]).prop_map(|(min, size)| {
+            CellBox::new(min, [min[0] + size[0], min[1] + size[1], min[2] + size[2]])
+        })
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn the_union_area_counts_every_covered_column_once(
+            boxes in proptest::collection::vec(small_box(), 0..6),
+        ) {
+            let covered = (-6..12)
+                .flat_map(|x| (-6..12).map(move |z| (x, z)))
+                .filter(|&(x, z)| {
+                    boxes.iter().any(|b| {
+                        !b.is_empty() && b.min[0] <= x && x < b.max[0] && b.min[2] <= z && z < b.max[2]
+                    })
+                })
+                .count();
+            proptest::prop_assert_eq!(
+                CellBox::union_footprint_area(&boxes),
+                i64::try_from(covered).unwrap_or(i64::MAX)
+            );
+        }
+
+        #[test]
+        fn footprints_touch_where_a_one_cell_growth_makes_them_overlap(
+            a in small_box(),
+            b in small_box(),
+        ) {
+            let overlap = !a.is_empty() && !b.is_empty() && [0, 2].iter().all(|&axis| {
+                a.grown(1).min[axis] < b.max[axis] && b.min[axis] < a.grown(1).max[axis]
+            });
+            proptest::prop_assert_eq!(a.footprint_touches(&b), overlap);
+        }
     }
 }
