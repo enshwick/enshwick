@@ -41,6 +41,12 @@ fn path(loader: &Loader) -> Option<PathBuf> {
         .map(|key| crate::base::world_folders::loader_data(key, FILE))
 }
 
+/// The text of the mutes' file, a change still waiting for a held file
+/// included.
+fn read(path: &std::path::Path) -> std::io::Result<String> {
+    crate::base::frame_writes::waiting(path).map_or_else(|| std::fs::read_to_string(path), Ok)
+}
+
 fn keep(keys: Vec<u64>) {
     STATE.any.store(!keys.is_empty(), Ordering::Release);
     STATE.told.relock().retain(|key, _| keys.contains(key));
@@ -81,7 +87,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
         keep(Vec::new());
         return;
     };
-    let text = match std::fs::read_to_string(&path) {
+    let text = match read(&path) {
         Ok(text) => text,
         Err(e) => {
             if e.kind() != ErrorKind::NotFound {
@@ -130,7 +136,7 @@ pub(crate) fn set(loader: &Loader, key: u64, muted: bool, who: &str) -> Result<(
     }
     let _one = STATE.writing.relock();
     let path = path(loader).ok_or(SetMuteError::NoWorld)?;
-    let text = match std::fs::read_to_string(&path) {
+    let text = match read(&path) {
         Ok(text) => text,
         Err(e) if e.kind() == ErrorKind::NotFound => String::new(),
         Err(e) => return Err(e.into()),
@@ -140,7 +146,7 @@ pub(crate) fn set(loader: &Loader, key: u64, muted: bool, who: &str) -> Result<(
         keep(parse(&text).0);
         return Ok(());
     };
-    enshwick_core::files::write_atomically(&path, &text)?;
+    crate::base::frame_writes::write(&path, &text, crate::base::frame_writes::whole)?;
     keep(parse(&text).0);
     crate::log!(
         INFO,
