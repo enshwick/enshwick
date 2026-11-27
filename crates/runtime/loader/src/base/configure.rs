@@ -140,15 +140,7 @@ pub fn get(id: &str, schema: &Schema, text: &str, key: &str) -> Result<String, F
     Ok(lines.join("\n"))
 }
 
-/// The setting a key names and the element of a list it names, if any:
-/// `per_level[2]` is element 2 of `per_level`.
-#[must_use]
-pub fn element(key: &str) -> (&str, Option<usize>) {
-    key.strip_suffix(']')
-        .and_then(|rest| rest.rsplit_once('['))
-        .and_then(|(base, index)| Some((base, Some(index.parse().ok()?))))
-        .unwrap_or((key, None))
-}
+pub use enshwick_core::config::__element as element;
 
 fn field<'a>(id: &str, schema: &'a Schema, key: &str) -> Result<&'a Field, FindSettingError> {
     schema

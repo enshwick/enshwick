@@ -542,9 +542,10 @@ impl Input {
     /// # Errors
     ///
     /// [`WorldError::Refused`] while one of its kind waits or the mod holds
-    /// four presses, a bad argument
-    /// for a wrong screen, tab or bound, [`WorldError::Unavailable`] on a
-    /// server and on a build without what it needs.
+    /// four presses; [`WorldError::BadArgument`] for a value past its bound
+    /// or a name the build does not know, such as an equipment slot,
+    /// screen, tab or game action; [`WorldError::Unavailable`] on a server
+    /// and on a build without what it needs.
     ///
     /// # Examples
     ///

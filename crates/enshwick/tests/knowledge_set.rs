@@ -123,17 +123,26 @@ mod tests {
     fn a_set_of_an_unknown_id_a_bool_above_one_or_a_player_s_id_on_the_world_is_refused() {
         let (loader, knowledge) = started();
         let refused = [
-            knowledge.set(
-                Entity::from_engine(2),
-                KnowledgeId::new(0x99),
-                1,
-                KnowledgeNotice::Quiet,
+            (
+                knowledge.set(
+                    Entity::from_engine(2),
+                    KnowledgeId::new(0x99),
+                    1,
+                    KnowledgeNotice::Quiet,
+                ),
+                WorldError::BadArgument,
             ),
-            knowledge.set_world(PLACE, 2, KnowledgeNotice::Quiet),
-            knowledge.set_world(RECIPE, 1, KnowledgeNotice::Quiet),
+            (
+                knowledge.set_world(PLACE, 2, KnowledgeNotice::Quiet),
+                WorldError::BadArgument,
+            ),
+            (
+                knowledge.set_world(RECIPE, 1, KnowledgeNotice::Quiet),
+                WorldError::Refused,
+            ),
         ];
-        for (call, answer) in refused.into_iter().enumerate() {
-            assert_eq!(answer, Err(WorldError::Refused), "call {call}");
+        for (call, (answer, error)) in refused.into_iter().enumerate() {
+            assert_eq!(answer, Err(error), "call {call}");
         }
         assert!(loader.knowledge_sets().is_empty());
     }
@@ -148,7 +157,7 @@ mod tests {
                 0b011,
                 KnowledgeNotice::Shown
             ),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgument)
         );
         knowledge
             .set(

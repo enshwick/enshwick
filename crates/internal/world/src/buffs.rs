@@ -322,9 +322,9 @@ impl Buffs {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] for a type the game does not know, or one
-    /// removed from the entity in this step (the game frees its place in
-    /// the next); [`WorldError::Lacks`] for an entity that holds no buffs or
+    /// [`WorldError::BadArgument`] for a type the game does not know;
+    /// [`WorldError::Refused`] for one removed from the entity in this step
+    /// (the game frees its place in the next); [`WorldError::Lacks`] for an entity that holds no buffs or
     /// is not in the world; [`WorldError::WrongThread`] off the game thread;
     /// [`WorldError::Unavailable`] on a build without buffs.
     ///

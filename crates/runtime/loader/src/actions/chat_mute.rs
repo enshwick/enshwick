@@ -114,7 +114,7 @@ pub enum SetMuteError {
 #[cfg(windows)]
 mod runtime;
 #[cfg(windows)]
-pub(crate) use runtime::{drops, has, serving, set, world_event};
+pub(crate) use runtime::{drops, given_up, has, serving, set, world_event};
 
 #[cfg(test)]
 mod tests {

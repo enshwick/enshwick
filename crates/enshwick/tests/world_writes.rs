@@ -389,11 +389,11 @@ mod tests {
         let entity = dropped.unwrap();
         assert_eq!(
             effects.drop_items(ItemId(0x2a), 0, [0.0; 3], ItemDrop::new()),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgument)
         );
         assert_eq!(
             effects.drop_items(ItemId(0x2a), 65_536, [0.0; 3], ItemDrop::new()),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgument)
         );
         for far in [
             [f64::NAN, 0.0, 0.0],
@@ -402,7 +402,7 @@ mod tests {
         ] {
             assert_eq!(
                 effects.drop_items(ItemId(0x2a), 5, far, ItemDrop::new()),
-                Err(WorldError::Refused),
+                Err(WorldError::BadArgument),
                 "a position past the fixed point: {far:?}"
             );
         }

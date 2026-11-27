@@ -77,6 +77,40 @@ pub(super) fn equipment_words(
     words
 }
 
+/// The equipment copy after a step in which `SlotSelection` named `named`,
+/// when the slot named for an equipment slot moved since `before`: it keeps
+/// the slot named before as the equipment slot's home and `item_at` the slot
+/// named now, the item that moved there. `None` when none moved, so the
+/// step writes nothing. The time stays the last slot read's, 0 before one,
+/// so [`equip_move`] still takes it only beside that read.
+///
+/// Every step runs it, outside the ask: an item the player moves out while
+/// no mod reads the slots still finds its way back.
+pub(super) fn moved_words(
+    before: Option<&[u64; EQUIPMENT_WORDS]>,
+    named: &[u64; EQUIPMENT_SLOTS],
+    item_at: impl Fn(u64) -> u64,
+) -> Option<[u64; EQUIPMENT_WORDS]> {
+    let same = |words: &[u64; EQUIPMENT_WORDS]| {
+        named
+            .iter()
+            .enumerate()
+            .all(|(entry, &slot)| words[1 + 3 * entry] == slot)
+    };
+    if before.is_some_and(same) {
+        return None;
+    }
+    let mut words = before.copied().unwrap_or([0; EQUIPMENT_WORDS]);
+    for (entry, &now) in named.iter().enumerate() {
+        let was = core::mem::replace(&mut words[1 + 3 * entry], now);
+        if was != now && was != 0 && now != 0 {
+            words[2 + 3 * entry] = was;
+            words[3 + 3 * entry] = item_at(now);
+        }
+    }
+    Some(words)
+}
+
 /// How an equip runs, as [`equip_move`] decides it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum EquipMove {
@@ -97,11 +131,8 @@ pub(crate) enum EquipMove {
 /// research probe, 2026-11-27); after a move out of the equipment
 /// inventories that is the item's own slot, so the request moves nothing.
 /// Such an equip is a move back into the equipment slot it last named, while
-/// that is empty and the item is the one that lay there.
-///
-/// shortcut: the last named slot is kept only while a mod reads the slots,
-/// so an item the player moved out unwatched still times out; read the
-/// equipment every step if that matters.
+/// that is empty and the item is the one that lay there. Each step keeps
+/// that slot ([`moved_words`]), the slot reads or not.
 pub(crate) fn equip_move(now: u64, entry: u8, slot: u64) -> EquipMove {
     STATE.slots_asked.store(now, Ordering::Relaxed);
     let Some(slots) = STATE
@@ -215,6 +246,56 @@ mod tests {
             home(&equipment_words(None, &named, &slots, 2), &slots, 18, bag),
             None,
             "no equipment slot named before the move"
+        );
+    }
+
+    #[test]
+    fn an_equip_after_a_move_out_no_slot_read_saw_goes_back_to_its_equipment_slot() {
+        use InventoryCategory as C;
+        let (glider, bag, ring) = (1 | 1 << 32, 6858, 2 | 3 << 32);
+        let glider_item = 0x534b_a901;
+        let mut named = [0; EQUIPMENT_SLOTS];
+        named[18] = glider;
+        named[3] = ring;
+        let worn = packed(&[(glider, C::EQUIPMENT, glider_item), (bag, C::GENERIC, 0)]);
+        let read = equipment_words(None, &named, &worn, 1);
+        assert_eq!(
+            moved_words(Some(&read), &named, |_| unreachable!()),
+            None,
+            "a step with nothing moved writes nothing"
+        );
+        named[18] = bag;
+        let item_at = |slot| {
+            if slot == bag {
+                u64::from(glider_item)
+            } else {
+                0
+            }
+        };
+        let stepped = moved_words(Some(&read), &named, item_at).unwrap();
+        assert_eq!(stepped[0], 1, "the time stays the slot read's");
+        let slots = packed(&[
+            (glider, C::EQUIPMENT, 0),
+            (ring, C::EQUIPMENT, 0),
+            (bag, C::GENERIC, glider_item),
+        ]);
+        let after = equipment_words(Some(&stepped), &named, &slots, 2);
+        assert_eq!(
+            home(&after, &slots, 18, bag),
+            Some(glider),
+            "the glider goes back though no read saw it in the slot"
+        );
+        let first = moved_words(None, &named, item_at).unwrap();
+        assert_eq!(first[0], 0, "no slot read yet");
+        assert_eq!(
+            home(
+                &equipment_words(Some(&first), &named, &slots, 2),
+                &slots,
+                18,
+                bag
+            ),
+            None,
+            "the first step knows no slot named before"
         );
     }
 }

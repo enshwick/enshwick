@@ -15,8 +15,8 @@
 use core::cell::RefCell;
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::Instant;
 
 use arc_swap::ArcSwapOption;
 use enshwick_core::Entity;
@@ -27,6 +27,7 @@ use enshwick_gamedata::catalogue;
 use crate::actions::bindings;
 use crate::actions::linked_controls::{Follow, Players};
 use crate::base::remote::{Carried, Heard, MAX_CARRIED};
+use crate::engine::clock::now_ms;
 use crate::engine::fuse::{Fuse, Off};
 use crate::engine::loader::Loader;
 use crate::engine::mod_index::ModIndex;
@@ -76,12 +77,12 @@ struct State {
     gate: OnceLock<Gate>,
     /// The controls that follow game actions, once reflection names them.
     linked: OnceLock<Linked>,
-    /// The clock both sides' trackers count milliseconds on.
-    start: OnceLock<Instant>,
     /// The file's entries for controls no running mod declares, as written,
     /// which a write keeps; `None` while the file does not read, so nothing
     /// writes over it.
     kept: Mutex<Option<toml::Table>>,
+    /// The player's key file, `mod-controls.toml`, once the client linked.
+    file: OnceLock<PathBuf>,
     /// The server's players' trackers and the firings that wait for the
     /// step's end.
     players: Mutex<Players>,
@@ -101,8 +102,8 @@ impl State {
             keys: ArcSwapOption::const_empty(),
             gate: OnceLock::new(),
             linked: OnceLock::new(),
-            start: OnceLock::new(),
             kept: Mutex::new(None),
+            file: OnceLock::new(),
             players: Mutex::new(Players::new()),
             firing: AtomicBool::new(false),
             rights: Mutex::new(None),
@@ -171,11 +172,6 @@ struct Gate {
 struct Linked {
     digital: usize,
     follows: Vec<Follow>,
-}
-
-fn now_ms() -> u64 {
-    let start = STATE.start.get_or_init(Instant::now);
-    u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
 /// Why a mod's control was not declared.
@@ -275,20 +271,7 @@ pub(crate) fn link(loader: &Loader) {
         return;
     }
     let path = game_dir(loader).join(bindings::FILE);
-    let read = match std::fs::read_to_string(&path) {
-        Ok(text) => Some(text),
-        Err(why) if why.kind() == std::io::ErrorKind::NotFound => Some(String::new()),
-        Err(why) => {
-            crate::log!(WARN, "{}: {why}; the mods' keys apply", bindings::FILE);
-            None
-        }
-    };
-    let text = read.clone().unwrap_or_default();
-    let (overrides, problems) = bindings::parse(&text);
-    let table = read.and_then(|text| text.parse::<toml::Table>().ok());
-    for problem in &problems {
-        crate::log!(WARN, "{}: {problem}; the mod's key applies", bindings::FILE);
-    }
+    let overrides = take_file(declared, &path);
     let unknown: Vec<&str> = overrides
         .keys()
         .filter(|id| !declared.iter().any(|d| d.id == **id))
@@ -302,26 +285,7 @@ pub(crate) fn link(loader: &Loader) {
             unknown.join(", ")
         );
     }
-    *STATE.kept.relock() = table.map(|table| {
-        table
-            .into_iter()
-            .filter(|(id, _)| !declared.iter().any(|d| d.id == *id))
-            .collect()
-    });
-    let keys: Vec<[u32; 2]> = declared
-        .iter()
-        .map(|d| {
-            in_force(
-                d.defaults,
-                overrides.get(&d.id).copied().unwrap_or_default(),
-            )
-        })
-        .collect();
-    STATE.keys.store(Some(Arc::new(Bound {
-        keys,
-        carried: Vec::new(),
-        carried_at: 0,
-    })));
+    let _first = STATE.file.set(path);
     match gate(loader) {
         Ok(found) => {
             let _first = STATE.gate.set(found);
@@ -359,7 +323,7 @@ fn in_force(defaults: [u32; 2], set: bindings::Override) -> [u32; 2] {
     [set[0].unwrap_or(defaults[0]), set[1].unwrap_or(defaults[1])]
 }
 
-fn game_dir(loader: &Loader) -> std::path::PathBuf {
+fn game_dir(loader: &Loader) -> PathBuf {
     loader
         .mods_dir
         .parent()
@@ -881,105 +845,15 @@ pub(crate) fn keys_off(reason: &str) {
     KEYS_FUSE.turn_off(&Off::fault(KEYS_FUSE.feature(), reason));
 }
 
-/// Sets control `index`'s key in `slot` to `bits` (0 unbinds) and writes
-/// the player's file, keeping its entries for controls no running mod
-/// declares, a server's carried ones among them.
-///
-/// # Errors
-///
-/// The reason the file could not be written, or that it did not read at
-/// start, so writing would lose it; the key holds for this run.
-pub(crate) fn set_key(
-    loader: &Loader,
-    index: usize,
-    slot: usize,
-    bits: u32,
-) -> Result<(), SetKeyError> {
-    let Some(declared) = DECLARED.sealed() else {
-        return Ok(());
-    };
-    let changed = |defaults: [u32; 2], k: [u32; 2]| {
-        let at = |slot: usize| (k[slot] != defaults[slot]).then_some(k[slot]);
-        [at(0), at(1)]
-    };
-    let mut entries: Vec<(String, bindings::Override)> = Vec::new();
-    let mut carried_set = None;
-    let mut bound_once = false;
-    // A server's message may change the carried list meanwhile, on the chat
-    // thread: this key goes on top of whatever list stands.
-    STATE.keys.rcu(|bound| {
-        let bound = bound.as_ref()?;
-        bound_once = true;
-        let carried = index
-            .checked_sub(declared.len())
-            .and_then(|at| bound.carried.get(at));
-        // A carried control this client declares too sets its own control's key.
-        let twin = carried.and_then(|heard| {
-            let id = heard.id();
-            declared.iter().position(|d| d.id == id)
-        });
-        let mut keys = bound.keys.clone();
-        for at in [Some(index), twin].into_iter().flatten() {
-            if let Some(slots) = keys.get_mut(at)
-                && let Some(key) = slots.get_mut(slot)
-            {
-                *key = bits;
-            }
-        }
-        entries = declared
-            .iter()
-            .zip(&keys)
-            .map(|(d, k)| (d.id.clone(), changed(d.defaults, *k)))
-            .collect();
-        carried_set = carried
-            .filter(|_| twin.is_none())
-            .zip(keys.get(index).copied())
-            .map(|(heard, k)| (heard.id(), changed(heard.control.keys, k)));
-        Some(Arc::new(Bound {
-            keys,
-            carried: bound.carried.clone(),
-            carried_at: bound.carried_at,
-        }))
-    });
-    if !bound_once {
-        return Ok(());
-    }
-    let kept = {
-        let mut kept = STATE.kept.relock();
-        let Some(kept) = kept.as_mut() else {
-            return Err(SetKeyError::Unread);
-        };
-        if let Some((id, set)) = &carried_set {
-            bindings::set_kept(kept, id, *set);
-        }
-        kept.clone()
-    };
-    let path = game_dir(loader).join(bindings::FILE);
-    crate::base::frame_writes::write(
-        &path,
-        &bindings::render(&entries, &kept),
-        crate::base::frame_writes::whole,
-    )?;
-    Ok(())
-}
-
-/// Why a key was not saved.
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum SetKeyError {
-    /// The file did not read when the game started; writing would lose it.
-    #[error("{} did not read when the game started", bindings::FILE)]
-    Unread,
-    /// Windows refused the write.
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-}
-
 mod input;
+mod key_file;
 mod rights;
 
 pub(crate) use rights::{hello, left, resend_on_rights, rules_changed};
 
 pub(crate) use input::{capture_keys, focused, key_name};
+use key_file::take_file;
+pub(crate) use key_file::{SetKeyError, given_up, set_key};
 
 #[cfg(test)]
 mod tests;

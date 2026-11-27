@@ -210,7 +210,7 @@ impl World {
     ///
     /// # Errors
     ///
-    /// As [`World::set`], and [`WorldError::Refused`] for a value the field's
+    /// As [`World::set`], and [`WorldError::BadArgument`] for a value the field's
     /// kind does not hold.
     #[script(name = "set")]
     pub(crate) fn set_script(
@@ -221,7 +221,7 @@ impl World {
     ) -> Result<(), WorldError> {
         macro_rules! write {
             ($t:ty, $value:expr) => {{
-                let value: $t = $value.ok_or(WorldError::Refused)?;
+                let value: $t = $value.ok_or(WorldError::BadArgument)?;
                 self.set(
                     entity,
                     field.typed::<$t>().ok_or(WorldError::Unavailable)?,
@@ -266,7 +266,7 @@ impl World {
     ///
     /// # Errors
     ///
-    /// As [`World::update`], and [`WorldError::Refused`] for bytes of
+    /// As [`World::update`], and [`WorldError::BadArgument`] for bytes of
     /// another length.
     #[script(name = "update")]
     pub(crate) fn update_script(
@@ -286,7 +286,7 @@ impl World {
         if fits {
             Ok(())
         } else {
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgument)
         }
     }
 }

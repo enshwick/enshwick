@@ -1,3 +1,4 @@
+use enshwick_values::fnv::{BASIS32, fnv1a32_from};
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -266,20 +267,12 @@ impl PackFiles {
     /// See [`PackFiles`].
     #[must_use]
     pub fn hash(&self) -> u32 {
-        let mut hash: u32 = 0x811c_9dc5;
-        let mut eat = |bytes: &[u8]| {
-            for &b in bytes {
-                hash ^= u32::from(b);
-                hash = hash.wrapping_mul(0x0100_0193);
-            }
-        };
-        for (name, bytes) in &self.files {
-            eat(name.as_bytes());
-            eat(&[0]);
-            eat(&u64::try_from(bytes.len()).unwrap_or(u64::MAX).to_le_bytes());
-            eat(bytes);
-        }
-        hash
+        self.files.iter().fold(BASIS32, |hash, (name, bytes)| {
+            let len = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+            [name.as_bytes(), &[0], &len.to_le_bytes(), bytes]
+                .into_iter()
+                .fold(hash, fnv1a32_from)
+        })
     }
 
     pub(super) fn text(&self, name: &str) -> Result<Option<&str>, PackError> {

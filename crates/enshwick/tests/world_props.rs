@@ -117,7 +117,7 @@ mod tests {
         let (loader, world) = started();
         assert_eq!(
             world.transaction().place_prop(PEBBLE, here()).commit(),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgument)
         );
         assert!(loader.transactions().is_empty());
     }
@@ -137,7 +137,7 @@ mod tests {
                     .transaction()
                     .place_prop(CHEST, WorldTransform::at(far))
                     .commit(),
-                Err(WorldError::Refused),
+                Err(WorldError::BadArgument),
                 "{far:?}"
             );
         }
@@ -541,7 +541,7 @@ mod tests {
         ] {
             assert_eq!(
                 world.persists(far, [1.0; 3]),
-                Err(WorldError::Refused),
+                Err(WorldError::BadArgument),
                 "{far:?}"
             );
         }

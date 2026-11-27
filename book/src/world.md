@@ -260,6 +260,7 @@ fail with a `WorldError`:
 | `Gone` | the entity is not in the world |
 | `Lacks` | the entity lacks the component |
 | `Refused` | the loader will not write the type |
+| `BadArgument` | a value is malformed, past its bounds or unknown to the game build |
 | `WrongThread` | the write runs off the game thread or inside a step |
 | `Missing` | no server runs, as on a client in another player's game, or the build has no writes |
 

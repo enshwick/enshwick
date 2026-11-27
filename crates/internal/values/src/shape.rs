@@ -14,6 +14,8 @@ use core::marker::PhantomData;
 use core::num::{NonZeroU8, NonZeroU16, NonZeroU32, NonZeroU64};
 use core::ptr::NonNull;
 
+use crate::fnv::{BASIS64, fnv1a64};
+
 /// A type with a structural hash, so a field of it can be checked between
 /// mods.
 ///
@@ -74,8 +76,6 @@ pub unsafe trait Shape {
 pub struct ShapeHasher(u64);
 
 impl ShapeHasher {
-    const PRIME: u64 = 0x0000_0100_0000_01b3;
-
     /// A hash that starts with `kind`, such as `struct` or `enum`.
     ///
     /// # Examples
@@ -83,7 +83,7 @@ impl ShapeHasher {
     /// See [`ShapeHasher`].
     #[must_use]
     pub const fn new(kind: &str) -> Self {
-        Self(0xcbf2_9ce4_8422_2325).text(kind)
+        Self(BASIS64).text(kind)
     }
 
     /// Adds `text` and its length, so `ab`, `c` and `a`, `bc` differ.
@@ -93,15 +93,7 @@ impl ShapeHasher {
     /// See [`ShapeHasher`].
     #[must_use]
     pub const fn text(self, text: &str) -> Self {
-        let mut hash = self.number(text.len() as u64).0;
-        let bytes = text.as_bytes();
-        let mut i = 0;
-        while i < bytes.len() {
-            hash ^= bytes[i] as u64;
-            hash = hash.wrapping_mul(Self::PRIME);
-            i += 1;
-        }
-        Self(hash)
+        Self(fnv1a64(self.number(text.len() as u64).0, text.as_bytes()))
     }
 
     /// Adds `number`, such as an offset, a discriminant or another shape.
@@ -111,15 +103,7 @@ impl ShapeHasher {
     /// See [`ShapeHasher`].
     #[must_use]
     pub const fn number(self, number: u64) -> Self {
-        let mut hash = self.0;
-        let bytes = number.to_le_bytes();
-        let mut i = 0;
-        while i < bytes.len() {
-            hash ^= bytes[i] as u64;
-            hash = hash.wrapping_mul(Self::PRIME);
-            i += 1;
-        }
-        Self(hash)
+        Self(fnv1a64(self.0, &number.to_le_bytes()))
     }
 
     /// Adds the size and alignment of `T`.
@@ -315,7 +299,13 @@ function!(A B C D E F G H);
 
 #[cfg(test)]
 mod tests {
-    use super::Shape;
+    use super::{Shape, ShapeHasher};
+
+    #[test]
+    fn a_shape_hash_keeps_its_value_for_the_same_parts() {
+        let hash = ShapeHasher::new("enum").text("Coin").number(1).finish();
+        assert_eq!(hash, 0x09cb_f9fe_6653_17e4);
+    }
 
     #[test]
     fn each_primitive_has_its_own_shape() {

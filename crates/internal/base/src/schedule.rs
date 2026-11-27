@@ -133,7 +133,7 @@ pub(crate) fn fake_clock() -> bool {
 
 /// Whether the scheduler counts time by a fake host's steps: never in a
 /// build without the fake.
-#[cfg(all(not(feature = "fake"), any(test, feature = "test")))]
+#[cfg(all(not(feature = "fake"), test))]
 pub(crate) const fn fake_clock() -> bool {
     false
 }

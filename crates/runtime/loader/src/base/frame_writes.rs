@@ -53,6 +53,8 @@ struct Queue {
     writing: bool,
     /// The files given up on, the newest last, at most [`MOST_LOST`].
     lost: Vec<Lost>,
+    /// The files given up on whose readers have not read them again yet.
+    unread: Vec<PathBuf>,
 }
 
 /// The queue, and whether anything waits or was given up on, so readers
@@ -66,7 +68,15 @@ struct State {
     /// The given-up files as last changed, for the Mods screen, which reads
     /// them each frame and must not wait for a write that holds the queue.
     shown: ArcSwapOption<Vec<PathBuf>>,
+    /// The owners that keep a file's content in memory, which read it again
+    /// once a write of it is given up on.
+    readers: Mutex<Vec<Reread>>,
 }
+
+/// Reads a file again after the writer gave up on the text kept for it, so
+/// an owner that keeps the file's content in memory goes back to what the
+/// file holds; it ignores a file that is not its own.
+pub(crate) type Reread = fn(&Path);
 
 /// How many given-up files the loader remembers to show; a file given up
 /// on again moves to the end instead of taking a second place.
@@ -159,6 +169,13 @@ pub(crate) fn unraised() -> Vec<PathBuf> {
     STATE.lost(|lost| &mut lost.raised)
 }
 
+/// Names `reread`, for an owner above base when it seals. It runs on the
+/// writer's thread with each file given up on, outside the queue's lock, so
+/// it takes no game lock.
+pub(crate) fn on_give_up(reread: Reread) {
+    STATE.readers.relock().push(reread);
+}
+
 /// After a server step on its game thread: tells each administrator online
 /// of every file given up on since, by name; with none online the files
 /// wait for the first step one is.
@@ -214,7 +231,9 @@ fn write_waiting() {
         // watch's, short; the pauses between them do the waiting.
         let written = std::panic::catch_unwind(|| briefly(|| write(&path, &text)))
             .unwrap_or_else(|_| Err(io::Error::other("the write panicked")));
-        if STATE.settle(&path, turn, written) {
+        let go_on = STATE.settle(&path, turn, written);
+        STATE.reread();
+        if go_on {
             pause = FIRST_PAUSE;
         } else {
             std::thread::sleep(pause);
@@ -250,11 +269,34 @@ impl State {
                 turns: 0,
                 writing: false,
                 lost: Vec::new(),
+                unread: Vec::new(),
             }),
             any: AtomicBool::new(false),
             any_lost: AtomicBool::new(false),
             untold: AtomicBool::new(false),
             shown: ArcSwapOption::const_empty(),
+            readers: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Runs every named reader with each file given up on since, outside
+    /// the queue's lock; a reader that panics leaves the others to run.
+    fn reread(&self) {
+        let paths = std::mem::take(&mut self.queue.relock().unread);
+        if paths.is_empty() {
+            return;
+        }
+        let readers = self.readers.relock().clone();
+        for path in &paths {
+            for reread in &readers {
+                if std::panic::catch_unwind(|| reread(path)).is_err() {
+                    crate::log!(
+                        WARN,
+                        "{} was not read again after its change was given up",
+                        path.display()
+                    );
+                }
+            }
         }
     }
 
@@ -315,6 +357,7 @@ impl State {
         if queue.lost.len() == MOST_LOST {
             queue.lost.remove(0);
         }
+        queue.unread.push(path.clone());
         queue.lost.push(Lost {
             path,
             raised: false,
@@ -657,6 +700,26 @@ mod tests {
         );
         assert!(!state.untold.load(Ordering::Acquire));
         assert!(told(&state, &[3]).is_empty(), "once");
+    }
+
+    #[test]
+    fn each_named_reader_reads_a_given_up_file_again_once() {
+        static READ: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+        fn record(path: &Path) {
+            READ.relock().push(path.to_owned());
+        }
+        fn panics(_: &Path) {
+            panic!("a reader's fault");
+        }
+        let state = State::new();
+        state.readers.relock().extend([panics as Reread, record]);
+        state.reread();
+        assert!(READ.relock().is_empty(), "nothing given up yet");
+        let path = PathBuf::from("mutes.toml");
+        state.give_up(&mut state.queue.relock(), path.clone());
+        state.reread();
+        state.reread();
+        assert_eq!(*READ.relock(), [path], "once, past a reader that panics");
     }
 
     #[test]

@@ -606,7 +606,7 @@ fails with `OutsideWorld`. The game itself reads such voxels as air, which
 a mod could not tell from real air. The edge is the game's own, read from
 the running world. The height is the loader's, above every place the game
 builds, since the game keeps none. An empty box,
-one larger than `READ_MAX` or one past 2³⁰ voxels on an axis is `Refused`.
+one larger than `READ_MAX` or one past 2³⁰ voxels on an axis is `BadArgument`.
 A read costs one lock and one copy for each 4-metre brick it touches.
 Reads, like edits, need a quiet moment: inside a step, from a filter or a
 hook, they fail with `WrongThread`.

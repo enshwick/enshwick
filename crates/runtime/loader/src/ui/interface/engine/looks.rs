@@ -289,13 +289,13 @@ mod tests {
         assert_eq!(look_index(&untyped, "b"), None, "looks of no known type");
     }
 
-    /// On the client `ENSH_CLIENT_EXE` names (skipped without it), the small
-    /// button's look reads from the reflection as kind 4.
+    /// On the client `ENSH_CLIENT_EXE` names, the small button's look reads
+    /// from the reflection as kind 4.
     #[test]
+    #[ignore = "needs ENSH_CLIENT_EXE"]
     fn the_client_s_small_button_look_reads_from_its_reflection() {
-        let Ok(path) = std::env::var("ENSH_CLIENT_EXE") else {
-            return;
-        };
+        let path =
+            std::env::var("ENSH_CLIENT_EXE").expect("ENSH_CLIENT_EXE names the game executable");
         let bytes = std::fs::read(path).unwrap();
         let image = enshwick_gamedata::reflect::Image::parse(
             &bytes,

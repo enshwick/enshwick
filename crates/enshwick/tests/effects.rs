@@ -165,7 +165,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             effects.spawn(enshwick::content::Guid([0; 16]), [0.0; 3], Spawn::new()),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgument)
         );
         let spawns = loader.spawns();
         assert_eq!(spawns.len(), 1);
@@ -209,22 +209,22 @@ mod tests {
         for far in PAST_THE_FIXED_POINT {
             assert_eq!(
                 effects.spawn(template, far, Spawn::new()),
-                Err(WorldError::Refused),
+                Err(WorldError::BadArgument),
                 "spawn {far:?}"
             );
             assert_eq!(
                 effects.teleport(Entity::from_engine(5), far, Teleport::new()),
-                Err(WorldError::Refused),
+                Err(WorldError::BadArgument),
                 "teleport {far:?}"
             );
             assert_eq!(
                 effects.npc_command(42, NpcCommandType::GoToPosition(far)),
-                Err(WorldError::Refused),
+                Err(WorldError::BadArgument),
                 "order {far:?}"
             );
             assert_eq!(
                 effects.ping(Entity::from_engine(6), far),
-                Err(WorldError::Refused),
+                Err(WorldError::BadArgument),
                 "ping {far:?}"
             );
         }
@@ -278,7 +278,7 @@ mod tests {
                 [f64::NAN, 0.0, 0.0],
                 Teleport::new()
             ),
-            Err(WorldError::Refused),
+            Err(WorldError::BadArgument),
             "a position the fixed point cannot hold stays a bad argument"
         );
         let corner = [10_240.0, 2_560.0, 10_240.0];

@@ -70,7 +70,7 @@ mod tests {
         );
         assert_eq!(
             world.account_action(AccountAction::Ban, enshwick::PlayerKey::new(0)),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgument)
         );
         assert_eq!(loader.banned(), [enshwick::PlayerKey::new(7)]);
         assert_eq!(loader.removed(), [7]);
@@ -144,8 +144,8 @@ mod tests {
 
         assert_eq!(world.set_muted(key(8), true), Err(WorldError::Refused));
         assert_eq!(world.set_muted(key(9), true), Err(WorldError::Refused));
-        assert_eq!(world.set_muted(key(0), true), Err(WorldError::Refused));
-        assert_eq!(world.muted(key(0)), Err(WorldError::Refused));
+        assert_eq!(world.set_muted(key(0), true), Err(WorldError::BadArgument));
+        assert_eq!(world.muted(key(0)), Err(WorldError::BadArgument));
 
         assert_eq!(world.set_muted(key(7), false), Ok(()));
         assert_eq!(world.set_muted(key(7), false), Ok(()));

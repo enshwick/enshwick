@@ -284,7 +284,7 @@ impl World {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] for a region of more than [`CAPTURE_TILES`]
+    /// [`WorldError::BadArgument`] for a region of more than [`CAPTURE_TILES`]
     /// tiles;
     /// [`WorldError::NotLoaded`] while part of the region is not loaded,
     /// [`WorldError::OutsideWorld`] for one past the world's edge, and the
@@ -304,7 +304,7 @@ impl World {
             .try_fold(1u32, |count, &axis| count.checked_mul(axis.div_ceil(TILE)))
             .filter(|&tiles| tiles <= CAPTURE_TILES);
         if tiles.is_none() || abi::Voxel::read_count(low, [1; 3]).is_none() {
-            return Err(WorldError::Refused);
+            return Err(WorldError::BadArgument);
         }
         let origin = VoxelPos::from(low);
         let voxels = self.capture_voxels(origin, size)?;
@@ -336,7 +336,7 @@ impl World {
     fn capture_voxels(self, origin: VoxelPos, size: [u32; 3]) -> Result<VoxelBox, WorldError> {
         let count: usize = size.iter().map(|&axis| axis as usize).product();
         let mut whole = VoxelBox::from_parts(origin, size, vec![Voxel::default(); count])
-            .ok_or(WorldError::Refused)?;
+            .ok_or(WorldError::BadArgument)?;
         let reader = Voxels::new(self.0.host);
         let mut not_loaded = false;
         for tile in tiles(size) {

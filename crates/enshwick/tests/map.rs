@@ -152,7 +152,7 @@ mod tests {
         assert_eq!(places, [[10.0, 5.0, 10.0], [20.0, 0.0, 0.0]]);
         assert_eq!(
             map.markers_in([f64::NAN, 0.0, 0.0], [1.0; 3]),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgument)
         );
     }
 
@@ -366,7 +366,7 @@ mod tests {
             ([0.0; 3], 0.0),
             ([0.0; 3], 200_000.0),
         ] {
-            assert_eq!(map.uncover(with, at, radius), Err(WorldError::Refused));
+            assert_eq!(map.uncover(with, at, radius), Err(WorldError::BadArgument));
         }
         assert_eq!(map.uncover_all(with), Ok(()));
 

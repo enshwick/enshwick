@@ -193,8 +193,8 @@ mod tests {
         let key = UI_BUNDLE.key_by_hash(hash(types::FB_UI_BUNDLE));
         let built = loader.build_resource(&key, &bundle()).unwrap();
         let bench = WorkshopId::new(BENCH.guid()).id();
-        let plank = derived_guid(PLANK_RECIPE, fnv1a(b"menu")).fnv1a();
-        let chest = derived_guid(CHEST_RECIPE, fnv1a(b"menu")).fnv1a();
+        let plank = derived_guid(PLANK_RECIPE, enshwick::resources::fnv1a32(b"menu")).fnv1a();
+        let chest = derived_guid(CHEST_RECIPE, enshwick::resources::fnv1a32(b"menu")).fnv1a();
         assert_eq!(
             menu(&built),
             [
@@ -267,12 +267,5 @@ mod tests {
                 ids::CLIENT_CRAFTING_INTERACTION
             ]
         );
-    }
-
-    /// FNV-1a, the salt `derive_recipes` makes of the mod id.
-    fn fnv1a(bytes: &[u8]) -> u32 {
-        bytes.iter().fold(0x811c_9dc5_u32, |hash, &b| {
-            (hash ^ u32::from(b)).wrapping_mul(0x0100_0193)
-        })
     }
 }

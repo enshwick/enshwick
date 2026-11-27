@@ -63,13 +63,16 @@ mod tests {
         let now = clock.now().unwrap();
         assert!((now.hours - 21.5).abs() < 1e-4, "taken modulo a day");
         assert!(!now.is_day);
-        assert_eq!(clock.set_hours(f32::NAN), Err(WorldError::Refused));
+        assert_eq!(clock.set_hours(f32::NAN), Err(WorldError::BadArgument));
 
         assert_eq!(loader.clock_speed(), Some(1.0));
         speed.set(2.0).unwrap();
         assert_eq!(loader.clock_speed(), Some(2.0));
-        assert_eq!(speed.set(-1.0), Err(WorldError::Refused));
-        assert_eq!(speed.set(ClockSpeed::MAX + 1.0), Err(WorldError::Refused));
+        assert_eq!(speed.set(-1.0), Err(WorldError::BadArgument));
+        assert_eq!(
+            speed.set(ClockSpeed::MAX + 1.0),
+            Err(WorldError::BadArgument)
+        );
 
         assert_eq!(loader.raise::<NightStarted>(&()), 1);
     }

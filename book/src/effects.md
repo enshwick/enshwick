@@ -183,7 +183,7 @@ template is a GUID as `World::template` gives it, so a mod can spawn copies of
 what it finds in the world. The new entity's id comes back at once. The
 entity is in the world after the next step. A template the game does not
 know spawns nothing. A position the engine's fixed point cannot hold is
-refused (`Refused`), as [Positions](ecs.md#positions) bounds it.
+refused (`BadArgument`), as [Positions](ecs.md#positions) bounds it.
 `Spawn::new()` takes the template as it is. Three
 methods change the spawn:
 

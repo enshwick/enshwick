@@ -68,7 +68,7 @@ included. They fail with a [`WorldError`](world.md#writing-components):
 - `WrongThread` off the game thread;
 - `Missing` while no world runs or when the scene does not read on the game
   build;
-- `Refused` for a corner that is not finite.
+- `BadArgument` for a corner that is not finite.
 
 A marker's type is a `MapMarkerTypeId`, the key of the game's marker type
 registry. The registry is game data and grows with the game, so the API
@@ -241,7 +241,7 @@ client, with no message.
 A client without Enshwick is not reached, and the call fails with
 `WorldError::Unavailable`. It fails so for a player who is not online too, and
 on a client in another's game. The mod decides what to tell whoever asked. A
-place that is not finite and a radius out of bounds fail with `Refused`.
+place that is not finite and a radius out of bounds fail with `BadArgument`.
 `uncover` returns once the circle is sent and works from any thread;
 `uncover_all` reads the frame, so it runs on the game thread.
 

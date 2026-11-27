@@ -133,25 +133,25 @@ mod tests {
         let unknown = KnowledgeId::new(0x99);
         assert_eq!(
             knowledge.revoke(Entity::from_engine(2), unknown, Revoke::Clear),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgument)
         );
         assert_eq!(
             knowledge.revoke(Entity::from_engine(2), RECIPE, Revoke::Clear),
-            Err(WorldError::Refused),
+            Err(WorldError::BadArgument),
             "a bool revoke of flags"
         );
         assert_eq!(
             knowledge.revoke_account(ACCOUNT, RECIPE, Revoke::Clear),
-            Err(WorldError::Refused),
+            Err(WorldError::BadArgument),
             "a bool revoke of flags"
         );
         assert_eq!(
             knowledge.revoke_account(ACCOUNT, unknown, Revoke::Clear),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgument)
         );
         assert_eq!(
             knowledge.grant_account(ACCOUNT, PLACE, Grant::Set),
-            Err(WorldError::Refused),
+            Err(WorldError::BadArgument),
             "an account grant of a world id"
         );
         assert!(loader.revokes().is_empty());
@@ -179,14 +179,29 @@ mod tests {
             &[],
         );
         let refused = [
-            knowledge.revoke(Entity::from_engine(2), RECIPE, Revoke::Unflag(32)),
-            knowledge.revoke_world(RECIPE, Revoke::Unflag(1)),
-            knowledge.grant(Entity::from_engine(2), RECIPE, Grant::Flag(32)),
-            knowledge.grant(Entity::from_engine(2), listed, Grant::Flag(1)),
-            knowledge.grant_world(listed, Grant::Flag(2)),
+            (
+                knowledge.revoke(Entity::from_engine(2), RECIPE, Revoke::Unflag(32)),
+                WorldError::BadArgument,
+            ),
+            (
+                knowledge.revoke_world(RECIPE, Revoke::Unflag(1)),
+                WorldError::Refused,
+            ),
+            (
+                knowledge.grant(Entity::from_engine(2), RECIPE, Grant::Flag(32)),
+                WorldError::BadArgument,
+            ),
+            (
+                knowledge.grant(Entity::from_engine(2), listed, Grant::Flag(1)),
+                WorldError::BadArgument,
+            ),
+            (
+                knowledge.grant_world(listed, Grant::Flag(2)),
+                WorldError::Refused,
+            ),
         ];
-        for (call, answer) in refused.into_iter().enumerate() {
-            assert_eq!(answer, Err(WorldError::Refused), "call {call}");
+        for (call, (answer, error)) in refused.into_iter().enumerate() {
+            assert_eq!(answer, Err(error), "call {call}");
         }
         knowledge
             .grant(Entity::from_engine(2), listed, Grant::Flag(2))
