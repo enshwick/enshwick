@@ -30,12 +30,15 @@ mod stage {
 /// No version seen yet, which no `u32` version equals.
 const UNSEEN: u64 = u64::MAX;
 
-/// The handed request: the handoff's word, its act's words, its mod, the
-/// version of its kind's request at the last step pass, and the watched
-/// change count when it was written.
+/// The handed request: the handoff's word, its act's words, the act it
+/// writes and the request that decided it, both written only in step
+/// passes, its mod, the version of its kind's request at the last step
+/// pass, and the watched change count when it was written.
 struct Request {
     handoff: Handoff,
     act: [AtomicU64; 3],
+    decided: [AtomicU64; 3],
+    decided_for: AtomicU64,
     owner: AtomicUsize,
     seen: AtomicU64,
     written_at: AtomicU64,
@@ -44,6 +47,8 @@ struct Request {
 static REQUEST: Request = Request {
     handoff: Handoff::new(),
     act: [const { AtomicU64::new(0) }; 3],
+    decided: [const { AtomicU64::new(0) }; 3],
+    decided_for: AtomicU64::new(0),
     owner: AtomicUsize::new(0),
     seen: AtomicU64::new(UNSEEN),
     written_at: AtomicU64::new(0),
@@ -125,6 +130,34 @@ fn players_quiet(version: u32) -> bool {
     REQUEST.seen.swap(u64::from(version), Ordering::Relaxed) == u64::from(version)
 }
 
+/// `act` as its request writes it, read at `now`: an equip
+/// [`player_state::equip_move`] turns into a move becomes it, any other
+/// equip loses its entry; `None` while that waits for a fresh read. The
+/// caller keeps the answer, so every later pass writes the same request.
+fn decided(act: Act, now: u64) -> Option<Act> {
+    let Act::Equip {
+        slot,
+        equipment,
+        entry: Some(entry),
+    } = act
+    else {
+        return Some(act);
+    };
+    Some(match player_state::equip_move(now, entry, slot) {
+        player_state::EquipMove::Unread => return None,
+        player_state::EquipMove::To(to) => Act::Move {
+            from: slot,
+            to,
+            count: 0,
+        },
+        player_state::EquipMove::Game => Act::Equip {
+            slot,
+            equipment,
+            entry: None,
+        },
+    })
+}
+
 /// Writes the handed request in a step pass.
 ///
 /// # Safety
@@ -153,6 +186,24 @@ pub(super) unsafe fn drive(layout: &ActLayout, input: *mut u8, mode: u32) {
         return;
     };
     let now = local_held::now_ms();
+    let act = if REQUEST.decided_for.load(Ordering::Acquire) == id {
+        Act::from_words(
+            REQUEST
+                .decided
+                .each_ref()
+                .map(|w| w.load(Ordering::Relaxed)),
+        )
+    } else {
+        decided(act, now).inspect(|act| {
+            for (word, value) in REQUEST.decided.iter().zip(act.words()) {
+                word.store(value, Ordering::Relaxed);
+            }
+            REQUEST.decided_for.store(id, Ordering::Release);
+        })
+    };
+    let Some(act) = act else {
+        return;
+    };
     // The effect counts against a read of the watched inventories of the
     // last second: until one exists, the request waits, its hand started
     // the reads.
@@ -208,6 +259,18 @@ mod tests {
             [500, player_state::PLAYER]
         );
         assert_eq!(watched(Act::Trash { slot: to }), [0x42, 0]);
+    }
+
+    #[test]
+    fn only_an_equip_with_an_entry_waits_for_its_decision() {
+        let equip = Act::Equip {
+            slot: 0x44,
+            equipment: 22,
+            entry: None,
+        };
+        let trash = Act::Trash { slot: 0x43 };
+        assert_eq!(decided(equip, 1).map(Act::words), Some(equip.words()));
+        assert_eq!(decided(trash, 1).map(Act::words), Some(trash.words()));
     }
 
     #[test]

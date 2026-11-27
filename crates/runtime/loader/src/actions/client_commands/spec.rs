@@ -134,6 +134,7 @@ pub(super) fn kind(loader: &Loader, spec: &Spec) -> Result<Kind, CommandError> {
             Kind::Act(Act::Equip {
                 slot: spec.slot,
                 equipment,
+                entry: held_entry(loader, target, equipment),
             })
         }),
         Spec::TRASH => Ok(Kind::Act(Act::Trash { slot: spec.slot })),
@@ -160,6 +161,43 @@ fn equipment_slot(loader: &Loader, name: &str) -> Result<u8, CommandError> {
         .ok()
         .and_then(|value| u8::try_from(value).ok())
         .ok_or(CommandError::BadArgs)
+}
+
+/// The members whose items the server keeps in generic inventories, so an
+/// equip of one never moves it into an equipment inventory (server 26430253
+/// `0x140936c30` and `0x1401b6760`, read in the decompiler, 2026-11-27).
+const GENERIC_MEMBERS: [&str; 4] = [
+    catalogue::ids::EQUIPMENT_SLOT_RANGED_WEAPON,
+    catalogue::ids::EQUIPMENT_SLOT_ARROW,
+    catalogue::ids::EQUIPMENT_SLOT_SPELL,
+    catalogue::ids::EQUIPMENT_SLOT_FISHING_BAIT,
+];
+
+/// The index of the slot `SlotSelection` keeps for the member `name`, whose
+/// value is `equipment`, in its `EquipmentSlotData`, an `InventorySlotId`
+/// a slot; `None` for a member with none, or one in [`GENERIC_MEMBERS`].
+fn held_entry(loader: &Loader, name: &str, equipment: u8) -> Option<u8> {
+    let generic = GENERIC_MEMBERS
+        .iter()
+        .any(|&id| catalogue::constant(id, &loader.reflection) == Some(u64::from(equipment)));
+    if generic {
+        return None;
+    }
+    let ty = catalogue::type_name(catalogue::ids::EQUIPMENT_SLOT_DATA);
+    let at = loader.reflection.field_offset(ty, &data_field(name)).ok()?;
+    let stride = crate::engine::catalogue::size(loader, catalogue::ids::INVENTORY_SLOT_ID)?;
+    u8::try_from(usize::try_from(at).ok()?.checked_div(stride)?).ok()
+}
+
+/// The `EquipmentSlotData` field of the `EquipmentSlot` member `name`: its
+/// name without underscores, the first letter lower (`Armour_LowerBody`,
+/// `armourLowerBody`), as the build reflects every one of them.
+fn data_field(name: &str) -> String {
+    let mut field: String = name.chars().filter(|&c| c != '_').collect();
+    if let Some(first) = field.get_mut(..1) {
+        first.make_ascii_lowercase();
+    }
+    field
 }
 
 /// The window command `spec` gives on window `window`, its ids read.
@@ -245,4 +283,25 @@ pub(super) fn expected_screen(kind: Kind, name: &str) -> Result<Option<u8>, Comm
         return Ok(None);
     }
     screen_byte(name).map(Some).ok_or(CommandError::BadArgs)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_equipment_slot_name_finds_its_slot_selection_field() {
+        for (name, field) in [
+            ("Vanity_Head", "vanityHead"),
+            ("Armour_LowerBody", "armourLowerBody"),
+            ("Ring0", "ring0"),
+            ("RangedWeapon", "rangedWeapon"),
+            ("HookShot", "hookShot"),
+            ("Glider", "glider"),
+            ("Backpack", "backpack"),
+        ] {
+            assert_eq!(data_field(name), field, "{name}");
+        }
+        assert_eq!(data_field(""), "");
+    }
 }

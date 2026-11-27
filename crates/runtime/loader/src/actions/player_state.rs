@@ -22,6 +22,13 @@ use crate::engine::ecs::Components;
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
 
+mod equipment;
+
+use equipment::{
+    EQUIPMENT_SLOTS, EQUIPMENT_WORDS, EquipmentLayout, equipment_layout, equipment_words,
+};
+pub(crate) use equipment::{EquipMove, equip_move};
+
 /// The feature's name in the log and on the Mods screen.
 pub(crate) const FEATURE: &str = "the local player's position, look, vitals and inventory";
 /// The slot read's name in the log and on the Mods screen.
@@ -125,7 +132,7 @@ impl Read {
 /// above the index, the item with its count, and the item's entity.
 fn pack_slot(slot: &ClientSlot) -> [u64; 3] {
     [
-        slot.slot & 0xff_ffff_ffff | u64::from(slot.category) << 40 | u64::from(slot.flags) << 48,
+        slot.slot & SLOT_ID | u64::from(slot.category) << 40 | u64::from(slot.flags) << 48,
         u64::from(slot.item) | u64::from(slot.count) << 32,
         u64::from(slot.pide.get()),
     ]
@@ -137,7 +144,7 @@ fn unpack_slot(words: [u64; 3]) -> ClientSlot {
     let byte = |shift: u32| u8::try_from(at >> shift & 0xff).unwrap_or(0);
     let low = |word: u64| u32::try_from(word & 0xffff_ffff).unwrap_or(0);
     enshwick_abi::headed!(ClientSlot {
-        slot: at & 0xff_ffff_ffff,
+        slot: at & SLOT_ID,
         item: low(stack),
         count: low(stack >> 32),
         pide: Entity::from_engine(low(pide)),
@@ -158,6 +165,9 @@ struct State {
     parts: Copied<8>,
     /// The last read of the inventory's slots.
     slots: Copied<SLOT_WORDS>,
+    /// What `SlotSelection` names for each equipment slot, as
+    /// [`EQUIPMENT_WORDS`] lays it out.
+    equipment: Copied<EQUIPMENT_WORDS>,
     /// When a mod last asked for the slots, as `now_ms` counts; 0 never.
     slots_asked: AtomicU64,
     /// The two inventories a command's outcome is watched in, low and high
@@ -177,6 +187,7 @@ struct State {
 static STATE: State = State {
     parts: Copied::new(),
     slots: Copied::new(),
+    equipment: Copied::new(),
     slots_asked: AtomicU64::new(0),
     watch: AtomicU64::new(0),
     watch_generation: AtomicU16::new(0),
@@ -261,6 +272,9 @@ struct SlotLayout {
     /// `SlotSelection`'s action bar entities, two `u32`; without them no
     /// slot is flagged as the action bar's.
     actionbar_entities: Option<usize>,
+    /// `SlotSelection`'s `EquipmentSlotData`; without it no equip moves an
+    /// item into an equipment inventory.
+    equipment: Option<EquipmentLayout>,
 }
 
 /// Where each part reads on this build: a component's type hash and its
@@ -315,6 +329,7 @@ impl Layout {
                 stack_count: at(catalogue::ids::ITEM_STACK_COUNT)?,
                 stack_pide: at(catalogue::ids::ITEM_STACK_PIDE)?,
                 actionbar_entities: at(catalogue::ids::SLOT_SELECTION_ACTIONBAR_ENTITIES).ok(),
+                equipment: equipment_layout(loader),
             })
         };
         let slots = slots()
@@ -424,17 +439,37 @@ pub(crate) unsafe fn read(
                 // two action bar entity ids sit at the reflected offset.
                 unsafe { enshwick_core::raw::read_at::<[u32; 2]>(data, entities) }
             });
-        read_slots(&component, slots, player, bar, at);
+        let named = slots.equipment.as_ref().and_then(|equipment| {
+            let data = component(player, equipment.selection)?;
+            let mut named = [0u64; EQUIPMENT_SLOTS];
+            for (i, slot) in named[..equipment.count].iter_mut().enumerate() {
+                // SAFETY: `data` is the player's live `SlotSelection`, whose
+                // `EquipmentSlotData` at the reflected `offset` holds `count`
+                // `InventorySlotId`s of the reflected `stride`, at least 8.
+                let id: u64 = unsafe {
+                    enshwick_core::raw::read_at(data, equipment.offset + equipment.stride * i)
+                };
+                *slot = id & SLOT_ID;
+            }
+            Some(named)
+        });
+        read_slots(&component, slots, player, bar, named.as_ref(), at);
     }
 }
 
+/// The bytes of an `InventorySlotId` that name it: the `u32` entity and the
+/// `u8` index after it.
+const SLOT_ID: u64 = 0xff_ffff_ffff;
+
 /// Reads and keeps the player `player`'s slots, those of the action bar's
-/// two inventories `bar` flagged, then its watched inventories, at `at`.
+/// two inventories `bar` flagged, with the slots `SlotSelection` named
+/// for its equipment slots, then its watched inventories, at `at`.
 fn read_slots(
     component: &dyn Fn(u32, u32) -> Option<*const u8>,
     slots: &SlotLayout,
     player: u32,
     bar: [u32; 2],
+    named: Option<&[u64; EQUIPMENT_SLOTS]>,
     at: u64,
 ) {
     let mut words = [0u64; SLOT_WORDS];
@@ -462,6 +497,13 @@ fn read_slots(
     }
     words[0] = u64::try_from(count).unwrap_or(0);
     words[1] = at;
+    if let Some(named) = named {
+        let read = &words[2..2 + 3 * count];
+        let before = STATE.equipment.load();
+        STATE
+            .equipment
+            .write(equipment_words(before.as_ref(), named, read, at));
+    }
     STATE.slots.write(words);
     read_watch(component, slots, player, at);
 }
@@ -481,6 +523,7 @@ const TEST_SLOTS: SlotLayout = SlotLayout {
     stack_count: 4,
     stack_pide: 8,
     actionbar_entities: None,
+    equipment: None,
 };
 
 /// Readies one step's slot read for its benchmark over a stand-in player:
@@ -519,7 +562,7 @@ pub fn bench_slot_read(watching: bool) -> impl FnMut() -> u64 {
             }
         };
         at += 16;
-        read_slots(&component, &TEST_SLOTS, 7, [0; 2], at);
+        read_slots(&component, &TEST_SLOTS, 7, [0; 2], None, at);
         STATE.watched_changes.load(Ordering::Relaxed)
     }
 }

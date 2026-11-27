@@ -1388,6 +1388,12 @@ pub const FACTS: &[(&str, Fact)] = &[
         ),
     ),
     (
+        ids::SLOT_SELECTION_EQUIPMENT,
+        offset(SLOT_SELECTION, "equipment", EQUIPMENT_SLOT_DATA),
+    ),
+    (ids::EQUIPMENT_SLOT_DATA, Fact::Type(EQUIPMENT_SLOT_DATA)),
+    (ids::INVENTORY_SLOT_ID, Fact::Type(INVENTORY_SLOT_ID)),
+    (
         ids::CLIENT_PLAYER_INPUT_CRAFTING,
         Fact::Path {
             steps: &[
@@ -3004,6 +3010,8 @@ const QUATERNION: &str = "keen::Quaternion";
 const NETWORK_PLAYER_ATTRIBUTES: &str = "keen::ecs::NetworkPlayerAttributes";
 /// A player's selected equipment and action bar slot.
 const SLOT_SELECTION: &str = "keen::ecs::SlotSelection";
+/// The slot each equipment slot names, a field per `EquipmentSlot` member.
+const EQUIPMENT_SLOT_DATA: &str = "keen::ecs::EquipmentSlotData";
 /// A player input request's version, a `u32` first.
 const VERSIONED_DATA: &str = "keen::VersionedData";
 /// A slot: an inventory entity and an index in it.
