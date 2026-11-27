@@ -49,9 +49,13 @@ entries! {
             // As the loader: a rebind names a control a mod declared, which
             // in the fake is one of the mod's own, and a key a control can
             // hold or none. Controls come with `unstable`, as the rebind API
-            // does.
+            // does, so without it no control exists to rebind.
             #[cfg(feature = "unstable")]
             if spec.kind == Spec::REBIND && !rebinds_a_declared_control(s, me, &spec) {
+                return Status::BAD_ARGS;
+            }
+            #[cfg(not(feature = "unstable"))]
+            if spec.kind == Spec::REBIND {
                 return Status::BAD_ARGS;
             }
             // As the loader: an answer goes to the dialog it names while that
@@ -260,8 +264,8 @@ fn reflects(host: &crate::test::FakeHost, ty: &str, name: &str) -> bool {
 
 /// Whether `spec`'s target and expected screen are ones the loader takes:
 /// an open of a screen the game opens from the world, a tab the menu has,
-/// a look or move that expects only the world's screen, and a chat line of
-/// UTF-8 text, which the loader copies as text.
+/// a look or move that expects only the world's screen, and a chat line or
+/// a setting's key and value of UTF-8 text, which the loader copies as text.
 fn named_as_the_loader_takes(spec: &enshwick_core::abi::ClientCommand) -> bool {
     // SAFETY: the mod's spec, its target borrowed for the call.
     let target = unsafe { spec.target.as_str() };
@@ -278,6 +282,11 @@ fn named_as_the_loader_takes(spec: &enshwick_core::abi::ClientCommand) -> bool {
             | enshwick_core::abi::ClientCommand::WINDOW_TEXT
     );
     if spec.kind == enshwick_core::abi::ClientCommand::CHAT && text.is_none() {
+        return false;
+    }
+    if spec.kind == enshwick_core::abi::ClientCommand::SET_SETTING
+        && (item.is_none() || text.is_none())
+    {
         return false;
     }
     if window_kind {

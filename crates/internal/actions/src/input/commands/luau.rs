@@ -81,7 +81,8 @@ pub(super) struct LuauCommand {
     pub second: Option<bool>,
     /// The key a rebind binds; it clears the key without one.
     pub key: Option<crate::controls::Key>,
-    /// The setting a set changes, by its key in the mod's settings.
+    /// The setting a set changes, by its key in the mod's settings: Rust's
+    /// `SetSetting::key`, named apart from a rebind's `key`.
     pub setting: Option<String>,
     /// The value a set gives the setting, as TOML.
     pub value: Option<String>,

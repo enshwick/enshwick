@@ -397,7 +397,8 @@ cancels a command in these cases:
 - the player presses a control;
 - the mod turns off;
 - two seconds pass without its effect, in a world or outside one;
-- a window command finds its item drawn off (`ItemOff`).
+- a window command finds its item drawn off (`ItemOff`);
+- the Mods screen refuses a rebind or a setting (`ChangeRefused`).
 
 A reason a newer loader gives reads as `CancelReason::Other`, `"other"` in
 Luau. In Rust, the `name()` of a reason, a join failure or a join phase is
@@ -870,6 +871,8 @@ quit from a world, leave it first.
 
 A quit is `Observed` once the interface's queue takes it, in the next
 frame. The process then ends, so a mod reads its status at most once more.
+A quit that waits for the queue ends `Cancelled(OtherScreen)` when play
+starts or a join or host runs first.
 The quit command was read on client 26430625, and its poster is found by
 its pattern on every kept client.
 

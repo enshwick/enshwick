@@ -487,7 +487,7 @@ fn wrong_bump(was: Version, old: &Snapshot, new: &Snapshot, now: Version) -> Opt
 
 /// Why `now` is the wrong version for the layout `new`, the golden file
 /// holding `old` at `was`, with the ABI `released` or not: before its
-/// release a change at the same version fits, its types born at their size
+/// release every change keeps the version, its types born at their size
 /// as in a new major, since no released mod relies on the older layout;
 /// otherwise as [`wrong_bump`] says.
 fn wrong_change(
@@ -497,10 +497,18 @@ fn wrong_change(
     now: Version,
     released: bool,
 ) -> Option<String> {
-    if !released && now == was {
-        return wrong_born(old, new, true);
+    if released {
+        return wrong_bump(was, old, new, now);
     }
-    wrong_bump(was, old, new, now)
+    if now != was {
+        let (major, minor) = was;
+        return Some(format!(
+            "until the ABI's release a layout change keeps ABI {major}.{minor}: \
+             set ABI_MAJOR to {major} and ABI_MINOR to {minor}, \
+             then run the tests with ENSHWICK_ABI_LAYOUT=update"
+        ));
+    }
+    wrong_born(old, new, true)
 }
 
 /// The major after `major`: the next number, past the [`ALPHA_MAJORS`] a

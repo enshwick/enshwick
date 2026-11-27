@@ -175,8 +175,16 @@ fn before_the_release_a_change_keeps_the_version_and_after_it_takes_the_next() {
         }),
     )]);
     let changed = layout(&[("Fixture", shape!(Plain { value }))]);
-    for new in [&grown, &changed] {
+    for new in [&grown, &changed, &old] {
         assert_eq!(wrong_change((1, 0), &old, new, (1, 0), false), None);
+        for bumped in [(1, 1), (2, 0)] {
+            assert!(
+                wrong_change((1, 0), &old, new, bumped, false).is_some(),
+                "an unreleased ABI keeps 1.0, not {bumped:?}"
+            );
+        }
+    }
+    for new in [&grown, &changed] {
         assert!(
             wrong_change((1, 0), &old, new, (1, 0), true).is_some(),
             "a released ABI needs a new version"

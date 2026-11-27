@@ -272,8 +272,9 @@ pub enum CommandAction {
     /// screen, as the page's own field does: checked against the mod's
     /// schema and by the mod, written to the world's settings file of the
     /// mod with its comments kept, and the mod told. Only in a world this
-    /// process runs, whose settings the page changes. Observed once the
-    /// change is written; [`CommandState::Unavailable`] while the page does
+    /// process runs, whose settings the page changes. Observed once the page
+    /// made the change and the file's write is queued, not once it is on
+    /// disk; [`CommandState::Unavailable`] while the page does
     /// not show the setting, and [`CancelReason::ChangeRefused`] for a value
     /// the schema or the mod refuses, or a setting the page shows read-only.
     SetSetting {

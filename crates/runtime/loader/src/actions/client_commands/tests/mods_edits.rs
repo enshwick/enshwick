@@ -156,15 +156,74 @@ fn a_handed_change_ends_as_the_draw_answered() {
 }
 
 #[test]
-fn a_quit_is_posted_at_the_main_menu_and_observed_once_the_queue_takes_it() {
-    let quit = || {
-        kept(Command {
-            session: 0,
-            expected: None,
-            ..command(Kind::Quit)
-        })
+fn a_handed_change_ends_unavailable_once_its_page_closes_before_the_draw_answers() {
+    let handed = Command {
+        expected: None,
+        handed: Some(150),
+        ..command(Kind::Edit(edits::Edit::Setting))
     };
+    for (seen, why) in [
+        (mods_page(Snapshot::MOD_LIST), "back to the list of mods"),
+        (Seen::menu(3, LoaderScreen::default()), "the screen closed"),
+    ] {
+        assert_eq!(
+            next(&handed, &seen, Some(Progress::Waiting), 160),
+            Next::End(Status::UNAVAILABLE, 0),
+            "{why}: no draw answers it"
+        );
+    }
+}
+
+/// A quit queued at the main menu, in session 0.
+fn quit() -> Commands {
+    kept(Command {
+        session: 0,
+        expected: None,
+        ..command(Kind::Quit)
+    })
+}
+
+#[test]
+fn a_queued_quit_is_cancelled_once_play_starts_or_a_host_runs_before_it_posts() {
     let menu = Seen::menu(3, LoaderScreen::default());
+    let _menu = play::note_stage(2, 150);
+    let mut commands = quit();
+    assert!(
+        run(&mut commands, None, Some(menu), 150, |_| Applied::Busy),
+        "a full queue: it waits"
+    );
+    let _loading = play::note_stage(4, 160);
+    assert!(!run(&mut commands, None, Some(menu), 160, |_| {
+        panic!("play started: no quit posts")
+    }));
+    let ended = commands.kept[0];
+    assert_eq!(
+        (ended.state, ended.reason),
+        (Status::CANCELLED, Status::OTHER_SCREEN)
+    );
+    let _menu = play::note_stage(2, 170);
+    let host = play::Host {
+        world: 0,
+        character: 0,
+        online: false,
+    };
+    assert_eq!(play::host(9, host, 170), Ok(()));
+    let mut beside = quit();
+    assert!(!run(&mut beside, None, Some(menu), 170, |_| {
+        panic!("a host runs: no quit posts")
+    }));
+    let ended = beside.kept[0];
+    play::release(9, 170, false);
+    assert_eq!(
+        (ended.state, ended.reason),
+        (Status::CANCELLED, Status::OTHER_SCREEN)
+    );
+}
+
+#[test]
+fn a_quit_is_posted_at_the_main_menu_and_observed_once_the_queue_takes_it() {
+    let menu = Seen::menu(3, LoaderScreen::default());
+    let _menu = play::note_stage(2, 150);
     let mut commands = quit();
     let mut posted = Vec::new();
     assert!(

@@ -145,6 +145,41 @@ side = "both""#
     }
 
     #[test]
+    fn a_raw_setting_whose_key_or_value_is_not_utf_8_is_refused_as_the_loader_refuses_it() {
+        use enshwick::abi::{Status as Code, Str};
+        /// `Str`'s layout, to view bytes that are not UTF-8 as a C caller can.
+        #[repr(C)]
+        struct Bytes(*const u8, usize);
+        const NOT_TEXT: &[u8] = b"\xff\xfe";
+        let (loader, _input) = started();
+        // SAFETY: `Str` is `repr(C)` with a pointer and a length, as `Bytes`
+        // is; the pointer views a `'static` slice of that length.
+        let not_text: Str =
+            unsafe { core::mem::transmute(Bytes(NOT_TEXT.as_ptr(), NOT_TEXT.len())) };
+        // SAFETY: the fake's table is a static.
+        let api = unsafe { &*loader.api() };
+        for (item, text, why) in [
+            (not_text, Str::new("12"), "the key"),
+            (Str::new("range"), not_text, "the value"),
+        ] {
+            let spec = enshwick::abi::headed!(Raw {
+                kind: Raw::SET_SETTING,
+                target: Str::new(TRAIL),
+                item,
+                text,
+                ..Raw::EMPTY
+            });
+            let mut id = 0;
+            assert_eq!(
+                (api.client_command)(loader.handle(), &raw const spec, &raw mut id),
+                Code::BAD_ARGS,
+                "{why}"
+            );
+        }
+        assert!(loader.client_commands().is_empty());
+    }
+
+    #[test]
     fn a_quit_queues_at_the_main_menu_and_is_refused_in_a_world_or_another_session() {
         let (loader, input) = started();
         let quit = ClientCommand::new(CommandAction::Quit, 0);

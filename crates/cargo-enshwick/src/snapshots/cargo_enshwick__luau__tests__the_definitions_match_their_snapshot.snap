@@ -593,7 +593,7 @@ export type ClientCommand = {
 	second: boolean?,
 	--- The key a rebind binds; it clears the key without one.
 	key: string?,
-	--- The setting a set changes, by its key in the mod's settings.
+	--- The setting a set changes, by its key in the mod's settings: Rust's `SetSetting.key`, named apart from a rebind's `key`.
 	setting: string?,
 	--- The value a set gives the setting, as TOML.
 	value: string?,

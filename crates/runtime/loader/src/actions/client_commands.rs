@@ -378,9 +378,10 @@ fn next(
             return cancel(Status::OTHER_SCREEN);
         }
         // A change on the Mods screen goes to a mod's page, which the draw
-        // checks is the command's mod.
+        // checks is the command's mod; a handed one whose page closed before
+        // the draw took it is never answered.
         if matches!(command.kind, Kind::Edit(_))
-            && progress.is_none()
+            && matches!(progress, None | Some(Progress::Waiting))
             && !seen.loader.shows_mod_page()
         {
             return Next::End(Status::UNAVAILABLE, 0);
@@ -778,6 +779,9 @@ fn run(
             Next::End(Status::CANCELLED, Status::MOD_OFF)
         } else if command.kind.plays() && command.handed.is_some() {
             plays_next(command)
+        } else if command.kind == Kind::Quit && play::can_quit(now).is_err() {
+            // Since its queue, play may have started or a join or host run.
+            Next::End(Status::CANCELLED, Status::OTHER_SCREEN)
         } else if let Some(seen) = seen {
             // Session 0, before the client read a game, is the one this
             // frame counts; the first fresh read is the held baseline.
