@@ -609,6 +609,28 @@ mod tests {
     }
 
     #[test]
+    fn a_script_s_equip_of_a_slot_name_the_build_lacks_raises_that_the_argument_is_unknown() {
+        let loader = run(
+            FakeHost::new().side(Side::CLIENT).player_input(),
+            r#"
+            local ok, why = pcall(enshwick.input.client_command, {
+                kind = "equip", session = "1", slot = "65", equipment = "ArmourUpperBody",
+            })
+            enshwick.log.info(`equip {ok}: {why}`)
+            "#,
+        );
+        assert!(
+            logged(
+                &loader,
+                "equip false: enshwick.input.client_command: an argument is malformed or unknown to this game build"
+            ),
+            "{:?}",
+            loader.logs()
+        );
+        assert!(loader.client_commands().is_empty());
+    }
+
+    #[test]
     fn a_script_reads_the_local_player_s_state_and_slots_and_crafts_once_at_a_time() {
         use enshwick::abi::{ClientSlot, ClientSnapshot};
         let loader = run(
