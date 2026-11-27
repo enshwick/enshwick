@@ -36,8 +36,15 @@ pub(crate) enum Act {
     /// Moves every stack from the inventory `from` into `to`, 0 for the
     /// player's own, as the storage window's take all and deposit all do.
     MoveAll { from: u32, to: u32 },
-    /// Equips the slot's item into the `EquipmentSlot` member `equipment`.
-    Equip { slot: u64, equipment: u8 },
+    /// Equips the slot's item into the `EquipmentSlot` member `equipment`,
+    /// whose slot `SlotSelection` keeps at index `entry` of its
+    /// `EquipmentSlotData`; `None` for a member whose item is never moved
+    /// into an equipment inventory.
+    Equip {
+        slot: u64,
+        equipment: u8,
+        entry: Option<u8>,
+    },
     /// Destroys the slot's stack, a transfer of type `Destroy`, which the
     /// server runs as a plain destroy; `ItemActionType::Trash` is another
     /// action, which it runs only for some items and which gives one back.
@@ -63,7 +70,15 @@ impl Act {
             } => [head(Self::CRAFT, count), station.into(), recipe.into()],
             Self::Move { from, to, count } => [head(Self::MOVE, count), from, to],
             Self::MoveAll { from, to } => [head(Self::MOVE_ALL, 0), from.into(), to.into()],
-            Self::Equip { slot, equipment } => [head(Self::EQUIP, equipment.into()), slot, 0],
+            Self::Equip {
+                slot,
+                equipment,
+                entry,
+            } => [
+                head(Self::EQUIP, equipment.into()),
+                slot,
+                entry.map_or(0, |entry| u64::from(entry) + 1),
+            ],
             Self::Trash { slot } => [head(Self::TRASH, 0), slot, 0],
         }
     }
@@ -90,6 +105,10 @@ impl Act {
             Self::EQUIP => Self::Equip {
                 slot: a,
                 equipment: u8::try_from(small).ok()?,
+                entry: match b {
+                    0 => None,
+                    entry => Some(u8::try_from(entry - 1).ok()?),
+                },
             },
             Self::TRASH => Self::Trash { slot: a },
             _ => return None,
@@ -343,7 +362,9 @@ impl ActLayout {
                 transfer([own(from), own(to)], [0, 0], kind, self.move_all_stacks, 0);
             }
             Act::Trash { slot } => transfer([0, 0], [slot, 0], self.destroy, 0, 0),
-            Act::Equip { slot, equipment } => {
+            Act::Equip {
+                slot, equipment, ..
+            } => {
                 let r = &self.equipment;
                 put(r, self.equipment_slot, &slot.to_ne_bytes());
                 put(r, self.equipment_member, &[equipment]);
@@ -492,6 +513,12 @@ mod tests {
             Act::Equip {
                 slot: 0x41 | 1 << 32,
                 equipment: u8::MAX,
+                entry: Some(u8::MAX),
+            },
+            Act::Equip {
+                slot: 0x44,
+                equipment: 22,
+                entry: None,
             },
             Act::Trash { slot: 0x43 },
         ] {
@@ -527,6 +554,7 @@ mod tests {
             Act::Equip {
                 slot: 0x41 | 1 << 32,
                 equipment: 12,
+                entry: Some(18),
             },
         );
         assert_eq!(at::<u64>(&input, 0x1c0), 0x41 | 1 << 32);

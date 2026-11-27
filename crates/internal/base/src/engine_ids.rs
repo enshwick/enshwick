@@ -397,6 +397,15 @@ ids! {
     SLOT_SELECTION_ACTIONBAR = "slot_selection.actionbar";
     /// The id of its two action bar inventory entities.
     SLOT_SELECTION_ACTIONBAR_ENTITIES = "slot_selection.actionbar_entities";
+    /// The id of its [`EQUIPMENT_SLOT_DATA`], the slot each equipment slot
+    /// names as its item's.
+    SLOT_SELECTION_EQUIPMENT = "slot_selection.equipment";
+    /// The id of the slot per equipment slot, a field named after each
+    /// `EquipmentSlot` member that has one.
+    EQUIPMENT_SLOT_DATA = "equipment_slot_data";
+    /// The id of a slot's id, an inventory entity and an index in it, whose
+    /// size is the stride of [`EQUIPMENT_SLOT_DATA`].
+    INVENTORY_SLOT_ID = "inventory_slot_id";
     /// The id of the local player's crafting request in its input, a
     /// [`CRAFTING_ACTION`] the server takes when its version changes.
     CLIENT_PLAYER_INPUT_CRAFTING = "client_player_input.crafting";
