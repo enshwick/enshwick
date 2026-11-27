@@ -38,6 +38,7 @@ fn seen(screen: u8, tab: TabRead) -> Seen {
         held: Some(0),
         host: 0,
         loader: LoaderScreen::default(),
+        menu_idle: false,
     }
 }
 

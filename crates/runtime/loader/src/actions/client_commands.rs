@@ -260,12 +260,15 @@ pub(crate) struct Seen {
     pub(crate) host: u32,
     /// What the loader's own Mods screen shows.
     pub(crate) loader: LoaderScreen,
+    /// Whether the main menu shows with no join, host or leave running, as
+    /// a quit needs.
+    pub(crate) menu_idle: bool,
 }
 
 impl Seen {
     /// What a frame outside a game shows in `session`: none of the game's
     /// screens, only the loader's own Mods screen, `loader`, which the main
-    /// menu opens too.
+    /// menu opens too; not idle until the frame reads the play stage.
     pub(crate) const fn menu(session: u64, loader: LoaderScreen) -> Self {
         Self {
             session,
@@ -275,6 +278,7 @@ impl Seen {
             held: None,
             host: 0,
             loader,
+            menu_idle: false,
         }
     }
 }
@@ -373,8 +377,9 @@ fn next(
             return Next::Applied;
         }
     } else {
-        // A quit runs at the main menu, where no HUD screen shows.
-        if elsewhere || (command.kind == Kind::Quit && seen.screen.is_some()) {
+        // A quit runs at the main menu, where no HUD screen shows, and only
+        // while no play started and no join or host runs since its queue.
+        if elsewhere || (command.kind == Kind::Quit && !seen.menu_idle) {
             return cancel(Status::OTHER_SCREEN);
         }
         // A change on the Mods screen goes to a mod's page, which the draw
@@ -721,9 +726,13 @@ pub(crate) fn frame(
     }
     let _ran = FUSE.run(FEATURE, || {
         let mut commands = STATE.commands.relock();
+        let now = local_held::now_ms();
         let game = game();
-        let menu = game.is_none().then(menu);
-        let open = run(&mut commands, game, menu, local_held::now_ms(), apply);
+        let menu = game.is_none().then(|| Seen {
+            menu_idle: play::can_quit(now).is_ok(),
+            ..menu()
+        });
+        let open = run(&mut commands, game, menu, now, apply);
         STATE.open.store(open, Ordering::Release);
     });
 }
@@ -779,9 +788,6 @@ fn run(
             Next::End(Status::CANCELLED, Status::MOD_OFF)
         } else if command.kind.plays() && command.handed.is_some() {
             plays_next(command)
-        } else if command.kind == Kind::Quit && play::can_quit(now).is_err() {
-            // Since its queue, play may have started or a join or host run.
-            Next::End(Status::CANCELLED, Status::OTHER_SCREEN)
         } else if let Some(seen) = seen {
             // Session 0, before the client read a game, is the one this
             // frame counts; the first fresh read is the held baseline.

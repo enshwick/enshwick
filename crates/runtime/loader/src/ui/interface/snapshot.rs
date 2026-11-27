@@ -87,6 +87,7 @@ pub(super) unsafe fn note(engine: &Engine, context: usize, popup: bool) {
                 held: crate::actions::local_held::players_held(),
                 host: view.host,
                 loader: loader_screen(),
+                menu_idle: false,
             })
         },
         || Seen::menu(crate::actions::client_snapshot::session(), loader_screen()),

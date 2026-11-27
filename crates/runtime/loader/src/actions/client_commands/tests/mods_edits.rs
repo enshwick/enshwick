@@ -183,37 +183,28 @@ fn quit() -> Commands {
     })
 }
 
+/// The main menu with nothing running, where a quit posts.
+fn idle_menu() -> Seen {
+    Seen {
+        menu_idle: true,
+        ..Seen::menu(3, LoaderScreen::default())
+    }
+}
+
 #[test]
-fn a_queued_quit_is_cancelled_once_play_starts_or_a_host_runs_before_it_posts() {
-    let menu = Seen::menu(3, LoaderScreen::default());
-    let _menu = play::note_stage(2, 150);
+fn a_queued_quit_is_cancelled_once_the_menu_is_no_longer_idle_before_it_posts() {
     let mut commands = quit();
     assert!(
-        run(&mut commands, None, Some(menu), 150, |_| Applied::Busy),
+        run(&mut commands, None, Some(idle_menu()), 150, |_| {
+            Applied::Busy
+        }),
         "a full queue: it waits"
     );
-    let _loading = play::note_stage(4, 160);
-    assert!(!run(&mut commands, None, Some(menu), 160, |_| {
-        panic!("play started: no quit posts")
+    let busy = Seen::menu(3, LoaderScreen::default());
+    assert!(!run(&mut commands, None, Some(busy), 160, |_| {
+        panic!("play started, or a join or host runs: no quit posts")
     }));
     let ended = commands.kept[0];
-    assert_eq!(
-        (ended.state, ended.reason),
-        (Status::CANCELLED, Status::OTHER_SCREEN)
-    );
-    let _menu = play::note_stage(2, 170);
-    let host = play::Host {
-        world: 0,
-        character: 0,
-        online: false,
-    };
-    assert_eq!(play::host(9, host, 170), Ok(()));
-    let mut beside = quit();
-    assert!(!run(&mut beside, None, Some(menu), 170, |_| {
-        panic!("a host runs: no quit posts")
-    }));
-    let ended = beside.kept[0];
-    play::release(9, 170, false);
     assert_eq!(
         (ended.state, ended.reason),
         (Status::CANCELLED, Status::OTHER_SCREEN)
@@ -222,8 +213,7 @@ fn a_queued_quit_is_cancelled_once_play_starts_or_a_host_runs_before_it_posts() 
 
 #[test]
 fn a_quit_is_posted_at_the_main_menu_and_observed_once_the_queue_takes_it() {
-    let menu = Seen::menu(3, LoaderScreen::default());
-    let _menu = play::note_stage(2, 150);
+    let menu = idle_menu();
     let mut commands = quit();
     let mut posted = Vec::new();
     assert!(
