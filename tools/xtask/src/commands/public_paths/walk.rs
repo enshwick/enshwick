@@ -16,9 +16,11 @@ pub(crate) const SEPARATOR: &str = "::";
 /// id in that crate's JSON.
 type Key<'a> = (&'a str, Id);
 
-/// What brings a member to its type: `None` when a mod names it through the
-/// type alone, else the trait of a documented crate whose impl gives it, which
-/// a mod calls only where it can name that trait.
+/// What brings a member to its type: the trait of a documented crate whose
+/// impl gives it, which a mod calls only where it can name that trait, or
+/// `None` for an inherent member and for a trait the walk cannot gate: one
+/// of an undocumented crate (`core`'s `Debug`, `From`) or one `resolve` does
+/// not find, both listed as the type's own.
 type Via<'a> = Option<Key<'a>>;
 
 /// The members of a type, each with what brings it ([`Via`]).

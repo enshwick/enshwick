@@ -32,7 +32,7 @@ use std::thread;
 
 use crate::affected::{self, Lane, Package, Scope, WIDE_PACKAGES};
 use crate::commands::{fuzz, header, public_paths, wine};
-use crate::{FACADE, packages, say, workspace_root};
+use crate::{FACADE, cargo_files, packages, say, workspace_root};
 use failures::Failures;
 pub(crate) use failures::{Ran, run_steps};
 use part::{
@@ -331,11 +331,13 @@ fn public_paths_hold(
 
 /// Whether a change can move [`public_paths::FILE`], so the facade is
 /// documented again to check it: it reaches the facade, edits this task's
-/// own files, since it writes the list, or edits the list, which no package
-/// owns. This task only depending on a changed package, as it does on the
-/// loader, cannot move the list: the facade documented twice took 13 to
-/// 22 s of each loader change's check (2026-11-27). An edit of the book's
-/// stability chapter alone is checked against the committed list.
+/// own files, since it writes the list, edits the lock file or the workspace
+/// manifest while the scope holds this task, since its rustdoc reader may
+/// have moved, or edits the list, which no package owns. This task only
+/// depending on a changed package, as it does on the loader, cannot move
+/// the list: the facade documented twice took 13 to 22 s of each loader
+/// change's check (2026-11-27). An edit of the book's stability chapter
+/// alone is checked against the committed list.
 fn lists_public_paths(scope: &Scope, changed: Option<&[String]>, packages: &[Package]) -> bool {
     let own = packages
         .iter()
@@ -345,6 +347,9 @@ fn lists_public_paths(scope: &Scope, changed: Option<&[String]>, packages: &[Pac
         || own.is_some_and(|dir| {
             changed.is_some_and(|files| files.iter().any(|file| file.starts_with(&dir)))
         })
+        || (touches(scope, env!("CARGO_PKG_NAME"))
+            && (names_file(changed, cargo_files::LOCK)
+                || names_file(changed, cargo_files::MANIFEST)))
         || names_file(changed, public_paths::FILE)
 }
 

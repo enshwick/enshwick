@@ -890,6 +890,12 @@ fn the_public_paths_list_is_written_again_only_when_the_facade_its_writer_or_the
         !lists(&task, &["crates/runtime/loader/src/lib.rs"]),
         "the task only depends on the loader"
     );
+    assert!(
+        lists(&task, &["Cargo.lock"]),
+        "a lock bump may move the task's rustdoc reader"
+    );
+    assert!(lists(&task, &["Cargo.toml"]));
+    assert!(!lists(&scope(&["enshwick-loader"]), &["Cargo.lock"]));
     assert!(!lists(&scope(&[]), &["tools/xtask-other/a.rs"]));
     assert!(lists(&scope(&[]), &[public_paths::FILE]));
     assert!(!lists(&scope(&[]), &[public_paths::chapter::FILE]));
