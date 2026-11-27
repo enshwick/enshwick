@@ -27,7 +27,7 @@ mod waypoint;
 pub(crate) use acts::TEST_LAYOUT as ACT_TEST_LAYOUT;
 pub(crate) use acts::{Act, ActLayout};
 pub(crate) use chat::ChatPost;
-pub(crate) use menu::{HostPosts, MenuPosts, SelectedCharacter, post as post_menu};
+pub(crate) use menu::{HostPosts, MenuPosts, QuitPost, SelectedCharacter, post as post_menu};
 #[cfg(test)]
 pub(crate) use waypoint::TEST_LAYOUT as WAYPOINT_TEST_LAYOUT;
 pub(crate) use waypoint::{Mark, WaypointLayout};
@@ -67,6 +67,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::RECIPE_SELECT.id(),
     pinned::ui::TOGGLE_HUD_SCREEN.id(),
     pinned::ui::POST_CHAT.id(),
+    pinned::ui::POST_QUIT.id(),
 ];
 
 /// The input builder's passes, by its mode argument (client 26430625,
@@ -163,6 +164,8 @@ pub(crate) struct Groups {
     pub(crate) character: Group<SelectedCharacter>,
     /// The chat window's poster, which chat commands send through.
     pub(crate) chat: Group<ChatPost>,
+    /// The menu's own quit command, which quit commands post.
+    pub(crate) quit: Group<QuitPost>,
 }
 
 /// The groups of this process.
@@ -178,6 +181,7 @@ pub(crate) static GROUPS: Groups = Groups {
     acts: Group::new("the client's crafting and item commands"),
     character: Group::new("the main menu's selected character"),
     chat: Group::new("the client's chat command"),
+    quit: Group::new("the client's quit command"),
 };
 
 /// Where the in-game menu keeps its tab, and which screen bytes are the
@@ -649,6 +653,7 @@ pub(crate) fn link(loader: &Loader) {
         .character
         .link(loader, SelectedCharacter::resolve(loader));
     GROUPS.chat.link(loader, ChatPost::resolve(loader));
+    GROUPS.quit.link(loader, QuitPost::resolve(loader));
 }
 
 /// A look input per device, each a float pair, as the input builder writes
@@ -935,6 +940,7 @@ mod tests {
             &GROUPS.host.fuse,
             &GROUPS.waypoint.fuse,
             &GROUPS.chat.fuse,
+            &GROUPS.quit.fuse,
         ] {
             assert!(fuse.is_off(), "{}", fuse.feature());
         }

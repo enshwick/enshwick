@@ -539,13 +539,13 @@ export type ChunkData = {
 
 --- `ClientCommand` as Luau gives it; its `Debug` shows none of the password.
 export type ClientCommand = {
-	--- `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`, `"move"`, `"highlight_recipe"`, `"join"`, `"leave"`, `"press"`, `"set_waypoint"`, `"clear_waypoint"`, `"ping"`, `"host"`, `"open_mods"`, `"open_mod"`, `"open_mod_settings"`, `"press_window_item"`, `"pick_window_item"`, `"set_window_text"` or `"answer_dialog"`, `"craft"`, `"move_item"`, `"equip"`, `"take_all"`, `"deposit_all"`, `"trash"` or `"chat"`.
+	--- `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`, `"move"`, `"highlight_recipe"`, `"join"`, `"leave"`, `"press"`, `"set_waypoint"`, `"clear_waypoint"`, `"ping"`, `"host"`, `"open_mods"`, `"open_mod"`, `"open_mod_settings"`, `"press_window_item"`, `"pick_window_item"`, `"set_window_text"` or `"answer_dialog"`, `"craft"`, `"move_item"`, `"equip"`, `"take_all"`, `"deposit_all"`, `"trash"`, `"chat"`, `"rebind"`, `"set_setting"` or `"quit"`.
 	kind: string,
 	--- The session, as `client_snapshot().session` gives it.
 	session: string,
 	--- The HUD screen the client must show.
 	expected_screen: string?,
-	--- The screen to open, the tab to choose, the server to join or the mod whose page to open, by its id.
+	--- The screen to open, the tab to choose, the server to join, or the mod, by its id, whose page to open, control to rebind or setting to set.
 	target: string?,
 	--- A look's yaw and pitch in radians.
 	look: {number}?,
@@ -587,6 +587,16 @@ export type ClientCommand = {
 	target_slot: string?,
 	--- The equipment slot an equip fills, by the game's `EquipmentSlot` member.
 	equipment: string?,
+	--- The control a rebind binds, by the name its mod declared.
+	control: string?,
+	--- Whether a rebind sets the control's second key; its first without it.
+	second: boolean?,
+	--- The key a rebind binds; it clears the key without one.
+	key: string?,
+	--- The setting a set changes, by its key in the mod's settings: Rust's `SetSetting.key`, named apart from a rebind's `key`.
+	setting: string?,
+	--- The value a set gives the setting, as TOML.
+	value: string?,
 }
 
 --- The client's state in one copy, as `Input.client_snapshot` gives it to Luau.

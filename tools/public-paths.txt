@@ -711,6 +711,7 @@ abi::ClientCommand::MAX_HOLD_MS
 abi::ClientCommand::MAX_LOOK
 abi::ClientCommand::MAX_PASSWORD
 abi::ClientCommand::MAX_PRESS_MS
+abi::ClientCommand::MAX_SETTING
 abi::ClientCommand::MAX_SLOTS
 abi::ClientCommand::MAX_TEXT
 abi::ClientCommand::MOVE
@@ -721,6 +722,9 @@ abi::ClientCommand::OPEN_MOD_SETTINGS
 abi::ClientCommand::OPEN_SCREEN
 abi::ClientCommand::PING
 abi::ClientCommand::PRESS
+abi::ClientCommand::QUIT
+abi::ClientCommand::REBIND
+abi::ClientCommand::SET_SETTING
 abi::ClientCommand::SET_WAYPOINT
 abi::ClientCommand::TAKE_ALL
 abi::ClientCommand::TRASH
@@ -740,6 +744,8 @@ abi::ClientCommand::header
 abi::ClientCommand::hold_ms
 abi::ClientCommand::in_bounds
 abi::ClientCommand::item
+abi::ClientCommand::key
+abi::ClientCommand::key_slot
 abi::ClientCommand::kind
 abi::ClientCommand::look
 abi::ClientCommand::online
@@ -758,6 +764,7 @@ abi::ClientCommandStatus::APPLIED
 abi::ClientCommandStatus::BORN
 abi::ClientCommandStatus::BY_MOD
 abi::ClientCommandStatus::CANCELLED
+abi::ClientCommandStatus::CHANGE_REFUSED
 abi::ClientCommandStatus::EMPTY
 abi::ClientCommandStatus::FAILED
 abi::ClientCommandStatus::FULL
@@ -5600,6 +5607,7 @@ input::BoundKey::from_value unstable
 input::BoundKey::into_value unstable
 input::CancelReason unstable
 input::CancelReason::ByMod unstable
+input::CancelReason::ChangeRefused unstable
 input::CancelReason::InputBlocked unstable
 input::CancelReason::ItemOff unstable
 input::CancelReason::ModOff unstable
@@ -5670,6 +5678,7 @@ input::CommandAction::Join unstable
 input::CommandAction::Leave unstable
 input::CommandAction::Look unstable
 input::CommandAction::MAX_CHAT unstable
+input::CommandAction::MAX_SETTING unstable
 input::CommandAction::Move unstable
 input::CommandAction::MoveItem unstable
 input::CommandAction::OpenMod unstable
@@ -5680,6 +5689,9 @@ input::CommandAction::PickWindowItem unstable
 input::CommandAction::Ping unstable
 input::CommandAction::Press unstable
 input::CommandAction::PressWindowItem unstable
+input::CommandAction::Quit unstable
+input::CommandAction::Rebind unstable
+input::CommandAction::SetSetting unstable
 input::CommandAction::SetWaypoint unstable
 input::CommandAction::SetWindowText unstable
 input::CommandAction::TakeAll unstable

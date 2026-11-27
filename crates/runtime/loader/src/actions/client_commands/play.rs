@@ -10,8 +10,9 @@
 //! starts; 0x29 does nothing in the main menu or a world (client 26430625,
 //! `0x140873710`, `0x14085e780`). Cancel and leave post the back command
 //! (5), which the start-play state takes as back and play as
-//! `Play::BackToMenu` (`0x14087c220`, `0x14085e780`). Never posted: 4,
-//! which quits the game from the main menu.
+//! `Play::BackToMenu` (`0x14087c220`, `0x14085e780`). Never posted here:
+//! 4, which quits the game from the main menu and which only a quit
+//! command posts, through the interface frame.
 //!
 //! A host posts the character (0x11), the world (0x16), the session's
 //! kind (0x27, which also sets the session to a hosted one) and the play
@@ -454,6 +455,21 @@ fn ask(layout: &Layout, host: &str, port: u16) -> Answer {
 /// [`StartError::NotNow`] outside play and while a join or leave runs.
 pub(crate) fn can_leave(now: u64) -> Result<(), StartError> {
     if stage(now).playing() && !STATE.running.load(Ordering::Acquire) {
+        Ok(())
+    } else {
+        Err(StartError::NotNow)
+    }
+}
+
+/// Whether a quit may start at `now`: at the main menu, while no join,
+/// host or leave runs.
+///
+/// # Errors
+///
+/// [`StartError::NotNow`] outside the menu, on a stage read older than
+/// [`FRESH_MS`], and while a join, host or leave runs.
+pub(crate) fn can_quit(now: u64) -> Result<(), StartError> {
+    if stage(now) == Stage::Menu && !STATE.running.load(Ordering::Acquire) {
         Ok(())
     } else {
         Err(StartError::NotNow)

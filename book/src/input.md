@@ -397,7 +397,8 @@ cancels a command in these cases:
 - the player presses a control;
 - the mod turns off;
 - two seconds pass without its effect, in a world or outside one;
-- a window command finds its item drawn off (`ItemOff`).
+- a window command finds its item drawn off (`ItemOff`);
+- the Mods screen refuses a rebind or a setting (`ChangeRefused`).
 
 A reason a newer loader gives reads as `CancelReason::Other`, `"other"` in
 Luau. In Rust, the `name()` of a reason, a join failure or a join phase is
@@ -860,6 +861,25 @@ local id = enshwick.input.client_command({
 })
 ```
 
+## Quitting the game from the main menu
+
+`CommandAction::Quit` quits the game from the main menu through the game's
+own quit command, so the game ends on its own shutdown path. A quit starts
+at the main menu with session 0, as a host does. The loader refuses a quit
+while a join, a host or a leave runs, or while the client is in a world. To
+quit from a world, leave it first.
+
+A quit is `Observed` once the interface's queue takes it, in the next
+frame. The process then ends, so a mod reads its status at most once more.
+A quit that waits for the queue ends `Cancelled(OtherScreen)` when play
+starts or a join or host runs first.
+The quit command was read on client 26430625, and its poster is found by
+its pattern on every kept client.
+
+```luau
+enshwick.input.client_command({ kind = "quit", session = "0" })
+```
+
 ## Opening the Mods screen
 
 `CommandAction::OpenMods` opens the loader's own Mods screen at its list of
@@ -891,6 +911,67 @@ enshwick.input.client_command({
     kind = "open_mod_settings",
     session = enshwick.input.client_snapshot().session,
     target = "you.trail",
+})
+```
+
+## Binding a key and setting a value on the Mods screen
+
+Two commands change what a mod's page of the Mods screen shows, through the
+page's own paths. The page must show first: open it with `OpenMod` or
+`OpenModSettings`. A command made while the screen shows the list of mods, or
+no page at all, ends `Unavailable`. A command made for another mod's page,
+or for a control or a setting that the page does not show, ends `Unavailable`
+too.
+
+`CommandAction::Rebind` binds a key to a mod's control, as the page's key
+capture does. It names the mod by its id and the control by the name the mod
+declared. Its `second` sets the control's second key instead of its first.
+A key of `None` clears the key, as the page's Clear does. The key works at
+once. The loader keeps it for this player in `mod-controls.toml`, as it
+keeps a key the player binds. A mod of the joined server that this client
+does not have counts too, on its page of key bindings. A control that no mod
+declared returns `WorldError::BadArgs`.
+
+`CommandAction::SetSetting` sets one of a mod's settings, as the page's own
+field does. It names the mod by its id and the setting by its key. The value
+is one TOML value of 1 to 1,024 bytes (`CommandAction::MAX_SETTING`). A
+toggle takes `true` or `false`. A number takes a plain number, and a text
+takes its text in quotes.
+The mod's schema and the mod check the value. The loader writes it to the
+world's settings file of the mod, keeps the file's comments, and tells the
+mod. A setting changes only in a world this process runs, so a command at
+the main menu ends `Unavailable`. A mod id that no loaded mod has returns
+`WorldError::BadArgs`.
+
+Each command is `Observed` once the page made the change and the file's
+write is queued. The page shows the outcome as it shows a click's. A change
+the page refuses ends `Cancelled(ChangeRefused)`. The page refuses a value
+the schema or the mod refuses, a setting it shows read-only, and a file that
+does not write.
+
+```rust
+use enshwick::controls::Key;
+use enshwick::input::{ClientCommand, CommandAction};
+
+fn bind(input: enshwick::input::Input) -> Result<(), enshwick::Off> {
+    let action = CommandAction::Rebind {
+        mod_id: "you.trail".to_owned(),
+        control: "toggle".to_owned(),
+        second: false,
+        key: Some(Key::parse("Alt+T")?),
+    };
+    let _queued = input.client_command(&ClientCommand::new(action, 0));
+    Ok(())
+}
+```
+
+```luau
+enshwick.input.client_command({
+    kind = "set_setting",
+    session = enshwick.input.client_snapshot().session,
+    target = "you.trail",
+    setting = "length",
+    value = "12",
 })
 ```
 

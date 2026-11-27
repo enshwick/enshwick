@@ -219,8 +219,16 @@ impl Heard {
     /// `<mod id>:<name>`, as `mod-controls.toml` names it.
     #[must_use]
     pub fn id(&self) -> String {
-        format!("{}:{}", self.mod_id, self.control.name)
+        control_id(&self.mod_id, &self.control.name)
     }
+}
+
+/// The id of mod `mod_id`'s control `name`, `<mod id>:<name>`, as
+/// `mod-controls.toml` names it, for a declared control and a carried one
+/// alike.
+#[must_use]
+pub fn control_id(mod_id: &str, name: &str) -> String {
+    format!("{mod_id}:{name}")
 }
 
 /// The carried controls once the server sent mod `id`'s `controls`.

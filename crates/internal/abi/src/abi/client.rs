@@ -316,7 +316,7 @@ impl ClientSnapshot {
 pub struct ClientCommand {
     /// Size and version of this struct.
     pub header: Header,
-    /// What to do: [`ClientCommand::OPEN_SCREEN`] to [`ClientCommand::CHAT`].
+    /// What to do: [`ClientCommand::OPEN_SCREEN`] to [`ClientCommand::QUIT`].
     pub kind: u32,
     /// A move's hold in milliseconds, 1 to [`ClientCommand::MAX_HOLD_MS`];
     /// a press's, 1 to [`ClientCommand::MAX_PRESS_MS`].
@@ -400,6 +400,12 @@ pub struct ClientCommand {
     /// [`ClientCommand::MAX_AMOUNT`]; items [`ClientCommand::MOVE_ITEM`]
     /// moves, 0 for the whole stack.
     pub amount: u32,
+    /// The key [`ClientCommand::REBIND`] binds, as a control's keys hold
+    /// one (the API's `Key` bits), 0 to clear the binding.
+    pub key: u32,
+    /// Which of the control's two keys [`ClientCommand::REBIND`] sets: 0
+    /// its first, 1 its second.
+    pub key_slot: u32,
 }
 
 impl_headed!(ClientCommand);
@@ -480,12 +486,25 @@ impl ClientCommand {
     /// Sends `text` to the world's chat as the local player's own line, as
     /// the chat window's Enter does, in a world.
     pub const CHAT: u32 = 28;
+    /// Binds `key` in `key_slot` to the control `item`, by the name it was
+    /// declared with, of mod `target`, by its id, on that mod's page of the
+    /// Mods screen, as its key capture or Clear does.
+    pub const REBIND: u32 = 29;
+    /// Sets the setting `item` of mod `target` to `text`, one TOML value,
+    /// on that mod's page of the Mods screen, as its field does.
+    pub const SET_SETTING: u32 = 30;
+    /// Quits the game from the main menu through the interface's own quit
+    /// command; `session` is 0.
+    pub const QUIT: u32 = 31;
     /// The most crafts or items one command asks for.
     pub const MAX_AMOUNT: u32 = 0xffff;
     /// The longest text, in bytes, a window's field takes.
     pub const MAX_TEXT: usize = 255;
     /// The longest chat line, in bytes, the game's chat takes.
     pub const MAX_CHAT: usize = 0x400;
+    /// The longest TOML value, in bytes, [`ClientCommand::SET_SETTING`]
+    /// sets.
+    pub const MAX_SETTING: usize = 0x400;
     /// How many worlds and characters the main menu lists at most.
     pub const MAX_SLOTS: u16 = 16;
     /// The longest password, in bytes, the game's join takes.
@@ -522,6 +541,8 @@ impl ClientCommand {
         target_slot: 0,
         entity: Entity::from_engine(0),
         amount: 0,
+        key: 0,
+        key_slot: 0,
     };
 
     /// Whether the command's own bounds hold: a finite look of at most
@@ -535,7 +556,10 @@ impl ClientCommand {
     /// non-zero recipe 1 to [`ClientCommand::MAX_AMOUNT`] times, a move
     /// between two different slots of at most that many items, an
     /// inventory to take from or deposit into, a slot to equip from or
-    /// trash, and a chat line of 1 to [`ClientCommand::MAX_CHAT`] bytes.
+    /// trash, a chat line of 1 to [`ClientCommand::MAX_CHAT`] bytes, a
+    /// rebind of a named mod's named control in its first or second key, a
+    /// setting of a named mod's named key to 1 to
+    /// [`ClientCommand::MAX_SETTING`] bytes, and a quit of session 0.
     ///
     /// # Examples
     ///
@@ -591,6 +615,13 @@ impl ClientCommand {
             Self::TAKE_ALL | Self::DEPOSIT_ALL => !self.entity.is_none(),
             Self::EQUIP | Self::TRASH => self.slot != 0,
             Self::CHAT => (1..=Self::MAX_CHAT).contains(&self.text.len()),
+            Self::REBIND => !self.target.is_empty() && !self.item.is_empty() && self.key_slot <= 1,
+            Self::SET_SETTING => {
+                !self.target.is_empty()
+                    && !self.item.is_empty()
+                    && (1..=Self::MAX_SETTING).contains(&self.text.len())
+            }
+            Self::QUIT => self.session == 0,
             _ => true,
         }
     }
@@ -625,7 +656,7 @@ pub struct ClientCommandStatus {
     /// [`ClientCommandStatus::PENDING`] to [`ClientCommandStatus::UNAVAILABLE`].
     pub state: u32,
     /// Why a cancelled command ended: [`ClientCommandStatus::SESSION_CHANGED`] to
-    /// [`ClientCommandStatus::ITEM_OFF`]; 0 otherwise.
+    /// [`ClientCommandStatus::CHANGE_REFUSED`]; 0 otherwise.
     pub reason: u32,
     /// The command's kind.
     pub kind: u32,
@@ -678,6 +709,10 @@ impl ClientCommandStatus {
     /// empty or an action the player may not run now, or the item has no
     /// option of that name or takes no such text.
     pub const ITEM_OFF: u32 = 8;
+    /// The Mods screen refused a rebind or a setting: the setting's schema
+    /// or its mod refuses the value, the setting is not open to change
+    /// here, or the file did not write.
+    pub const CHANGE_REFUSED: u32 = 9;
     /// The game ended a join or a host without reaching the world, for
     /// `failure`.
     pub const FAILED: u32 = 5;

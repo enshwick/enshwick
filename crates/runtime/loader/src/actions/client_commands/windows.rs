@@ -8,13 +8,11 @@
 //! acts on the window as a click or typing would, and answers whether the
 //! window's own state shows it.
 
-use std::sync::Mutex;
-
-use enshwick_base::Relock;
 use enshwick_core::__private::rules;
 pub(crate) use enshwick_core::__private::rules::WindowItem as Target;
 
-use super::{Handoff, Progress};
+use super::Progress;
+use super::desk::Desk;
 
 /// What a window command does to its item.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -68,34 +66,24 @@ pub(crate) enum Answer {
     Off,
 }
 
-/// A handed command waits for the carried draw.
-const WAITING: u8 = 1;
 /// The draw answered [`Answer::Shown`].
 const SHOWN: u8 = 2;
 /// The draw answered [`Answer::Missing`].
 const MISSING: u8 = 3;
 /// The draw answered [`Answer::Off`].
 const OFF: u8 = 4;
-/// The draw claimed the command and acts on it in this frame.
-const ACTING: u8 = 5;
 
 /// The window commands' state, one per process.
 struct State {
-    /// The command handed to the carried draw.
-    handoff: Handoff,
-    /// The handed command's ask, filled before its stage shows.
-    handed: Mutex<Option<Ask>>,
-    /// The asks of queued commands not yet handed, by command id.
-    parked: Mutex<Vec<(u64, Ask)>>,
+    /// The asks, from their queue to the carried draw's answer.
+    desk: Desk<Ask>,
     /// Whether the carried windows draw on this build, once the interface
     /// registered them.
     draws: std::sync::OnceLock<fn() -> bool>,
 }
 
 static STATE: State = State {
-    handoff: Handoff::new(),
-    handed: Mutex::new(None),
-    parked: Mutex::new(Vec::new()),
+    desk: Desk::new(),
     draws: std::sync::OnceLock::new(),
 };
 
@@ -112,24 +100,17 @@ pub(super) fn runs() -> bool {
 
 /// Keeps command `id`'s ask until it is handed.
 pub(super) fn park(id: u64, ask: Ask) {
-    STATE.parked.relock().push((id, ask));
+    STATE.desk.park(id, ask);
 }
 
 /// Hands command `id` to the carried draw; false while another is handed.
 pub(super) fn hand(id: u64) -> bool {
-    STATE.handoff.arm(id, WAITING, || {
-        let mut parked = STATE.parked.relock();
-        let ask = parked
-            .iter()
-            .position(|(parked, _)| *parked == id)
-            .map(|at| parked.swap_remove(at).1);
-        *STATE.handed.relock() = ask;
-    })
+    STATE.desk.hand(id)
 }
 
 /// Where the draw stands with command `id`; `None` while it is not handed.
 pub(super) fn progress(id: u64) -> Option<Progress> {
-    Some(match STATE.handoff.stage(id)? {
+    Some(match STATE.desk.stage(id)? {
         SHOWN => Progress::Done,
         MISSING => Progress::Unavailable,
         OFF => Progress::Cancelled(enshwick_core::abi::ClientCommandStatus::ITEM_OFF),
@@ -139,32 +120,25 @@ pub(super) fn progress(id: u64) -> Option<Progress> {
 
 /// Forgets command `id`, handed or still parked.
 pub(super) fn release(id: u64) {
-    STATE.parked.relock().retain(|(parked, _)| *parked != id);
-    if STATE.handoff.release(id).is_some() {
-        *STATE.handed.relock() = None;
-    }
+    STATE.desk.release(id);
 }
 
 /// The command handed to the carried draw and its ask, while it waits for
 /// an answer; one atomic load while none is.
 pub(crate) fn asked() -> Option<(u64, Ask)> {
-    let (id, WAITING) = STATE.handoff.current()? else {
-        return None;
-    };
-    let ask = STATE.handed.relock().clone()?;
-    Some((id, ask))
+    STATE.desk.asked()
 }
 
 /// Claims command `id` for the carried draw before it acts on the window;
 /// false once a cancel took it back, so a cancelled command never acts.
 pub(crate) fn claim(id: u64) -> bool {
-    STATE.handoff.advance(id, WAITING, ACTING)
+    STATE.desk.claim(id)
 }
 
 /// Gives claimed command `id` back to wait for the next frame, as when its
 /// window did not draw or another click won the frame.
 pub(crate) fn retry(id: u64) {
-    let _waits = STATE.handoff.advance(id, ACTING, WAITING);
+    STATE.desk.retry(id);
 }
 
 /// The carried draw's answer to claimed command `id`.
@@ -174,11 +148,14 @@ pub(crate) fn answer(id: u64, answer: Answer) {
         Answer::Missing => MISSING,
         Answer::Off => OFF,
     };
-    let _moved = STATE.handoff.advance(id, ACTING, stage);
+    STATE.desk.answer(id, stage);
 }
-
 #[cfg(test)]
 pub(crate) mod tests {
+    use std::sync::Mutex;
+
+    use enshwick_base::Relock;
+
     use super::*;
 
     /// Held by every test that arms the window commands' process-wide

@@ -33,13 +33,20 @@ pub enum CancelReason {
     /// The window draws the item off, as a Run button while a field is
     /// empty, or the item takes no such option or text.
     ItemOff,
+    /// The Mods screen refused a
+    /// [`CommandAction::Rebind`](super::CommandAction::Rebind) or a
+    /// [`CommandAction::SetSetting`](super::CommandAction::SetSetting): the
+    /// setting's schema or its mod
+    /// refuses the value, the setting is not open to change here, or the
+    /// file did not write.
+    ChangeRefused,
     /// A reason a newer loader gives that this build of the API does not
     /// name, as its raw value.
     Other(u32),
 }
 
 impl CancelReason {
-    const ALL: [(u32, Self, &'static str); 8] = [
+    const ALL: [(u32, Self, &'static str); 9] = [
         (
             Raw::SESSION_CHANGED,
             Self::SessionChanged,
@@ -52,6 +59,7 @@ impl CancelReason {
         (Raw::INPUT_BLOCKED, Self::InputBlocked, "input_blocked"),
         (Raw::MOD_OFF, Self::ModOff, "mod_off"),
         (Raw::ITEM_OFF, Self::ItemOff, "item_off"),
+        (Raw::CHANGE_REFUSED, Self::ChangeRefused, "change_refused"),
     ];
 
     pub(super) fn from_raw(reason: u32) -> Self {

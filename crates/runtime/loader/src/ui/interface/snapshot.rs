@@ -87,6 +87,7 @@ pub(super) unsafe fn note(engine: &Engine, context: usize, popup: bool) {
                 held: crate::actions::local_held::players_held(),
                 host: view.host,
                 loader: loader_screen(),
+                menu_idle: false,
             })
         },
         || Seen::menu(crate::actions::client_snapshot::session(), loader_screen()),
@@ -131,6 +132,20 @@ unsafe fn apply(context: usize, state: Option<usize>, change: FrameChange<'_>) -
     let groups = &crate::actions::client_control::GROUPS;
     match (change, state) {
         (FrameChange::Mods(ask), _) => super::mods::ask(ask),
+        // The main menu reads no interface state; the command's own checks
+        // keep it out of a world.
+        (FrameChange::Quit, _) => {
+            let Some(quit) = groups.quit.get() else {
+                return Applied::Unavailable;
+            };
+            // SAFETY: the caller's contract: the UI context is live only
+            // inside the interface frame, as every menu poster needs.
+            if unsafe { quit.post(context) } {
+                Applied::Taken
+            } else {
+                Applied::Busy
+            }
+        }
         (_, None) => Applied::Busy,
         (FrameChange::Open(screen) | FrameChange::Close(screen), Some(_)) => {
             let Some(toggle) = groups.toggle.get() else {

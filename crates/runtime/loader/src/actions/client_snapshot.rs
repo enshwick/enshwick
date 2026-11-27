@@ -79,6 +79,15 @@ impl LoaderScreen {
     /// The bit of a word a frame wrote, which no page number reaches.
     const READ: u64 = 1 << 31;
 
+    /// Whether it shows a mod's page: its settings and key bindings, or
+    /// the key bindings of a mod of the joined server.
+    pub(crate) const fn shows_mod_page(self) -> bool {
+        matches!(
+            self.page,
+            ClientSnapshot::MOD_PAGE | ClientSnapshot::MOD_BINDINGS
+        )
+    }
+
     /// The screen in one word: the page with [`Self::READ`], then the mod's
     /// index plus 1.
     fn pack(self) -> u64 {

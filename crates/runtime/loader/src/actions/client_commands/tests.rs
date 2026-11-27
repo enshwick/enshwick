@@ -5,6 +5,7 @@ mod chat_lines;
 mod dialog_answers;
 mod item_acts;
 mod joins;
+mod mods_edits;
 
 /// The frame's step while no command opens or closes a screen.
 fn next(command: &Command, seen: &Seen, progress: Option<Progress>, now: u64) -> Next {
@@ -37,6 +38,7 @@ fn seen(screen: u8, tab: TabRead) -> Seen {
         held: Some(0),
         host: 0,
         loader: LoaderScreen::default(),
+        menu_idle: false,
     }
 }
 
