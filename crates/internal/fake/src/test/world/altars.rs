@@ -22,7 +22,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn without_altar_code(mut self) -> Self {
-        self.world.no_altar_code = true;
+        let _new = self.world.lacks.insert(super::Lacks::AltarCode);
         self
     }
 

@@ -19,7 +19,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn without_entity_commands(mut self) -> Self {
-        self.world.no_entity_commands = true;
+        let _new = self.world.lacks.insert(Lacks::EntityCommands);
         self
     }
 
@@ -36,8 +36,39 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn without_world_reads(mut self) -> Self {
-        self.world.no_world_reads = true;
+        let _new = self.world.lacks.insert(Lacks::WorldReads);
         self
+    }
+
+    /// Plays a game build whose table lacks the save code: a save and a
+    /// save hold, or letting one go, answer
+    /// [`Status::UNAVAILABLE`](enshwick_core::abi::Status::UNAVAILABLE), as
+    /// the loader does on such a build, so a mod tests its reply when the
+    /// game cannot save.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().world().without_saves().install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn without_saves(mut self) -> Self {
+        let _new = self.world.lacks.insert(Lacks::SaveCode);
+        self
+    }
+}
+
+impl WorldPresets {
+    /// Whether the build lacks `part`.
+    pub(crate) fn lacks(&self, part: Lacks) -> bool {
+        self.lacks.contains(&part)
+    }
+
+    /// Whether the build lacks the world's reads, for the base domain's
+    /// component reads, which may not name this domain's types.
+    pub(crate) fn lacks_world_reads(&self) -> bool {
+        self.lacks(Lacks::WorldReads)
     }
 }
 
@@ -58,16 +89,25 @@ pub(crate) enum BaseCode {
 /// metres, as the loader read it on server 26430253.
 pub(crate) const GAME_WORLD_BOX: ([f64; 3], [f64; 3]) = ([0.0; 3], [10_240.0, 2_560.0, 10_240.0]);
 
+/// A piece of the world's code a fake game build lacks, so the calls made
+/// of it answer `UNAVAILABLE`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum Lacks {
+    /// Destroy, `set_saved`, teleport and component writes.
+    EntityCommands,
+    /// Component reads, on the game thread too.
+    WorldReads,
+    /// Saves and save holds.
+    SaveCode,
+    /// The code altars are read from.
+    AltarCode,
+}
+
 /// What the fake's world answers, as the test set it.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct WorldPresets {
-    pub(crate) no_entity_commands: bool,
-    /// The build lacks the world's reads: component reads answer
-    /// `UNAVAILABLE` on the game thread too.
-    pub(crate) no_world_reads: bool,
+    pub(crate) lacks: rustc_hash::FxHashSet<Lacks>,
     pub(crate) base_code: BaseCode,
-    /// The build lacks the code altars are read from.
-    pub(crate) no_altar_code: bool,
     /// The game's level cap and need per level, once the test set them.
     pub(crate) level_table: Option<super::progress::LevelTable>,
     pub(crate) placed: Vec<(u32, EntityPlace)>,

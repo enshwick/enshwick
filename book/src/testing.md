@@ -187,7 +187,9 @@ assert_eq!(
 
 A preset sets every type hash, size and offset one area of the API resolves,
 such as `items()` for items and the item registry. Its values agree with each
-other and claim nothing about a game build. `FakeHost` answers them through
+other and claim nothing about a game build. The one exception lays out the
+game settings as the current build does, with the dedicated server's Default
+values. `FakeHost` answers them through
 `EngineFacts`, so a test lays out its game data by the layout the mod resolves,
 never by offsets of its own:
 
@@ -219,6 +221,7 @@ let item_hash = host.hash(types::ITEM_INFO.id())?;
 | `loot()`          | The components loot from destroyed things checks; the loot slot stays the test's. |
 | `meters()`        | The `FuelSetup` component, the template and the template collection, which an item meter is made from. |
 | `container_kinds()` | The markers `ContainerKinds` tells holders apart by.                       |
+| `game_settings()` | What `Load::game_settings` resolves, as the current build lays it out; `set_default_game_settings()` fills the Default preset. |
 
 Where no layout type is public, `test::facts` names each fact a test lays its
 blobs out by:

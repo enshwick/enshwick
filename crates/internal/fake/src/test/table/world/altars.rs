@@ -43,7 +43,7 @@ pub(crate) struct ZoneSizing {
 entries! {
     pub(crate) fn request_altars(me as Mod) -> Status {
         crate::test::table::with_open(|s| {
-            if s.host.world.no_altar_code {
+            if s.host.world.lacks(crate::test::world::Lacks::AltarCode) {
                 return Status::UNAVAILABLE;
             }
             opened(&mut s.world.altar_openers, me);
@@ -76,7 +76,7 @@ entries! {
         };
         crate::test::table::with_open(|s| {
             // The filter opens the altars, as the loader's does.
-            if s.host.world.no_altar_code {
+            if s.host.world.lacks(crate::test::world::Lacks::AltarCode) {
                 return Status::UNAVAILABLE;
             }
             opened(&mut s.world.altar_openers, me);
