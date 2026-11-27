@@ -9,6 +9,7 @@ use super::*;
 
 mod fields;
 mod folders;
+mod hashes;
 mod rewards;
 mod sounds;
 
@@ -178,12 +179,6 @@ fn a_manifest_names_its_problem_line() {
     assert_eq!((error.line, error.column), (2, 1), "{error}");
     let error = PackManifest::parse("id = \"a\"\nversion = \"1\"\nextra = 1\n").unwrap_err();
     assert_eq!(error.line, 3, "{error}");
-}
-
-#[test]
-fn groups_differ_by_pack_and_are_never_a_mod_s() {
-    assert_ne!(group("a"), group("b"));
-    assert_ne!(group("a"), 0);
 }
 
 #[cfg(feature = "unstable")]

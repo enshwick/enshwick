@@ -1,3 +1,4 @@
+use enshwick_values::fnv::{BASIS64, fnv1a64};
 use std::collections::BTreeMap;
 
 use crate::Off;
@@ -845,12 +846,7 @@ pub(super) fn id(full: &str) -> Result<Id, Off> {
 /// The group of a pack's drops.
 #[must_use]
 pub(crate) fn group(namespace: &str) -> u64 {
-    namespace
-        .bytes()
-        .fold(0xcbf2_9ce4_8422_2325_u64, |hash, b| {
-            (hash ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3)
-        })
-        | 1
+    fnv1a64(BASIS64, namespace.as_bytes()) | 1
 }
 
 /// Takes out the drops of the pack `namespace`, as the loader does when the

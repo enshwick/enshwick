@@ -202,7 +202,7 @@ mod tests {
         loader.set_terrain(&[rock()]);
         let at = [10.0, 20.0, 30.0];
 
-        assert_eq!(world.transaction().commit(), Err(WorldError::Refused));
+        assert_eq!(world.transaction().commit(), Err(WorldError::BadArgs));
         let refused = [
             world.transaction().terrain_dig(at, 0.0, Shape::Round, &[]),
             world
@@ -220,7 +220,7 @@ mod tests {
                 .terrain_flatten(at, 17.0, 9, Shape::Round),
         ];
         for transaction in refused {
-            assert_eq!(transaction.commit(), Err(WorldError::Refused));
+            assert_eq!(transaction.commit(), Err(WorldError::BadArgs));
         }
         assert!(loader.transactions().is_empty(), "nothing half-queued");
         let accepted = world
@@ -278,7 +278,7 @@ mod tests {
         };
         assert_eq!(
             wide(91).commit(),
-            Err(WorldError::Refused),
+            Err(WorldError::BadArgs),
             "more bricks than the cap"
         );
         wide(50).commit().unwrap();

@@ -381,7 +381,7 @@ mod tests {
 
         assert_eq!(
             effects.drop_items(ItemId(0x2b), 5, [0.0; 3], ItemDrop::new()),
-            Err(WorldError::Refused),
+            Err(WorldError::BadArgs),
             "an item the game does not know"
         );
         let how = ItemDrop::new().level(3).rarity(ItemRarity::Rare);
@@ -389,11 +389,11 @@ mod tests {
         let entity = dropped.unwrap();
         assert_eq!(
             effects.drop_items(ItemId(0x2a), 0, [0.0; 3], ItemDrop::new()),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgs)
         );
         assert_eq!(
             effects.drop_items(ItemId(0x2a), 65_536, [0.0; 3], ItemDrop::new()),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgs)
         );
         for far in [
             [f64::NAN, 0.0, 0.0],
@@ -402,7 +402,7 @@ mod tests {
         ] {
             assert_eq!(
                 effects.drop_items(ItemId(0x2a), 5, far, ItemDrop::new()),
-                Err(WorldError::Refused),
+                Err(WorldError::BadArgs),
                 "a position past the fixed point: {far:?}"
             );
         }

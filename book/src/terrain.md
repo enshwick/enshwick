@@ -176,7 +176,7 @@ Each call fails with a [`WorldError`](world.md#writing-components):
 
 | Error | When |
 | --- | --- |
-| `Refused` | a radius, height, position or material is out of range |
+| `BadArgs` | a radius, height, position or material is out of range |
 | `OutsideWorld` | the edit reaches past the world's edge or above 1,024 metres |
 | `NotLoaded` | part of what the edit can reach is not loaded |
 | `WrongThread` | the call runs off the game thread |
@@ -606,7 +606,7 @@ fails with `OutsideWorld`. The game itself reads such voxels as air, which
 a mod could not tell from real air. The edge is the game's own, read from
 the running world. The height is the loader's, above every place the game
 builds, since the game keeps none. An empty box,
-one larger than `READ_MAX` or one past 2³⁰ voxels on an axis is `Refused`.
+one larger than `READ_MAX` or one past 2³⁰ voxels on an axis is `BadArgs`.
 A read costs one lock and one copy for each 4-metre brick it touches.
 Reads, like edits, need a quiet moment: inside a step, from a filter or a
 hook, they fail with `WrongThread`.
@@ -787,8 +787,8 @@ as plain data. The result is a `Capture` with its voxels and its props. Both
 are counted from the region's lowest corner, its `origin`. The call reads
 the voxels in tiles of up to 64 voxels, 32 metres, a side, counted from that
 corner. It takes at most `CAPTURE_TILES`, 16 tiles. That fits a region of
-128 by 128 metres and 32 high, or a cube of 64 metres. A larger region is
-`Refused` before any read. A tile read took 2.4 to 3.1 milliseconds on a
+128 by 128 metres and 32 high, or a cube of 64 metres. A larger region fails
+with `BadArgs` before any read. A tile read took 2.4 to 3.1 milliseconds on a
 server copy under Rosetta and Wine. So a capture holds the game thread for
 at most about 50 milliseconds. A mod captures a bigger region in parts, one
 per step or scheduler task, and keeps them together itself. `NotLoaded` and

@@ -33,6 +33,7 @@ use crate::engine::fuse::Fuse;
 use crate::engine::loader::{Loader, Target};
 use crate::engine::pinned;
 use enshwick_core::content::Guid;
+use enshwick_values::fnv::{BASIS32, fnv1a32_from};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -251,17 +252,17 @@ const fn record_fits(size: usize, context: usize) -> bool {
 /// The hash a served `data` gets: its size, two FNV-1a words over it and
 /// the loader's mark.
 pub(crate) fn hash_of(data: &[u8]) -> ContentHash {
-    let fnv = |seed: u32| {
-        data.iter()
-            .fold(seed, |h, &b| (h ^ u32::from(b)).wrapping_mul(0x0100_0193))
-    };
     [
         u32::try_from(data.len()).unwrap_or(u32::MAX),
-        fnv(0x811c_9dc5),
-        fnv(0x2f69_3d1b),
+        fnv1a32_from(BASIS32, data),
+        fnv1a32_from(SECOND_SEED, data),
         MARK,
     ]
 }
+
+/// The seed of a served hash's second FNV-1a word, so two different
+/// contents rarely share both words.
+const SECOND_SEED: u32 = 0x2f69_3d1b;
 
 /// Why content was not served or read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]

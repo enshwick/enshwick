@@ -573,6 +573,7 @@ impl World {
     ///
     /// # Errors
     ///
+    /// [`WorldError::BadArgs`] for entity 0,
     /// [`WorldError::Gone`] for an entity not in the world,
     /// [`WorldError::Lacks`] when it lacks the component,
     /// [`WorldError::Refused`] for a type the loader will not write,

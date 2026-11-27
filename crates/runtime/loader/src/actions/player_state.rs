@@ -428,10 +428,32 @@ pub(crate) unsafe fn read(
         })
     });
     STATE.parts.write(read.pack(at));
-    if let Some(slots) = &layout.slots
-        && !SLOTS_FUSE.is_off()
-        && slots_wanted(at)
-    {
+    if let Some(slots) = layout.slots.as_ref().filter(|_| !SLOTS_FUSE.is_off()) {
+        read_selected(&component, layout, slots, player, selection, at);
+    }
+}
+
+/// Reads `player`'s equipment slots each step and, while a mod asks, its
+/// slots at `at`; `selection` is the `SlotSelection` the action bar's read
+/// found, which flags the action bar's slots whatever the equipment's layout.
+fn read_selected(
+    component: &dyn Fn(u32, u32) -> Option<*const u8>,
+    layout: &Layout,
+    slots: &SlotLayout,
+    player: u32,
+    selection: Option<*const u8>,
+    at: u64,
+) {
+    // The action bar's read found the same `SlotSelection` the equipment's
+    // layout names.
+    let same = selection.filter(|_| {
+        layout
+            .actionbar
+            .zip(slots.equipment.as_ref())
+            .is_some_and(|((bar, _), equipment)| bar == equipment.selection)
+    });
+    let named = equipment_step(component, slots, player, same);
+    if slots_wanted(at) {
         let bar = selection
             .zip(slots.actionbar_entities)
             .map_or([0; 2], |(data, entities)| {
@@ -439,22 +461,59 @@ pub(crate) unsafe fn read(
                 // two action bar entity ids sit at the reflected offset.
                 unsafe { enshwick_core::raw::read_at::<[u32; 2]>(data, entities) }
             });
-        let named = slots.equipment.as_ref().and_then(|equipment| {
-            let data = component(player, equipment.selection)?;
-            let mut named = [0u64; EQUIPMENT_SLOTS];
-            for (i, slot) in named[..equipment.count].iter_mut().enumerate() {
-                // SAFETY: `data` is the player's live `SlotSelection`, whose
-                // `EquipmentSlotData` at the reflected `offset` holds `count`
-                // `InventorySlotId`s of the reflected `stride`, at least 8.
-                let id: u64 = unsafe {
-                    enshwick_core::raw::read_at(data, equipment.offset + equipment.stride * i)
-                };
-                *slot = id & SLOT_ID;
-            }
-            Some(named)
-        });
-        read_slots(&component, slots, player, bar, named.as_ref(), at);
+        read_slots(component, slots, player, bar, named.as_ref(), at);
     }
+}
+
+/// Reads the slots `player`'s `SlotSelection` names for its equipment slots,
+/// `selection` when the caller found it already, and keeps where one moved
+/// ([`equipment::moved_words`]); every step, so allocation-free: one
+/// component read, at most [`EQUIPMENT_SLOTS`] words and, for a slot that
+/// moved, its item's.
+fn equipment_step(
+    component: &dyn Fn(u32, u32) -> Option<*const u8>,
+    slots: &SlotLayout,
+    player: u32,
+    selection: Option<*const u8>,
+) -> Option<[u64; EQUIPMENT_SLOTS]> {
+    let equipment = slots.equipment.as_ref()?;
+    let data = selection.or_else(|| component(player, equipment.selection))?;
+    let mut named = [0u64; EQUIPMENT_SLOTS];
+    for (i, slot) in named[..equipment.count].iter_mut().enumerate() {
+        // SAFETY: `data` is the player's live `SlotSelection`, whose
+        // `EquipmentSlotData` at the reflected `offset` holds `count`
+        // `InventorySlotId`s of the reflected `stride`, at least 8.
+        let id: u64 =
+            unsafe { enshwick_core::raw::read_at(data, equipment.offset + equipment.stride * i) };
+        *slot = id & SLOT_ID;
+    }
+    let before = STATE.equipment.load();
+    if let Some(words) = equipment::moved_words(before.as_ref(), &named, |slot| {
+        item_at(component, slots, slot)
+    }) {
+        STATE.equipment.write(words);
+    }
+    Some(named)
+}
+
+/// The item in `slot`, an `InventorySlotId`'s entity and index; 0 for none
+/// or a slot whose inventory does not read.
+fn item_at(component: &dyn Fn(u32, u32) -> Option<*const u8>, at: &SlotLayout, slot: u64) -> u64 {
+    let (link, index) = (slot & 0xffff_ffff, slot >> 32 & 0xff);
+    let (Ok(link), Ok(index)) = (u32::try_from(link), u16::try_from(index)) else {
+        return 0;
+    };
+    if index >= u16::from(SLOTS) {
+        return 0;
+    }
+    component(link, at.inventory).map_or(0, |stacks| {
+        // SAFETY: `stacks` is the link's live `Inventory` of `SLOTS`
+        // reflected `ItemStack`s, `index < SLOTS`; each stack holds its u32
+        // item id first.
+        u64::from(unsafe {
+            enshwick_core::raw::read_at::<u32>(stacks, usize::from(index) * at.stack)
+        })
+    })
 }
 
 /// The bytes of an `InventorySlotId` that name it: the `u32` entity and the
@@ -564,6 +623,47 @@ pub fn bench_slot_read(watching: bool) -> impl FnMut() -> u64 {
         at += 16;
         read_slots(&component, &TEST_SLOTS, 7, [0; 2], None, at);
         STATE.watched_changes.load(Ordering::Relaxed)
+    }
+}
+
+/// Readies one step's read of the 20 equipment slots `SlotSelection` names,
+/// as client 26430625 lays them out, for its benchmark: with none moved, the
+/// read of every step, or with one moved back and forth each step.
+#[cfg(feature = "test")]
+#[doc(hidden)]
+pub fn bench_equipment_step(moving: bool) -> impl FnMut() -> u64 {
+    const STRIDE: usize = 8;
+    let mut selection = [0u8; STRIDE * 20];
+    let stacks = vec![7u8; 12 * usize::from(SLOTS)];
+    let slots = SlotLayout {
+        equipment: Some(EquipmentLayout {
+            selection: 3,
+            offset: 0,
+            stride: STRIDE,
+            count: 20,
+        }),
+        ..TEST_SLOTS
+    };
+    let mut step = 0u64;
+    move || {
+        step += 1;
+        if moving {
+            let slot: u64 = if step.is_multiple_of(2) {
+                0x50
+            } else {
+                0x51 | 1 << 32
+            };
+            selection[18 * STRIDE..19 * STRIDE].copy_from_slice(&slot.to_ne_bytes());
+        }
+        let data = selection.as_ptr();
+        let component = |entity: u32, hash: u32| -> Option<*const u8> {
+            match (entity, hash) {
+                (7, 3) => Some(data),
+                (0x50 | 0x51, 2) => Some(stacks.as_ptr()),
+                _ => None,
+            }
+        };
+        equipment_step(&component, &slots, 7, None).map_or(0, |named| named[18])
     }
 }
 
@@ -820,6 +920,50 @@ mod tests {
         assert!(!watch_fresh(1500), "a new watch waits for its baseline");
         inventories[1] = stacks_of(6, 1);
         assert_eq!(step(&inventories, 1500), base + 2, "its baseline");
+    }
+
+    #[test]
+    fn the_action_bar_flags_its_slots_on_a_build_without_the_equipment_layout() {
+        let slots = SlotLayout {
+            actionbar_entities: Some(0),
+            ..TEST_SLOTS
+        };
+        let layout = Layout {
+            position: None,
+            look: None,
+            vitals: None,
+            actionbar: Some((3, 8)),
+            slots: None,
+        };
+        let mut selection = [0u8; 16];
+        selection[..4].copy_from_slice(&70u32.to_ne_bytes());
+        let mut setup = [0u8; 6 * LINKS];
+        setup[..4].copy_from_slice(&70u32.to_ne_bytes());
+        setup[5 * LINKS] = 1;
+        let stacks = stacks_of(5, 0);
+        let component = |entity: u32, hash: u32| -> Option<*const u8> {
+            match (entity, hash) {
+                (7, 1) => Some(setup.as_ptr()),
+                (70, 2) => Some(stacks.as_ptr()),
+                _ => None,
+            }
+        };
+        STATE.slots_asked.store(1000, Ordering::Relaxed);
+        read_selected(
+            &component,
+            &layout,
+            &slots,
+            7,
+            Some(selection.as_ptr()),
+            1000,
+        );
+        let words = STATE.slots.load().unwrap();
+        let first = unpack_slot(words[2..5].try_into().unwrap());
+        assert_eq!(
+            first.flags & ClientSlot::ACTIONBAR,
+            ClientSlot::ACTIONBAR,
+            "the action bar's inventory 70 is flagged"
+        );
     }
 
     /// A time past the last read's freshness.

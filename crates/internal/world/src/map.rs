@@ -409,7 +409,7 @@ impl Map {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] for a corner that is not finite; otherwise
+    /// [`WorldError::BadArgs`] for a corner that is not finite; otherwise
     /// as [`Map::markers`].
     ///
     /// # Examples
@@ -424,7 +424,7 @@ impl Map {
     /// ```
     #[script]
     pub fn markers_in(self, a: [f64; 3], b: [f64; 3]) -> Result<Vec<MapMarker>, WorldError> {
-        let (low, high) = crate::world::span(a, b).ok_or(WorldError::Refused)?;
+        let (low, high) = crate::world::span(a, b).ok_or(WorldError::BadArgs)?;
         self.scan(|at| (0..3).all(|axis| (low[axis]..=high[axis]).contains(&at[axis])))
     }
 
@@ -509,9 +509,10 @@ impl Map {
     ///
     /// [`WorldError::Unavailable`] for a player whose client takes no messages
     /// from the loader, as one without Enshwick or not online, and on a
-    /// client in another's game; [`WorldError::Refused`] for a place that
-    /// is not finite, a radius that is not above 0 and at most 100 000
-    /// metres, or a link to the player with no room; [`WorldError::Gone`]
+    /// client in another's game; [`WorldError::BadArgs`] for a place
+    /// that is not finite or a radius that is not above 0 and at most
+    /// 100 000 metres; [`WorldError::Refused`] for a link to the player with
+    /// no room; [`WorldError::Gone`]
     /// for a character no connected player has.
     ///
     /// # Examples

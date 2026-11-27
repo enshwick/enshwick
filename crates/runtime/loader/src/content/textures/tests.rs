@@ -136,6 +136,11 @@ fn a_served_hash_carries_its_size_and_the_mark() {
 }
 
 #[test]
+fn a_served_hash_keeps_its_value_for_the_same_bytes() {
+    assert_eq!(hash_of(b"pixels"), [6, 0x2272_692c, 0xa60d_bbbe, MARK]);
+}
+
+#[test]
 fn requests_are_read_only_when_inside_one_readable_region() {
     use windows_sys::Win32::System::Memory::{
         MEM_COMMIT, MEM_PRIVATE, PAGE_NOACCESS, PAGE_READWRITE,

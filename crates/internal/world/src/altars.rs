@@ -493,7 +493,7 @@ pub fn base_limit() -> Option<BaseLimit> {
 ///
 /// # Errors
 ///
-/// [`WorldError::Refused`] below the game's 16 bases
+/// [`WorldError::BadArgs`] below the game's 16 bases
 /// ([`BaseLimit::vanilla_bases`]) and [`WorldError::Unavailable`] without a
 /// loader.
 ///

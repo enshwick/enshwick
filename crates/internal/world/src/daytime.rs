@@ -137,7 +137,7 @@ impl Clock {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] for an hour that is not a finite number,
+    /// [`WorldError::BadArgs`] for an hour that is not a finite number,
     /// [`WorldError::WrongThread`] off the game thread and
     /// [`WorldError::Unavailable`] on a build without the clock.
     ///
@@ -147,7 +147,7 @@ impl Clock {
     #[script]
     pub fn set_hours(&self, hours: f32) -> Result<(), WorldError> {
         if !hours.is_finite() {
-            return Err(WorldError::Refused);
+            return Err(WorldError::BadArgs);
         }
         #[expect(
             clippy::cast_possible_truncation,
@@ -203,7 +203,7 @@ impl ClockSpeed {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] for a factor outside 0 to [`ClockSpeed::MAX`],
+    /// [`WorldError::BadArgs`] for a factor outside 0 to [`ClockSpeed::MAX`],
     /// [`WorldError::WrongThread`] off the game thread and
     /// [`WorldError::Unavailable`] on a build without the clock or once the
     /// loader turned the clock's speed off.
@@ -214,7 +214,7 @@ impl ClockSpeed {
     #[script]
     pub fn set(&self, factor: f32) -> Result<(), WorldError> {
         if !(0.0..=Self::MAX).contains(&factor) {
-            return Err(WorldError::Refused);
+            return Err(WorldError::BadArgs);
         }
         WorldError::from_status((self.host.api().set_time_speed)(self.host.handle(), factor))
     }

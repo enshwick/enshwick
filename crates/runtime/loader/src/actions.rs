@@ -148,6 +148,7 @@ pub(crate) static PARTS: &[&Part] = &[
     &Part {
         seal: Some(|_| {
             controls::seal();
+            crate::base::frame_writes::on_give_up(controls::given_up);
             crate::base::remote::on_client(crate::base::remote::CONTROLS, |message| {
                 if let Message::Controls { id, name, controls } = message {
                     controls::carry(&id, &name, &controls);
@@ -218,6 +219,7 @@ pub(crate) static PARTS: &[&Part] = &[
         ..part!("build_reasons", build_reasons)
     },
     &Part {
+        seal: Some(|_| crate::base::frame_writes::on_give_up(chat_mute::given_up)),
         world_event: Some(fused!("chat mutes at world events", |loader, event| {
             chat_mute::world_event(loader, event);
         })),

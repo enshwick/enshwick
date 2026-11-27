@@ -72,8 +72,8 @@ is not the type's. Each call fails with a
 - `WrongThread` off the game thread;
 - `Refused` for a type the loader does not allow, or when the step has no
   room for more events;
-- `Refused` for a position the engine's fixed point cannot hold, as
-  [Positions](ecs.md#positions) bounds it;
+- `BadArgs` for a size that is not the type's, or a position the engine's
+  fixed point cannot hold, as [Positions](ecs.md#positions) bounds it;
 - `Missing` on a build without the event.
 
 ```rust
@@ -183,7 +183,7 @@ template is a GUID as `World::template` gives it, so a mod can spawn copies of
 what it finds in the world. The new entity's id comes back at once. The
 entity is in the world after the next step. A template the game does not
 know spawns nothing. A position the engine's fixed point cannot hold is
-refused (`Refused`), as [Positions](ecs.md#positions) bounds it.
+refused (`BadArgs`), as [Positions](ecs.md#positions) bounds it.
 `Spawn::new()` takes the template as it is. Three
 methods change the spawn:
 
@@ -232,10 +232,10 @@ change it:
 - `.level(n)` gives the item a level, as the game levels weapons and armour;
 - `.rarity(rarity)` gives it an `ItemRarity`.
 
-An item the game does not know is refused (`WorldError::Refused`), and so
-is a position the engine's fixed point cannot hold. A drop
-before the game's items or its world exist answers `WorldError::Missing`, and
-a later drop may succeed. The loader
+An item the game does not know is a bad argument (`WorldError::BadArgs`), and
+so is a position the engine's fixed point cannot hold. A drop
+before the game's items or its world exist answers `WorldError::Unavailable`,
+and a later drop may succeed. The loader
 reads the pickup on a thread of its own as the server starts, before its
 world loads. The read takes about a tenth of a second, and a drop asked for
 before it ends waits for the rest of it.

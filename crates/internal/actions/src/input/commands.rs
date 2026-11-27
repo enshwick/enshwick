@@ -166,7 +166,8 @@ pub enum CommandAction {
     /// [`WorldError::Unavailable`] while the dialog `dialog` names does not
     /// show, which
     /// [`ClientSnapshot::dialog_buttons`](super::ClientSnapshot::dialog_buttons)
-    /// tells, and refused for a response the dialog has no button for.
+    /// tells, and [`WorldError::BadArgs`] for a response the dialog has no
+    /// button for.
     AnswerDialog {
         /// The dialog, as [`ClientSnapshot::dialog`](super::ClientSnapshot::dialog)
         /// numbers it.
@@ -542,9 +543,12 @@ impl Input {
     /// # Errors
     ///
     /// [`WorldError::Refused`] while one of its kind waits or the mod holds
-    /// four presses, a bad argument
-    /// for a wrong screen, tab or bound, [`WorldError::Unavailable`] on a
-    /// server and on a build without what it needs.
+    /// four presses; [`WorldError::BadArgs`] for a value past its bound, a
+    /// name the build does not know, such as an equipment slot, tab or game
+    /// action, a mod id no loaded mod has, a response the dialog has no
+    /// button for, or a command for another screen or session than the
+    /// client's; [`WorldError::Unavailable`] on a server and on a build
+    /// without what it needs, a screen to open among them.
     ///
     /// # Examples
     ///

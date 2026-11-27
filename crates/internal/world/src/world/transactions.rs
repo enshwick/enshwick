@@ -560,7 +560,7 @@ impl Transaction {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] for no changes, a change the loader refuses
+    /// [`WorldError::BadArgs`] for no changes, a change the loader refuses
     /// (as [`Terrain`](crate::terrain::Terrain) does; a block whose shape
     /// item has no `VoxelBlueprintItem` or whose material item places no
     /// building material; voxels whose kind is not the one their material
@@ -585,7 +585,7 @@ impl Transaction {
             .collect();
         let mut next = writes.iter();
         let ops: Vec<TransactionOp> = self.changes.iter().map(|c| c.op(&mut next)).collect();
-        let count = u32::try_from(ops.len()).map_err(|_| WorldError::Refused)?;
+        let count = u32::try_from(ops.len()).map_err(|_| WorldError::BadArgs)?;
         let mut id = 0u64;
         let api = self.host.api();
         let status = (api.transaction_commit)(

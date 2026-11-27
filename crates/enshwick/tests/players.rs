@@ -177,7 +177,7 @@ mod tests {
         );
         assert_eq!(
             world.change_permissions(enshwick::PlayerKey::new(0), &taken, &[]),
-            Err(enshwick::WorldError::Refused)
+            Err(enshwick::WorldError::BadArgs)
         );
     }
 

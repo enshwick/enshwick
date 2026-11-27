@@ -213,7 +213,7 @@ impl Inventories {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`](crate::WorldError::Refused) for item 0, count
+    /// [`WorldError::BadArgs`](crate::WorldError::BadArgs) for item 0, count
     /// 0 or an entity that is no player in game;
     /// [`WorldError::WrongThread`](crate::WorldError::WrongThread) off the
     /// server's game thread; [`WorldError::Unavailable`](crate::WorldError::Unavailable)

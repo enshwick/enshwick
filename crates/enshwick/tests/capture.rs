@@ -160,7 +160,7 @@ mod tests {
         );
         assert_eq!(
             world.props_in([f64::NAN, 0.0, 0.0], [1.0; 3]),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgs)
         );
     }
 
@@ -314,14 +314,14 @@ mod tests {
             world
                 .capture(VoxelPos::new(0, 0, 0), VoxelPos::new(8191, 0, 8191))
                 .err(),
-            Some(WorldError::Refused),
+            Some(WorldError::BadArgs),
             "a thin region of many tiles"
         );
         assert_eq!(
             world
                 .capture(VoxelPos::new(0, 0, 0), VoxelPos::new(tiles, 0, 0))
                 .err(),
-            Some(WorldError::Refused),
+            Some(WorldError::BadArgs),
             "one tile past the most"
         );
         assert!(

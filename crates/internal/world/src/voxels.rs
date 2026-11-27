@@ -631,7 +631,7 @@ impl Voxels {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] for an empty box, more than [`READ_MAX`]
+    /// [`WorldError::BadArgs`] for an empty box, more than [`READ_MAX`]
     /// voxels or one past 2³⁰ voxels on an axis;
     /// [`WorldError::NotLoaded`] while part of the box is not loaded yet,
     /// which this read starts loading: try again in a second or so;
@@ -646,16 +646,16 @@ impl Voxels {
     /// See [`VoxelBox`].
     #[script]
     pub fn read(&self, min: VoxelPos, size: [u32; 3]) -> Result<VoxelBox, WorldError> {
-        let count = abi::Voxel::read_count(min.to_array(), size).ok_or(WorldError::Refused)?;
+        let count = abi::Voxel::read_count(min.to_array(), size).ok_or(WorldError::BadArgs)?;
         let mut raw =
-            vec![abi::Voxel::default(); usize::try_from(count).map_err(|_| WorldError::Refused)?];
+            vec![abi::Voxel::default(); usize::try_from(count).map_err(|_| WorldError::BadArgs)?];
         let corner = min.to_array();
         let status = (self.host.api().voxel_read)(
             self.host.handle(),
             &raw const corner,
             &raw const size,
             raw.as_mut_ptr(),
-            u32::try_from(count).map_err(|_| WorldError::Refused)?,
+            u32::try_from(count).map_err(|_| WorldError::BadArgs)?,
         );
         WorldError::from_status(status)?;
         Ok(VoxelBox {

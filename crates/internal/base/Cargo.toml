@@ -39,12 +39,10 @@ proptest.workspace = true
 insta.workspace = true
 serde = { workspace = true, features = ["derive"] }
 
-# The features of `enshwick-core`, which turns each of them on here, and
-# `test`, the checks only the loader's tests make of this crate.
+# The features of `enshwick-core`, which turns each of them on here.
 [features]
 fake = []
 schema = ["dep:schemars"]
-test = []
 unstable = []
 
 [lints]

@@ -78,7 +78,7 @@ mod tests {
 
         assert_eq!(
             buffs.apply(player, BuffTypeId(8), Apply::new()),
-            Err(WorldError::Refused),
+            Err(WorldError::BadArgs),
             "unknown type"
         );
         assert_eq!(

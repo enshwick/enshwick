@@ -160,8 +160,7 @@ impl LoadMethods for crate::BaseLoad {
                     let (like, pixels) = match icon {
                         PackIcon::Tint { like, tint } => (*like, Pixels::Tint(*tint)),
                         PackIcon::Png(bytes) => {
-                            let bytes: &'static [u8] = Box::leak(bytes.clone().into_boxed_slice());
-                            (item.like, Pixels::Png(bytes))
+                            (item.like, Pixels::Png(enshwick_base::intern::bytes(bytes)))
                         }
                     };
                     Ok(Icon::new(id(&format!("{}.icon", item.id))?, like, pixels))

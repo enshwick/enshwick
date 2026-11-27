@@ -23,7 +23,15 @@ pub const PRIME64: u64 = 0x0100_0000_01b3;
 /// ```
 #[must_use]
 pub const fn fnv1a32(bytes: &[u8]) -> u32 {
-    let mut hash = BASIS32;
+    fnv1a32_from(BASIS32, bytes)
+}
+
+/// FNV-1a 32 over `bytes` from `seed`, each byte taken unsigned: a hash
+/// over several pieces in a row passes each piece's result on as the next
+/// piece's seed.
+#[must_use]
+pub const fn fnv1a32_from(seed: u32, bytes: &[u8]) -> u32 {
+    let mut hash = seed;
     let mut i = 0;
     while i < bytes.len() {
         hash = (hash ^ bytes[i] as u32).wrapping_mul(PRIME32);
@@ -57,5 +65,11 @@ mod tests {
         assert_eq!(fnv1a64(BASIS64, b""), BASIS64);
         assert_eq!(fnv1a64(BASIS64, b"a"), 0xaf63_dc4c_8601_ec8c);
         assert_eq!(fnv1a64(BASIS64, b"foobar"), 0x8594_4171_f739_67e8);
+    }
+
+    #[test]
+    fn a_seeded_hash_over_pieces_in_a_row_is_the_hash_of_their_join() {
+        assert_eq!(fnv1a32_from(BASIS32, b"foobar"), fnv1a32(b"foobar"));
+        assert_eq!(fnv1a32_from(fnv1a32(b"foo"), b"bar"), fnv1a32(b"foobar"));
     }
 }

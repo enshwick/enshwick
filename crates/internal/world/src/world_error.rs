@@ -45,6 +45,11 @@ pub enum WorldError {
     /// clients.
     #[error("refused by the world")]
     Refused,
+    /// An argument is malformed or names what this game build does not
+    /// know, such as an equipment slot, screen or game action under a name
+    /// the build lacks, or a value past its bounds.
+    #[error("an argument is malformed or unknown to this game build")]
+    BadArgs,
     /// The entity is in the world but lacks the component, such as a chest
     /// asked for its stamina.
     #[error("the entity lacks the component")]
@@ -98,7 +103,8 @@ impl enshwick_base::load::StatusError for WorldError {
             Status::STATIC_HALF => Self::StaticHalf,
             #[cfg(feature = "unstable")]
             Status::NOT_A_PROP => Self::NotAProp,
-            Status::REFUSED | Status::BAD_ARGS => Self::Refused,
+            Status::REFUSED => Self::Refused,
+            Status::BAD_ARGS => Self::BadArgs,
             Status::UNAVAILABLE | Status::MISSING => Self::Unavailable,
             Status::BUSY => Self::Busy,
             _ => Self::Failed,

@@ -24,15 +24,6 @@ pub use builds::{
     rebuild_in, rebuild_one, rebuild_readers, rekeys_another,
 };
 
-/// Whether the scheduler counts time only as a fake host's steps move it,
-/// which it does once a fake host is installed in the process; the loader's
-/// tests check that theirs is the wall clock.
-#[cfg(feature = "test")]
-#[must_use]
-pub fn fake_clock() -> bool {
-    crate::schedule::fake_clock()
-}
-
 /// Makes the calling thread's atomic file writes wait about 30 ms per step
 /// for a held file when `briefly`, not a second, and a second again when
 /// not.

@@ -345,6 +345,9 @@ entries! {
             if entity_calls_off(s) {
                 return Status::UNAVAILABLE;
             }
+            if entity.get() == 0 {
+                return Status::BAD_ARGS;
+            }
             if s.host.base.players.iter().any(|p| p.entity == entity) {
                 return Status::REFUSED;
             }

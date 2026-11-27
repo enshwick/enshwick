@@ -77,10 +77,10 @@ as the game's admin command does:
 It returns the settings now in force, or a
 [`WorldError`](world.md#writing-components):
 
-- `Refused` for a negative or not finite factor, or a day or night length of
+- `BadArgs` for a negative or not finite factor, or a day or night length of
   zero;
 - `WrongThread` off the game thread;
-- `Missing` while no world runs.
+- `Unavailable` while no world runs.
 
 Most values act at once. Some act on what comes next:
 

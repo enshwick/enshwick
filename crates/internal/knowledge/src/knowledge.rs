@@ -322,9 +322,9 @@ impl Knowledge {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] for an id the game does not know, a grant
-    /// that does not fit the id's kind,
-    /// a bit the game does not expect or a player not in the game;
+    /// [`WorldError::BadArgs`] for an id the game does not know, a grant
+    /// that does not fit the id's kind or a bit the game does not expect;
+    /// [`WorldError::Refused`] for a player not in the game;
     /// [`WorldError::Busy`] for a step with too many grants, which a later
     /// step may take; [`WorldError::WrongThread`] off the game
     /// thread; [`WorldError::Unavailable`] on a build without knowledge.
@@ -378,9 +378,10 @@ impl Knowledge {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] for an id the game does not know, a revoke
-    /// that does not fit the id's kind, a bit past 31, or a player not in
-    /// the game or whose save has not loaded yet;
+    /// [`WorldError::BadArgs`] for an id the game does not know, a
+    /// revoke that does not fit the id's kind or a bit past 31;
+    /// [`WorldError::Refused`] for a player not in the game or whose save
+    /// has not loaded yet;
     /// [`WorldError::WrongThread`] off the game thread;
     /// [`WorldError::Unavailable`] on a build without it.
     ///
@@ -452,9 +453,10 @@ impl Knowledge {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] for an id the game does not know, a bool
-    /// above 1, a gained bit the game does not expect when shown, or a
-    /// player not in the game or whose save has not loaded yet;
+    /// [`WorldError::BadArgs`] for an id the game does not know, a bool
+    /// above 1 or a gained bit the game does not expect when shown;
+    /// [`WorldError::Refused`] for a player not in the game or whose save
+    /// has not loaded yet;
     /// [`WorldError::Busy`] when a shown gain finds the step's grants full,
     /// with what the set wrote and granted before it kept;
     /// [`WorldError::WrongThread`] off the game thread;
@@ -524,8 +526,8 @@ impl Knowledge {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] for an id the game does not know, an id of
-    /// the world's or a grant that does not fit the id's kind, and as for
+    /// [`WorldError::BadArgs`] for an id the game does not know, an id
+    /// of the world's or a grant that does not fit the id's kind, and as for
     /// [`Knowledge::grant`] when the character is in the game;
     /// [`WorldError::Gone`] for a character no connected player has;
     /// [`WorldError::WrongThread`] off the game thread;

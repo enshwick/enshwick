@@ -162,7 +162,7 @@ mod tests {
                     .transaction()
                     .place_block(shape, material, at)
                     .commit(),
-                Err(WorldError::Refused),
+                Err(WorldError::BadArgs),
                 "{shape:?} of {material:?}"
             );
         }
@@ -176,7 +176,7 @@ mod tests {
                 .transaction()
                 .place_block(SHAPE, STONE, skewed)
                 .commit(),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgs)
         );
         let end = f64::from(enshwick::abi::Voxel::END) / enshwick::abi::Voxel::PER_METRE;
         for far in [
@@ -190,7 +190,7 @@ mod tests {
                     .transaction()
                     .place_block(SHAPE, STONE, WorldTransform::at(far))
                     .commit(),
-                Err(WorldError::Refused),
+                Err(WorldError::BadArgs),
                 "{far:?}"
             );
         }

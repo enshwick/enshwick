@@ -96,11 +96,11 @@ mod tests {
 
         assert_eq!(
             settings.change(|s| s.night_time_duration = Duration::ZERO),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgs)
         );
         assert_eq!(
             settings.change(|s| s.player_health_factor = f32::NAN),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgs)
         );
 
         assert!(

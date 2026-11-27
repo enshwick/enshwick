@@ -318,6 +318,7 @@ Shape::SCHEMA_TYPES
 Shape::SHAPE
 VERSION
 WorldError
+WorldError::BadArgs
 WorldError::Busy
 WorldError::Failed
 WorldError::Gone

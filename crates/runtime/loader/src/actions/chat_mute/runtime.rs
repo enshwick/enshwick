@@ -2,7 +2,7 @@
 //! every line a player types.
 
 use std::io::ErrorKind;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
@@ -22,6 +22,9 @@ struct State {
     any: AtomicBool,
     /// Held while a change reads and writes the file.
     writing: Mutex<()>,
+    /// The file `keys` came from: the running world's, `None` while none
+    /// runs.
+    file: Mutex<Option<PathBuf>>,
     /// When each muted player was last told.
     told: Mutex<rustc_hash::FxHashMap<u64, Instant>>,
 }
@@ -30,6 +33,7 @@ static STATE: State = State {
     keys: Mutex::new(Vec::new()),
     any: AtomicBool::new(false),
     writing: Mutex::new(()),
+    file: Mutex::new(None),
     told: Mutex::new(rustc_hash::FxHashMap::with_hasher(
         rustc_hash::FxBuildHasher,
     )),
@@ -43,7 +47,7 @@ fn path(loader: &Loader) -> Option<PathBuf> {
 
 /// The text of the mutes' file, a change still waiting for a held file
 /// included.
-fn read(path: &std::path::Path) -> std::io::Result<String> {
+fn read(path: &Path) -> std::io::Result<String> {
     crate::base::frame_writes::waiting(path).map_or_else(|| std::fs::read_to_string(path), Ok)
 }
 
@@ -77,24 +81,49 @@ pub(crate) fn serving(loader: &Loader) -> bool {
 /// down; a file that does not read mutes nobody and says so.
 pub(crate) fn world_event(loader: &Loader, event: Event) {
     if event == Event::SHUTDOWN_STARTED {
+        *STATE.file.relock() = None;
         keep(Vec::new());
         return;
     }
     if event != Event::WORLD_LOADED {
         return;
     }
-    let Some(path) = path(loader) else {
-        keep(Vec::new());
+    let path = path(loader);
+    keep(path.as_deref().and_then(file_keys).unwrap_or_default());
+    *STATE.file.relock() = path;
+}
+
+/// Reads the mutes' file again once the loader gave up on a change kept for
+/// it, so the mutes in force are the file's and the next change starts from
+/// its text; a file not the running world's mutes' is left alone, and one
+/// that does not read now leaves the mutes in force. On the held files'
+/// writer thread.
+pub(crate) fn given_up(path: &Path) {
+    let _one = STATE.writing.relock();
+    if STATE.file.relock().as_deref() != Some(path) {
+        return;
+    }
+    let Some(keys) = file_keys(path) else {
+        crate::log!(WARN, "chat mutes: the mutes in force stay");
         return;
     };
-    let text = match read(&path) {
+    crate::log!(
+        INFO,
+        "chat mutes: back to {}, whose change was given up",
+        path.display()
+    );
+    keep(keys);
+}
+
+/// The accounts the file at `path` mutes, none for a file that does not
+/// exist; `None` for one that does not read, which says so.
+fn file_keys(path: &Path) -> Option<Vec<u64>> {
+    let text = match read(path) {
         Ok(text) => text,
+        Err(e) if e.kind() == ErrorKind::NotFound => return Some(Vec::new()),
         Err(e) => {
-            if e.kind() != ErrorKind::NotFound {
-                crate::log!(WARN, "chat mutes: {} does not read: {e}", path.display());
-            }
-            keep(Vec::new());
-            return;
+            crate::log!(WARN, "chat mutes: {} does not read: {e}", path.display());
+            return None;
         }
     };
     let (keys, bad) = parse(&text);
@@ -108,11 +137,15 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
     if !keys.is_empty() {
         crate::log!(INFO, "chat mutes: {} accounts muted", keys.len());
     }
-    keep(keys);
+    Some(keys)
 }
 
 /// Whether `key` is muted.
 pub(crate) fn has(_loader: &Loader, key: u64) -> bool {
+    muted(key)
+}
+
+fn muted(key: u64) -> bool {
     STATE.any.load(Ordering::Acquire) && STATE.keys.relock().contains(&key)
 }
 
@@ -191,4 +224,35 @@ fn dropped(loader: &Loader, key: u64) -> bool {
         crate::actions::reply::tell_text(loader, key, "muted.notice");
     }
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_given_up_mutes_file_leaves_the_mutes_in_force_equal_to_the_file() {
+        let dir = std::env::temp_dir().join(format!("enshwick-mutes-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(FILE);
+        std::fs::write(&path, "0000000000000007\n").unwrap();
+        *STATE.file.relock() = Some(path.clone());
+        keep(vec![7, 9]);
+
+        given_up(&dir.join("other.txt"));
+        assert!(muted(9), "another file leaves the mutes alone");
+        given_up(&path);
+        assert!(muted(7), "the file's mute holds");
+        assert!(!muted(9), "the mute whose write was given up is gone");
+
+        // A folder does not read as a file, as one a program holds unshared.
+        *STATE.file.relock() = Some(dir.clone());
+        keep(vec![7, 9]);
+        given_up(&dir);
+        assert!(
+            muted(7) && muted(9),
+            "a file that does not read keeps the mutes in force"
+        );
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
 }

@@ -518,7 +518,7 @@ impl GameSettings {
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] for a negative or not finite factor or a day
+    /// [`WorldError::BadArgs`] for a negative or not finite factor or a day
     /// or night length of zero, [`WorldError::WrongThread`] off the game
     /// thread and [`WorldError::Unavailable`] while no world runs.
     ///
@@ -613,7 +613,7 @@ impl GameSettings {
         let mut settings = self.offsets.decode(&bytes, &self.enums);
         change(&mut settings);
         if !settings.valid() || !self.offsets.encode(&settings, &mut bytes, &self.enums) {
-            return Err(WorldError::Refused);
+            return Err(WorldError::BadArgs);
         }
         Ok((bytes, settings))
     }

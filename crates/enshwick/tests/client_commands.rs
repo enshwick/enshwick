@@ -158,7 +158,7 @@ side = "both""#
             assert!(
                 matches!(
                     input.client_command(&chat(refused)),
-                    Err(WorldError::Refused)
+                    Err(WorldError::BadArgs)
                 ),
                 "refused at the call"
             );
@@ -191,7 +191,7 @@ side = "both""#
             ),
         ] {
             assert!(
-                matches!(input.client_command(&refused), Err(WorldError::Refused)),
+                matches!(input.client_command(&refused), Err(WorldError::BadArgs)),
                 "{refused:?}"
             );
         }
@@ -207,7 +207,7 @@ side = "both""#
             look(0.5).on_screen("Backpack"),
         ] {
             assert!(
-                matches!(input.client_command(&refused), Err(WorldError::Refused)),
+                matches!(input.client_command(&refused), Err(WorldError::BadArgs)),
                 "{refused:?}"
             );
         }
@@ -330,7 +330,7 @@ side = "both""#
             press(GameAction::Block, 16).on_screen("Backpack"),
         ] {
             assert!(
-                matches!(input.client_command(&refused), Err(WorldError::Refused)),
+                matches!(input.client_command(&refused), Err(WorldError::BadArgs)),
                 "{refused:?}"
             );
         }
@@ -369,12 +369,14 @@ side = "both""#
                 1,
             )
         };
+        let typo = input.client_command(&equip("ArmourUpperBody"));
         assert!(
-            matches!(
-                input.client_command(&equip("RangedWeapn")),
-                Err(WorldError::Refused)
-            ),
-            "a typo the game's build lacks"
+            matches!(typo, Err(WorldError::BadArgs)),
+            "a typo of Armour_UpperBody, which the game's build lacks"
+        );
+        assert_eq!(
+            typo.map_err(|e| e.to_string()),
+            Err("an argument is malformed or unknown to this game build".to_owned())
         );
         assert!(input.client_command(&equip("RangedWeapon")).is_ok());
         assert_eq!(loader.client_commands().len(), 1);
@@ -435,7 +437,7 @@ side = "both""#
         let none = ClientCommand::new(CommandAction::HighlightRecipe(enshwick::RecipeId(0)), 1);
         assert!(matches!(
             input.client_command(&none),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgs)
         ));
     }
 
@@ -519,7 +521,7 @@ side = "both""#
         let (loader, input) = input(Side::CLIENT);
         for bad in ["127.0.0.1", "a b:15637", "host:0"] {
             assert!(
-                matches!(input.client_command(&join(bad)), Err(WorldError::Refused)),
+                matches!(input.client_command(&join(bad)), Err(WorldError::BadArgs)),
                 "{bad}"
             );
         }
@@ -532,7 +534,7 @@ side = "both""#
         );
         assert!(matches!(
             input.client_command(&in_a_session),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgs)
         ));
         let leave = ClientCommand::new(CommandAction::Leave, 0);
         assert!(
@@ -595,7 +597,7 @@ side = "both""#
         let (loader, input) = input(Side::CLIENT);
         for bad in [host(Raw::MAX_SLOTS, 0), host(0, Raw::MAX_SLOTS)] {
             assert!(
-                matches!(input.client_command(&bad), Err(WorldError::Refused)),
+                matches!(input.client_command(&bad), Err(WorldError::BadArgs)),
                 "{bad:?}"
             );
         }
@@ -609,12 +611,12 @@ side = "both""#
         );
         assert!(matches!(
             input.client_command(&in_a_session),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgs)
         ));
         let on_a_screen = host(0, 0).on_screen("InGame");
         assert!(matches!(
             input.client_command(&on_a_screen),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgs)
         ));
         loader.set_client_snapshot(enshwick::abi::headed!(enshwick::abi::ClientSnapshot {
             session: 2,
@@ -646,7 +648,7 @@ side = "both""#
         for refused in [String::new(), "you.trial".to_owned()] {
             let unknown = ClientCommand::new(CommandAction::OpenModSettings(refused.clone()), 1);
             assert!(
-                matches!(input.client_command(&unknown), Err(WorldError::Refused)),
+                matches!(input.client_command(&unknown), Err(WorldError::BadArgs)),
                 "{refused:?}: no loaded mod has it, as the loader refuses"
             );
         }
@@ -792,7 +794,7 @@ side = "both""#
         for refused in [[-1.0, 0.0, 100.0], [f64::NAN, 0.0, 100.0]] {
             let set = ClientCommand::new(CommandAction::SetWaypoint(refused), 1);
             assert!(
-                matches!(input.client_command(&set), Err(WorldError::Refused)),
+                matches!(input.client_command(&set), Err(WorldError::BadArgs)),
                 "{refused:?}"
             );
         }
@@ -833,7 +835,7 @@ side = "both""#
         assert!(
             matches!(
                 input.client_command(&answer(first, Response::Retry)),
-                Err(WorldError::Refused)
+                Err(WorldError::BadArgs)
             ),
             "the dialog has no Retry"
         );
@@ -889,7 +891,7 @@ side = "both""#
             assert!(
                 matches!(
                     input.client_command(&ClientCommand::new(action.clone(), 1)),
-                    Err(WorldError::Refused)
+                    Err(WorldError::BadArgs)
                 ),
                 "{action:?}"
             );
@@ -944,7 +946,7 @@ side = "both""#
             assert!(
                 matches!(
                     input.client_command(&press_item(window, item)),
-                    Err(WorldError::Refused)
+                    Err(WorldError::BadArgs)
                 ),
                 "{window} {item}"
             );
@@ -956,7 +958,7 @@ side = "both""#
         };
         assert!(matches!(
             input.client_command(&ClientCommand::new(no_option, 1)),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgs)
         ));
     }
 

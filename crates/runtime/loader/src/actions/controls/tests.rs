@@ -105,3 +105,61 @@ fn controls_follow_game_actions_only_while_every_link_they_need_is_on() {
     fuse.blow("a test");
     assert!(!state.follows(&fuse, reads), "their own fuse is off");
 }
+
+#[test]
+fn a_given_up_key_file_leaves_the_keys_in_force_equal_to_the_file() {
+    let dir = std::env::temp_dir().join(format!("enshwick-controls-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join(bindings::FILE);
+    let kept: toml::Table = "\"you.server:dash\" = [3]\n".parse().unwrap();
+    let entries = [("you.test:jump".to_owned(), [Some(7), None])];
+    std::fs::write(&path, bindings::render(&entries, &kept)).unwrap();
+    let jump = [declared("")];
+    let dash = Heard {
+        mod_id: "you.server".to_owned(),
+        mod_name: "Server".to_owned(),
+        control: Carried {
+            name: "dash".to_owned(),
+            label: "Dash".to_owned(),
+            action: "dash".to_owned(),
+            keys: [5, 0],
+            fires: 1,
+            hold_ms: 0,
+        },
+    };
+    STATE.keys.store(Some(Arc::new(Bound {
+        keys: vec![[9, 0], [6, 0]],
+        carried: vec![dash.clone()],
+        carried_at: 4,
+    })));
+    *STATE.kept.relock() = Some(toml::Table::new());
+
+    key_file::reread(&jump, &path);
+    let bound = STATE.keys.load_full().unwrap();
+    assert_eq!(
+        bound.keys.first(),
+        Some(&[7, 0]),
+        "the rebind kept in memory is gone"
+    );
+    assert_eq!(bound.carried, [dash], "the server's controls stay");
+    assert_eq!(bound.carried_at, 4, "no carried control restarts");
+    assert_eq!(
+        STATE.kept.relock().as_ref(),
+        Some(&kept),
+        "a later rebind writes the file's other entries"
+    );
+
+    // A folder does not read as a file, as one a program holds unshared.
+    key_file::reread(&jump, &dir);
+    assert_eq!(
+        STATE.keys.load_full().unwrap().keys.first(),
+        Some(&[7, 0]),
+        "a file that does not read keeps the keys in force"
+    );
+    assert_eq!(
+        STATE.kept.relock().as_ref(),
+        Some(&kept),
+        "and the entries a rebind writes"
+    );
+    let _gone = std::fs::remove_dir_all(&dir);
+}

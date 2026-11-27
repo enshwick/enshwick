@@ -94,11 +94,11 @@ mod tests {
         knowledge.grant_world(FOUND, Grant::Add(2)).unwrap();
         assert_eq!(
             knowledge.grant(Entity::from_engine(2), RECIPE, Grant::Set),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgs)
         );
         assert_eq!(
             knowledge.grant(Entity::from_engine(2), UNKNOWN, Grant::Set),
-            Err(WorldError::Refused)
+            Err(WorldError::BadArgs)
         );
         assert_eq!(
             loader.grants(),
