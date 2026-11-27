@@ -663,7 +663,8 @@ pub use enshwick_macros::point;
 /// the return type implement [`script::FromScript`] and
 /// [`script::IntoScript`]; `&T` reads a `T`; an `impl Fn(A) -> R` parameter
 /// takes a script function, with `A: IntoScript` and `R: script::Answer`; a
-/// `Result` returns its `Ok` value and raises its `Err`'s message.
+/// `Result` returns its `Ok` value and raises its `Err`, whose type
+/// implements [`script::ErrorKind`] to name the error's kind.
 ///
 /// # Examples
 ///

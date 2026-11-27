@@ -1,0 +1,35 @@
+id: errors-name-their-kind
+language: rust
+severity: error
+message: a public error of the API derives `script::ErrorKind` beside `thiserror::Error`
+note: >-
+  A mod's `#[script]` method returns only an error with a kind, and the
+  orphan rule keeps a mod from implementing the API's trait for the API's
+  error, so every public error names its kinds itself. An error that names
+  its kind by hand implements the trait or passes through as it is, and
+  ignores the rule there with its reason.
+files:
+  - "crates/internal/**"
+ignores:
+  - "crates/internal/fake/**"
+  - "**/__internal/**"
+  - "**/tests/**"
+  - "**/tests.rs"
+rule:
+  any:
+    - kind: enum_item
+    - kind: struct_item
+  has:
+    kind: visibility_modifier
+    regex: '^pub$'
+  follows:
+    stopBy:
+      not:
+        any:
+          - kind: attribute_item
+          - kind: line_comment
+          - kind: block_comment
+    kind: attribute_item
+    regex: '^#\[derive\([^\]]*\bthiserror::Error\b'
+    not:
+      regex: '\bErrorKind\b'

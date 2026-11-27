@@ -392,7 +392,7 @@ impl core::fmt::Display for Value {
 /// let error = Field::Output.check(Value::Set(70000.0)).unwrap_err();
 /// assert_eq!(error.to_string(), "output_count 70000 is not from 1 to 65535");
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum SetFieldError {
     /// A set outside the field's range.

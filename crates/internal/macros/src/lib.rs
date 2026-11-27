@@ -14,6 +14,7 @@ use syn::{
 };
 
 mod declare;
+mod error_kind;
 mod forward;
 mod krate;
 mod schema;
@@ -679,6 +680,16 @@ pub fn derive_shape(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     with_crate(krate::in_attrs(&input.attrs, "shape"), |krate| {
         expand_shape(&input, krate)
+    })
+}
+
+/// Names the kind a script reads from an error: the variant's name, or the
+/// type's for a struct; examples are on `enshwick::script::ErrorKind`.
+#[proc_macro_derive(ErrorKind, attributes(script))]
+pub fn derive_error_kind(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    with_crate(krate::in_attrs(&input.attrs, "script"), |krate| {
+        error_kind::expand(&input, krate)
     })
 }
 

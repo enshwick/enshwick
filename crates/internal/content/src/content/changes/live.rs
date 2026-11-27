@@ -73,7 +73,7 @@ impl Target {
 /// let why = Field::Output.check(Value::Set(0.0)).unwrap_err();
 /// assert_eq!(SetChangeError::Value(why).to_string(), "output_count 0 is not from 1 to 65535");
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum SetChangeError {
     /// The field does not take the value.

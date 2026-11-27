@@ -263,7 +263,7 @@ pub fn render(rows: &[Row]) -> String {
 }
 
 /// Why a table does not read.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, crate::script::ErrorKind)]
 #[error("line {line} of the contract table: {why}")]
 #[expect(
     clippy::exhaustive_structs,

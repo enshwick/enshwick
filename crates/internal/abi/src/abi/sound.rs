@@ -12,7 +12,7 @@ use crate::content::Guid;
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{Entity, Header, SoundPlay};
+/// use enshwick::abi::{Header, SoundPlay};
 /// use enshwick::content::Guid;
 ///
 /// let play = enshwick::abi::headed!(SoundPlay {
@@ -21,7 +21,7 @@ use crate::content::Guid;
 ///     at: [10.0, 0.0, 0.0],
 ///     ..SoundPlay::EMPTY
 /// });
-/// assert_eq!((play.volume, play.entity), (1.0, Entity::NONE));
+/// assert_eq!((play.volume, play.entity.get()), (1.0, 0));
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]

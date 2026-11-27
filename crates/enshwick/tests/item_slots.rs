@@ -105,13 +105,13 @@ mod tests {
         let loader = started(Side::CLIENT);
         let _nothing = loader.draw_screen(HudScreenType::Backpack);
         let at = SlotRef::new(Entity::from_engine(41), 3);
-        loader.hover_slot(Some((at.0, LOG, 7, Entity::from_engine(0))));
+        loader.hover_slot(Some((at.0, LOG, 7, None)));
         let drawn = loader.draw_screen(HudScreenType::Backpack);
         assert!(drawn[0].1.contains(&Drawn::Label {
             text: "7".into(),
             style: enshwick::abi::UiWidget::STYLE_BODY,
         }));
-        loader.hover_slot(Some((at.0, TORCH, 1, Entity::from_engine(900))));
+        loader.hover_slot(Some((at.0, TORCH, 1, Entity::from_raw(900))));
         let _drawn = loader.draw_screen(HudScreenType::Backpack);
         let slot = |item, count, pide| Slot::new(at, InventoryCategory::INVALID, item, count, pide);
         assert_eq!(
@@ -131,7 +131,7 @@ mod tests {
             SlotRef::new(Entity::from_engine(41), 3).0,
             LOG,
             7,
-            Entity::from_engine(0),
+            None,
         )));
         let _drawn = loader.draw_frame();
         assert_eq!(*IN_FRAME.lock().unwrap(), [None]);

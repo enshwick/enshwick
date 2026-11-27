@@ -243,9 +243,10 @@ impl Player {
     /// use enshwick::Entity;
     /// use enshwick::world::Player;
     ///
-    /// let player = Player::new(Entity::from_engine(2), 0, enshwick::PlayerKey::new(7), 0, "Émile".into());
+    /// let player = Player::new(Entity::from_raw(2).ok_or("no entity")?, 0, enshwick::PlayerKey::new(7), 0, "Émile".into());
     /// assert!(player.is_named("éMILE"));
     /// assert!(!player.is_named("Emile"));
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn is_named(&self, name: &str) -> bool {
@@ -274,9 +275,10 @@ impl Player {
     /// use enshwick::abi::PlayerInfo;
     /// use enshwick::world::{Player, PlayerPermissions};
     ///
-    /// let friend = Player::new(Entity::from_engine(2), 0, enshwick::PlayerKey::new(7), PlayerInfo::CAN_EDIT_BASE, "Ann".into());
+    /// let friend = Player::new(Entity::from_raw(2).ok_or("no entity")?, 0, enshwick::PlayerKey::new(7), PlayerInfo::CAN_EDIT_BASE, "Ann".into());
     /// assert!(friend.has(PlayerPermissions::CanEditBase));
     /// assert!(!friend.has(PlayerPermissions::CanKickBan));
+    /// # Ok::<(), &str>(())
     /// ```
     #[cfg(feature = "unstable")]
     #[must_use]
@@ -328,8 +330,9 @@ impl Placed {
     /// use enshwick::Entity;
     /// use enshwick::world::Placed;
     ///
-    /// let chest = Placed::new(Entity::from_engine(7), [3.0, 0.0, 4.0]);
+    /// let chest = Placed::new(Entity::from_raw(7).ok_or("no entity")?, [3.0, 0.0, 4.0]);
     /// assert_eq!(chest.distance([0.0, 0.0, 0.0]), 5.0);
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn distance(&self, point: [f64; 3]) -> f64 {

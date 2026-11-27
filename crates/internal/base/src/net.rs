@@ -134,7 +134,7 @@ impl Peer {
 ///
 /// assert_eq!(SendError::NotReady.to_string(), "the peer takes no messages now");
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum SendError {
     /// The message is over [`MAX_MESSAGE`] bytes encoded.

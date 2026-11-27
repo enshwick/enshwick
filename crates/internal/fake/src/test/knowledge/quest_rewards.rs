@@ -24,7 +24,7 @@ impl Installed {
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let quest = enshwick::abi::headed!(QuestPayment {
-    ///     entity: enshwick::Entity::from_engine(2),
+    ///     entity: enshwick::Entity::from_raw(2).ok_or("no entity")?,
     ///     quest: enshwick::knowledge::KnowledgeId::new(0x51),
     ///     count: 1,
     ///     limit: 3,
@@ -33,6 +33,7 @@ impl Installed {
     ///     experience: [0x77; QuestPayment::MAX],
     /// });
     /// assert_eq!(loader.pay_quest(quest), quest, "no filters, the game's payment");
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn pay_quest(&self, mut payment: QuestPayment) -> QuestPayment {

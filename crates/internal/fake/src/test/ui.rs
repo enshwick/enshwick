@@ -22,7 +22,12 @@ struct Reads {
     verb: u32,
     host: u32,
     host_read: Option<(enshwick_core::content::Guid, [i64; 3])>,
-    hovered: Option<(u64, enshwick_core::ItemId, u32, enshwick_core::Entity)>,
+    hovered: Option<(
+        u64,
+        enshwick_core::ItemId,
+        u32,
+        Option<enshwick_core::Entity>,
+    )>,
 }
 
 /// An interface step before a draw, as the game's `player_ui` runs before
@@ -73,7 +78,9 @@ fn in_game(token: u64, open: &str, reads: &Reads) -> enshwick_core::abi::UiFrame
         hovered_slot: hovered.map_or(0, |(slot, ..)| slot),
         hovered_item: hovered.map_or(enshwick_core::ItemId::new(0), |(_, item, ..)| item),
         hovered_count: hovered.map_or(0, |(_, _, count, _)| count),
-        hovered_pide: hovered.map_or(enshwick_core::Entity::from_engine(0), |(.., pide)| pide),
+        hovered_pide: hovered
+            .and_then(|(.., pide)| pide)
+            .unwrap_or(enshwick_core::Entity::NONE),
         reserved_hovered: 0,
     })
 }
@@ -312,7 +319,7 @@ impl Installed {
     /// use enshwick::abi::Side;
     ///
     /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
-    /// loader.host_screen(Some(Entity::from_engine(512)));
+    /// loader.host_screen(Entity::from_raw(512));
     /// assert!(loader.draw_frame().is_empty());
     /// ```
     pub fn host_screen(&self, host: Option<enshwick_core::Entity>) {
@@ -339,7 +346,7 @@ impl Installed {
     /// use enshwick::content::Guid;
     ///
     /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
-    /// loader.host_screen(Some(Entity::from_engine(512)));
+    /// loader.host_screen(Entity::from_raw(512));
     /// loader.read_screen_host(Guid::named("you.safes:safe"), [1.0, 2.0, 3.0]);
     /// assert!(loader.draw_frame().is_empty());
     /// ```
@@ -581,8 +588,8 @@ impl Installed {
 
     /// Points the cursor at a slot of the game's open inventory screen in
     /// the frames drawn from now on: the slot, the item it holds, how many
-    /// and the item's own entity, entity 0 for none; `None` for no slot.
-    /// Frames read it only while a game screen is open.
+    /// and the item's own entity, if it has one; `None` for no slot. Frames
+    /// read it only while a game screen is open.
     ///
     /// # Examples
     ///
@@ -591,13 +598,19 @@ impl Installed {
     /// use enshwick::inventory::SlotRef;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let slot = SlotRef::new(Entity::from_engine(41), 3);
-    /// loader.hover_slot(Some((slot.0, enshwick::ItemId::new(0x5e01), 2, Entity::from_engine(0))));
+    /// let slot = SlotRef::new(Entity::from_raw(41).ok_or("no entity")?, 3);
+    /// loader.hover_slot(Some((slot.0, enshwick::ItemId::new(0x5e01), 2, None)));
     /// assert!(loader.draw_frame().is_empty());
+    /// # Ok::<(), &str>(())
     /// ```
     pub fn hover_slot(
         &self,
-        slot: Option<(u64, enshwick_core::ItemId, u32, enshwick_core::Entity)>,
+        slot: Option<(
+            u64,
+            enshwick_core::ItemId,
+            u32,
+            Option<enshwick_core::Entity>,
+        )>,
     ) {
         table::with((), |s| s.ui.hovered = slot);
     }
@@ -615,8 +628,9 @@ impl Installed {
     /// use enshwick::abi::Side;
     ///
     /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
-    /// let lines = loader.open_tooltip(enshwick::ItemId::new(0x5e01), enshwick::Entity::from_engine(900));
+    /// let lines = loader.open_tooltip(enshwick::ItemId::new(0x5e01), enshwick::Entity::from_raw(900).ok_or("no entity")?);
     /// assert!(lines.is_empty());
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn open_tooltip(

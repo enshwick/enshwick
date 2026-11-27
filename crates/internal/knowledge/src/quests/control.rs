@@ -98,7 +98,7 @@ impl Holder {
 ///     }
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum MoveQuestError {
     /// No quest of the journal has this id, or the journal has not read yet,

@@ -288,7 +288,7 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let player = enshwick::abi::headed!(PlayerInfo {
     ///     slot: 0,
-    ///     entity: enshwick::Entity::from_engine(2),
+    ///     entity: enshwick::Entity::from_raw(2).ok_or("no entity")?,
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
@@ -296,6 +296,7 @@ impl Installed {
     /// });
     /// let held = [GameAction::ContextualAction];
     /// assert_eq!(loader.game_actions(&player, &held, Duration::from_millis(50)), 0);
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use = "the count says whether a control fired"]
     pub fn game_actions(&self, player: &PlayerInfo, held: &[GameAction], after: Duration) -> usize {

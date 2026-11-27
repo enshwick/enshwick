@@ -221,7 +221,7 @@ pub struct Section<'a> {
 }
 
 /// Why the bytes of a section do not read.
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum ReadSectionError {
     /// A part is no UTF-8 text.

@@ -14,7 +14,9 @@ use crate::world::PropState;
 ///
 /// assert_eq!(WorldError::WrongThread.to_string(), "not on the server's game thread");
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error, crate::Script)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind, crate::Script,
+)]
 #[non_exhaustive]
 pub enum WorldError {
     /// Called off the server's game thread or inside a step (from a filter

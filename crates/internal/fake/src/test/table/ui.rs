@@ -111,7 +111,12 @@ pub(crate) struct UiState {
     pub(crate) client_slots: Option<Vec<enshwick_core::abi::ClientSlot>>,
     /// The slot of an inventory screen under the cursor, as the frames
     /// hear it: the packed slot, item, count and item entity.
-    pub(crate) hovered: Option<(u64, enshwick_core::ItemId, u32, enshwick_core::Entity)>,
+    pub(crate) hovered: Option<(
+        u64,
+        enshwick_core::ItemId,
+        u32,
+        Option<enshwick_core::Entity>,
+    )>,
     /// Item tooltip callbacks.
     pub(crate) tooltips: Vec<Registered<UiTooltipFn>>,
     /// The lines the tooltip callback running now added, with its token.

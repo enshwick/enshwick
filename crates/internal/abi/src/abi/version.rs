@@ -71,7 +71,7 @@ const _: () = assert!(
 /// assert!(matches!(why, CheckAbiError::OtherMajor { .. }));
 /// assert!(why.to_string().ends_with(enshwick::VERSION));
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum CheckAbiError {
     /// The mod was built for a newer major: the loader needs an update.

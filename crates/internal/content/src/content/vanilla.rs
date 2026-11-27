@@ -56,7 +56,7 @@ use crate::near::NEAR;
 /// let unknown = VanillaError::Unknown { name: "Tool_Torch1".into(), near: vec!["Tool_Torch01".into()] };
 /// assert_eq!(unknown.to_string(), "no vanilla item \"Tool_Torch1\"; near: Tool_Torch01");
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum VanillaError {
     /// The game's data does not read.

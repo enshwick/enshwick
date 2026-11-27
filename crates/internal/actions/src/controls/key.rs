@@ -30,7 +30,7 @@ pub struct Key(u32);
 /// # Examples
 ///
 /// See [`Key`].
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum ParseKeyError {
     /// No key has this name.

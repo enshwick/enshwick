@@ -18,7 +18,7 @@ use crate::abi::{Status, Str};
 ///
 /// assert_eq!(run("   "), Err(RunLineError::Empty));
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum RunLineError {
     /// The line holds no word.

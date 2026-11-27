@@ -36,7 +36,7 @@ const VARIANT_SIZE: usize = 8;
 /// let error = registry.encode("demo::uint8", &Value::Uint(300), None).unwrap_err();
 /// assert_eq!(error.to_string(), "300 does not fit demo::uint8");
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[error("{}{why}", if path.is_empty() { String::new() } else { format!("{path}: ") })]
 pub struct CodecError {
     path: String,

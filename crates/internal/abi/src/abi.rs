@@ -564,7 +564,7 @@ impl<'de> serde::Deserialize<'de> for Level {
 ///
 /// assert!("loud".parse::<Level>().is_err());
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[error("a log level is one of \"error\", \"warn\", \"info\" or \"debug\"")]
 #[expect(
     clippy::exhaustive_structs,

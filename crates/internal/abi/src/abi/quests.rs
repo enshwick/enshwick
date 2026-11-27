@@ -12,8 +12,9 @@ use crate::abi::{Entity, Header, KnowledgeId};
 /// ```
 /// use enshwick::abi::{Header, QuestData};
 ///
-/// let done = enshwick::abi::headed!(QuestData { entity: enshwick::Entity::from_engine(2), quest: enshwick::knowledge::KnowledgeId::new(0x51) });
-/// assert_eq!(done.entity, enshwick::Entity::from_engine(2));
+/// let done = enshwick::abi::headed!(QuestData { entity: enshwick::Entity::from_raw(2).ok_or("no entity")?, quest: enshwick::knowledge::KnowledgeId::new(0x51) });
+/// assert_eq!(done.entity, enshwick::Entity::from_raw(2).ok_or("no entity")?);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, crate::Script)]
@@ -37,11 +38,12 @@ impl_headed!(QuestData);
 /// use enshwick::abi::{Header, QuestStepData};
 ///
 /// let done = enshwick::abi::headed!(QuestStepData {
-///     entity: enshwick::Entity::from_engine(2),
+///     entity: enshwick::Entity::from_raw(2).ok_or("no entity")?,
 ///     quest: enshwick::knowledge::KnowledgeId::new(0x51),
 ///     step: 1,
 /// });
 /// assert_eq!(done.step, 1, "the quest's second step");
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, crate::Script)]
@@ -68,7 +70,7 @@ impl_headed!(QuestStepData);
 /// use enshwick::abi::{Header, QuestProgressData};
 ///
 /// let counted = enshwick::abi::headed!(QuestProgressData {
-///     entity: enshwick::Entity::from_engine(2),
+///     entity: enshwick::Entity::from_raw(2).ok_or("no entity")?,
 ///     quest: enshwick::knowledge::KnowledgeId::new(0x51),
 ///     step: 0,
 ///     part: 0,
@@ -76,6 +78,7 @@ impl_headed!(QuestStepData);
 ///     target: 5,
 /// });
 /// assert!(counted.value < counted.target, "three of five");
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, crate::Script)]
@@ -113,7 +116,7 @@ impl_headed!(QuestProgressData);
 /// use enshwick::abi::{Header, QuestPayment};
 ///
 /// let mut paid = enshwick::abi::headed!(QuestPayment {
-///     entity: enshwick::Entity::from_engine(2),
+///     entity: enshwick::Entity::from_raw(2).ok_or("no entity")?,
 ///     quest: enshwick::knowledge::KnowledgeId::new(0x51),
 ///     count: 1,
 ///     limit: 3,
@@ -123,6 +126,7 @@ impl_headed!(QuestProgressData);
 /// });
 /// paid.count = 2;
 /// assert!(paid.count <= paid.limit, "the same experience paid twice");
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]

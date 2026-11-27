@@ -45,8 +45,9 @@ impl FakeHost {
     /// use enshwick::abi::RespawnPointInfo;
     ///
     /// let _loader = enshwick::test::FakeHost::new()
-    ///     .spawn_point(enshwick::Entity::from_engine(40), RespawnPointInfo::BASE, [10.0, 2.0, 4.0])
+    ///     .spawn_point(enshwick::Entity::from_raw(40).ok_or("no entity")?, RespawnPointInfo::BASE, [10.0, 2.0, 4.0])
     ///     .install();
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn spawn_point(mut self, entity: Entity, kind: u32, position: [f64; 3]) -> Self {
@@ -77,9 +78,10 @@ impl FakeHost {
     ///
     /// let _loader = enshwick::test::FakeHost::new()
     ///     .game_events()
-    ///     .spawn_point(enshwick::Entity::from_engine(40), RespawnPointInfo::SAVE_POINT, [0.0; 3])
-    ///     .spawn_point_names(enshwick::Entity::from_engine(40), None, Some(UniqueSceneId(7)))
+    ///     .spawn_point(enshwick::Entity::from_raw(40).ok_or("no entity")?, RespawnPointInfo::SAVE_POINT, [0.0; 3])
+    ///     .spawn_point_names(enshwick::Entity::from_raw(40).ok_or("no entity")?, None, Some(UniqueSceneId(7)))
     ///     .install();
+    /// # Ok::<(), &str>(())
     /// ```
     #[cfg(feature = "unstable")]
     #[must_use]
@@ -110,9 +112,10 @@ impl FakeHost {
     /// use enshwick::abi::RespawnPointInfo;
     ///
     /// let _loader = enshwick::test::FakeHost::new()
-    ///     .spawn_point(enshwick::Entity::from_engine(40), RespawnPointInfo::SAVE_POINT, [0.0; 3])
-    ///     .respawns_at(enshwick::Entity::from_engine(2), enshwick::Entity::from_engine(40))
+    ///     .spawn_point(enshwick::Entity::from_raw(40).ok_or("no entity")?, RespawnPointInfo::SAVE_POINT, [0.0; 3])
+    ///     .respawns_at(enshwick::Entity::from_raw(2).ok_or("no entity")?, enshwick::Entity::from_raw(40).ok_or("no entity")?)
     ///     .install();
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn respawns_at(mut self, character: Entity, spawn_point: Entity) -> Self {

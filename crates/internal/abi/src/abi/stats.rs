@@ -168,13 +168,14 @@ impl StatModifier {
 /// use enshwick::abi::{Header, StatModifier, StatModify};
 ///
 /// let blessing = enshwick::abi::headed!(StatModify {
-///     entity: enshwick::Entity::from_engine(2),
+///     entity: enshwick::Entity::from_raw(2).ok_or("no entity")?,
 ///     key: 7,
 ///     modifier: StatModifier { stat: 0, op: StatModifier::ADD, reserved: [0; 3], value: 50.0 },
 ///     flags: 0,
 ///     duration_ms: 60_000,
 /// });
 /// assert_eq!(blessing.flags & StatModify::REMOVE, 0);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
@@ -213,8 +214,9 @@ impl StatModify {
 /// ```
 /// use enshwick::abi::{Header, StatChange, StatRef};
 ///
-/// let change = enshwick::abi::headed!(StatChange { entity: enshwick::Entity::from_engine(2), stat: StatRef { index: 0, key: 0x1234 }, old: 0.0, new: 50.0, reserved: 0 });
+/// let change = enshwick::abi::headed!(StatChange { entity: enshwick::Entity::from_raw(2).ok_or("no entity")?, stat: StatRef { index: 0, key: 0x1234 }, old: 0.0, new: 50.0, reserved: 0 });
 /// assert!(change.new > change.old);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
@@ -359,8 +361,9 @@ pub struct AffixModifierSpec {
 /// ```
 /// use enshwick::abi::{AffixRoll, Header};
 ///
-/// let roll = enshwick::abi::headed!(AffixRoll { pide: enshwick::Entity::from_engine(900), item: enshwick::ItemId::new(7), min: 1, max: 2, max_rarity: 4, flags: AffixRoll::ONCE, seed: 42 });
+/// let roll = enshwick::abi::headed!(AffixRoll { pide: enshwick::Entity::from_raw(900).ok_or("no entity")?, item: enshwick::ItemId::new(7), min: 1, max: 2, max_rarity: 4, flags: AffixRoll::ONCE, seed: 42 });
 /// assert!(roll.min <= roll.max);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]

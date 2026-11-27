@@ -129,8 +129,9 @@ impl Installed {
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let ty = enshwick::abi::headed!(BuffTypeInfo { id: enshwick::buffs::BuffTypeId::new(7), slot: 1, flags: 0, name: 0, duration_ns: 60_000_000_000 });
-    /// loader.set_buffs(&[ty], &[enshwick::Entity::from_engine(2)]);
-    /// assert_eq!(loader.buffs_of(enshwick::Entity::from_engine(2)), Some(Vec::new()));
+    /// loader.set_buffs(&[ty], &[enshwick::Entity::from_raw(2).ok_or("no entity")?]);
+    /// assert_eq!(loader.buffs_of(enshwick::Entity::from_raw(2).ok_or("no entity")?), Some(Vec::new()));
+    /// # Ok::<(), &str>(())
     /// ```
     pub fn set_buffs(&self, types: &[enshwick_core::abi::BuffTypeInfo], holders: &[Entity]) {
         table::with((), |s| {

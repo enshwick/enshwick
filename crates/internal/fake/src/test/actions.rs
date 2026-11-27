@@ -183,8 +183,9 @@ impl Installed {
     /// use enshwick::abi::Interaction;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let call = Interaction::new(Interaction::OPEN, enshwick::Entity::from_engine(1), enshwick::Entity::from_engine(2));
+    /// let call = Interaction::new(Interaction::OPEN, enshwick::Entity::from_raw(1).ok_or("no entity")?, enshwick::Entity::from_raw(2).ok_or("no entity")?);
     /// assert!(loader.interaction(&call));
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn interaction(&self, call: &Interaction) -> bool {
@@ -229,8 +230,9 @@ impl Installed {
     /// use enshwick::abi::{CraftCheck, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let craft = enshwick::abi::headed!(CraftCheck { crafting_operator_id: enshwick::Entity::from_engine(2), crafting_station_id: enshwick::Entity::from_engine(0), recipe_id: enshwick::RecipeId::new(1), recipe_amount: 1, reserved: 0 });
+    /// let craft = enshwick::abi::headed!(CraftCheck { crafting_operator_id: enshwick::Entity::from_raw(2).ok_or("no entity")?, recipe_id: enshwick::RecipeId::new(1), recipe_amount: 1, reserved: 0 });
     /// assert!(loader.craft(&craft));
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn craft(&self, call: &enshwick_core::abi::CraftCheck) -> bool {
@@ -266,13 +268,14 @@ impl Installed {
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let wall = enshwick::abi::headed!(BuildCheck {
-    ///     character: enshwick::Entity::from_engine(2),
+    ///     character: enshwick::Entity::from_raw(2).ok_or("no entity")?,
     ///     item: enshwick::ItemId::new(7),
     ///     position: [0.0; 3],
     ///     reason: core::ptr::null_mut(),
     ///     account: enshwick::PlayerKey::default(),
     /// });
     /// assert_eq!(loader.build(&wall), Ok(()));
+    /// # Ok::<(), &str>(())
     /// ```
     pub fn build(&self, call: &enshwick_core::abi::BuildCheck) -> Result<(), Option<String>> {
         // shortcut: the fake has no worlds or steps, so a hosting fake takes any character no player names for its own prediction, and a respawned character's account comes at once, where the loader gives a character made in the current server step none until the next step; model both if a mod test ever needs those gaps.

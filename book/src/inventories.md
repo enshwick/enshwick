@@ -23,7 +23,7 @@ use enshwick::Entity;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let inventories = load.inventories()?;
-    let (corpse, player) = (Entity::from_engine(40), Entity::from_engine(2));
+    let (corpse, player) = (Entity::from_raw(40).ok_or(enshwick::Off::new("no entity"))?, Entity::from_raw(2).ok_or(enshwick::Off::new("no entity"))?);
     load.scheduler()?.next_tick(move || {
         if let Ok(slots) = inventories.read().slots(corpse) {
             let full = slots.iter().filter(|s| !s.is_empty()).count();
@@ -56,9 +56,10 @@ the sub-inventory entity and the slot index, packed as the game packs them,
 use enshwick::Entity;
 use enshwick::inventory::SlotRef;
 
-let slot = SlotRef::new(Entity::from_engine(0x41), 3);
+let slot = SlotRef::new(Entity::from_raw(0x41).ok_or("no entity")?, 3);
 assert_eq!(slot.0, 0x3_0000_0041);
-assert_eq!((slot.inventory(), slot.index()), (Entity::from_engine(0x41), 3));
+assert_eq!((slot.inventory(), slot.index()), (Entity::from_raw(0x41).ok_or("no entity")?, 3));
+# Ok::<(), &str>(())
 ```
 
 ## Reads
@@ -292,11 +293,12 @@ use enshwick::inventory::{Batch, Op};
 
 let mut everything = Batch::new();
 for chest in 100..120 {
-    everything.push(Op::MoveAll { from: Entity::from_engine(chest), to: Entity::from_engine(2), include_special: false });
+    everything.push(Op::MoveAll { from: Entity::from_raw(chest).ok_or("no entity")?, to: Entity::from_raw(2).ok_or("no entity")?, include_special: false });
 }
 let parts = everything.split();
 assert!(parts.len() > 1);
 assert!(parts.iter().all(|part| part.check().is_ok()));
+# Ok::<(), &str>(())
 ```
 
 ## Outcomes

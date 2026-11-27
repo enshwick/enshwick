@@ -142,7 +142,7 @@ pub const fn layout_hash(name: &str, shape: u64, size: usize, align: usize, offs
 /// let offered = [("price", 1)];
 /// assert!(matches!(compare(&wanted, &offered), Err(LayoutError::Newer { .. })));
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum LayoutError {
     /// The asking side was built against a longer declaration.

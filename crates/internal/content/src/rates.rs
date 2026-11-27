@@ -286,7 +286,7 @@ pub fn scale_whole(value: i64, factor: f32) -> i64 {
 ///
 /// assert_eq!(RateError::OutOfRange(-1.0).to_string(), "factor -1 is not between 0 and 100");
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum RateError {
     /// The factor is not finite or lies outside 0 to [`MAX_FACTOR`].

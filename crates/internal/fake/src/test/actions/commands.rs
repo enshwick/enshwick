@@ -97,13 +97,14 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let player = enshwick::abi::headed!(PlayerInfo {
     ///     slot: 0,
-    ///     entity: enshwick::Entity::from_engine(2),
+    ///     entity: enshwick::Entity::from_raw(2).ok_or("no entity")?,
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
     ///     name: [0; 128],
     /// });
     /// assert_eq!(loader.ask_actions(ActionCall::ALLOWED, &player, 0, "", ""), None);
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn ask_actions(
@@ -161,13 +162,14 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let player = enshwick::abi::headed!(PlayerInfo {
     ///     slot: 0,
-    ///     entity: enshwick::Entity::from_engine(2),
+    ///     entity: enshwick::Entity::from_raw(2).ok_or("no entity")?,
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
     ///     name: [0; 128],
     /// });
     /// assert_eq!(loader.type_in_chat(&player, 0, "/adm online"), None);
+    /// # Ok::<(), &str>(())
     /// ```
     #[cfg(feature = "unstable")]
     #[must_use]
@@ -222,13 +224,14 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let player = enshwick::abi::headed!(PlayerInfo {
     ///     slot: 0,
-    ///     entity: enshwick::Entity::from_engine(2),
+    ///     entity: enshwick::Entity::from_raw(2).ok_or("no entity")?,
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
     ///     name: [0; 128],
     /// });
     /// assert!(loader.carried_windows(&player, 0).is_empty());
+    /// # Ok::<(), &str>(())
     /// ```
     #[cfg(feature = "unstable")]
     #[must_use]
@@ -333,7 +336,7 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let player = enshwick::abi::headed!(PlayerInfo {
     ///     slot: 0,
-    ///     entity: enshwick::Entity::from_engine(2),
+    ///     entity: enshwick::Entity::from_raw(2).ok_or("no entity")?,
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
@@ -341,6 +344,7 @@ impl Installed {
     /// });
     /// loader.close_window(&player, "panel");
     /// assert!(loader.carried_windows(&player, 0).is_empty());
+    /// # Ok::<(), &str>(())
     /// ```
     #[cfg(feature = "unstable")]
     pub fn close_window(&self, player: &PlayerInfo, id: &str) {
@@ -379,13 +383,14 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let player = enshwick::abi::headed!(PlayerInfo {
     ///     slot: 0,
-    ///     entity: enshwick::Entity::from_engine(2),
+    ///     entity: enshwick::Entity::from_raw(2).ok_or("no entity")?,
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
     ///     name: [0; 128],
     /// });
     /// assert_eq!(loader.set_waypoint(&player, 0, [10.0, 0.0, 10.0]), None);
+    /// # Ok::<(), &str>(())
     /// ```
     #[cfg(feature = "unstable")]
     #[must_use]
@@ -527,7 +532,7 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let player = enshwick::abi::headed!(PlayerInfo {
     ///     slot: 0,
-    ///     entity: enshwick::Entity::from_engine(2),
+    ///     entity: enshwick::Entity::from_raw(2).ok_or("no entity")?,
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
@@ -535,6 +540,7 @@ impl Installed {
     /// });
     /// let chest = ActionTarget::at([1.0, 2.0, 3.0]);
     /// assert_eq!(loader.ask_action_at(&player, 0, "open", "", chest), None);
+    /// # Ok::<(), &str>(())
     /// ```
     #[cfg(feature = "unstable")]
     #[must_use]

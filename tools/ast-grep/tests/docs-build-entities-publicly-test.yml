@@ -1,0 +1,24 @@
+id: docs-build-entities-publicly
+valid:
+  - |
+    /// let chest = Entity::from_raw(4096).ok_or("no entity")?;
+    fn f() {}
+  - |
+    // A plain comment may name Entity::from_engine(0).
+    fn f() {}
+  - |
+    fn f() -> Entity {
+        Entity::from_engine(0)
+    }
+  - |
+    //// Four slashes make a plain comment: Entity::NONE.
+    fn f() {}
+invalid:
+  - |
+    /// let chest = Entity::from_engine(4096);
+    fn f() {}
+  - |
+    //! assert_eq!(slot.entity, enshwick::Entity::NONE);
+  - |
+    ///     entity: enshwick::Entity::from_engine(0),
+    fn f() {}

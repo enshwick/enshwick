@@ -36,7 +36,7 @@
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     let owners = load.entity_data::<Owner>("owner", Replication::Server)?;
-//!     let chest = Entity::from_engine(4_200);
+//!     let chest = Entity::from_raw(4_200).ok_or(enshwick::Off::new("no entity"))?;
 //!     if owners.get(chest).is_none() {
 //!         let _set = owners.set(chest, &Owner { player: 7 });
 //!     }

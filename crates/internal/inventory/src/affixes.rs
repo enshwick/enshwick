@@ -69,7 +69,7 @@ pub struct AffixInfo {
 ///
 /// assert_eq!(RollError::Rolled.to_string(), "the item rolled before");
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum RollError {
     /// A roll of an item that rolled before, or off the server.

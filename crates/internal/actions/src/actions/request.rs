@@ -303,7 +303,7 @@ pub struct Subject {
 /// assert_eq!(none.reason(), "No gate near you");
 /// assert_eq!(none.to_string(), "nothing to act on: No gate near you");
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[error("nothing to act on: {reason}")]
 pub struct FindSubjectError {
     reason: String,
@@ -405,8 +405,9 @@ impl ActionTarget {
     /// # Examples
     ///
     /// ```
-    /// let chest = enshwick::actions::ActionTarget::entity(enshwick::Entity::from_engine(4096));
-    /// assert_eq!(chest.entity, Some(enshwick::Entity::from_engine(4096)));
+    /// let chest = enshwick::actions::ActionTarget::entity(enshwick::Entity::from_raw(4096).ok_or("no entity")?);
+    /// assert_eq!(chest.entity, enshwick::Entity::from_raw(4096));
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub const fn entity(entity: Entity) -> Self {
@@ -437,8 +438,9 @@ impl ActionTarget {
     /// ```
     /// use enshwick::actions::ActionTarget;
     ///
-    /// let chest = ActionTarget::entity(enshwick::Entity::from_engine(4096)).with_position([1.0, 2.0, 3.0]);
+    /// let chest = ActionTarget::entity(enshwick::Entity::from_raw(4096).ok_or("no entity")?).with_position([1.0, 2.0, 3.0]);
     /// assert_eq!(chest.position, Some([1.0, 2.0, 3.0]));
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub const fn with_position(mut self, position: [f64; 3]) -> Self {

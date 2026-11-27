@@ -22,16 +22,16 @@ use crate::content::Guid;
 ///     hud_screen: Str::new("StorageChest"),
 ///     prompt_title: Str::EMPTY,
 ///     prompt_verb: 0,
-///     screen_host: enshwick::Entity::from_engine(512),
+///     screen_host: enshwick::Entity::from_raw(512).ok_or("no entity")?,
 ///     screen_host_template: enshwick::abi::Guid::NIL,
 ///     screen_host_position: [0.0; 3],
 ///     hovered_slot: 0,
 ///     hovered_item: enshwick::ItemId::new(0),
 ///     hovered_count: 0,
-///     hovered_pide: enshwick::Entity::from_engine(0),
 ///     reserved_hovered: 0,
 /// });
 /// assert_eq!(frame.screen, UiFrame::IN_GAME);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
@@ -495,9 +495,10 @@ impl UiWidget {
 /// let item = enshwick::abi::headed!(UiTooltipItem {
 ///     token: 7,
 ///     item: enshwick::ItemId::new(0x5e01),
-///     pide: enshwick::Entity::from_engine(900),
+///     pide: enshwick::Entity::from_raw(900).ok_or("no entity")?,
 /// });
-/// assert_eq!(item.pide, enshwick::Entity::from_engine(900));
+/// assert_eq!(item.pide, enshwick::Entity::from_raw(900).ok_or("no entity")?);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]

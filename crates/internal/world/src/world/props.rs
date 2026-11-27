@@ -161,8 +161,9 @@ impl Prop {
 /// use enshwick::ItemId;
 /// use enshwick::world::{CapturedProp, Prop, WorldTransform};
 ///
-/// let prop = Prop::new(enshwick::Entity::from_engine(41), ItemId::new(7), WorldTransform::at([1.0, 2.0, 3.0]));
+/// let prop = Prop::new(enshwick::Entity::from_raw(41).ok_or("no entity")?, ItemId::new(7), WorldTransform::at([1.0, 2.0, 3.0]));
 /// assert_eq!(CapturedProp::from(prop).item, ItemId::new(7));
+/// # Ok::<(), &str>(())
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize, crate::Script)]
 #[non_exhaustive]

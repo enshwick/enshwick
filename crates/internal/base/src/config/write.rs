@@ -86,7 +86,7 @@ pub(super) fn write(
 /// let why = SetSettingError::NoWorld;
 /// assert_eq!(why.to_string(), "no world runs here, and settings belong to each world");
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum SetSettingError {
     /// No world runs in this process, as on a client in another's world or

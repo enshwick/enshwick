@@ -13,7 +13,7 @@ use crate::abi::{Entity, Header, PlayerInfo, Status, Str};
 /// ```
 /// use enshwick::abi::{ActionCall, Header, PlayerInfo, Str};
 ///
-/// let player = PlayerInfo::with_name(enshwick::Entity::from_engine(2), enshwick::PlayerKey::new(7), 0, "Ann");
+/// let player = PlayerInfo::with_name(enshwick::Entity::from_raw(2).ok_or("no entity")?, enshwick::PlayerKey::new(7), 0, "Ann");
 /// let call = enshwick::abi::headed!(ActionCall {
 ///     kind: ActionCall::RUN,
 ///     language: 0,
@@ -27,6 +27,7 @@ use crate::abi::{Entity, Header, PlayerInfo, Status, Str};
 ///     reason: 0,
 /// });
 /// assert_eq!(call.kind, ActionCall::RUN);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
@@ -165,7 +166,6 @@ impl_headed!(CommandInfo);
 ///
 /// let chest = enshwick::abi::headed!(ActionTarget {
 ///     flags: ActionTarget::POSITION,
-///     entity: enshwick::Entity::from_engine(0),
 ///     position: [10.0, 2.0, -4.5],
 /// });
 /// assert_eq!(chest.flags & ActionTarget::ENTITY, 0);
@@ -357,11 +357,12 @@ pub type StatusFn = unsafe extern "system" fn(user: *mut c_void, out: *mut Str);
 /// use enshwick::abi::{Header, RenameCall, Str};
 ///
 /// let call = enshwick::abi::headed!(RenameCall {
-///     entity: enshwick::Entity::from_engine(4096),
+///     entity: enshwick::Entity::from_raw(4096).ok_or("no entity")?,
 ///     player: core::ptr::null(),
 ///     text: Str::new("Tools"),
 /// });
 /// assert!(call.player.is_null());
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]

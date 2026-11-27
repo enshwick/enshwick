@@ -173,7 +173,7 @@ impl MapPoint {
 ///
 /// assert_eq!(MapSnapshot::from_bytes(&[9, 0]), Err(SnapshotError::Format(9)));
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum SnapshotError {
     /// Written in another format than [`MAP_SNAPSHOT_FORMAT`].

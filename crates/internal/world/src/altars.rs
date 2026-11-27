@@ -47,8 +47,9 @@ use crate::{Host, Off};
 /// use enshwick::altars::{Altar, CellBox};
 /// use enshwick::Entity;
 ///
-/// let altar = Altar::new(Entity::from_engine(4096), 1, false, [0.0; 3], CellBox::new([-40, -40, -40], [40, 40, 40]), vec![CellBox::new([-40, -40, -40], [40, 40, 40])]);
+/// let altar = Altar::new(Entity::from_raw(4096).ok_or("no entity")?, 1, false, [0.0; 3], CellBox::new([-40, -40, -40], [40, 40, 40]), vec![CellBox::new([-40, -40, -40], [40, 40, 40])]);
 /// assert!(altar.zone.contains([0, 0, 0]));
+/// # Ok::<(), &str>(())
 /// ```
 #[derive(Clone, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
@@ -127,11 +128,13 @@ impl Altar {
 /// use enshwick::altars::{bases_of, Altar, CellBox};
 /// use enshwick::Entity;
 ///
-/// let altar = |entity, x| Altar::new(Entity::from_engine(entity), 1, false, [0.0; 3], CellBox::new([x, 0, 0], [x + 10, 10, 10]), Vec::new());
-/// let bases = bases_of(&[altar(1, 0), altar(2, 10), altar(3, 50)]);
+/// let id = |raw| Entity::from_raw(raw).ok_or("no entity");
+/// let altar = |entity, x| Altar::new(entity, 1, false, [0.0; 3], CellBox::new([x, 0, 0], [x + 10, 10, 10]), Vec::new());
+/// let bases = bases_of(&[altar(id(1)?, 0), altar(id(2)?, 10), altar(id(3)?, 50)]);
 /// assert_eq!(bases.len(), 2);
-/// assert_eq!(bases[0].altars, vec![Entity::from_engine(1), Entity::from_engine(2)]);
+/// assert_eq!(bases[0].altars, vec![id(1)?, id(2)?]);
 /// assert!(bases[0].contains([15, 5, 5]));
+/// # Ok::<(), &str>(())
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
@@ -363,7 +366,7 @@ impl ZoneSizes {
 ///     "altar zones not sized again: refused by the loader (status 3)"
 /// );
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum ResizeError {
     /// The mod is turned off, so its filter no longer runs.

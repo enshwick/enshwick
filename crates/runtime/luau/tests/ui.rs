@@ -864,12 +864,7 @@ mod tests {
             "#,
         );
         loader.slot_input(torch, Input::Click);
-        loader.hover_slot(Some((
-            0x3_0000_0041,
-            torch,
-            2,
-            enshwick::Entity::from_engine(0),
-        )));
+        loader.hover_slot(Some((0x3_0000_0041, torch, 2, None)));
         let under_slots = enshwick::ui::PanelPlacement::new(enshwick::ui::Edge::Left)
             .align(enshwick::ui::Align::Start)
             .shift(362.0)

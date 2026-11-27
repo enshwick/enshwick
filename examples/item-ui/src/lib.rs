@@ -174,12 +174,7 @@ mod tests {
     fn the_panel_beside_the_backpack_shows_three_slots_and_the_slot_under_the_cursor() {
         let loader = start(Side::CLIENT, false);
         let at = SlotRef::new(Entity::from_engine(41), 3);
-        loader.hover_slot(Some((
-            at.0,
-            ItemId::from_guid(LOGS),
-            7,
-            Entity::from_engine(0),
-        )));
+        loader.hover_slot(Some((at.0, ItemId::from_guid(LOGS), 7, None)));
         let drawn = loader.draw_screen(HudScreenType::Backpack);
         assert_eq!(drawn.len(), 1);
         assert_eq!(drawn[0].0, UiExtension::LEFT);

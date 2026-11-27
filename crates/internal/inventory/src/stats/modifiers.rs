@@ -263,7 +263,7 @@ pub enum Lasting {
 ///
 /// assert_eq!(ModifyError::NotServer.to_string(), "only the server keeps modifiers");
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum ModifyError {
     /// Called on a client that hosts no game.

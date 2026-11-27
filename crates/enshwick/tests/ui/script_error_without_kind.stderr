@@ -1,0 +1,21 @@
+error[E0277]: `NoSeed` names no kind for scripts
+  --> tests/ui/script_error_without_kind.rs:15:1
+   |
+15 | #[enshwick::script(garden)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   | |
+   | `NoSeed` doesn't satisfy the trait bound
+   | a `#[script]` method's error
+   |
+help: the trait `enshwick::script::Failure` is not implemented for `NoSeed`
+  --> tests/ui/script_error_without_kind.rs:5:1
+   |
+ 5 | struct NoSeed;
+   | ^^^^^^^^^^^^^
+   = note: derive `script::ErrorKind` beside `thiserror::Error`, or return a `script::Error`
+help: the trait `enshwick::script::Failure` is implemented for `enshwick::script::Error`
+  --> $WORKSPACE/crates/internal/values/src/script/kinds.rs
+   |
+   | impl Failure for super::Error {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: this error originates in the attribute macro `enshwick::script` (in Nightly builds, run with -Z macro-backtrace for more info)

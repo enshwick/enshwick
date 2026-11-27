@@ -41,14 +41,14 @@ struct Owner {
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     // `<this mod>:bonus`; another mod opens it as "<this mod>:bonus".
     let bonus = load.item_data::<Bonus>("bonus")?;
-    let ring = ItemInstance { pide: Entity::from_engine(900), item: enshwick::ItemId::new(0x5e01) };
+    let ring = ItemInstance { pide: Entity::from_raw(900).ok_or(enshwick::Off::new("no entity"))?, item: enshwick::ItemId::new(0x5e01) };
     if bonus.get(ring).is_none() {
         let _set = bonus.set(ring, &Bonus { fire: 12 });
     }
 
     // `<this mod>:owner`, kept on the server alone.
     let owners = load.entity_data::<Owner>("owner", Replication::Server)?;
-    let chest = Entity::from_engine(4_200);
+    let chest = Entity::from_raw(4_200).ok_or(enshwick::Off::new("no entity"))?;
     if owners.get(chest).is_none() {
         let _set = owners.set(chest, &Owner { player: 7 });
     }

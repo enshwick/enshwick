@@ -24,7 +24,7 @@ pub use script::{DataStore, StateFns};
 ///     format!("kept in memory: {error}")
 /// }
 /// ```
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum StoreFileError {
     /// The file could not be read, written or removed.

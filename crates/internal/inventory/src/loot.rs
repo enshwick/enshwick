@@ -82,11 +82,12 @@ impl InteractionOfferRuntime {
 /// use enshwick::Entity;
 /// use enshwick::loot::{Container, InteractionOfferRuntime};
 ///
-/// let mut corpse = Container::new(Entity::from_engine(900), [10.0, 2.0, -4.0], false, true);
+/// let mut corpse = Container::new(Entity::from_raw(900).ok_or("no entity")?, [10.0, 2.0, -4.0], false, true);
 /// corpse.area_loot = Some(true);
 /// corpse.offer = Some(InteractionOfferRuntime::new(0, false));
 /// assert!(corpse.is_enemy_loot());
 /// assert!(corpse.is_open());
+/// # Ok::<(), &str>(())
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]

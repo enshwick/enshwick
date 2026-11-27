@@ -60,7 +60,8 @@ pub use path::after_crate;
 /// let error = u8::from_value(&Value::Text("no".into())).unwrap_err();
 /// assert_eq!(error.to_string(), "a u8, not Text(\"no\")");
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
+#[script(crate = "crate")]
 #[error("{}{expected}", path_prefix(.path))]
 pub struct ShapeError {
     path: Vec<String>,

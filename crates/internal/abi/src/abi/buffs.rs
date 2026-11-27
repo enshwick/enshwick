@@ -68,13 +68,14 @@ impl BuffTypeInfo {
 ///
 /// let fed = enshwick::abi::headed!(ActiveBuff {
 ///     id: enshwick::buffs::BuffTypeId::new(7),
-///     entity: enshwick::Entity::from_engine(4100),
+///     entity: enshwick::Entity::from_raw(4100).ok_or("no entity")?,
 ///     slot: 0,
 ///     level: 0,
 ///     duration_ns: 600_000_000_000,
 ///     remaining_ns: 120_000_000_000,
 /// });
 /// assert!(fed.remaining_ns < fed.duration_ns);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
@@ -106,13 +107,14 @@ impl_headed!(ActiveBuff);
 /// use enshwick::abi::{BuffRequest, Header};
 ///
 /// let request = enshwick::abi::headed!(BuffRequest {
-///     entity: enshwick::Entity::from_engine(2),
+///     entity: enshwick::Entity::from_raw(2).ok_or("no entity")?,
 ///     id: enshwick::buffs::BuffTypeId::new(7),
 ///     level: 0,
 ///     reserved: 0,
 ///     duration_ns: 0,
 /// });
 /// assert_eq!(request.duration_ns, 0, "the type's own duration");
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
