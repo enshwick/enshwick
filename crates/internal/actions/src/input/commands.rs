@@ -211,7 +211,11 @@ pub enum CommandAction {
     /// member of the game's `EquipmentSlot` such as `RangedWeapon`, through
     /// the game's own equipment request. Observed once the client's copy of
     /// the slot's inventory changes; the server refuses an item of another
-    /// kind than the equipment slot, so that one ends timed out.
+    /// kind than the equipment slot, so that one ends timed out. An item a
+    /// [`Self::MoveItem`] took out of the equipment, which the game's
+    /// equipment slot still names, moves back into the equipment slot it
+    /// left while that slot is empty; a server mod hears that as an item
+    /// transfer, not an equip.
     Equip {
         /// The slot that holds the item.
         slot: SlotRef,
@@ -227,12 +231,13 @@ pub enum CommandAction {
     /// Moves every stack of the player's into the inventory `to`, as a
     /// storage window's deposit all does. Observed as [`Self::TakeAll`].
     DepositAll(Entity),
-    /// Destroys the stack in `slot`, as the game's trash does; the game has
-    /// no drop of an item on the ground. It is an item transfer of type
+    /// Destroys the stack in `slot`, as the backpack's Delete does (client
+    /// 26430625, read statically); the game has no drop of an item on the
+    /// ground. It is an item transfer of type
     /// [`Destroy`](crate::interactions::InventoryActionType::Destroy), so a
-    /// server mod refuses it through its interaction filter's move, not
-    /// through an item filter on trash. Observed once the client's copy of
-    /// the slot's inventory changes.
+    /// server mod refuses it through its interaction filter's move or an
+    /// item filter on trash. Observed once the client's copy of the slot's
+    /// inventory changes.
     Trash(SlotRef),
     /// Sends `text` to the world's chat as the local player's own line, as
     /// the chat window's Enter does, on any server the client plays on: 1

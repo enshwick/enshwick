@@ -253,7 +253,7 @@ impl FogImage {
 ///
 /// assert_eq!(FogError::Missing.to_string(), "no fog of war to read");
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum FogError {
     /// The client is in no world, this game build lacks the fog, or the

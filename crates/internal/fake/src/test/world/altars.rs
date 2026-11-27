@@ -77,8 +77,9 @@ impl Installed {
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let mut altar = AltarInfo::EMPTY;
-    /// altar.entity = enshwick::Entity::from_engine(4096);
+    /// altar.entity = enshwick::Entity::from_raw(4096).ok_or("no entity")?;
     /// loader.set_altars(&[altar]);
+    /// # Ok::<(), &str>(())
     /// ```
     pub fn set_altars(&self, altars: &[AltarInfo]) {
         table::with((), |s| s.world.altars = altars.to_vec());
@@ -112,7 +113,8 @@ impl Installed {
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert_eq!(loader.altar_zone(enshwick::Entity::from_engine(4096), 2, 60), (0, 60));
+    /// assert_eq!(loader.altar_zone(enshwick::Entity::from_raw(4096).ok_or("no entity")?, 2, 60), (0, 60));
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn altar_zone(&self, altar: Entity, level: u8, height: i64) -> (i64, i64) {

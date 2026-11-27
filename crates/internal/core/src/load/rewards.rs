@@ -37,7 +37,7 @@ impl Load<'_> {
     /// ```
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     // No rewards for the first player, entity 1.
-    ///     load.on_reward(|grant| grant.player != enshwick::Entity::from_engine(1))
+    ///     load.on_reward(|grant| grant.player.get() != 1)
     /// }
     /// ```
     #[script]

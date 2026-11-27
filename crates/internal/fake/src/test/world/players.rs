@@ -34,7 +34,7 @@ impl FakeHost {
     ///
     /// let player = enshwick::abi::headed!(PlayerInfo {
     ///     slot: 0,
-    ///     entity: enshwick::Entity::from_engine(2),
+    ///     entity: enshwick::Entity::from_raw(2).ok_or("no entity")?,
     ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: PlayerInfo::CAN_KICK_BAN,
     ///     name_len: 0,
@@ -42,6 +42,7 @@ impl FakeHost {
     /// });
     /// let loader = enshwick::test::FakeHost::new().player(player).install();
     /// # let _ = loader;
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn player(mut self, player: PlayerInfo) -> Self {
@@ -91,7 +92,8 @@ impl Installed {
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert!(loader.rename(enshwick::Entity::from_engine(4096), None, "Tools"));
+    /// assert!(loader.rename(enshwick::Entity::from_raw(4096).ok_or("no entity")?, None, "Tools"));
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn rename(

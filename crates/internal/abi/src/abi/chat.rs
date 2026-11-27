@@ -21,12 +21,13 @@ use crate::abi::{Entity, Header, PlayerKey, Str};
 ///
 /// let line = enshwick::abi::headed!(ChatLine {
 ///     account: enshwick::PlayerKey::new(7),
-///     entity: enshwick::Entity::from_engine(2),
+///     entity: enshwick::Entity::from_raw(2).ok_or("no entity")?,
 ///     kind: ChatLine::PLAYER,
 ///     loca: [0; 2],
 ///     text: Str::new("hello"),
 /// });
 /// assert_eq!(line.text.len(), 5);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]

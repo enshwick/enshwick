@@ -482,7 +482,7 @@ impl Edit {
 
 /// Why the game's buff collection cannot take a new type.
 #[doc(hidden)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum Refusal {
     /// The collection does not read with the build's layout.

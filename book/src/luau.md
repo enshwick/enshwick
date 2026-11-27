@@ -172,13 +172,16 @@ these Luau types:
 
 The Luau API is read from descriptions kept beside the Rust items, so it
 is no second copy. `#[derive(Script)]` describes a type.
-`#[script(<part>)]` marks the methods of an impl block a script may call. The
-event tables describe each event. A new event or a newly marked method
-reaches Luau and the definitions with no other change.
+`#[script(<part>)]` marks the methods of an impl block a script may call.
+A method's error type derives `script::ErrorKind` beside `thiserror::Error`,
+which names its kinds. A method may also return a `script::Error` with a
+kind of its own. The event tables describe each event. A new event or
+a newly marked method reaches Luau and the definitions with no other change.
 
 A call that fails raises a Luau error as a table. Its `kind` is the name of
-the Rust error's variant, and its `message` says what went wrong. Its `call`
-names the call that failed. A kind is `WrongThread` for
+the Rust error's variant, or of its type when it has none. A failed file
+call gives the kind of its io error, such as `NotFound`. Its `message`
+says what went wrong. Its `call` names the call that failed. A kind is `WrongThread` for
 `WorldError::WrongThread`, for example. It is `BadArgs` for an argument the
 call cannot take. It is `WrongTime` for a call at the wrong time, such as a
 start call after the start. It is `Gone` for a call on an object whose call

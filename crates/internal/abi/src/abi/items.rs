@@ -20,13 +20,14 @@ use crate::abi::{Entity, Header, ItemId};
 ///
 /// let call = enshwick::abi::headed!(ItemAction {
 ///     kind: ItemAction::CONSUME,
-///     character: enshwick::Entity::from_engine(4096),
+///     character: enshwick::Entity::from_raw(4096).ok_or("no entity")?,
 ///     item: enshwick::ItemId::new(0x5e01),
 ///     count: 1,
-///     inventory: enshwick::Entity::from_engine(4100),
+///     inventory: enshwick::Entity::from_raw(4100).ok_or("no entity")?,
 ///     slot: 3,
 /// });
 /// assert_eq!(call.kind, ItemAction::CONSUME);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]

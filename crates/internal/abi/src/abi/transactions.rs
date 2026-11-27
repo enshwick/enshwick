@@ -104,8 +104,9 @@ impl_headed!(PropPlace);
 /// ```
 /// use enshwick::abi::{Header, PropRemove};
 ///
-/// let gone = enshwick::abi::headed!(PropRemove { entity: enshwick::Entity::from_engine(77), flags: 0 });
+/// let gone = enshwick::abi::headed!(PropRemove { entity: enshwick::Entity::from_raw(77).ok_or("no entity")?, flags: 0 });
 /// assert_eq!(gone.flags & PropRemove::DISCARD_STATE, 0);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]

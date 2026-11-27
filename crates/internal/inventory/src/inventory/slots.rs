@@ -10,9 +10,10 @@ use crate::{Entity, ItemId};
 /// use enshwick::Entity;
 /// use enshwick::inventory::SlotRef;
 ///
-/// let slot = SlotRef::new(Entity::from_engine(0x41), 3);
+/// let slot = SlotRef::new(Entity::from_raw(0x41).ok_or("no entity")?, 3);
 /// assert_eq!(slot.0, 0x3_0000_0041);
-/// assert_eq!((slot.inventory(), slot.index()), (Entity::from_engine(0x41), 3));
+/// assert_eq!((slot.inventory(), slot.index()), (Entity::from_raw(0x41).ok_or("no entity")?, 3));
+/// # Ok::<(), &str>(())
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord, crate::Script)]
 #[expect(
@@ -94,8 +95,9 @@ impl InventoryCategory {
 /// use enshwick::Entity;
 /// use enshwick::inventory::{InventoryCategory, Slot, SlotRef};
 ///
-/// let slot = Slot::new(SlotRef::new(Entity::from_engine(9), 0), InventoryCategory::GENERIC, enshwick::ItemId::new(0), 0, None);
+/// let slot = Slot::new(SlotRef::new(Entity::from_raw(9).ok_or("no entity")?, 0), InventoryCategory::GENERIC, enshwick::ItemId::new(0), 0, None);
 /// assert!(slot.is_empty());
+/// # Ok::<(), &str>(())
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
@@ -294,8 +296,9 @@ impl Fill {
 /// use enshwick::Entity;
 /// use enshwick::inventory::{InventoryCategory, ItemInstance, Slot, SlotRef};
 ///
-/// let slot = Slot::new(SlotRef::new(Entity::from_engine(41), 0), InventoryCategory::GENERIC, enshwick::ItemId::new(0x5e01), 1, Some(Entity::from_engine(900)));
-/// assert_eq!(ItemInstance::of(&slot), Some(ItemInstance { pide: Entity::from_engine(900), item: enshwick::ItemId::new(0x5e01) }));
+/// let slot = Slot::new(SlotRef::new(Entity::from_raw(41).ok_or("no entity")?, 0), InventoryCategory::GENERIC, enshwick::ItemId::new(0x5e01), 1, Entity::from_raw(900));
+/// assert_eq!(ItemInstance::of(&slot), Some(ItemInstance { pide: Entity::from_raw(900).ok_or("no entity")?, item: enshwick::ItemId::new(0x5e01) }));
+/// # Ok::<(), &str>(())
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, crate::Script)]
 #[expect(

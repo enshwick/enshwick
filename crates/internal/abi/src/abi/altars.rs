@@ -52,12 +52,13 @@ pub const ALTAR_LEVELS: usize = 16;
 /// use enshwick::abi::{AltarInfo, Bounds, Header};
 ///
 /// let mut altar = AltarInfo::EMPTY;
-/// altar.entity = enshwick::Entity::from_engine(4096);
+/// altar.entity = enshwick::Entity::from_raw(4096).ok_or("no entity")?;
 /// altar.level = 1;
 /// altar.level_count = 1;
 /// altar.zone = Bounds { min: [0, 0, 0], max: [80, 80, 80] };
 /// altar.levels[0] = altar.zone;
 /// assert_eq!(altar.header, Header::of::<AltarInfo>());
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
@@ -121,8 +122,9 @@ impl AltarInfo {
 /// ```
 /// use enshwick::abi::{AltarZone, Header};
 ///
-/// let zone = enshwick::abi::headed!(AltarZone { altar: enshwick::Entity::from_engine(4096), level: 2, reserved: [0; 3], grow: 0, height: 60 });
+/// let zone = enshwick::abi::headed!(AltarZone { altar: enshwick::Entity::from_raw(4096).ok_or("no entity")?, level: 2, reserved: [0; 3], grow: 0, height: 60 });
 /// assert_eq!(zone.grow, 0);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]

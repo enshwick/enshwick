@@ -45,7 +45,7 @@ pub(super) struct Layout {
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let inventories = load.inventories()?;
-///     let (corpse, player) = (Entity::from_engine(40), Entity::from_engine(2));
+///     let (corpse, player) = (Entity::from_raw(40).ok_or(enshwick::Off::new("no entity"))?, Entity::from_raw(2).ok_or(enshwick::Off::new("no entity"))?);
 ///     load.scheduler()?.next_tick(move || {
 ///         if let Ok(slots) = inventories.read().slots(corpse) {
 ///             let full = slots.iter().filter(|s| !s.is_empty()).count();

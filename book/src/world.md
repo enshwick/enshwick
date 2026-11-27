@@ -724,7 +724,7 @@ use enshwick::events::PlayerDied;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
-    let altar = enshwick::Entity::from_engine(40);
+    let altar = enshwick::Entity::from_raw(40).ok_or(enshwick::Off::new("no entity"))?;
     load.on::<PlayerDied>(move |died| {
         if let Some(player) = world.player(died.entity) {
             if let Err(why) = world.set_respawn_point(&player, altar) {

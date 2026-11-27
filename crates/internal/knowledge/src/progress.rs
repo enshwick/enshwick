@@ -32,8 +32,9 @@ use enshwick_base::vetoes::Verdict;
 /// use enshwick::Entity;
 /// use enshwick::progress::Experience;
 ///
-/// let row = Experience { entity: Entity::from_engine(4096), level: 3, progress: 10, need: 100, gained: 5 };
+/// let row = Experience { entity: Entity::from_raw(4096).ok_or("no entity")?, level: 3, progress: 10, need: 100, gained: 5 };
 /// assert_eq!(row.need - row.progress, 90);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]

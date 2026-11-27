@@ -64,7 +64,7 @@ pub const PROGRESS_ADD_EXPERIENCE: u32 = 3;
 /// use enshwick::abi::{Header, PROGRESS_SET_LEVEL, ProgressWriteData};
 ///
 /// let written = enshwick::abi::headed!(ProgressWriteData {
-///     entity: enshwick::Entity::from_engine(2),
+///     entity: enshwick::Entity::from_raw(2).ok_or("no entity")?,
 ///     what: PROGRESS_SET_LEVEL,
 ///     value: 12,
 ///     outcome: ProgressWriteData::APPLIED,
@@ -73,6 +73,7 @@ pub const PROGRESS_ADD_EXPERIENCE: u32 = 3;
 ///     gained: 0,
 /// });
 /// assert_eq!(written.outcome, ProgressWriteData::APPLIED);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, crate::Script)]

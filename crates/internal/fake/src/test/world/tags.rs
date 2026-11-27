@@ -28,10 +28,11 @@ impl FakeHost {
     /// let loader = FakeHost::new()
     ///     .world()
     ///     .entity_tags()
-    ///     .tagged(enshwick::Entity::from_engine(7), 1, &[enshwick::content::Guid([0x11; 16])])
+    ///     .tagged(enshwick::Entity::from_raw(7).ok_or("no entity")?, 1, &[enshwick::content::Guid([0x11; 16])])
     ///     .install();
-    /// let bytes = loader.component_bytes(enshwick::Entity::from_engine(7), fnv1a32(TAG_CONTAINER.as_bytes()));
+    /// let bytes = loader.component_bytes(enshwick::Entity::from_raw(7).ok_or("no entity")?, fnv1a32(TAG_CONTAINER.as_bytes()));
     /// assert_eq!(bytes.map(|bytes| bytes.len()), Some(24));
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn entity_tags(self) -> Self {

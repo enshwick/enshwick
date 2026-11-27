@@ -233,7 +233,7 @@ pub trait Config: serde::de::DeserializeOwned + Default {
 /// assert_eq!(refused, ConfigError::Value { key: "limit".into(), need: "is 1 to 16".into() });
 /// assert_eq!(refused.to_string(), "limit is 1 to 16");
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum ConfigError {
     /// The text is not settings TOML, or a value does not fit its field's

@@ -6,12 +6,17 @@ use std::sync::Arc;
 #[doc(hidden)]
 pub mod convert;
 mod declared;
+mod kinds;
 mod objects;
 mod unions;
 
 pub use declared::Declared;
 #[doc(hidden)]
 pub use declared::declare;
+pub use enshwick_macros::ErrorKind;
+pub use kinds::ErrorKind;
+#[doc(hidden)]
+pub use kinds::Failure;
 pub use objects::{Class, Handle, Object};
 pub use unions::{Union, Variant};
 
@@ -751,6 +756,8 @@ impl Callback {
 /// ```
 #[derive(Clone, Debug, thiserror::Error)]
 #[error("{message}")]
+// Its kind is a value of its own, which `script::Failure` passes through.
+// ast-grep-ignore: errors-name-their-kind
 pub struct Error {
     kind: String,
     message: String,
@@ -794,9 +801,13 @@ impl Error {
         }
     }
 
-    /// The error a call of the API answered, its kind the name of `error`'s
-    /// variant (`WrongThread` of [`WorldError::WrongThread`]), or of its type
-    /// when it has no variants.
+    /// The error a call of the API answered, its kind the one `error` names
+    /// ([`ErrorKind`]): `WrongThread` of [`WorldError::WrongThread`], or
+    /// [`Error::BAD_ARGS`] for an empty name.
+    ///
+    /// An error without [`ErrorKind`] has no kind, so neither this call nor a
+    /// `#[script]` method returning it compiles; a `#[script]` method may also
+    /// return an `Error` itself.
     ///
     /// [`WorldError::WrongThread`]: ../enum.WorldError.html#variant.WrongThread
     ///
@@ -806,24 +817,15 @@ impl Error {
     /// let error = enshwick::script::Error::failed(&enshwick::WorldError::WrongThread);
     /// assert_eq!((error.kind(), error.to_string().as_str()), ("WrongThread", "not on the server's game thread"));
     /// ```
-    pub fn failed<E: core::fmt::Display + core::fmt::Debug>(error: &E) -> Self {
-        let debug = format!("{error:?}");
-        let kind: String = debug
-            .chars()
-            .take_while(|c| c.is_alphanumeric() || *c == '_')
-            .collect();
-        Self {
-            kind: if kind.is_empty() {
-                Self::BAD_ARGS.to_owned()
-            } else {
-                kind
-            },
-            message: error.to_string(),
-        }
+    pub fn failed<E: core::fmt::Display + ErrorKind>(error: &E) -> Self {
+        let kind = Some(error.kind()).filter(|kind| !kind.is_empty());
+        Self::with_kind(kind.unwrap_or(Self::BAD_ARGS), error.to_string())
     }
 
-    /// What went wrong, as a name a script compares: the variant of the
-    /// API's error, such as `WrongThread`, or [`Error::BAD_ARGS`].
+    /// What went wrong, as a name a script compares: the [`ErrorKind`] of
+    /// the API's error, such as `WrongThread`, `Off` or an io kind such as
+    /// `NotFound`, or one of [`Error::BAD_ARGS`], [`Error::WRONG_TIME`] and
+    /// [`Error::GONE`].
     ///
     /// # Examples
     ///

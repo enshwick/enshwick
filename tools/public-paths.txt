@@ -267,6 +267,7 @@ Next
 Next::call
 Off
 Off::from
+Off::kind
 Off::new
 Off::text
 PlayerKey
@@ -333,6 +334,7 @@ WorldError::Unavailable
 WorldError::WrongThread
 WorldError::from_value
 WorldError::into_value
+WorldError::kind
 WorldError::of
 abi
 abi::ABI_MAJOR
@@ -676,6 +678,7 @@ abi::CheckAbiError
 abi::CheckAbiError::NewerMajor
 abi::CheckAbiError::NewerMinor
 abi::CheckAbiError::OtherMajor
+abi::CheckAbiError::kind
 abi::ChunkData
 abi::ChunkData::BORN
 abi::ChunkData::TY
@@ -1851,6 +1854,7 @@ abi::PROGRESS_OPEN
 abi::PROGRESS_SET_EXPERIENCE
 abi::PROGRESS_SET_LEVEL
 abi::ParseLevelError
+abi::ParseLevelError::kind
 abi::PlayerData
 abi::PlayerData::BORN
 abi::PlayerData::TY
@@ -2854,6 +2858,7 @@ actions::Ask::say unstable
 actions::Ask::target unstable
 actions::FindSubjectError unstable
 actions::FindSubjectError::from unstable
+actions::FindSubjectError::kind unstable
 actions::FindSubjectError::reason unstable
 actions::MAX_ID unstable
 actions::MAX_KNOWN unstable
@@ -3125,6 +3130,7 @@ affixes::RollError
 affixes::RollError::Refused
 affixes::RollError::Rolled
 affixes::RollError::WrongThread
+affixes::RollError::kind
 affixes::RollRules
 affixes::RollRules::TY
 affixes::RollRules::from_value
@@ -3253,6 +3259,7 @@ altars::NewFlameAltar::zones
 altars::ResizeError
 altars::ResizeError::Refused
 altars::ResizeError::TurnedOff
+altars::ResizeError::kind
 altars::ZoneSizes
 altars::ZoneSizes::CLASS
 altars::ZoneSizes::PARTS
@@ -3398,6 +3405,7 @@ code
 code::FindError
 code::FindError::Many
 code::FindError::None
+code::FindError::kind
 code::Pattern
 code::Pattern::find_all
 code::Pattern::find_unique
@@ -3410,6 +3418,7 @@ code::Pattern::parse
 code::PatternError
 code::PatternError::Empty
 code::PatternError::Token
+code::PatternError::kind
 code::find_each_unique
 commands unstable
 commands::Caller unstable
@@ -3432,6 +3441,7 @@ commands::RunCommandError::NotOnGameThread unstable
 commands::RunCommandError::Refused unstable
 commands::RunCommandError::TooLong unstable
 commands::RunCommandError::Unknown unstable
+commands::RunCommandError::kind unstable
 commands::RunCommandError::of unstable
 commands::list unstable
 commands::run unstable
@@ -3449,6 +3459,7 @@ config::ConfigError::Text
 config::ConfigError::Value
 config::ConfigError::from
 config::ConfigError::invalid
+config::ConfigError::kind
 config::ConfigError::text
 config::Field
 config::Field::accepts
@@ -3503,6 +3514,7 @@ config::SetSettingError::BadValue
 config::SetSettingError::NoSetting
 config::SetSettingError::NoWorld
 config::SetSettingError::Refused
+config::SetSettingError::kind
 config::SetSettingError::of
 config::TableConfig
 config::TableConfig::on_change
@@ -3517,6 +3529,7 @@ console::RunLineError::NoLoader
 console::RunLineError::NotOnGameThread
 console::RunLineError::Refused
 console::RunLineError::Unknown
+console::RunLineError::kind
 console::RunLineError::of
 console::run
 content
@@ -3715,6 +3728,7 @@ content::changes::SetChangeError
 content::changes::SetChangeError::Refused
 content::changes::SetChangeError::Restart
 content::changes::SetChangeError::Value
+content::changes::SetChangeError::kind
 content::changes::SetFieldError
 content::changes::SetFieldError::BadFactor
 content::changes::SetFieldError::FactorOnly
@@ -3727,6 +3741,7 @@ content::changes::SetFieldError::NotWhole
 content::changes::SetFieldError::OutOfRange
 content::changes::SetFieldError::SetOnly
 content::changes::SetFieldError::Shrinks
+content::changes::SetFieldError::kind
 content::changes::Target
 content::changes::Target::Entry
 content::changes::Target::Items unstable
@@ -4550,6 +4565,7 @@ content::vanilla::VanillaError::Unknown
 content::vanilla::VanillaError::UnknownRecipe
 content::vanilla::VanillaError::UnknownTemplate
 content::vanilla::VanillaError::Unreadable
+content::vanilla::VanillaError::kind
 content::vanilla::VanillaItem
 content::vanilla::VanillaItem::TY
 content::vanilla::VanillaItem::from_value
@@ -4724,6 +4740,7 @@ controls::MAX_NAME unstable
 controls::ParseKeyError unstable
 controls::ParseKeyError::Protected unstable
 controls::ParseKeyError::Unknown unstable
+controls::ParseKeyError::kind unstable
 controls::Phase unstable
 controls::Phase::Hold unstable
 controls::Phase::Press unstable
@@ -4932,6 +4949,7 @@ entity_data::SetItemDataError::NotKept unstable
 entity_data::SetItemDataError::NotServer unstable
 entity_data::SetItemDataError::Refused unstable
 entity_data::SetItemDataError::TooLarge unstable
+entity_data::SetItemDataError::kind unstable
 entity_data::SetItemDataError::of unstable
 error
 error_every
@@ -5607,6 +5625,7 @@ input::BindingError unstable
 input::BindingError::NoAction unstable
 input::BindingError::Refused unstable
 input::BindingError::Unavailable unstable
+input::BindingError::kind unstable
 input::BoundKey unstable
 input::BoundKey::Key unstable
 input::BoundKey::Other unstable
@@ -6069,6 +6088,7 @@ inventory::RunBatchError::Malformed
 inventory::RunBatchError::TooLarge
 inventory::RunBatchError::TooManyInventories
 inventory::RunBatchError::TooManyOps
+inventory::RunBatchError::kind
 inventory::RunOpError
 inventory::RunOpError::InvalidState
 inventory::RunOpError::NotRun
@@ -6135,6 +6155,7 @@ item_data::SetItemDataError::NotKept unstable
 item_data::SetItemDataError::NotServer unstable
 item_data::SetItemDataError::Refused unstable
 item_data::SetItemDataError::TooLarge unstable
+item_data::SetItemDataError::kind unstable
 item_data::SetItemDataError::of unstable
 items unstable
 items::ItemAction unstable
@@ -6399,6 +6420,7 @@ map::FogError unstable
 map::FogError::Missing unstable
 map::FogError::Outside unstable
 map::FogError::Refused unstable
+map::FogError::kind unstable
 map::FogError::of unstable
 map::FogImage unstable
 map::FogImage::CLASS unstable
@@ -6541,6 +6563,7 @@ map::SnapshotError unstable
 map::SnapshotError::Encode unstable
 map::SnapshotError::Format unstable
 map::SnapshotError::Malformed unstable
+map::SnapshotError::kind unstable
 map::WaypointChanged unstable
 map::WaypointChanged::TY unstable
 map::WaypointChanged::entity unstable
@@ -6626,6 +6649,7 @@ net::SendError::NotReady
 net::SendError::OverRate
 net::SendError::Refused
 net::SendError::TooLarge
+net::SendError::kind
 net::SendError::of
 net::looks_like_code
 pacing
@@ -6686,6 +6710,7 @@ packs::PackDependency::version
 packs::PackError
 packs::PackError::column
 packs::PackError::file
+packs::PackError::kind
 packs::PackError::line
 packs::PackError::message
 packs::PackFiles
@@ -6742,6 +6767,7 @@ packs::PackSide
 packs::PackSide::Both
 packs::PackSide::Server
 packs::ParsePackError
+packs::ParsePackError::kind
 packs::ParsePackError::list
 packs::PointLayout
 packs::PointLayout::input
@@ -6760,6 +6786,7 @@ packs::ReadPackError::Io
 packs::ReadPackError::TooLarge
 packs::ReadPackError::TooManyIcons
 packs::ReadPackError::TooManyScripts
+packs::ReadPackError::kind
 packs::SCRIPT_EXTENSION
 packs::SCRIPT_MAIN
 packs::SOUNDS_FILE
@@ -6920,6 +6947,7 @@ quests::MoveQuestError unstable
 quests::MoveQuestError::NoQuest unstable
 quests::MoveQuestError::Unwritable unstable
 quests::MoveQuestError::World unstable
+quests::MoveQuestError::kind unstable
 quests::PageInfo unstable
 quests::PageInfo::TY unstable
 quests::PageInfo::category unstable
@@ -7039,6 +7067,7 @@ rates::Rate::seen_by_clients unstable
 rates::RateError unstable
 rates::RateError::OutOfRange unstable
 rates::RateError::Refused unstable
+rates::RateError::kind unstable
 rates::RateHandle unstable
 rates::RateHandle::CLASS unstable
 rates::RateHandle::PARTS unstable
@@ -7070,6 +7099,7 @@ resources::Bytes::TY
 resources::Bytes::from_value
 resources::Bytes::into_value
 resources::CodecError
+resources::CodecError::kind
 resources::CodecError::path
 resources::Constant
 resources::Constant::name
@@ -7353,6 +7383,8 @@ script::Error::failed unstable
 script::Error::kind unstable
 script::Error::new unstable
 script::Error::with_kind unstable
+script::ErrorKind unstable
+script::ErrorKind::kind unstable
 script::EventKind unstable
 script::EventKind::data unstable
 script::EventKind::doc unstable
@@ -7480,6 +7512,7 @@ services::CallServiceError
 services::CallServiceError::Failed
 services::CallServiceError::Off
 services::CallServiceError::Unmatched
+services::CallServiceError::kind
 services::CallServiceError::of
 services::Caller
 services::Caller::call
@@ -7508,6 +7541,7 @@ services::Emitter::send
 services::LayoutError
 services::LayoutError::Field
 services::LayoutError::Newer
+services::LayoutError::kind
 services::ModEvent
 services::ModEvent::DESCRIBED
 services::ModEvent::LAYOUT
@@ -7794,6 +7828,7 @@ state::StoreFileError
 state::StoreFileError::Io
 state::StoreFileError::Parse
 state::StoreFileError::Serialize
+state::StoreFileError::kind
 state::WorldStore
 state::WorldStore::clone
 state::WorldStore::flush
@@ -7840,6 +7875,7 @@ stats::ModifyError
 stats::ModifyError::NotPlayer
 stats::ModifyError::NotServer
 stats::ModifyError::Refused
+stats::ModifyError::kind
 stats::Op
 stats::Op::Add
 stats::Op::Max
@@ -7864,6 +7900,7 @@ stats::SetItemDataError::NotKept
 stats::SetItemDataError::NotServer
 stats::SetItemDataError::Refused
 stats::SetItemDataError::TooLarge
+stats::SetItemDataError::kind
 stats::SetItemDataError::of
 stats::Source
 stats::Source::TY
@@ -15797,6 +15834,7 @@ typed::SequenceResource::name unstable
 typed::SequenceResource::r#loop unstable
 typed::SequenceResource::to_value unstable
 typed::ShapeError unstable
+typed::ShapeError::kind unstable
 typed::ShufflebagCategoryLabelOverride unstable
 typed::ShufflebagCategoryLabelOverride::SHAPE unstable
 typed::ShufflebagCategoryLabelOverride::TY unstable
@@ -35358,6 +35396,7 @@ ui::UiError::Missing
 ui::UiError::Refused
 ui::UiError::Unavailable
 ui::UiError::WrongThread
+ui::UiError::kind
 ui::UiError::of
 vetoes
 vetoes::Placement
@@ -35563,6 +35602,7 @@ world::BuildRefusal::TY unstable
 world::BuildRefusal::Unchecked unstable
 world::BuildRefusal::from_value unstable
 world::BuildRefusal::into_value unstable
+world::BuildRefusal::kind unstable
 world::CAPTURE_TILES unstable
 world::Capture unstable
 world::Capture::CLASS unstable

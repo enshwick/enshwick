@@ -360,15 +360,16 @@ use enshwick::Entity;
 use enshwick::points::Decision;
 use price::{Deal, Price};
 
-fn a_regular_gets_more(loader: &enshwick::test::Installed) {
+fn a_regular_gets_more(loader: &enshwick::test::Installed) -> Result<(), &'static str> {
     let price = Price {
         item: 1,
         count: 1,
         player: 0x00ab_cdef_0123_4567,
-        character: Entity::from_engine(10),
+        character: Entity::from_raw(10).ok_or("no entity")?,
         deal: Deal::SELL,
     };
     assert_eq!(loader.ask_point(&price, 10), Decision::Changed(12));
+    Ok(())
 }
 ```
 

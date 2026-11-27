@@ -94,8 +94,9 @@ pub type GameEventFn = unsafe extern "system" fn(event: *const GameEventData, us
 /// ```
 /// use enshwick::abi::EntityPlace;
 ///
-/// let chest = EntityPlace { entity: enshwick::Entity::from_engine(4096), reserved: 0, position: [1.0, 0.0, 0.0] };
+/// let chest = EntityPlace { entity: enshwick::Entity::from_raw(4096).ok_or("no entity")?, reserved: 0, position: [1.0, 0.0, 0.0] };
 /// assert_eq!(chest.position[0], 1.0);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
@@ -127,12 +128,13 @@ impl Default for EntityPlace {
 /// use enshwick::abi::{Header, TeleportRequest};
 ///
 /// let to_spawn = enshwick::abi::headed!(TeleportRequest {
-///     entity: enshwick::Entity::from_engine(2),
+///     entity: enshwick::Entity::from_raw(2).ok_or("no entity")?,
 ///     flags: TeleportRequest::BEST_SPAWN,
 ///     position: [100.0, 40.0, -20.0],
 ///     orientation: [0.0, 0.0, 0.0, 1.0],
 /// });
 /// assert_eq!(to_spawn.flags, TeleportRequest::BEST_SPAWN);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
@@ -172,12 +174,13 @@ impl TeleportRequest {
 /// use enshwick::abi::{Header, RespawnPointInfo};
 ///
 /// let altar = enshwick::abi::headed!(RespawnPointInfo {
-///     entity: enshwick::Entity::from_engine(40),
+///     entity: enshwick::Entity::from_raw(40).ok_or("no entity")?,
 ///     kind: RespawnPointInfo::BASE,
 ///     position: [100.0, 40.0, -20.0],
 ///     orientation: [0.0, 0.0, 0.0, 1.0],
 /// });
 /// assert_eq!(altar.kind, RespawnPointInfo::BASE);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
@@ -269,8 +272,9 @@ impl SpawnRequest {
 /// ```
 /// use enshwick::abi::{CraftCheck, Header};
 ///
-/// let craft = enshwick::abi::headed!(CraftCheck { crafting_operator_id: enshwick::Entity::from_engine(2), crafting_station_id: enshwick::Entity::from_engine(0), recipe_id: enshwick::RecipeId::new(0x51), recipe_amount: 3, reserved: 0 });
-/// assert_eq!(craft.crafting_station_id, enshwick::Entity::from_engine(0));
+/// let craft = enshwick::abi::headed!(CraftCheck { crafting_operator_id: enshwick::Entity::from_raw(2).ok_or("no entity")?, recipe_id: enshwick::RecipeId::new(0x51), recipe_amount: 3, reserved: 0 });
+/// assert_eq!(craft.crafting_station_id.get(), 0);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
@@ -314,13 +318,14 @@ pub type CraftFilterFn =
 /// use enshwick::abi::{BuildCheck, Header};
 ///
 /// let wall = enshwick::abi::headed!(BuildCheck {
-///     character: enshwick::Entity::from_engine(2),
+///     character: enshwick::Entity::from_raw(2).ok_or("no entity")?,
 ///     item: enshwick::ItemId::new(0x1d),
 ///     position: [0.0; 3],
 ///     reason: core::ptr::null_mut(),
 ///     account: enshwick::PlayerKey::new(7),
 /// });
 /// assert_eq!(wall.item, enshwick::ItemId::new(0x1d));
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
@@ -429,15 +434,14 @@ pub const DAMAGE_TYPES: usize = 13;
 ///
 /// let mut fall = enshwick::abi::headed!(DamageCheck {
 ///     cause: DamageCheck::FALL_DAMAGE,
-///     target: enshwick::Entity::from_engine(2),
-///     source: enshwick::Entity::from_engine(0),
-///     attacker: enshwick::Entity::from_engine(0),
+///     target: enshwick::Entity::from_raw(2).ok_or("no entity")?,
 ///     total: 40.0,
 ///     amount_count: 0,
 ///     amounts: core::ptr::null_mut(),
 /// });
 /// fall.total *= 0.5;
 /// assert_eq!(fall.total, 20.0);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
@@ -572,7 +576,6 @@ impl KnowledgeInfo {
 ///
 /// let unflag = enshwick::abi::headed!(KnowledgeChange {
 ///     account: PlayerKey(7),
-///     entity: enshwick::Entity::from_engine(0),
 ///     id: enshwick::knowledge::KnowledgeId::new(0x1d),
 ///     value: 1,
 ///     kind: KnowledgeInfo::FLAGS,
@@ -767,12 +770,13 @@ impl WeatherFront {
 /// use enshwick::abi::{BuildRights, Header};
 ///
 /// let check = enshwick::abi::headed!(BuildRights {
-///     character: enshwick::Entity::from_engine(2),
+///     character: enshwick::Entity::from_raw(2).ok_or("no entity")?,
 ///     refusal: BuildRights::ALLOWED,
 ///     min: [100.0, 40.0, 100.0],
 ///     max: [104.0, 44.0, 104.0],
 /// });
 /// assert_eq!(check.refusal, BuildRights::ALLOWED);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]

@@ -134,7 +134,7 @@ use enshwick::Entity;
 use enshwick::loot::{Kinds, LootContainerId, Roll, Source};
 
 let mut boss = Roll::new(Kinds::CORPSES, true, false);
-boss.entity = Some(Entity::from_engine(7));
+boss.entity = Entity::from_raw(7);
 boss.labels = Some(LootContainerId::new(9));
 assert!(Source::bosses().matches(&boss));
 assert!(!Source::locked_chests().matches(&boss));

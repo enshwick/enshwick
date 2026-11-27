@@ -193,12 +193,13 @@ impl Event {
 ///
 /// let moved = enshwick::abi::headed!(WaypointData {
 ///     key: enshwick::PlayerKey::new(7),
-///     entity: enshwick::Entity::from_engine(2),
+///     entity: enshwick::Entity::from_raw(2).ok_or("no entity")?,
 ///     position: [12.5, 3.0, -7.25],
 ///     set: 1,
 ///     reserved_tail: 0,
 /// });
 /// assert_eq!(moved.set, 1);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
@@ -242,15 +243,15 @@ impl WaypointData {
 /// use enshwick::abi::{DamageCheck, Header, PlayerDeathData};
 ///
 /// let fell = enshwick::abi::headed!(PlayerDeathData {
-///     entity: enshwick::Entity::from_engine(2),
+///     entity: enshwick::Entity::from_raw(2).ok_or("no entity")?,
 ///     cause: DamageCheck::FALL_DAMAGE,
 ///     key: enshwick::PlayerKey::new(7),
 ///     position: [10.0, 50.0, -3.0],
 ///     cause_guid: enshwick::abi::Guid::NIL,
-///     killer_entity: enshwick::Entity::from_engine(0),
 ///     reserved_tail: 0,
 /// });
 /// assert_eq!(fell.cause, DamageCheck::FALL_DAMAGE);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable, crate::Script)]
@@ -294,8 +295,9 @@ impl_headed!(PlayerDeathData);
 /// ```
 /// use enshwick::abi::{Header, KnowledgeData};
 ///
-/// let learnt = enshwick::abi::headed!(KnowledgeData { entity: enshwick::Entity::from_engine(2), id: enshwick::knowledge::KnowledgeId::new(0x1d), value: 3 });
+/// let learnt = enshwick::abi::headed!(KnowledgeData { entity: enshwick::Entity::from_raw(2).ok_or("no entity")?, id: enshwick::knowledge::KnowledgeId::new(0x1d), value: 3 });
 /// assert_eq!(learnt.value, 3);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, crate::Script)]
@@ -323,7 +325,7 @@ impl_headed!(KnowledgeData);
 /// use enshwick::abi::{Header, KnowledgeInfo, KnowledgeInput};
 ///
 /// let seen = enshwick::abi::headed!(KnowledgeInput {
-///     character: enshwick::Entity::from_engine(2),
+///     character: enshwick::Entity::from_raw(2).ok_or("no entity")?,
 ///     id: enshwick::knowledge::KnowledgeId::new(0x1d),
 ///     kind: KnowledgeInfo::FLAGS,
 ///     scope: KnowledgeInfo::PLAYER,
@@ -334,6 +336,7 @@ impl_headed!(KnowledgeData);
 ///     reserved_tail: [0; 3],
 /// });
 /// assert_eq!(seen.allowed, 1);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
@@ -475,8 +478,8 @@ impl_headed!(TerrainPageData);
 /// use enshwick::abi::{BuildingData, Header};
 ///
 /// let placed = enshwick::abi::headed!(BuildingData {
-///     entity: enshwick::Entity::from_engine(4096),
-///     character: enshwick::Entity::from_engine(2),
+///     entity: enshwick::Entity::from_raw(4096).ok_or("no entity")?,
+///     character: enshwick::Entity::from_raw(2).ok_or("no entity")?,
 ///     item: enshwick::ItemId::new(1_302_084_846),
 ///     kind: BuildingData::PLACED,
 ///     replay: 0,
@@ -484,6 +487,7 @@ impl_headed!(TerrainPageData);
 ///     position: [1.0, 2.0, 3.0],
 /// });
 /// assert_eq!(placed.kind, BuildingData::PLACED);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable, crate::Script)]
@@ -536,12 +540,13 @@ impl BuildingData {
 /// use enshwick::abi::PlayerInfo;
 ///
 /// let player = PlayerInfo::with_name(
-///     enshwick::Entity::from_engine(2),
+///     enshwick::Entity::from_raw(2).ok_or("no entity")?,
 ///     enshwick::PlayerKey::new(7),
 ///     PlayerInfo::CAN_ACCESS_INVENTORIES,
 ///     "Ann",
 /// );
 /// assert_eq!(player.name_text(), "Ann");
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
@@ -844,8 +849,9 @@ pub struct TickHandle(pub u32);
 /// ```
 /// use enshwick::abi::{Header, PlayerData};
 ///
-/// let player = enshwick::abi::headed!(PlayerData { slot: 0, entity: enshwick::Entity::from_engine(7), key: enshwick::PlayerKey::new(42) });
-/// assert_eq!(player.entity, enshwick::Entity::from_engine(7));
+/// let player = enshwick::abi::headed!(PlayerData { slot: 0, entity: enshwick::Entity::from_raw(7).ok_or("no entity")?, key: enshwick::PlayerKey::new(42) });
+/// assert_eq!(player.entity, enshwick::Entity::from_raw(7).ok_or("no entity")?);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable, crate::Script)]

@@ -27,13 +27,14 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let call = enshwick::abi::headed!(ItemAction {
     ///     kind: ItemAction::CONSUME,
-    ///     character: enshwick::Entity::from_engine(1),
+    ///     character: enshwick::Entity::from_raw(1).ok_or("no entity")?,
     ///     item: enshwick::ItemId::new(0x5e01),
     ///     count: 1,
-    ///     inventory: enshwick::Entity::from_engine(2),
+    ///     inventory: enshwick::Entity::from_raw(2).ok_or("no entity")?,
     ///     slot: 0,
     /// });
     /// assert!(loader.item_action(&call));
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn item_action(&self, call: &ItemAction) -> bool {
@@ -61,13 +62,14 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let call = enshwick::abi::headed!(ItemAction {
     ///     kind: ItemAction::CONSUME,
-    ///     character: enshwick::Entity::from_engine(1),
+    ///     character: enshwick::Entity::from_raw(1).ok_or("no entity")?,
     ///     item: enshwick::ItemId::new(0x5e01),
     ///     count: 1,
-    ///     inventory: enshwick::Entity::from_engine(2),
+    ///     inventory: enshwick::Entity::from_raw(2).ok_or("no entity")?,
     ///     slot: 0,
     /// });
     /// assert!(loader.refused_use(&call));
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn refused_use(&self, call: &ItemAction) -> bool {

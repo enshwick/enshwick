@@ -709,7 +709,7 @@ fn answer(
                 quote! {
                     match #call {
                         ::core::result::Result::Ok(value) => ::core::result::Result::Ok(#script::IntoScript::into_value(value)),
-                        ::core::result::Result::Err(error) => ::core::result::Result::Err(#script::Error::failed(&error)),
+                        ::core::result::Result::Err(error) => ::core::result::Result::Err(#script::Failure::into_error(error)),
                     }
                 },
             ),

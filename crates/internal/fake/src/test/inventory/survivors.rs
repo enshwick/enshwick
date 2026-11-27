@@ -24,7 +24,7 @@ impl Installed {
     /// use enshwick::survivors::{Answer, NpcId};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let vanilla = Some(enshwick::Entity::from_engine(4096));
+    /// let vanilla = enshwick::Entity::from_raw(4096);
     /// let answer = loader.survivor_lookup(NpcId(7), vanilla, SurvivorLookup::SPAWN, None, [0; 3], &[]);
     /// assert_eq!(answer, Answer::Vanilla);
     /// ```
@@ -88,8 +88,9 @@ impl Installed {
     /// use enshwick::abi::{BedCheck, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let check = enshwick::abi::headed!(BedCheck { npc_id: enshwick::survivors::NpcId::new(7), entity: enshwick::Entity::from_engine(1), bed_id: enshwick::Entity::from_engine(2), home: [0; 3], bed_at: [0; 3] });
+    /// let check = enshwick::abi::headed!(BedCheck { npc_id: enshwick::survivors::NpcId::new(7), entity: enshwick::Entity::from_raw(1).ok_or("no entity")?, bed_id: enshwick::Entity::from_raw(2).ok_or("no entity")?, home: [0; 3], bed_at: [0; 3] });
     /// assert!(loader.survivor_bed_check(&check));
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn survivor_bed_check(&self, check: &BedCheck) -> bool {
@@ -118,7 +119,6 @@ impl Installed {
     ///     template: enshwick::abi::Guid::NIL,
     ///     target: [0; 3],
     ///     slot: 0,
-    ///     pide: enshwick::Entity::from_engine(0),
     ///     meter: [0; 2],
     ///     consumed: 0,
     ///     reserved: [0; 3],
@@ -155,7 +155,6 @@ impl Installed {
     ///     template: enshwick::abi::Guid::NIL,
     ///     target: [0; 3],
     ///     slot: 0,
-    ///     pide: enshwick::Entity::from_engine(0),
     ///     meter: [0; 2],
     ///     consumed: 1,
     ///     reserved: [0; 3],

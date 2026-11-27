@@ -20,7 +20,8 @@ use super::{
 /// assert_eq!(errors.list()[0].line, 1);
 /// assert!(errors.to_string().starts_with("items.toml:1:1: "), "{errors}");
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error, enshwick_base::script::ErrorKind)]
+#[script(crate = "enshwick_base")]
 #[error("{file}:{line}:{column}: {message}")]
 #[non_exhaustive]
 pub struct PackError {
@@ -41,7 +42,8 @@ crate::load::off_from!(PackError);
 /// # Examples
 ///
 /// See [`PackError`].
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error, enshwick_base::script::ErrorKind)]
+#[script(crate = "enshwick_base")]
 #[error("{}", self.lines())]
 pub struct ParsePackError(pub(super) Vec<PackError>);
 
@@ -81,7 +83,8 @@ impl From<ParsePackError> for Off {
 /// let large = ReadPackError::TooLarge { file: "items.toml".into(), limit: 4 << 20 };
 /// assert_eq!(large.to_string(), "items.toml: larger than 4194304 bytes");
 /// ```
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, enshwick_base::script::ErrorKind)]
+#[script(crate = "enshwick_base")]
 #[non_exhaustive]
 pub enum ReadPackError {
     /// A file could not be read.

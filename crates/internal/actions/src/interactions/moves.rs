@@ -96,17 +96,17 @@ impl Move {
     /// use enshwick::Entity;
     /// use enshwick::interactions::{InventoryActionType, Interaction, Kind, Move, Transfer};
     ///
-    /// const OWNER: Entity = Entity::from_engine(4096);
-    ///
-    /// fn allowed(i: &Interaction) -> bool {
-    ///     i.player == OWNER || i.moved.is_none_or(|m| m.transfer != Transfer::TakeAll)
+    /// fn allowed(i: &Interaction, owner: Entity) -> bool {
+    ///     i.player == owner || i.moved.is_none_or(|m| m.transfer != Transfer::TakeAll)
     /// }
     ///
-    /// let (stranger, chest) = (Entity::from_engine(4097), Entity::from_engine(5000));
+    /// let owner = Entity::from_raw(4096).ok_or("no entity")?;
+    /// let (stranger, chest) = (Entity::from_raw(4097).ok_or("no entity")?, Entity::from_raw(5000).ok_or("no entity")?);
     /// let take_all = Move::new(Transfer::TakeAll, Some(chest), Some(stranger));
     /// assert_eq!(take_all.action, Some(InventoryActionType::All));
     /// let call = Interaction::new(Kind::Move, stranger, chest).with_moved(take_all);
-    /// assert!(!allowed(&call));
+    /// assert!(!allowed(&call, owner));
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub const fn new(transfer: Transfer, from: Option<Entity>, to: Option<Entity>) -> Self {

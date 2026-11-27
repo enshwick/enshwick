@@ -273,7 +273,7 @@ pub struct SoundChange {
 }
 
 /// Why a [`SoundChange`] is refused.
-#[derive(Clone, Debug, PartialEq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum ChangeSoundError {
     /// A value lies outside its bound.

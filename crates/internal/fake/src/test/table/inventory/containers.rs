@@ -95,13 +95,14 @@ impl crate::test::Installed {
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let put = enshwick::abi::headed!(ContainerPut {
-    ///     container: enshwick::Entity::from_engine(5000),
+    ///     container: enshwick::Entity::from_raw(5000).ok_or("no entity")?,
     ///     container_item: enshwick::ItemId::new(0x5e01),
     ///     item: enshwick::ItemId::new(0x0e17),
     ///     count: 1,
     ///     slot: 5001,
     /// });
     /// assert!(loader.container_put(&put));
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn container_put(&self, put: &ContainerPut) -> bool {

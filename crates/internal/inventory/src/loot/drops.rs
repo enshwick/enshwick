@@ -809,7 +809,7 @@ pub fn replace_drops(drops: Vec<Drop>) -> Result<(), Off> {
 
 /// Why new loot drops cannot take effect before a restart.
 #[doc(hidden)]
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum ReplaceDropsError {
     /// A drop the game could not take.

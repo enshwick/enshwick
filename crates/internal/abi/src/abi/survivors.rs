@@ -20,14 +20,14 @@ use crate::content::Guid;
 ///
 /// let lookup = enshwick::abi::headed!(SurvivorLookup {
 ///     survivor: enshwick::survivors::NpcId::new(0x47a1_5e4a),
-///     vanilla: enshwick::Entity::from_engine(4096),
+///     vanilla: enshwick::Entity::from_raw(4096).ok_or("no entity")?,
 ///     purpose: SurvivorLookup::SPAWN,
-///     entity: enshwick::Entity::from_engine(0),
 ///     cell: [10, 0, 10],
 ///     bed_of: None,
 ///     token: core::ptr::null_mut(),
 /// });
 /// assert_eq!(lookup.purpose, SurvivorLookup::SPAWN);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
@@ -110,8 +110,9 @@ pub type SurvivorLookupFn = unsafe extern "system" fn(
 /// ```
 /// use enshwick::abi::{BedCheck, Header};
 ///
-/// let check = enshwick::abi::headed!(BedCheck { npc_id: enshwick::survivors::NpcId::new(7), entity: enshwick::Entity::from_engine(4096), bed_id: enshwick::Entity::from_engine(4100), home: [0; 3], bed_at: [4, 0, 4] });
-/// assert_eq!(check.bed_id, enshwick::Entity::from_engine(4100));
+/// let check = enshwick::abi::headed!(BedCheck { npc_id: enshwick::survivors::NpcId::new(7), entity: enshwick::Entity::from_raw(4096).ok_or("no entity")?, bed_id: enshwick::Entity::from_raw(4100).ok_or("no entity")?, home: [0; 3], bed_at: [4, 0, 4] });
+/// assert_eq!(check.bed_id, enshwick::Entity::from_raw(4100).ok_or("no entity")?);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
@@ -161,12 +162,13 @@ pub type BedCheckFn = unsafe extern "system" fn(check: *const BedCheck, user: *m
 ///     template: enshwick::abi::Guid::NIL,
 ///     target: [0; 3],
 ///     slot: 0x3_0000_0041,
-///     pide: enshwick::Entity::from_engine(900),
+///     pide: enshwick::Entity::from_raw(900).ok_or("no entity")?,
 ///     meter: [2, 3],
 ///     consumed: 0,
 ///     reserved: [0; 3],
 /// });
 /// assert_eq!(summon.meter, [2, 3]);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]

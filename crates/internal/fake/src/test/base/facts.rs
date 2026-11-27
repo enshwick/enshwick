@@ -17,7 +17,7 @@ use enshwick_core::__fake::ids;
 /// let transform = host.hash(facts::CURRENT_TRANSFORM.id())?;
 /// let orientation = host.offset(facts::WORLD_TRANSFORM_ORIENTATION.id())?;
 /// assert!(orientation >= host.offset(facts::WORLD_TRANSFORM_POSITION.id())? + 24);
-/// let loader = host.placed(transform, enshwick::Entity::from_engine(2), [0.0; 3]).install();
+/// let loader = host.placed(transform, enshwick::Entity::from_raw(2).ok_or(enshwick::Off::new("no entity"))?, [0.0; 3]).install();
 /// # let _ = loader;
 /// # Ok::<(), enshwick::Off>(())
 /// ```

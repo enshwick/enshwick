@@ -1,0 +1,36 @@
+id: errors-name-their-kind
+valid:
+  - |
+    #[derive(Debug, thiserror::Error, crate::script::ErrorKind)]
+    #[non_exhaustive]
+    pub enum PlantError {
+        #[error("no seed")]
+        NoSeed,
+    }
+  - |
+    #[derive(
+        Clone, Debug, thiserror::Error, crate::script::ErrorKind, crate::Script,
+    )]
+    pub struct Refused;
+  - |
+    #[derive(Debug, thiserror::Error)]
+    pub(crate) enum InnerError {
+        #[error("inner")]
+        Inner,
+    }
+  - |
+    #[derive(Clone, Debug)]
+    pub struct Plain;
+invalid:
+  - |
+    /// What went wrong.
+    #[derive(Clone, Debug, PartialEq, thiserror::Error)]
+    #[non_exhaustive]
+    pub enum PlantError {
+        #[error("no seed")]
+        NoSeed,
+    }
+  - |
+    #[derive(Debug, thiserror::Error)]
+    #[error("refused")]
+    pub struct Refused;

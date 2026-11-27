@@ -518,9 +518,10 @@ impl Interaction {
     ///     i.item != Some(LOCKED_CHEST)
     /// }
     ///
-    /// let open = Interaction::new(Kind::Open, Entity::from_engine(4096), Entity::from_engine(5000));
+    /// let open = Interaction::new(Kind::Open, Entity::from_raw(4096).ok_or("no entity")?, Entity::from_raw(5000).ok_or("no entity")?);
     /// assert!(allowed(&open));
     /// assert!(!allowed(&open.with_item(LOCKED_CHEST).with_position([1.0, 2.0, 3.0])));
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub const fn new(kind: Kind, player: Entity, target: Entity) -> Self {

@@ -3,8 +3,9 @@
 //! doctest harness of the API crate, so its Rust examples compile. Every
 //! chapter opens with its page type and description and keeps its intro
 //! short, a chapter that names an id links the page on how ids are
-//! namespaced, some chapter names each public module of the API crate, and
-//! the ABI coverage chapter lists every host table entry in order.
+//! namespaced, no chapter names a hidden entity item, some chapter names each
+//! public module of the API crate, and the ABI coverage chapter lists every
+//! host table entry in order.
 //! Its links and its sentence lengths are [`mod@links`] and [`mod@prose`].
 
 pub(crate) mod links;
@@ -49,6 +50,7 @@ pub(crate) fn check(root: &Path) -> Vec<String> {
                 found.extend(page_problems(chapter, &text));
                 found.extend(intro_problem(chapter, &text));
                 found.extend(ids_link_problem(chapter, &text));
+                found.extend(hidden_problems(chapter, &text));
                 texts.push(text);
             }
             Err(error) => found.push(format!("{SOURCE}/{chapter}: {error}")),
@@ -315,6 +317,35 @@ fn intro_problem(chapter: &str, text: &str) -> Option<String> {
     })
 }
 
+/// Hidden items of the API an example must not name, since mod authors
+/// copy examples and a hidden item carries no stability promise; the
+/// ast-grep rule `docs-build-entities-publicly` holds the Rust docs.
+const HIDDEN: [&str; 2] = ["Entity::from_engine", "Entity::NONE"];
+
+/// A line of a chapter naming one of [`HIDDEN`], each with its line number.
+fn hidden_problems(chapter: &str, text: &str) -> Vec<String> {
+    text.lines()
+        .enumerate()
+        .filter_map(|(at, line)| {
+            let item = HIDDEN.iter().find(|item| names(line, item))?;
+            Some(format!(
+                "{SOURCE}/{chapter}:{}: names the hidden `{item}`; build an entity with `Entity::from_raw`",
+                at + 1
+            ))
+        })
+        .collect()
+}
+
+/// Whether `line` names `item` as a whole path, not inside a longer name
+/// such as `MapEntity::NONE`.
+fn names(line: &str, item: &str) -> bool {
+    let word = |c: char| c.is_alphanumeric() || c == '_';
+    line.match_indices(item).any(|(at, _)| {
+        !line[..at].chars().next_back().is_some_and(word)
+            && !line[at + item.len()..].chars().next().is_some_and(word)
+    })
+}
+
 /// The chapter that states how ids are namespaced, relative to [`SOURCE`].
 const IDS_CHAPTER: &str = "concepts/ids.md";
 /// What marks a chapter as naming an id: a full id's form or the term.
@@ -557,6 +588,32 @@ mod tests {
         assert!(ids_link_problem("a.md", "A [content id](ids.md).").is_some());
         assert!(ids_link_problem("concepts/a.md", "A [content id](ids.md#x).").is_none());
         assert!(ids_link_problem("b/c/a.md", "A [content id](../../concepts/ids.md).").is_none());
+    }
+
+    #[test]
+    fn an_example_naming_a_hidden_entity_item_is_named_by_its_line() {
+        let chapter = "```rust\nlet a = Entity::from_raw(2);\nlet b = Entity::from_engine(2);\n\
+                       assert_ne!(b, Entity::NONE);\n```\n";
+        assert_eq!(
+            hidden_problems("a.md", chapter),
+            [
+                "book/src/a.md:3: names the hidden `Entity::from_engine`; build an entity with `Entity::from_raw`",
+                "book/src/a.md:4: names the hidden `Entity::NONE`; build an entity with `Entity::from_raw`",
+            ]
+        );
+        assert!(hidden_problems("a.md", "let a = Entity::from_raw(2);\n").is_empty());
+    }
+
+    #[test]
+    fn a_longer_name_ending_in_a_hidden_items_path_is_no_hidden_item() {
+        let chapter = "let a = MapEntity::NONE;\nlet b = Entity::NONE_OF_THEM;\n\
+                       let c = map::Entity::NONE;\n";
+        assert_eq!(
+            hidden_problems("a.md", chapter),
+            [
+                "book/src/a.md:3: names the hidden `Entity::NONE`; build an entity with `Entity::from_raw`"
+            ]
+        );
     }
 
     #[test]

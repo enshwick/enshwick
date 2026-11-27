@@ -19,11 +19,12 @@ use crate::content::Guid;
 /// // Everything from a chest (entity 40) to a player (entity 2).
 /// let op = InventoryOp {
 ///     kind: InventoryOp::MOVE_ALL,
-///     target: Entity::from_engine(40),
-///     other: Entity::from_engine(2),
+///     target: Entity::from_raw(40).ok_or("no entity")?,
+///     other: Entity::from_raw(2).ok_or("no entity")?,
 ///     ..InventoryOp::default()
 /// };
 /// assert_eq!(op.kind, 5);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
@@ -93,15 +94,16 @@ impl InventoryOp {
 /// ```
 /// use enshwick::abi::{Header, InventoryOp, InventoryRequest};
 ///
-/// let ops = [InventoryOp { kind: InventoryOp::GIVE, target: enshwick::Entity::from_engine(2), item: enshwick::ItemId::new(0x1234), count: 5, ..Default::default() }];
+/// let ops = [InventoryOp { kind: InventoryOp::GIVE, target: enshwick::Entity::from_raw(2).ok_or("no entity")?, item: enshwick::ItemId::new(0x1234), count: 5, ..Default::default() }];
 /// let request = enshwick::abi::headed!(InventoryRequest {
 ///     flags: InventoryRequest::NOTIFY,
-///     actor: enshwick::Entity::from_engine(2),
+///     actor: enshwick::Entity::from_raw(2).ok_or("no entity")?,
 ///     ops: ops.as_ptr(),
 ///     op_count: 1,
 ///     reserved: 0,
 /// });
 /// assert_eq!(request.op_count, 1);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]

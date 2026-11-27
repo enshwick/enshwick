@@ -71,7 +71,7 @@ pub unsafe trait Call: Copy + 'static {
 ///
 /// assert_eq!(CallServiceError::Unmatched.to_string(), "no running mod serves the call as declared here");
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum CallServiceError {
     /// No running mod serves it as declared here, or not every mod is

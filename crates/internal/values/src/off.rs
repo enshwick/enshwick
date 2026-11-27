@@ -23,6 +23,8 @@ use crate::reason;
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("{reason}")]
+// Its kind, `Off`, is written by hand in `script::kinds`, where the trait is.
+// ast-grep-ignore: errors-name-their-kind
 pub struct Off {
     reason: Cow<'static, str>,
     /// The reason as the loader reads a text of the mod's texts, when it is

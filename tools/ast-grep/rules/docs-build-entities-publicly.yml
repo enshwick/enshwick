@@ -1,0 +1,19 @@
+id: docs-build-entities-publicly
+language: rust
+severity: error
+message: build an `Entity` in a doc through `Entity::from_raw`, never the hidden `Entity::from_engine` or `Entity::NONE`
+note: >-
+  Mod authors copy doc examples, and the hidden items carry the engine's 0
+  with no stability promise. `Entity::from_raw(n).ok_or(..)?` builds one; a
+  `headed!` struct leaves a field it does not name at 0, the engine's no
+  entity. The rule reads `///` and `//!` lines one at a time; the book's
+  chapters are held by the book check of `cargo xtask check`.
+ignores:
+  - "**/tests/**"
+  - "**/tests.rs"
+  - "**/benches/**"
+rule:
+  kind: line_comment
+  all:
+    - regex: '^//[/!]([^/!]|$)'
+    - regex: '\bEntity::(from_engine\b|NONE\b)'

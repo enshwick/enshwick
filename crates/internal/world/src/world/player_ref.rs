@@ -65,7 +65,7 @@ impl PlayerRef {
     }
 
     /// The character, from the connected player when only the key was
-    /// given; never [`Entity::NONE`].
+    /// given; never the engine's 0.
     pub(crate) fn entity_in(self, host: Host) -> Result<Entity, WorldError> {
         match (self.entity, self.key) {
             (Some(entity), _) => Ok(entity),

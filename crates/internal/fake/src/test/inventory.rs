@@ -214,8 +214,8 @@ impl FakeHost {
     /// let setup = host.hash(facts::INVENTORY_SETUP.id())?;
     /// let loot = host.hash(facts::LOOT_FILL.id())?;
     /// let loader = host
-    ///     .placed(setup, enshwick::Entity::from_engine(9), [0.0; 3])
-    ///     .component(enshwick::Entity::from_engine(9), loot, &[])
+    ///     .placed(setup, enshwick::Entity::from_raw(9).ok_or(enshwick::Off::new("no entity"))?, [0.0; 3])
+    ///     .component(enshwick::Entity::from_raw(9).ok_or(enshwick::Off::new("no entity"))?, loot, &[])
     ///     .install();
     /// # let _ = loader;
     /// # Ok::<(), enshwick::Off>(())
@@ -367,14 +367,13 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let fall = enshwick::abi::headed!(DamageCheck {
     ///     cause: DamageCheck::FALL_DAMAGE,
-    ///     target: enshwick::Entity::from_engine(2),
-    ///     source: enshwick::Entity::from_engine(0),
-    ///     attacker: enshwick::Entity::from_engine(0),
+    ///     target: enshwick::Entity::from_raw(2).ok_or("no entity")?,
     ///     total: 40.0,
     ///     amount_count: 0,
     ///     amounts: core::ptr::null_mut(),
     /// });
     /// assert_eq!(loader.damage(fall, &mut []), fall, "no filters, no change");
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn damage(
@@ -412,7 +411,8 @@ impl Installed {
     /// use enshwick::inventory::ItemInstance;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// loader.wear(Entity::from_engine(2), ItemInstance { pide: Entity::from_engine(900), item: enshwick::ItemId::new(0x5e01) });
+    /// loader.wear(Entity::from_raw(2).ok_or("no entity")?, ItemInstance { pide: Entity::from_raw(900).ok_or("no entity")?, item: enshwick::ItemId::new(0x5e01) });
+    /// # Ok::<(), &str>(())
     /// ```
     pub fn wear(&self, entity: Entity, item: enshwick_core::inventory::ItemInstance) {
         table::with((), |s| {

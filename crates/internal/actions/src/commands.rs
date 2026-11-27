@@ -111,7 +111,7 @@ impl Caller {
 ///
 /// assert_eq!(run("  ", &Caller::new("tool")), Err(RunCommandError::Empty));
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum RunCommandError {
     /// The line holds no word.

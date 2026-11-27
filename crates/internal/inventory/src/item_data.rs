@@ -45,7 +45,7 @@
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     let engravings = load.item_data::<Engraving>("engraving")?;
-//!     let ring = ItemInstance { pide: enshwick::Entity::from_engine(900), item: enshwick::ItemId::new(0x5e01) };
+//!     let ring = ItemInstance { pide: enshwick::Entity::from_raw(900).ok_or(enshwick::Off::new("no entity"))?, item: enshwick::ItemId::new(0x5e01) };
 //!     let _set = engravings.set(ring, &Engraving { by: "Balthazar".into() });
 //!     let _by = engravings.get(ring).map(|e| e.by);
 //!     Ok(())
@@ -71,7 +71,7 @@ pub const MAX_VALUE: usize = 512;
 ///
 /// assert_eq!(SetItemDataError::NoEntity.to_string(), "no such entity");
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum SetItemDataError {
     /// The value did not encode.

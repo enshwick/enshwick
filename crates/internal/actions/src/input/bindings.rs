@@ -109,7 +109,7 @@ pub struct Binding {
 /// # Examples
 ///
 /// See [`Input::binding`].
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum BindingError {
     /// On a server, before the client's interface drew its first frame,

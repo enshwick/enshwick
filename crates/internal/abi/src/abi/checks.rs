@@ -31,9 +31,10 @@ pub const FILTER_REFUSE: u8 = 2;
 ///     item: enshwick::ItemId::new(0x5e01),
 ///     known: 1,
 ///     position: [1.0, 2.0, 3.0],
-///     ..Interaction::new(Interaction::OPEN, enshwick::Entity::from_engine(4096), enshwick::Entity::from_engine(5000))
+///     ..Interaction::new(Interaction::OPEN, enshwick::Entity::from_raw(4096).ok_or("no entity")?, enshwick::Entity::from_raw(5000).ok_or("no entity")?)
 /// });
 /// assert_eq!(call.kind, Interaction::OPEN);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
@@ -188,13 +189,14 @@ pub type InteractionFilterFn =
 /// use enshwick::abi::{ContainerPut, Header};
 ///
 /// let put = enshwick::abi::headed!(ContainerPut {
-///     container: enshwick::Entity::from_engine(5000),
+///     container: enshwick::Entity::from_raw(5000).ok_or("no entity")?,
 ///     container_item: enshwick::ItemId::new(0x5e01),
 ///     item: enshwick::ItemId::new(0x0e17),
 ///     count: 20,
 ///     slot: 5001 | 3 << 32,
 /// });
 /// assert_eq!(put.count, 20);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
@@ -409,8 +411,9 @@ pub type ComfortFilterFn =
 /// ```
 /// use enshwick::abi::ExperienceRow;
 ///
-/// let row = ExperienceRow { entity: enshwick::Entity::from_engine(4096), level: 3, progress: 10, need: 100, gained: 5 };
+/// let row = ExperienceRow { entity: enshwick::Entity::from_raw(4096).ok_or("no entity")?, level: 3, progress: 10, need: 100, gained: 5 };
 /// assert_eq!(row.gained, 5);
+/// # Ok::<(), &str>(())
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]

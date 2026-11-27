@@ -131,7 +131,7 @@ pub struct Ui {
 ///
 /// assert_eq!(UiError::Busy.to_string(), "too many dialogs wait");
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum UiError {
     /// This process draws no interface, as on a server. A client whose interface the loader could not

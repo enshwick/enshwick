@@ -34,7 +34,7 @@ impl FakeHost {
     ///
     /// let host = enshwick::test::FakeHost::new().world();
     /// let transform = host.hash(facts::CURRENT_TRANSFORM.id())?;
-    /// let loader = host.placed(transform, enshwick::Entity::from_engine(2), [0.0; 3]).install();
+    /// let loader = host.placed(transform, enshwick::Entity::from_raw(2).ok_or(enshwick::Off::new("no entity"))?, [0.0; 3]).install();
     /// # let _ = loader;
     /// # Ok::<(), enshwick::Off>(())
     /// ```
@@ -87,10 +87,11 @@ impl FakeHost {
     /// ```
     /// let health = [80.0f32.to_le_bytes(), 100.0f32.to_le_bytes()].concat();
     /// let loader = enshwick::test::FakeHost::new()
-    ///     .component(enshwick::Entity::from_engine(4096), 0x027a_c564, &health)
-    ///     .template(enshwick::Entity::from_engine(4096), enshwick::abi::Guid([0x3a; 16]))
+    ///     .component(enshwick::Entity::from_raw(4096).ok_or("no entity")?, 0x027a_c564, &health)
+    ///     .template(enshwick::Entity::from_raw(4096).ok_or("no entity")?, enshwick::abi::Guid([0x3a; 16]))
     ///     .install();
     /// # let _ = loader;
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn component(
@@ -165,9 +166,10 @@ impl FakeHost {
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new()
-    ///     .placed(0x027a_c564, enshwick::Entity::from_engine(4096), [1.0, 2.0, 3.0])
+    ///     .placed(0x027a_c564, enshwick::Entity::from_raw(4096).ok_or("no entity")?, [1.0, 2.0, 3.0])
     ///     .install();
     /// # let _ = loader;
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn placed(
@@ -505,9 +507,10 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// let loader = enshwick::test::FakeHost::new().component(enshwick::Entity::from_engine(7), 1, &[4, 2]).install();
-    /// assert_eq!(loader.component_bytes(enshwick::Entity::from_engine(7), 1), Some(vec![4, 2]));
-    /// assert_eq!(loader.component_bytes(enshwick::Entity::from_engine(7), 2), None);
+    /// let loader = enshwick::test::FakeHost::new().component(enshwick::Entity::from_raw(7).ok_or("no entity")?, 1, &[4, 2]).install();
+    /// assert_eq!(loader.component_bytes(enshwick::Entity::from_raw(7).ok_or("no entity")?, 1), Some(vec![4, 2]));
+    /// assert_eq!(loader.component_bytes(enshwick::Entity::from_raw(7).ok_or("no entity")?, 2), None);
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn component_bytes(
@@ -535,9 +538,10 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// let loader = enshwick::test::FakeHost::new().component(enshwick::Entity::from_engine(7), 1, &[4, 2]).install();
-    /// assert!(loader.set_component(enshwick::Entity::from_engine(7), 1, &[9]));
-    /// assert_eq!(loader.component_bytes(enshwick::Entity::from_engine(7), 1), Some(vec![9, 2]));
+    /// let loader = enshwick::test::FakeHost::new().component(enshwick::Entity::from_raw(7).ok_or("no entity")?, 1, &[4, 2]).install();
+    /// assert!(loader.set_component(enshwick::Entity::from_raw(7).ok_or("no entity")?, 1, &[9]));
+    /// assert_eq!(loader.component_bytes(enshwick::Entity::from_raw(7).ok_or("no entity")?, 1), Some(vec![9, 2]));
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use = "false means the fake gave `entity` no such component"]
     pub fn set_component(

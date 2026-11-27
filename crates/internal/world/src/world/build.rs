@@ -95,7 +95,9 @@ impl PlayerPermissions {
 /// let refusal = BuildRefusal::NoPermission(PlayerPermissions::CanEditBase);
 /// assert_eq!(refusal.to_string(), "the player lacks CanEditBase");
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error, crate::Script)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind, crate::Script,
+)]
 #[non_exhaustive]
 pub enum BuildRefusal {
     /// The player lacks the permission: `CanEditWorld` for any edit,

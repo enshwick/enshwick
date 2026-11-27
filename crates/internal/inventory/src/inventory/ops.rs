@@ -12,8 +12,9 @@ use super::{MAX_INVENTORIES, MAX_OPS, OP_LOG, inventories};
 /// use enshwick::Entity;
 /// use enshwick::inventory::Op;
 ///
-/// let loot = Op::MoveAll { from: Entity::from_engine(40), to: Entity::from_engine(2), include_special: false };
+/// let loot = Op::MoveAll { from: Entity::from_raw(40).ok_or("no entity")?, to: Entity::from_raw(2).ok_or("no entity")?, include_special: false };
 /// let _ = loot;
+/// # Ok::<(), &str>(())
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[script(name = "InventoryOp")]
@@ -222,7 +223,7 @@ impl Op {
 /// let empty = enshwick::inventory::Batch::new();
 /// assert_eq!(empty.check(), Err(enshwick::inventory::RunBatchError::Empty));
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum RunBatchError {
     /// No operations.
@@ -254,11 +255,12 @@ crate::load::off_from!(RunBatchError);
 /// use enshwick::inventory::{Batch, Op};
 ///
 /// // A trade: 5 coins out, a sword in, or neither.
-/// let player = Entity::from_engine(2);
+/// let player = Entity::from_raw(2).ok_or("no entity")?;
 /// let trade = Batch::new()
 ///     .with(Op::Take { from: player, item: enshwick::ItemId::new(0x0c01), count: 5 })
 ///     .with(Op::Give { to: player, item: enshwick::ItemId::new(0x5e01), count: 1, fill: None });
 /// assert_eq!(trade.check(), Ok(()));
+/// # Ok::<(), &str>(())
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Batch {
@@ -376,7 +378,8 @@ impl Batch {
     /// use enshwick::inventory::{Batch, Op};
     ///
     /// // As many as fit.
-    /// let _ = Batch::new().with(Op::Give { to: Entity::from_engine(2), item: enshwick::ItemId::new(7), count: 500, fill: None }).allow_partial();
+    /// let _ = Batch::new().with(Op::Give { to: Entity::from_raw(2).ok_or("no entity")?, item: enshwick::ItemId::new(7), count: 500, fill: None }).allow_partial();
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub const fn allow_partial(mut self) -> Self {
@@ -395,11 +398,12 @@ impl Batch {
     /// use enshwick::Entity;
     /// use enshwick::inventory::{Batch, Op};
     ///
-    /// let (corpse, player) = (Entity::from_engine(40), Entity::from_engine(2));
+    /// let (corpse, player) = (Entity::from_raw(40).ok_or("no entity")?, Entity::from_raw(2).ok_or("no entity")?);
     /// let _ = Batch::new()
     ///     .with(Op::MoveAll { from: corpse, to: player, include_special: false })
     ///     .actor(player)
     ///     .notify();
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub const fn notify(mut self) -> Self {
@@ -421,7 +425,8 @@ impl Batch {
     /// use enshwick::inventory::{Batch, Op};
     ///
     /// // A quiet reward.
-    /// let _ = Batch::new().with(Op::Give { to: Entity::from_engine(2), item: enshwick::ItemId::new(7), count: 5, fill: None }).hide_in_ui();
+    /// let _ = Batch::new().with(Op::Give { to: Entity::from_raw(2).ok_or("no entity")?, item: enshwick::ItemId::new(7), count: 5, fill: None }).hide_in_ui();
+    /// # Ok::<(), &str>(())
     /// ```
     #[cfg(feature = "unstable")]
     #[must_use]
@@ -440,7 +445,8 @@ impl Batch {
     /// use enshwick::Entity;
     /// use enshwick::inventory::{Batch, Op};
     ///
-    /// let _ = Batch::new().with(Op::MoveAll { from: Entity::from_engine(40), to: Entity::from_engine(41), include_special: false }).actor(Entity::from_engine(2));
+    /// let _ = Batch::new().with(Op::MoveAll { from: Entity::from_raw(40).ok_or("no entity")?, to: Entity::from_raw(41).ok_or("no entity")?, include_special: false }).actor(Entity::from_raw(2).ok_or("no entity")?);
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub const fn actor(mut self, player: Entity) -> Self {
@@ -498,11 +504,12 @@ impl Batch {
     ///
     /// let mut everything = Batch::new();
     /// for chest in 100..120 {
-    ///     everything.push(Op::MoveAll { from: Entity::from_engine(chest), to: Entity::from_engine(2), include_special: false });
+    ///     everything.push(Op::MoveAll { from: Entity::from_raw(chest).ok_or("no entity")?, to: Entity::from_raw(2).ok_or("no entity")?, include_special: false });
     /// }
     /// let parts = everything.split();
     /// assert!(parts.len() > 1);
     /// assert!(parts.iter().all(|part| part.check().is_ok()));
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn split(self) -> Vec<Self> {

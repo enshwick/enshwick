@@ -33,7 +33,7 @@ impl Installed {
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let quest = enshwick::abi::headed!(KnowledgeInput {
-    ///     character: enshwick::Entity::from_engine(2),
+    ///     character: enshwick::Entity::from_raw(2).ok_or("no entity")?,
     ///     id: enshwick::knowledge::KnowledgeId::new(0x51),
     ///     kind: KnowledgeInfo::BOOL,
     ///     scope: KnowledgeInfo::PLAYER,
@@ -44,6 +44,7 @@ impl Installed {
     ///     reserved_tail: [0; 3],
     /// });
     /// assert!(!loader.knowledge_input(quest), "no filters, the guard's verdict");
+    /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn knowledge_input(&self, mut request: enshwick_core::abi::KnowledgeInput) -> bool {
@@ -230,9 +231,10 @@ impl Installed {
     /// use enshwick::progress::Experience;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let mut rows = [Experience { entity: Entity::from_engine(1), level: 1, progress: 0, need: 100, gained: 5 }];
+    /// let mut rows = [Experience { entity: Entity::from_raw(1).ok_or("no entity")?, level: 1, progress: 0, need: 100, gained: 5 }];
     /// loader.experience(&mut rows, 25, |level| level * 100);
     /// assert_eq!(rows[0].gained, 5);
+    /// # Ok::<(), &str>(())
     /// ```
     pub fn experience(
         &self,

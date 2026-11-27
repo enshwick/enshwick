@@ -16,7 +16,8 @@ pub use enshwick_base::peer::MAX_NOTIFIES_PER_STEP;
 /// use enshwick::effects::NotifyAt;
 ///
 /// let here = NotifyAt::Position([10.0, 50.0, -3.0]);
-/// assert_ne!(here, NotifyAt::Entity(enshwick::Entity::from_engine(7)));
+/// assert_ne!(here, NotifyAt::Entity(enshwick::Entity::from_raw(7).ok_or("no entity")?));
+/// # Ok::<(), &str>(())
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]

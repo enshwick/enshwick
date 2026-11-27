@@ -39,7 +39,7 @@ pub struct Pattern {
 ///
 /// assert!(Pattern::parse("B9 0").is_err());
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum PatternError {
     /// No byte at all, or only wildcards.
@@ -64,7 +64,7 @@ crate::load::off_from!(PatternError);
 /// assert_eq!(pattern.find_unique(&[0xc3, 0xc3]), Err(FindError::Many));
 /// # Ok::<(), enshwick::code::PatternError>(())
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error, crate::script::ErrorKind)]
 #[non_exhaustive]
 pub enum FindError {
     /// Nothing matches.
