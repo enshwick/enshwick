@@ -5,8 +5,6 @@ use toml::{Table, Value};
 
 /// The lock file, from the repository root.
 pub(crate) const LOCK: &str = "Cargo.lock";
-/// The workspace manifest, from the repository root.
-pub(crate) const MANIFEST: &str = "Cargo.toml";
 /// The manifest table of normal dependencies, and a lock entry's key of its
 /// dependencies.
 pub(crate) const DEPENDENCIES: &str = "dependencies";

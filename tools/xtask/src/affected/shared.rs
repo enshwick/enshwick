@@ -6,9 +6,11 @@ use std::collections::BTreeSet;
 use toml::{Table, Value};
 
 use super::{Package, Texts};
+pub(super) use crate::cargo_files::LOCK;
 use crate::cargo_files::{self, DEPENDENCIES, Locked};
-pub(super) use crate::cargo_files::{LOCK, MANIFEST};
 
+/// The workspace manifest.
+pub(crate) const MANIFEST: &str = "Cargo.toml";
 /// The manifest table of workspace settings, and the key that inherits one.
 pub(super) const WORKSPACE: &str = "workspace";
 /// The manifest table of package fields.

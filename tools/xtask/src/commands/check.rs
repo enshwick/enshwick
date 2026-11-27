@@ -348,8 +348,7 @@ fn lists_public_paths(scope: &Scope, changed: Option<&[String]>, packages: &[Pac
             changed.is_some_and(|files| files.iter().any(|file| file.starts_with(&dir)))
         })
         || (touches(scope, env!("CARGO_PKG_NAME"))
-            && (names_file(changed, cargo_files::LOCK)
-                || names_file(changed, cargo_files::MANIFEST)))
+            && (names_file(changed, cargo_files::LOCK) || names_file(changed, affected::MANIFEST)))
         || names_file(changed, public_paths::FILE)
 }
 
