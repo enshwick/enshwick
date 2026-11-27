@@ -238,7 +238,12 @@ mod tests {
 
     #[test]
     fn a_short_handler_runs_on_under_the_default_limits() {
-        let (loader, status) = run_with(&spinning_handler(1), Limits::default(), Scripts::new());
+        // An empty handler: a spin under the 10 ms default could be preempted past it.
+        let (loader, status) = run_with(
+            r#"enshwick.on("WorldSaved", function() end)"#,
+            Limits::default(),
+            Scripts::new(),
+        );
         assert_eq!(status, Status::OK);
         for _ in 0..20 {
             let _handled = loader.raise::<WorldSaved>(&());

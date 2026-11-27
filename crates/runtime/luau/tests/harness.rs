@@ -49,16 +49,20 @@ pub(crate) fn start_with(
     (loader, status)
 }
 
-/// The game's limits with no time budget a busy test machine can reach:
-/// a preempted call past the game's 10 ms would turn the mod off and fail
-/// a test that does not measure time.
+/// The default limits with time budgets no preemption on a busy test machine
+/// reaches: a call held past the default 10 ms would turn the mod off and fail
+/// a test that does not measure time, while a script that loops by mistake
+/// still fails within seconds.
 pub(crate) fn untimed() -> Limits {
     let mut limits = Limits::default()
-        .with_call(Duration::from_secs(60))
+        .with_call(UNTIMED_BUDGET)
         .with_per_second(Duration::from_secs(3_600));
-    limits.start = Duration::from_secs(60);
+    limits.start = UNTIMED_BUDGET;
     limits
 }
+
+/// The call and start budget of [`untimed`].
+const UNTIMED_BUDGET: Duration = Duration::from_secs(5);
 
 /// Starts `main` as the mod's `main.luau` on `host`, with the status init
 /// returned.
@@ -113,15 +117,15 @@ pub(crate) fn looked(
         .remove(0)
 }
 
-#[cfg(test)]
 mod tests {
     use enshwick::events::WorldSaved;
     use enshwick::test::FakeHost;
+    use enshwick_luau::Limits;
 
-    use super::run;
+    use super::{run, untimed};
 
     #[test]
-    fn a_call_a_busy_machine_holds_past_the_game_s_budget_keeps_the_test_mod_on() {
+    fn calls_a_busy_machine_holds_past_the_default_budgets_keep_the_test_mod_on() {
         let loader = run(
             FakeHost::new(),
             r#"enshwick.on("WorldSaved", function()
@@ -129,8 +133,18 @@ mod tests {
                 while os.clock() - start < 0.03 do end
             end)"#,
         );
-        let _first = loader.raise::<WorldSaved>(&());
-        let _second = loader.raise::<WorldSaved>(&());
+        // Four 30 ms calls pass both the default 10 ms per call and 100 ms per second.
+        for _ in 0..4 {
+            let _handled = loader.raise::<WorldSaved>(&());
+        }
         assert!(loader.faults().is_empty(), "{:?}", loader.faults());
+    }
+
+    #[test]
+    fn the_untimed_limits_lift_every_default_time_budget() {
+        let (untimed, default) = (untimed(), Limits::default());
+        assert!(untimed.call > default.call);
+        assert!(untimed.per_second > default.per_second);
+        assert!(untimed.start > default.start);
     }
 }
