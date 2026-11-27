@@ -95,7 +95,7 @@ the item and the key in the log.
 | Kind      | `on` key  | When                                            | What a refusal does                |
 | --------- | --------- | ----------------------------------------------- | ---------------------------------- |
 | `Consume` | `consume` | A player eats, drinks or uses the item          | The item stays in its slot         |
-| `Trash`   | `trash`   | A player throws the stack away                  | The stack stays                    |
+| `Trash`   | `trash`   | A player deletes or salvages the stack          | The stack stays                    |
 | `Equip`   | `equip`   | A player equips the item                        | The equipment stays as it was      |
 | `Unequip` | `unequip` | A player takes the item off                     | The item stays on                  |
 | `Pickup`  | `pickup`  | After a player picked the item up               | Nothing: the answer is ignored     |
@@ -118,8 +118,10 @@ placement.
 
 The source is the reflection of dedicated server build 26319703:
 
-- A use and a trash are the player input's `itemAction`. The server's
+- A use and a salvage are the player input's `itemAction`. The server's
   `inventory_actions` system runs it.
+- A delete is the input's `inventoryTransferAction` of type `Destroy`, as
+  client 26430625 sends it.
 - An equip and an unequip are its `changeEquipmentAction`, which
   `equipment_actions` runs.
 - A pickup and a placement are the `PickupEvent` and the `BuildingPlaceEvent`.

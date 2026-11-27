@@ -1,7 +1,8 @@
 //! Settings files watched for changes: the loader's own re-reads the log
 //! levels and raises [`Event::LOADER_SETTINGS_CHANGED`] for every mod. While
 //! a world runs, each settings file of each mod in that world is watched,
-//! and a change raises [`Event::SETTINGS_CHANGED`] for the mod.
+//! and a change raises [`Event::SETTINGS_CHANGED`] for the mod, as does a
+//! change kept for a held file that the writer gave up on.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -109,6 +110,20 @@ impl WorldWatched {
         self.seen = now;
         now.is_some() && !ours(path, now)
     }
+
+    /// Whether the mod hears its settings change: the file
+    /// [`changed`](Self::changed), or it is among the `lost` files whose
+    /// kept change the writer gave up on, which no stamp shows.
+    fn raised(
+        &mut self,
+        key: Option<&str>,
+        path: Option<&Path>,
+        now: Stamp,
+        lost: &[PathBuf],
+    ) -> bool {
+        let changed = self.changed(key, path, now);
+        changed || path.is_some_and(|path| lost.iter().any(|lost| lost == path))
+    }
 }
 
 fn stamp(path: &Path) -> Stamp {
@@ -187,6 +202,9 @@ fn watch_worlds(loader: &Loader, worlds: &mut Vec<WorldWatched>) {
         }
     }
     let key = crate::base::worlds::current();
+    // A change the loader kept for a held file and gave up on: readers went
+    // back to the file, which no stamp shows.
+    let lost = crate::base::frame_writes::unraised();
     let mut edited = Vec::new();
     for file in worlds {
         let path = key.as_deref().and_then(|key| {
@@ -194,10 +212,11 @@ fn watch_worlds(loader: &Loader, worlds: &mut Vec<WorldWatched>) {
             Some(crate::base::worlds::world_file(&record.id, &file.file, key))
         });
         let now = path.as_deref().and_then(stamp);
-        if file.changed(key.as_deref(), path.as_deref(), now) {
+        if file.raised(key.as_deref(), path.as_deref(), now, &lost) {
             edited.push(file.owner.get());
         }
     }
+    edited.sort_unstable();
     edited.dedup();
     for index in edited {
         crate::base::worlds::changed(loader, index);
@@ -313,5 +332,31 @@ mod tests {
         assert!(!file.changed(Some("b"), Some(&path), None), "deleted");
         assert!(!file.changed(None, None, None));
         assert!(!file.changed(Some("b"), Some(&path), at(6)), "loaded again");
+    }
+
+    #[test]
+    fn a_world_file_whose_kept_change_was_given_up_raises_the_change_untouched() {
+        let path = std::env::temp_dir().join(format!("enshwick-watch-lost-{}", std::process::id()));
+        let other = path.with_extension("other");
+        let at = Some((SystemTime::UNIX_EPOCH + Duration::from_secs(1), 1));
+        let mut file = WorldWatched {
+            owner: ModIndex::new(0),
+            file: "settings".to_owned(),
+            key: None,
+            seen: None,
+        };
+        assert!(!file.raised(Some("a"), Some(&path), at, &[]), "just loaded");
+        assert!(
+            file.raised(Some("a"), Some(&path), at, std::slice::from_ref(&path)),
+            "the file never changed, yet its readers went back to it"
+        );
+        assert!(
+            !file.raised(Some("a"), Some(&path), at, &[other]),
+            "another file"
+        );
+        assert!(
+            !file.raised(None, None, None, std::slice::from_ref(&path)),
+            "no world runs"
+        );
     }
 }

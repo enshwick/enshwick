@@ -173,8 +173,9 @@ impl Installed {
         })
     }
 
-    /// Asks the mod's interaction filters about `call` as the loader would;
-    /// whether every one allows it.
+    /// Asks the mod's interaction filters about `call` as the loader would,
+    /// and its item filters about a move of type `Destroy` as a trash of the
+    /// source stack; whether every one allows it.
     ///
     /// # Examples
     ///
@@ -193,7 +194,7 @@ impl Installed {
             filter.run(|callback, user| unsafe {
                 callback(call, user) != enshwick_core::abi::FILTER_REFUSE
             })
-        })
+        }) && crate::test::inventory::items::allows_destroy(call)
     }
 
     /// The prompt the mod gave the objects placed from `item`, as the

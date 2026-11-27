@@ -31,6 +31,7 @@
 "mods.points" = "Точки расширения: {points}"
 "mods.feature.off" = "{feature} отключено: {reason}"
 "mods.part.off" = "Часть Enshwick отключена после ошибки: {part} ({reason})"
+"files.lost" = "Enshwick не смог записать {path} {minutes} минут, поэтому изменение, сделанное в игре, потеряно."
 "mods.others.beside" = "Файлы других модов рядом с игрой: {files}"
 "mods.features.off" = "Отключено полностью или частично в этой версии игры: {features}"
 "mods.discovery.off" = "Обнаружение модов выключено: в игре, которую запускает игрок, хост и подключившиеся игроки не видят моды друг друга."

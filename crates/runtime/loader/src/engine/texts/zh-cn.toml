@@ -31,6 +31,7 @@
 "mods.points" = "扩展点：{points}"
 "mods.feature.off" = "{feature} 已关闭：{reason}"
 "mods.part.off" = "出错后关闭的 Enshwick 部分：{part}（{reason}）"
+"files.lost" = "Enshwick 在 {minutes} 分钟内无法写入 {path}，因此在游戏中所做的更改已丢失。"
 "mods.others.beside" = "游戏旁的其他模组文件：{files}"
 "mods.features.off" = "在此游戏版本上全部或部分关闭：{features}"
 "mods.discovery.off" = "模组检测已关闭：在玩家主持的游戏中，主机和加入的玩家看不到彼此的模组。"

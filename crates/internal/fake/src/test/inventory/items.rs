@@ -75,6 +75,38 @@ impl Installed {
     }
 }
 
+/// Whether the item filters let the move `call` destroy its source stack,
+/// as the loader asks them about a transfer of type `Destroy`; true for any
+/// other move.
+pub(crate) fn allows_destroy(call: &enshwick_core::abi::Interaction) -> bool {
+    use enshwick_core::abi::Interaction;
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "the slot's entity is the low half, its index the next byte, as the loader splits it"
+    )]
+    let (inventory, index) = (
+        call.from_slot as u32,
+        u32::from((call.from_slot >> 32) as u8),
+    );
+    if call.kind != Interaction::MOVE
+        || call.moving == 0
+        || call.action != Interaction::ACTION_DESTROY
+        || inventory == 0
+        || call.moved.get() == 0
+        || call.stack == 0
+    {
+        return true;
+    }
+    ask(&enshwick_core::headed!(ItemAction {
+        kind: ItemAction::TRASH,
+        character: call.character,
+        item: call.moved,
+        count: call.stack,
+        inventory: enshwick_core::Entity::from_engine(inventory),
+        slot: index,
+    }))
+}
+
 /// Asks the installed mod's filters about `call` as the loader does: a
 /// refusable action stops at the first refusal, one after the fact reaches
 /// every filter. Whether it is allowed.

@@ -7,10 +7,11 @@
 
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
+use arc_swap::ArcSwapOption;
 use enshwick_base::__internal::{briefly, held};
 use enshwick_base::Relock;
 
@@ -35,19 +36,41 @@ struct Waiting {
     since: Instant,
 }
 
+/// A file whose kept text the writer gave up on: its readers went back to
+/// what the file holds, and whom the loader told so far.
+struct Lost {
+    path: PathBuf,
+    /// The settings watch raised the change of the mod whose file it is.
+    raised: bool,
+    /// The administrators online were told, on a server's game thread.
+    told: bool,
+}
+
 /// The writes that wait, and whether a thread writes them.
 struct Queue {
     waiting: Vec<Waiting>,
     turns: u64,
     writing: bool,
+    /// The files given up on, the newest last, at most [`MOST_LOST`].
+    lost: Vec<Lost>,
 }
 
-/// The queue, and whether anything waits, so readers skip its lock while
-/// nothing does.
+/// The queue, and whether anything waits or was given up on, so readers
+/// skip its lock while nothing does.
 struct State {
     queue: Mutex<Queue>,
     any: AtomicBool,
+    any_lost: AtomicBool,
+    /// Some given-up file waits to be told to the administrators.
+    untold: AtomicBool,
+    /// The given-up files as last changed, for the Mods screen, which reads
+    /// them each frame and must not wait for a write that holds the queue.
+    shown: ArcSwapOption<Vec<PathBuf>>,
 }
+
+/// How many given-up files the loader remembers to show; a file given up
+/// on again moves to the end instead of taking a second place.
+const MOST_LOST: usize = 8;
 
 static STATE: State = State::new();
 
@@ -105,7 +128,12 @@ pub(crate) fn write(path: &Path, text: &str, write: Writer) -> io::Result<()> {
             "{} is held by another program ({e}); it is written once let go",
             path.display()
         ),
-        done => return done,
+        done => {
+            if done.is_ok() {
+                STATE.found(&mut queue, path);
+            }
+            return done;
+        }
     }
     queue.waiting.push(kept);
     STATE.any.store(true, Ordering::Release);
@@ -117,6 +145,51 @@ pub(crate) fn write(path: &Path, text: &str, write: Writer) -> io::Result<()> {
 /// it in place of what the file holds.
 pub(crate) fn waiting(path: &Path) -> Option<String> {
     STATE.waiting(path)
+}
+
+/// The files whose kept text was given up on, the newest last, for the Mods
+/// screen; read without the queue's lock.
+pub(crate) fn lost() -> Option<Arc<Vec<PathBuf>>> {
+    STATE.shown.load_full()
+}
+
+/// The given-up files the settings watch has not raised yet; each comes
+/// once.
+pub(crate) fn unraised() -> Vec<PathBuf> {
+    STATE.lost(|lost| &mut lost.raised)
+}
+
+/// After a server step on its game thread: tells each administrator online
+/// of every file given up on since, by name; with none online the files
+/// wait for the first step one is.
+#[cfg(windows)]
+pub(crate) fn after_step(loader: &crate::engine::loader::Loader) {
+    if !STATE.untold.load(Ordering::Acquire) {
+        return;
+    }
+    let Ok(players) = crate::engine::world::players(loader) else {
+        return;
+    };
+    let admins: Vec<_> = players
+        .iter()
+        .filter(|p| p.is_admin())
+        .map(|p| p.key.get())
+        .collect();
+    STATE.tell(&admins, |key, path| {
+        let text = crate::base::net::for_player(key, || lost_line(path));
+        crate::base::tell::tell(loader, key, &text);
+    });
+}
+
+/// The words that tell a player the change to `path` is lost.
+pub(crate) fn lost_line(path: &Path) -> String {
+    crate::engine::texts::fill(
+        "files.lost",
+        &[
+            ("path", &path.display().to_string()),
+            ("minutes", &(GIVE_UP_AFTER.as_secs() / 60).to_string()),
+        ],
+    )
 }
 
 /// Starts the writer unless it runs; a thread that does not start leaves
@@ -176,9 +249,80 @@ impl State {
                 waiting: Vec::new(),
                 turns: 0,
                 writing: false,
+                lost: Vec::new(),
             }),
             any: AtomicBool::new(false),
+            any_lost: AtomicBool::new(false),
+            untold: AtomicBool::new(false),
+            shown: ArcSwapOption::const_empty(),
         }
+    }
+
+    /// The given-up files whose flag `pick` names is unset, which it then
+    /// sets.
+    fn lost(&self, pick: impl Fn(&mut Lost) -> &mut bool) -> Vec<PathBuf> {
+        if !self.any_lost.load(Ordering::Acquire) {
+            return Vec::new();
+        }
+        let mut queue = self.queue.relock();
+        queue
+            .lost
+            .iter_mut()
+            .filter_map(|lost| {
+                let done = pick(lost);
+                (!std::mem::replace(done, true)).then(|| lost.path.clone())
+            })
+            .collect()
+    }
+
+    /// Sends each of `admins` every given-up file they were not told of;
+    /// with no administrator the files stay untold.
+    fn tell<T: Copy>(&self, admins: &[T], mut send: impl FnMut(T, &Path)) {
+        if admins.is_empty() {
+            return;
+        }
+        // Cleared before the files are taken, so a file given up meanwhile
+        // sets it again and waits for the next step.
+        self.untold.store(false, Ordering::Release);
+        for path in self.lost(|lost| &mut lost.told) {
+            for &admin in admins {
+                send(admin, &path);
+            }
+        }
+    }
+
+    /// Publishes the given-up files for the Mods screen, under the queue's
+    /// lock.
+    fn show(&self, queue: &Queue) {
+        let paths: Vec<PathBuf> = queue.lost.iter().map(|lost| lost.path.clone()).collect();
+        self.shown
+            .store((!paths.is_empty()).then(|| Arc::new(paths)));
+    }
+
+    /// Forgets that the writer gave up on `path`, which a write just reached.
+    fn found(&self, queue: &mut Queue, path: &Path) {
+        if self.any_lost.load(Ordering::Acquire) {
+            queue.lost.retain(|lost| lost.path != path);
+            self.any_lost
+                .store(!queue.lost.is_empty(), Ordering::Release);
+            self.show(queue);
+        }
+    }
+
+    /// Remembers that the writer gave up on `path`, under the queue's lock.
+    fn give_up(&self, queue: &mut Queue, path: PathBuf) {
+        queue.lost.retain(|lost| lost.path != path);
+        if queue.lost.len() == MOST_LOST {
+            queue.lost.remove(0);
+        }
+        queue.lost.push(Lost {
+            path,
+            raised: false,
+            told: false,
+        });
+        self.any_lost.store(true, Ordering::Release);
+        self.untold.store(true, Ordering::Release);
+        self.show(queue);
     }
 
     /// The text that waits for `path`, unless another program wrote the
@@ -231,6 +375,7 @@ impl State {
             (_, None) => true,
             (Ok(()), Some(at)) => {
                 crate::log!(INFO, "{} written once let go", path.display());
+                self.found(&mut queue, path);
                 if let Some(newer) = queue.waiting.get_mut(at).filter(|w| w.turn != turn) {
                     newer.seen = modified(path);
                 } else {
@@ -251,6 +396,7 @@ impl State {
                         path.display(),
                         GIVE_UP_AFTER.as_secs() / 60
                     );
+                    self.give_up(&mut queue, kept.path);
                     true
                 }
             }
@@ -440,6 +586,101 @@ mod tests {
         assert_eq!(state.waiting(&path), None, "given up");
         assert!(state.next().is_none(), "the writer ends");
         let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_given_up_file_is_raised_and_told_once_and_shown_until_a_write_lands() {
+        let state = State::new();
+        let dir = dir("lost");
+        let path = dir.join("settings.toml");
+        let long_ago = Instant::now().checked_sub(GIVE_UP_AFTER).unwrap();
+        let full = || Err(io::Error::other("the disk is full"));
+        assert!(shown(&state).is_empty(), "nothing lost yet");
+        let turn = queue(&state, &path, "kept", long_ago);
+        assert!(state.settle(&path, turn, full()));
+        let raised = |state: &State| state.lost(|lost| &mut lost.raised);
+        assert_eq!(
+            raised(&state),
+            std::slice::from_ref(&path),
+            "the watch raises it"
+        );
+        assert!(raised(&state).is_empty(), "once");
+        assert_eq!(
+            told(&state, &[1]),
+            [(1, path.clone())],
+            "the admins hear of it apart"
+        );
+        assert!(told(&state, &[1]).is_empty(), "once");
+        assert_eq!(
+            shown(&state),
+            std::slice::from_ref(&path),
+            "the Mods screen keeps it"
+        );
+        let turn = queue(&state, &path, "again", long_ago);
+        assert!(state.settle(&path, turn, full()));
+        assert_eq!(shown(&state).len(), 1, "a file lost again takes one place");
+        assert_eq!(
+            raised(&state),
+            std::slice::from_ref(&path),
+            "and is raised again"
+        );
+        let turn = queue(&state, &path, "landed", Instant::now());
+        assert!(state.settle(&path, turn, Ok(())));
+        assert!(shown(&state).is_empty(), "a write that lands clears it");
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_loader_remembers_only_the_latest_given_up_files() {
+        let state = State::new();
+        let mut queue = state.queue.relock();
+        for at in 0..=MOST_LOST {
+            state.give_up(&mut queue, PathBuf::from(format!("{at}.toml")));
+        }
+        drop(queue);
+        let lost = shown(&state);
+        assert_eq!(lost.len(), MOST_LOST);
+        assert_eq!(lost[0], PathBuf::from("1.toml"), "the oldest goes");
+    }
+
+    #[test]
+    fn a_given_up_file_waits_for_an_administrator_to_be_told() {
+        let state = State::new();
+        let path = PathBuf::from("mutes.toml");
+        state.give_up(&mut state.queue.relock(), path.clone());
+        assert!(told(&state, &[]).is_empty(), "no administrator online");
+        assert!(state.untold.load(Ordering::Acquire), "it still waits");
+        assert_eq!(
+            told(&state, &[1, 2]),
+            [(1, path.clone()), (2, path)],
+            "each administrator who comes hears it"
+        );
+        assert!(!state.untold.load(Ordering::Acquire));
+        assert!(told(&state, &[3]).is_empty(), "once");
+    }
+
+    #[test]
+    fn the_mods_screen_reads_the_given_up_files_while_a_write_holds_the_queue() {
+        let state = State::new();
+        let mut queue = state.queue.relock();
+        state.give_up(&mut queue, PathBuf::from("controls.toml"));
+        assert_eq!(shown(&state), [PathBuf::from("controls.toml")]);
+        drop(queue);
+    }
+
+    /// The given-up files the Mods screen shows.
+    fn shown(state: &State) -> Vec<PathBuf> {
+        state
+            .shown
+            .load_full()
+            .map_or_else(Vec::new, |paths| paths.to_vec())
+    }
+
+    /// Whom of `admins` [`State::tell`] tells of which file.
+    fn told(state: &State, admins: &[u32]) -> Vec<(u32, PathBuf)> {
+        let mut sent = Vec::new();
+        state.tell(admins, |admin, path| sent.push((admin, path.to_owned())));
+        sent
     }
 
     #[test]

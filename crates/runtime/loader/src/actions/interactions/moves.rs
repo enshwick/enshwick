@@ -7,7 +7,7 @@ use enshwick_core::raw::read_at;
 use super::Layout;
 use crate::engine::ecs::Components;
 use crate::engine::loader::Loader;
-use crate::inventory::stacks::{Stacks, slot_id};
+use crate::inventory::stacks::{Stacks, slot_id, split};
 
 /// Where the player's transfer action keeps what it moves, and the
 /// interaction constants of the game's action types and transfer flags.
@@ -126,6 +126,20 @@ impl Moved {
         call.from_slot = self.from_slot;
         call.to_slot = self.to_slot;
     }
+
+    /// Whether the item filters let `player` make the move: only a
+    /// `Destroy` asks them, as a trash of the source slot's stack.
+    pub(super) fn items_allow(
+        &self,
+        player: u32,
+        allows: impl FnOnce(u32, u32, u32, u32, u32) -> bool,
+    ) -> bool {
+        let Some((inventory, index)) = split(self.from_slot) else {
+            return true;
+        };
+        self.action != Interaction::ACTION_DESTROY
+            || allows(player, self.item, self.stack, inventory, index.into())
+    }
 }
 
 /// What the transfer in `input` moves, read in `ctx`.
@@ -241,6 +255,40 @@ mod tests {
         assert_eq!(moves.transfer_of(8), Interaction::TRANSFER_TO_ACTIONBAR);
         assert_eq!(moves.transfer_of(0x10), Interaction::TRANSFER_TO_BACKPACK);
         assert_eq!(moves.transfer_of(0x80), 0, "a bit the build does not name");
+    }
+
+    #[test]
+    fn only_a_destroy_asks_the_item_filters_about_the_source_stack() {
+        let destroy = Moved {
+            item: 0x0e17,
+            stack: 7,
+            action: Interaction::ACTION_DESTROY,
+            from_slot: slot_id(0x0000_0003_0000_1234),
+            ..Moved::default()
+        };
+        let asked = core::cell::Cell::new(None);
+        let refuse = |player, item, count, inventory, index| {
+            asked.set(Some((player, item, count, inventory, index)));
+            false
+        };
+        assert!(!destroy.items_allow(10, refuse), "a refused trash keeps it");
+        assert_eq!(asked.get(), Some((10, 0x0e17, 7, 0x1234, 3)));
+        let all = Moved {
+            action: Interaction::ACTION_ALL,
+            ..destroy
+        };
+        assert!(
+            all.items_allow(10, |_, _, _, _, _| false),
+            "a plain move is not a trash"
+        );
+        let nothing = Moved {
+            from_slot: 0,
+            ..destroy
+        };
+        assert!(
+            nothing.items_allow(10, |_, _, _, _, _| false),
+            "no source, nothing destroyed"
+        );
     }
 
     #[test]

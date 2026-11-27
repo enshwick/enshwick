@@ -31,6 +31,7 @@
 "mods.points" = "Genişletme noktaları: {points}"
 "mods.feature.off" = "{feature} kapalı: {reason}"
 "mods.part.off" = "Hatadan sonra kapanan Enshwick parçası: {part} ({reason})"
+"files.lost" = "Enshwick {path} dosyasına {minutes} dakika boyunca yazamadı, bu yüzden oyunda yapılan değişiklik kayboldu."
 "mods.others.beside" = "Oyunun yanındaki diğer mod dosyaları: {files}"
 "mods.features.off" = "Bu oyun sürümünde kapalı veya kısmen kapalı: {features}"
 "mods.discovery.off" = "Mod algılama kapalı: bir oyuncunun barındırdığı oyunlarda ev sahibi ve katılan oyuncular birbirlerinin modlarını göremez."
