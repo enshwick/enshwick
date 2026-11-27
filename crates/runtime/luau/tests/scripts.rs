@@ -75,7 +75,7 @@ mod tests {
     }
 
     fn run(main: &str) -> Installed {
-        let (loader, status) = run_with(main, Limits::default(), Scripts::new());
+        let (loader, status) = run_with(main, crate::harness::untimed(), Scripts::new());
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         loader
     }
@@ -238,7 +238,12 @@ mod tests {
 
     #[test]
     fn a_short_handler_runs_on_under_the_default_limits() {
-        let (loader, status) = run_with(&spinning_handler(1), Limits::default(), Scripts::new());
+        // An empty handler: a spin under the 10 ms default could be preempted past it.
+        let (loader, status) = run_with(
+            r#"enshwick.on("WorldSaved", function() end)"#,
+            Limits::default(),
+            Scripts::new(),
+        );
         assert_eq!(status, Status::OK);
         for _ in 0..20 {
             let _handled = loader.raise::<WorldSaved>(&());
@@ -288,7 +293,7 @@ mod tests {
 
     #[test]
     fn a_syntax_error_refuses_the_mod_with_its_line() {
-        let (loader, status) = run_with("local x = ", Limits::default(), Scripts::new());
+        let (loader, status) = run_with("local x = ", crate::harness::untimed(), Scripts::new());
         assert_ne!(status, Status::OK);
         assert!(logged(&loader, "main.luau:1"), "{:?}", loader.logs());
     }
@@ -317,7 +322,7 @@ mod tests {
 
     #[test]
     fn a_main_script_of_bytecode_is_refused() {
-        let (loader, status) = run_with(BYTECODE, Limits::default(), Scripts::new());
+        let (loader, status) = run_with(BYTECODE, crate::harness::untimed(), Scripts::new());
         assert_ne!(status, Status::OK, "{:?}", loader.logs());
     }
 
@@ -326,7 +331,7 @@ mod tests {
         let (loader, status) = run_with(
             r#"local ok = pcall(require, "./compiled")
             enshwick.log.info(`compiled loaded {ok}`)"#,
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new().with("compiled.luau", BYTECODE),
         );
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
@@ -342,7 +347,7 @@ mod tests {
         let (loader, status) = run_with(
             r#"local greet = require("./lib/greet")
             enshwick.log.info(greet("Ann"))"#,
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new()
                 .with("lib/greet.luau", r#"local suffix = require("./suffix") return function(n) return "hi " .. n .. suffix end"#)
                 .with("lib/suffix.luau", r#"return "!""#),
@@ -355,7 +360,7 @@ mod tests {
     fn an_unknown_event_refuses_the_mod() {
         let (loader, status) = run_with(
             r#"enshwick.on("PlayerJumped", function() end)"#,
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new(),
         );
         assert_ne!(status, Status::OK);
@@ -419,7 +424,7 @@ mod tests {
             enshwick.on("SettingsChanged", function()
                 enshwick.log.info(`now {enshwick.settings().greeting}`)
             end)"#,
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new(),
             Some(greeting_schema()),
             FakeHost::new().settings("greeting = \"yo\"\n"),
@@ -446,7 +451,7 @@ mod tests {
             enshwick.on("SettingsChanged", function()
                 enshwick.log.info(`now {enshwick.settings().greeting}`)
             end)"#,
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new(),
             Some(greeting_schema()),
             FakeHost::new().world_key("world0"),
@@ -485,7 +490,7 @@ mod tests {
                 local name = enshwick.content.item_name("05050505-0505-0505-0505-050505050505")
                 enshwick.log.info(`unnamed {id} {name}`)
             end)"#,
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new(),
             None,
             FakeHost::new().net_peer(enshwick::net::Peer::Player(key)),
@@ -554,7 +559,7 @@ mod tests {
             r#"enshwick.on("LevelUpEvent", function(up)
                 enshwick.log.info(`entity {up.player_entity_id} reached {up.level}`)
             end)"#,
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new(),
             None,
             game_host(),
@@ -578,7 +583,7 @@ mod tests {
             enshwick.on_game_type("keen::ecs::EntityDiedEvent", { deadEntityId = "entity" }, function(event)
                 enshwick.log.info(`died {event.deadEntityId}`)
             end)"#,
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new(),
             None,
             game_host(),
@@ -604,7 +609,7 @@ mod tests {
             r#"enshwick.on_client_game_type("keen::ecs::EntityDiedEvent", { deadEntityId = "entity" }, function(event)
                 enshwick.log.info(`client saw {event.deadEntityId}`)
             end)"#,
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new(),
             None,
             game_host().side(enshwick::abi::Side::CLIENT),
@@ -621,7 +626,7 @@ mod tests {
     fn an_unknown_client_event_type_names_the_call_that_asked_for_it() {
         let (loader, status) = run_full(
             r#"enshwick.on_client_game_type("keen::ecs::NoSuchEvent", {}, function() end)"#,
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new(),
             None,
             game_host().side(enshwick::abi::Side::CLIENT),
@@ -641,7 +646,7 @@ mod tests {
     fn a_field_of_an_unknown_kind_refuses_the_mod() {
         let (loader, status) = run_full(
             r#"enshwick.on_game_type("keen::ecs::EntityDiedEvent", { deadEntityId = "pointer" }, function() end)"#,
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new(),
             None,
             game_host(),
@@ -658,7 +663,7 @@ mod tests {
     fn a_field_the_type_lacks_refuses_the_mod() {
         let (loader, status) = run_full(
             r#"enshwick.on_game_type("keen::ecs::EntityDiedEvent", { nope = "u32" }, function() end)"#,
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new(),
             None,
             game_host(),
@@ -676,7 +681,7 @@ mod tests {
             enshwick.on("XpGainedEvent", function(xp)
                 enshwick.log.info(`xp from {xp.source}`)
             end)"#,
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new(),
             None,
             game_host(),
@@ -707,7 +712,7 @@ mod tests {
             r#"enshwick.on_game_type("keen::ecs::WideEvent", { account = "u64", delta = "i64" }, function(e)
                 enshwick.log.info(`account {e.account} delta {e.delta}`)
             end)"#,
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new(),
             None,
             game_host(),
@@ -728,7 +733,7 @@ mod tests {
     fn a_typed_game_event_this_build_lacks_a_field_of_refuses_the_mod_with_why() {
         let (loader, status) = run_full(
             r#"enshwick.on("LevelUpEvent", function() end)"#,
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new(),
             None,
             FakeHost::new()
@@ -785,7 +790,7 @@ mod tests {
                 if input.player == "18446744073709551615" then return answer * 2 end
                 return nil
             end)"#,
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new().with("points/price.luau", price_module()),
             None,
             FakeHost::new(),
@@ -814,7 +819,7 @@ mod tests {
                 &format!(
                     r#"enshwick.extend(require("./points/price"), function() return nil end, {order})"#
                 ),
-                Limits::default(),
+                crate::harness::untimed(),
                 Scripts::new().with("points/price.luau", price_module()),
                 None,
                 FakeHost::new(),
@@ -830,7 +835,7 @@ mod tests {
                 r#"local price = require("./points/price")
                 enshwick.extend(price, function() return nil end)
                 enshwick.extend(price, function() return nil end, { priority = 5 })"#,
-                Limits::default(),
+                crate::harness::untimed(),
                 Scripts::new().with("points/price.luau", price_module()),
                 None,
                 FakeHost::new(),
@@ -856,7 +861,7 @@ mod tests {
         use enshwick::points::Decision;
         let (loader, status) = run_full(
             r#"enshwick.extend(require("./points/price"), function() return "lots" end)"#,
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new().with("points/price.luau", price_module()),
             None,
             FakeHost::new(),
@@ -906,7 +911,7 @@ mod tests {
                     enshwick.log.info(`sold {{sold.item}} to {{sold.player}} cheap {{sold.cheap}}`)
                 end)"
             ),
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new(),
             None,
             FakeHost::new(),
@@ -939,7 +944,7 @@ mod tests {
             enshwick.on("WorldSaved", function()
                 greeted.send({ player = 7, times = 2 })
             end)"#,
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new(),
             None,
             FakeHost::new(),
@@ -959,7 +964,7 @@ mod tests {
             enshwick.on("WorldSaved", function()
                 greeted.send({ n = 3 })
             end)"#,
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new(),
             None,
             FakeHost::new(),
@@ -983,7 +988,7 @@ mod tests {
                 { name = "b", read = "u64", offset = 8, hash = "1" },
             } }, function() end)
             print(`mixed {ok2} {err2}`)"#,
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new(),
             None,
             FakeHost::new(),
@@ -1006,7 +1011,7 @@ mod tests {
                 local ok = pcall(enshwick.on_mod_event, {{ name = "you.trading-post:sold", fields = {{ {{ name = "item", read = "u64" }} }} }}, function() end)
                 print(`twice {{ok}}`)"#
             ),
-            Limits::default(),
+            crate::harness::untimed(),
             Scripts::new(),
             None,
             FakeHost::new(),

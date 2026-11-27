@@ -11,7 +11,7 @@ mod tests {
     use enshwick::events::WorldSaved;
     use enshwick::test::{FakeHost, Installed};
     use enshwick::{ItemId, Load, Mod, Off, RecipeId};
-    use enshwick_luau::{Limits, Scripts};
+    use enshwick_luau::Scripts;
 
     const SETUP: u32 = 0xc24d_f82a;
     const INVENTORY: u32 = 0xb195_28a9;
@@ -27,7 +27,7 @@ mod tests {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let scripts = CASE.lock().unwrap().take().unwrap();
             let _runtime =
-                enshwick_luau::start(load, "you.luau", scripts, None, Limits::default())?;
+                enshwick_luau::start(load, "you.luau", scripts, None, crate::harness::untimed())?;
             Ok(Self)
         }
     }

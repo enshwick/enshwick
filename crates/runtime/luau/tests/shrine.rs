@@ -11,7 +11,7 @@ mod tests {
     use enshwick::progress::Experience;
     use enshwick::test::{FakeHost, Installed};
     use enshwick::{Entity, ItemId, Load, Mod, Off, PlayerKey};
-    use enshwick_luau::{Limits, Scripts};
+    use enshwick_luau::Scripts;
 
     const ID: &str = "you.shrine";
 
@@ -47,7 +47,8 @@ mod tests {
             let scripts = Scripts::new()
                 .with("main.luau", read("main.luau"))
                 .with_items(&pack.item_bindings());
-            let runtime = enshwick_luau::start_pack(load, &manifest, scripts, Limits::default())?;
+            let runtime =
+                enshwick_luau::start_pack(load, &manifest, scripts, crate::harness::untimed())?;
             *RUNTIME.lock().unwrap() = Some(runtime);
             Ok(Self)
         }

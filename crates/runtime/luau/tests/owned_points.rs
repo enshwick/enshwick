@@ -12,7 +12,7 @@ mod tests {
     use enshwick::points::{Decision, Verdict};
     use enshwick::test::{FakeHost, Installed};
     use enshwick::{Load, Mod, Off};
-    use enshwick_luau::{Limits, Scripts};
+    use enshwick_luau::Scripts;
 
     const MANIFEST: &str = r#"
         id = "you.luau"
@@ -61,7 +61,8 @@ mod tests {
             let main = MAIN.lock().unwrap().take().unwrap();
             let manifest = PackManifest::parse(MANIFEST).unwrap();
             let scripts = Scripts::new().with("main.luau", main);
-            let _runtime = enshwick_luau::start_pack(load, &manifest, scripts, Limits::default())?;
+            let _runtime =
+                enshwick_luau::start_pack(load, &manifest, scripts, crate::harness::untimed())?;
             Ok(Self)
         }
     }

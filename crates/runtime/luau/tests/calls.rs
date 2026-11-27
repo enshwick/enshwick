@@ -10,7 +10,7 @@ mod tests {
     use enshwick::events::WorldSaved;
     use enshwick::test::{FakeHost, Installed};
     use enshwick::{Load, Mod, Off};
-    use enshwick_luau::{Limits, Runtime, Scripts};
+    use enshwick_luau::{Runtime, Scripts};
 
     /// The server's call, the one the fixture module describes.
     #[enshwick::call(name = "you.lockers:fee", output = u64, version = 1)]
@@ -33,7 +33,8 @@ mod tests {
     impl Mod for Luau {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let scripts = CASE.lock().unwrap().take().unwrap();
-            let runtime = enshwick_luau::start(load, "you.luau", scripts, None, Limits::default())?;
+            let runtime =
+                enshwick_luau::start(load, "you.luau", scripts, None, crate::harness::untimed())?;
             *RUNTIME.lock().unwrap() = Some(runtime);
             Ok(Self)
         }
