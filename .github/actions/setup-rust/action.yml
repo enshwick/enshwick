@@ -82,11 +82,11 @@ runs:
           archives="$RUNNER_TEMP/apt"
           mkdir -p "$shared" "$archives/partial"
           cp -n "$shared"/*.deb "$archives"/ 2> /dev/null || true
-          # The runner image's Microsoft source serves nothing installed here,
-          # and its 403s failed whole runs.
-          grep -rlZ packages.microsoft.com /etc/apt/sources.list.d 2> /dev/null |
+          # Nothing installed here comes from the runner image's Microsoft
+          # source, and apt-get update fails when that source answers 403.
+          { grep -rlZ packages.microsoft.com /etc/apt/sources.list.d 2> /dev/null || true; } |
             xargs -0r sudo rm -f
-          sudo apt-get update -qq -o Acquire::Retries=3
+          sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dir::Cache::archives="$archives" \
             install -y -qq --no-install-recommends "${packages[@]}"
           cp -n "$archives"/*.deb "$shared"/ 2> /dev/null || true
