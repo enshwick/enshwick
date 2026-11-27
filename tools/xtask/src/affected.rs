@@ -8,6 +8,8 @@ mod versions;
 
 use std::collections::{BTreeMap, BTreeSet};
 
+pub(crate) use shared::MANIFEST;
+
 /// A workspace package, as far as choosing checks needs it.
 #[derive(Debug, Clone, Default)]
 #[expect(
@@ -181,7 +183,7 @@ pub(crate) fn scope(
     for file in files {
         match file.as_str() {
             shared::LOCK if local && bump(texts, file, versions::lock) => {}
-            shared::MANIFEST if local && bump(texts, file, versions::root) => {
+            MANIFEST if local && bump(texts, file, versions::root) => {
                 // Members that inherit the version build under the new one.
                 bumped.extend(shared::inherited(texts, packages, local).unwrap_or_default());
             }
@@ -191,7 +193,7 @@ pub(crate) fn scope(
                 };
                 changed.extend(reached);
             }
-            shared::MANIFEST => {
+            MANIFEST => {
                 let Some(reached) = shared::inherited(texts, packages, local) else {
                     return Scope::All;
                 };

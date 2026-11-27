@@ -10,7 +10,7 @@ pub(super) use crate::cargo_files::LOCK;
 use crate::cargo_files::{self, DEPENDENCIES, Locked};
 
 /// The workspace manifest.
-pub(super) const MANIFEST: &str = "Cargo.toml";
+pub(crate) const MANIFEST: &str = "Cargo.toml";
 /// The manifest table of workspace settings, and the key that inherits one.
 pub(super) const WORKSPACE: &str = "workspace";
 /// The manifest table of package fields.

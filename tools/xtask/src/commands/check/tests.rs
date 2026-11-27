@@ -866,7 +866,7 @@ fn a_wide_change_with_the_facade_left_out_of_the_build_checks_no_links_of_unwrit
 }
 
 #[test]
-fn the_public_paths_list_is_written_again_only_when_its_writer_or_the_list_changes() {
+fn the_public_paths_list_is_written_again_only_when_the_facade_its_writer_or_the_list_changes() {
     let scope = |code: &[&str]| Scope::Some {
         code: code.iter().map(|name| (*name).to_owned()).collect(),
         docs: BTreeSet::new(),
@@ -874,21 +874,32 @@ fn the_public_paths_list_is_written_again_only_when_its_writer_or_the_list_chang
         built: BTreeSet::new(),
         wide: false,
     };
-    let list = [public_paths::FILE.to_owned()];
-    let other = ["README.md".to_owned()];
-    assert!(lists_public_paths(&scope(&[FACADE]), Some(&other)));
-    assert!(lists_public_paths(
-        &scope(&[env!("CARGO_PKG_NAME")]),
-        Some(&other)
-    ));
-    assert!(lists_public_paths(&scope(&[]), Some(&list)));
-    let chapter = [public_paths::chapter::FILE.to_owned()];
-    assert!(!lists_public_paths(&scope(&[]), Some(&chapter)));
-    assert!(!lists_public_paths(
-        &scope(&["enshwick-loader"]),
-        Some(&other)
-    ));
-    assert!(!lists_public_paths(&scope(&[]), None));
+    let packages = [Package {
+        name: env!("CARGO_PKG_NAME").to_owned(),
+        dir: "tools/xtask".to_owned(),
+        ..Package::default()
+    }];
+    let lists = |scope: &Scope, files: &[&str]| {
+        let files: Vec<String> = files.iter().map(|file| (*file).to_owned()).collect();
+        lists_public_paths(scope, Some(&files), &packages)
+    };
+    let task = scope(&[env!("CARGO_PKG_NAME"), "enshwick-loader"]);
+    assert!(lists(&scope(&[FACADE]), &["README.md"]));
+    assert!(lists(&task, &["tools/xtask/src/main.rs"]));
+    assert!(
+        !lists(&task, &["crates/runtime/loader/src/lib.rs"]),
+        "the task only depends on the loader"
+    );
+    assert!(
+        lists(&task, &["Cargo.lock"]),
+        "a lock bump may move the task's rustdoc reader"
+    );
+    assert!(lists(&task, &["Cargo.toml"]));
+    assert!(!lists(&scope(&["enshwick-loader"]), &["Cargo.lock"]));
+    assert!(!lists(&scope(&[]), &["tools/xtask-other/a.rs"]));
+    assert!(lists(&scope(&[]), &[public_paths::FILE]));
+    assert!(!lists(&scope(&[]), &[public_paths::chapter::FILE]));
+    assert!(!lists_public_paths(&scope(&[]), None, &packages));
 }
 
 #[test]
