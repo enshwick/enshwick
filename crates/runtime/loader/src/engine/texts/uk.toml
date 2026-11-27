@@ -38,7 +38,7 @@
 "mods.points" = "Точки розширення: {points}"
 "mods.feature.off" = "{feature} вимкнено: {reason}"
 "mods.part.off" = "Частину Enshwick вимкнено через помилку: {part} ({reason})"
-"files.lost" = "Інша програма тримала {path} {minutes} хвилин, тож зміну, зроблену в грі, втрачено."
+"files.lost" = "Enshwick не міг записати {path} {minutes} хвилин, тож зміну, зроблену в грі, втрачено."
 "mods.others.beside" = "Файли інших модів поруч із грою: {files}"
 "mods.features.off" = "Вимкнено повністю або частково в цій версії гри: {features}"
 "mods.discovery.off" = "Пошук модів вимкнено: у грі, яку запускає гравець, хост і гравці, що приєднуються, не бачать модів одне одного."

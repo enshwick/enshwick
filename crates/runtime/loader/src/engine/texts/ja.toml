@@ -31,7 +31,7 @@
 "mods.points" = "拡張ポイント：{points}"
 "mods.feature.off" = "{feature} はオフです：{reason}"
 "mods.part.off" = "エラーのためオフになった Enshwick の部分：{part}（{reason}）"
-"files.lost" = "別のプログラムが {path} を {minutes} 分間使用していたため、ゲーム内での変更は失われました。"
+"files.lost" = "Enshwick が {path} に {minutes} 分間書き込めなかったため、ゲーム内での変更は失われました。"
 "mods.others.beside" = "ゲームと同じ場所にあるほかの MOD のファイル：{files}"
 "mods.features.off" = "このゲームバージョンでオフまたは一部オフ：{features}"
 "mods.discovery.off" = "Mod の検出はオフです。プレイヤーがホストするゲームでは、ホストと参加するプレイヤーがお互いの Mod を確認できません。"

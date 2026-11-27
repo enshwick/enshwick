@@ -31,7 +31,7 @@
 "mods.points" = "จุดขยาย: {points}"
 "mods.feature.off" = "{feature} ปิดอยู่: {reason}"
 "mods.part.off" = "ส่วนของ Enshwick ปิดหลังเกิดข้อผิดพลาด: {part} ({reason})"
-"files.lost" = "โปรแกรมอื่นถือไฟล์ {path} ไว้ {minutes} นาที การเปลี่ยนแปลงที่ทำในเกมจึงหายไป"
+"files.lost" = "Enshwick เขียนไฟล์ {path} ไม่ได้เป็นเวลา {minutes} นาที การเปลี่ยนแปลงที่ทำในเกมจึงหายไป"
 "mods.others.beside" = "ไฟล์ของม็อดอื่นที่อยู่ข้างเกม: {files}"
 "mods.features.off" = "ปิดทั้งหมดหรือบางส่วนในเกมเวอร์ชันนี้: {features}"
 "mods.discovery.off" = "การตรวจหาม็อดปิดอยู่ ในเกมที่ผู้เล่นเป็นโฮสต์ โฮสต์และผู้เล่นที่เข้าร่วมจะไม่เห็นม็อดของกันและกัน"

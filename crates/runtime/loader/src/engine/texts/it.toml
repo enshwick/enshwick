@@ -31,7 +31,7 @@
 "mods.points" = "Punti di estensione: {points}"
 "mods.feature.off" = "{feature} è disattivata: {reason}"
 "mods.part.off" = "Parte di Enshwick disattivata dopo un errore: {part} ({reason})"
-"files.lost" = "Un altro programma ha tenuto {path} per {minutes} minuti, quindi la modifica fatta nel gioco è persa."
+"files.lost" = "Enshwick non ha potuto scrivere {path} per {minutes} minuti, quindi la modifica fatta nel gioco è persa."
 "mods.others.beside" = "File di altre mod accanto al gioco: {files}"
 "mods.features.off" = "Disattivate in tutto o in parte in questa versione del gioco: {features}"
 "mods.discovery.off" = "Il rilevamento delle mod è disattivato: nelle partite ospitate da un giocatore, l'host e i giocatori che si uniscono non vedono le mod degli altri."

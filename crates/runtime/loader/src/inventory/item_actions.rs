@@ -17,9 +17,8 @@
 //! none, since a stack dragged or stashed out of the slot looks taken. A
 //! stack the backpack deletes is an inventory transfer of type `Destroy`,
 //! which reaches the filters as a trash from the interactions' transfer
-//! link ([`allows_destroy`]). Pickups
-//! and placements reach
-//! the filters from the server's event streams, after the game made them.
+//! link ([`allows_destroy`]). Pickups and placements reach the filters from
+//! the server's event streams, after the game made them.
 //! Reflection of dedicated server build 26319703 names all of it.
 
 mod uses;

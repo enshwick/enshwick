@@ -75,21 +75,19 @@ impl Installed {
     }
 }
 
-/// Asks the installed mod's filters about `call` as the loader does: a
-/// refusable action stops at the first refusal, one after the fact reaches
-/// every filter. Whether it is allowed.
 /// Whether the item filters let the move `call` destroy its source stack,
 /// as the loader asks them about a transfer of type `Destroy`; true for any
 /// other move.
 pub(crate) fn allows_destroy(call: &enshwick_core::abi::Interaction) -> bool {
     use enshwick_core::abi::Interaction;
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "the slot's entity is the low half, its index the next byte, as the loader splits it"
+    )]
     let (inventory, index) = (
-        call.from_slot & u64::from(u32::MAX),
-        call.from_slot >> 32 & 0xff,
+        call.from_slot as u32,
+        u32::from((call.from_slot >> 32) as u8),
     );
-    let (Ok(inventory), Ok(index)) = (u32::try_from(inventory), u32::try_from(index)) else {
-        return true;
-    };
     if call.kind != Interaction::MOVE
         || call.moving == 0
         || call.action != Interaction::ACTION_DESTROY
@@ -109,6 +107,9 @@ pub(crate) fn allows_destroy(call: &enshwick_core::abi::Interaction) -> bool {
     }))
 }
 
+/// Asks the installed mod's filters about `call` as the loader does: a
+/// refusable action stops at the first refusal, one after the fact reaches
+/// every filter. Whether it is allowed.
 fn ask(call: &ItemAction) -> bool {
     let filters = table::with(Vec::new(), |s| s.inventory.item_filters.clone());
     let refusable = !matches!(

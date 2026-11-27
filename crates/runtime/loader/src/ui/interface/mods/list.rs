@@ -263,8 +263,11 @@ fn loader_notes(loader: &Loader, paint: &Painter<'_>) {
         paint.label(line.as_bytes(), UiWidget::STYLE_NEGATIVE, true, false);
     }
     parts_off(paint);
-    for path in crate::base::frame_writes::lost() {
-        let line = crate::base::frame_writes::lost_line(&path);
+    for path in crate::base::frame_writes::lost()
+        .iter()
+        .flat_map(|lost| lost.iter())
+    {
+        let line = crate::base::frame_writes::lost_line(path);
         paint.label(line.as_bytes(), UiWidget::STYLE_NEGATIVE, true, false);
     }
     if loader.unofficial.load(Ordering::Acquire) {

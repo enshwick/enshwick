@@ -31,7 +31,7 @@
 "mods.points" = "擴充點：{points}"
 "mods.feature.off" = "{feature} 已關閉：{reason}"
 "mods.part.off" = "出錯後關閉的 Enshwick 部分：{part}（{reason}）"
-"files.lost" = "另一個程式佔用 {path} 達 {minutes} 分鐘，因此在遊戲中所做的變更已遺失。"
+"files.lost" = "Enshwick 在 {minutes} 分鐘內無法寫入 {path}，因此在遊戲中所做的變更已遺失。"
 "mods.others.beside" = "遊戲旁的其他模組檔案：{files}"
 "mods.features.off" = "在此遊戲版本上全部或部分關閉：{features}"
 "mods.discovery.off" = "模組偵測已關閉：在玩家主持的遊戲中，主機和加入的玩家看不到彼此的模組。"
