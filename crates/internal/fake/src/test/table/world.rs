@@ -176,7 +176,11 @@ impl WorldEdits {
 /// Whether the entity calls cannot run here, where the loader answers
 /// [`Status::UNAVAILABLE`]: no server runs, or the build lacks the commands.
 pub(crate) fn entity_calls_off(s: &crate::test::table::State) -> bool {
-    s.host.world.no_entity_commands || !(s.host.base.serving()) || no_world(s)
+    s.host
+        .world
+        .lacks(crate::test::world::Lacks::EntityCommands)
+        || !(s.host.base.serving())
+        || no_world(s)
 }
 
 /// Whether no world runs, where the loader answers the world's calls
@@ -356,6 +360,9 @@ entries! {
 
     pub(crate) fn save_world(me as Caller) -> Status {
         with(Status::MISSING, |s| {
+            if s.host.world.lacks(crate::test::world::Lacks::SaveCode) {
+                return Status::UNAVAILABLE;
+            }
             if s.world.save.held || s.world.save.refused {
                 return Status::REFUSED;
             }

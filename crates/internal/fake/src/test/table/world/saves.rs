@@ -96,6 +96,9 @@ entries! {
             return Status::BAD_ARGS;
         }
         with(Status::MISSING, |s| {
+            if s.host.world.lacks(crate::test::world::Lacks::SaveCode) {
+                return Status::UNAVAILABLE;
+            }
             if !(s.world.save.shut && held == 1) {
                 s.world.save.held = held == 1;
             }

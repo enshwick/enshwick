@@ -8,6 +8,7 @@ use crate::test::{FakeHost, Installed, table};
 
 pub(crate) mod altars;
 pub(crate) mod buffs;
+mod game_settings;
 pub(crate) mod players;
 mod presets;
 pub(crate) mod progress;
@@ -19,7 +20,7 @@ pub(crate) mod tags;
 pub(crate) mod transactions;
 pub(crate) mod voxel_edits;
 
-pub(crate) use presets::{BaseCode, GAME_WORLD_BOX, WorldPresets};
+pub(crate) use presets::{BaseCode, GAME_WORLD_BOX, Lacks, WorldPresets};
 
 impl FakeHost {
     /// The world's own component types and where a placed thing keeps its

@@ -135,6 +135,31 @@ mod tests {
     }
 
     #[test]
+    fn a_build_without_the_save_code_has_neither_saves_nor_save_holds() {
+        let loader = enshwick::test::FakeHost::new()
+            .world()
+            .without_saves()
+            .install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!(Keeper)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let world = WORLD.get().unwrap();
+
+        assert_eq!(world.save(), Err(enshwick::WorldError::Unavailable));
+        assert_eq!(
+            world.hold_saves(true),
+            Err(enshwick::WorldError::Unavailable)
+        );
+        assert_eq!(
+            world.hold_saves(false),
+            Err(enshwick::WorldError::Unavailable),
+            "letting go too, as the loader answers before it looks at the hold"
+        );
+        assert!(!loader.saves_held());
+    }
+
+    #[test]
     fn a_mod_stops_a_dedicated_server_once_and_a_second_stop_is_refused() {
         let loader = enshwick::test::FakeHost::new().world().install();
         // SAFETY: the three functions are the exports of this file's `declare_mod!(Keeper)`.
