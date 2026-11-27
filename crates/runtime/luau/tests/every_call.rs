@@ -11,12 +11,9 @@ mod tests {
     use enshwick::abi::Status;
     use enshwick::script::{self, Class, Signature, Ty};
     use enshwick::test::FakeHost;
+    use enshwick_luau::Scripts;
 
-    use std::time::Duration;
-
-    use enshwick_luau::{Limits, Scripts};
-
-    use crate::harness::start_with_limits;
+    use crate::harness::start_with;
 
     /// A Luau expression of type `ty`, as a script might pass it.
     fn sample(ty: &Ty) -> String {
@@ -150,11 +147,7 @@ mod tests {
             .items()
             .type_hash("current_transform", 1)
             .type_hash("used_item", 2);
-        // One start calls every function: past the default start budget on
-        // a slow runner, which this test does not measure.
-        let mut limits = Limits::default();
-        limits.start = Duration::from_secs(30);
-        let (loader, status) = start_with_limits(host, &main, Scripts::new(), None, limits);
+        let (loader, status) = start_with(host, &main, Scripts::new(), None);
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         let names: BTreeSet<&str> = calls.iter().map(|(n, _)| n.as_str()).collect();
         let seen: usize = loader

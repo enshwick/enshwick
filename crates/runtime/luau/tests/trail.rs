@@ -13,7 +13,7 @@ mod tests {
     use enshwick::packs::{Pack, PackFiles, PackManifest};
     use enshwick::test::FakeHost;
     use enshwick::{Load, Mod, Off};
-    use enshwick_luau::{Limits, Scripts};
+    use enshwick_luau::Scripts;
 
     const ID: &str = "you.trail";
 
@@ -38,7 +38,8 @@ mod tests {
             let manifest =
                 PackManifest::parse(&read("pack.toml")).map_err(|e| Off::new(e.to_string()))?;
             let scripts = Scripts::new().with("main.luau", read("main.luau"));
-            let runtime = enshwick_luau::start_pack(load, &manifest, scripts, Limits::default())?;
+            let runtime =
+                enshwick_luau::start_pack(load, &manifest, scripts, crate::harness::untimed())?;
             *RUNTIME.lock().unwrap() = Some(runtime);
             Ok(Self)
         }

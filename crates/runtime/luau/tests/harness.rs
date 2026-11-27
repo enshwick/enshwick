@@ -4,6 +4,7 @@
 #![cfg(test)]
 
 use std::sync::Mutex;
+use std::time::Duration;
 
 use enshwick::abi::Status;
 use enshwick::config::Schema;
@@ -11,15 +12,15 @@ use enshwick::test::{FakeHost, Installed};
 use enshwick::{Load, Mod, Off};
 use enshwick_luau::{Limits, Runtime, Scripts};
 
-static CASE: Mutex<Option<(Scripts, Option<Schema>, Limits)>> = Mutex::new(None);
+static CASE: Mutex<Option<(Scripts, Option<Schema>)>> = Mutex::new(None);
 static RUNTIME: Mutex<Option<Runtime>> = Mutex::new(None);
 
 struct Luau;
 
 impl Mod for Luau {
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-        let (scripts, settings, limits) = CASE.lock().unwrap().take().unwrap();
-        let runtime = enshwick_luau::start(load, "you.luau", scripts, settings, limits)?;
+        let (scripts, settings) = CASE.lock().unwrap().take().unwrap();
+        let runtime = enshwick_luau::start(load, "you.luau", scripts, settings, untimed())?;
         *RUNTIME.lock().unwrap() = Some(runtime);
         Ok(Self)
     }
@@ -41,22 +42,22 @@ pub(crate) fn start_with(
     scripts: Scripts,
     settings: Option<Schema>,
 ) -> (Installed, Status) {
-    start_with_limits(host, main, scripts, settings, Limits::default())
-}
-
-/// Starts as [`start_with`] does, under `limits`.
-pub(crate) fn start_with_limits(
-    host: FakeHost,
-    main: &str,
-    scripts: Scripts,
-    settings: Option<Schema>,
-    limits: Limits,
-) -> (Installed, Status) {
-    *CASE.lock().unwrap() = Some((scripts.with("main.luau", main), settings, limits));
+    *CASE.lock().unwrap() = Some((scripts.with("main.luau", main), settings));
     let loader = host.install();
     // SAFETY: both functions are the exports of this file's `declare_mod!(Luau)`.
     let status = unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
     (loader, status)
+}
+
+/// The game's limits with no time budget a busy test machine can reach:
+/// a preempted call past the game's 10 ms would turn the mod off and fail
+/// a test that does not measure time.
+pub(crate) fn untimed() -> Limits {
+    let mut limits = Limits::default()
+        .with_call(Duration::from_secs(60))
+        .with_per_second(Duration::from_secs(3_600));
+    limits.start = Duration::from_secs(60);
+    limits
 }
 
 /// Starts `main` as the mod's `main.luau` on `host`, with the status init
@@ -110,4 +111,26 @@ pub(crate) fn looked(
         .unwrap()
         .entries
         .remove(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use enshwick::events::WorldSaved;
+    use enshwick::test::FakeHost;
+
+    use super::run;
+
+    #[test]
+    fn a_call_a_busy_machine_holds_past_the_game_s_budget_keeps_the_test_mod_on() {
+        let loader = run(
+            FakeHost::new(),
+            r#"enshwick.on("WorldSaved", function()
+                local start = os.clock()
+                while os.clock() - start < 0.03 do end
+            end)"#,
+        );
+        let _first = loader.raise::<WorldSaved>(&());
+        let _second = loader.raise::<WorldSaved>(&());
+        assert!(loader.faults().is_empty(), "{:?}", loader.faults());
+    }
 }

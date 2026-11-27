@@ -7,12 +7,11 @@ mod tests {
     use std::alloc::{GlobalAlloc, Layout, System};
     use std::cell::Cell;
     use std::fmt::Write as _;
-    use std::time::Duration;
 
     use enshwick::abi::{DamageCheck, Status};
     use enshwick::test::FakeHost;
     use enshwick::{Load, Mod, Off};
-    use enshwick_luau::{Limits, Scripts};
+    use enshwick_luau::Scripts;
 
     /// Counts the allocations of each thread, so a test counts its own.
     struct Counting;
@@ -108,16 +107,12 @@ mod tests {
 
     impl Mod for Luau {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            // A debug build runs slower than the default budget allows.
-            let limits = Limits::default()
-                .with_call(Duration::from_secs(1))
-                .with_per_second(Duration::from_secs(3_600));
             let _runtime = enshwick_luau::start(
                 load,
                 "you.luau",
                 Scripts::new().with("main.luau", script()),
                 None,
-                limits,
+                crate::harness::untimed(),
             )?;
             Ok(Self)
         }

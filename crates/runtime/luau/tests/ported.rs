@@ -11,7 +11,7 @@ mod tests {
     use enshwick::resources::{Constant, Field, Kind, Registry, Type, Value, Variant, fnv1a32};
     use enshwick::test::{FakeHost, Installed};
     use enshwick::{Load, Mod, Off};
-    use enshwick_luau::{Limits, Scripts};
+    use enshwick_luau::Scripts;
 
     static CASE: Mutex<Option<Scripts>> = Mutex::new(None);
 
@@ -21,7 +21,7 @@ mod tests {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let scripts = CASE.lock().unwrap().take().unwrap();
             let _runtime =
-                enshwick_luau::start(load, "you.ported", scripts, None, Limits::default())?;
+                enshwick_luau::start(load, "you.ported", scripts, None, crate::harness::untimed())?;
             Ok(Self)
         }
     }

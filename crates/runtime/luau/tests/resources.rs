@@ -10,7 +10,7 @@ mod tests {
     use enshwick::resources::{Constant, Field, Kind, Type, fnv1a32};
     use enshwick::test::{FakeHost, Installed};
     use enshwick::{Load, Mod, Off};
-    use enshwick_luau::{Limits, Scripts};
+    use enshwick_luau::Scripts;
 
     const TABLE: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
 
@@ -22,7 +22,7 @@ mod tests {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let scripts = CASE.lock().unwrap().take().unwrap();
             let _runtime =
-                enshwick_luau::start(load, "you.luau", scripts, None, Limits::default())?;
+                enshwick_luau::start(load, "you.luau", scripts, None, crate::harness::untimed())?;
             Ok(Self)
         }
     }

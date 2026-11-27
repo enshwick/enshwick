@@ -12,7 +12,7 @@ mod tests {
     use enshwick::script;
     use enshwick::test::FakeHost;
     use enshwick::{Load, Mod, Off};
-    use enshwick_luau::{Limits, Scripts};
+    use enshwick_luau::Scripts;
     use syn::{Attribute, FnArg, GenericArgument, ImplItem, Item, Meta, PathArguments, ReturnType};
 
     /// The heading of the book's table of differences.
@@ -58,7 +58,8 @@ mod tests {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let scripts = CASE.lock().unwrap().take().unwrap();
             let manifest = enshwick::packs::PackManifest::parse(MANIFEST).unwrap();
-            let _runtime = enshwick_luau::start_pack(load, &manifest, scripts, Limits::default())?;
+            let _runtime =
+                enshwick_luau::start_pack(load, &manifest, scripts, crate::harness::untimed())?;
             Ok(Self)
         }
     }

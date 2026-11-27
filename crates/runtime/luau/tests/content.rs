@@ -388,7 +388,7 @@ mod tests {
     fn a_pack_of_side_both_declares_what_players_read_and_one_of_side_server_does_not() {
         use enshwick::abi::{ModHandle, Side};
         use enshwick::packs::PackManifest;
-        use enshwick_luau::{Limits, Scripts};
+        use enshwick_luau::Scripts;
 
         let loader = FakeHost::new().pack(ModHandle(2), Side::BOTH).install();
         let main = r#"
@@ -408,7 +408,8 @@ mod tests {
                     let manifest = PackManifest::parse(&toml)
                         .map_err(|why| enshwick::Off::new(why.to_string()))?;
                     let scripts = Scripts::new().with("main.luau", main);
-                    enshwick_luau::start_pack(load, &manifest, scripts, Limits::default()).map(drop)
+                    enshwick_luau::start_pack(load, &manifest, scripts, crate::harness::untimed())
+                        .map(drop)
                 })
             }
         };
