@@ -92,11 +92,8 @@ mod tests {
         let voxels = VOXELS.get().unwrap();
         let corner = VoxelPos::new(10, 20, 30);
 
-        assert_eq!(voxels.read(corner, [0, 1, 1]), Err(WorldError::BadArgument));
-        assert_eq!(
-            voxels.read(corner, [65, 64, 64]),
-            Err(WorldError::BadArgument)
-        );
+        assert_eq!(voxels.read(corner, [0, 1, 1]), Err(WorldError::BadArgs));
+        assert_eq!(voxels.read(corner, [65, 64, 64]), Err(WorldError::BadArgs));
         assert_eq!(
             voxels.read(corner, [64, 64, 64]),
             Err(WorldError::NotLoaded),
@@ -104,11 +101,11 @@ mod tests {
         );
         assert_eq!(
             voxels.read(VoxelPos::new(1 << 30, 0, 0), [1, 1, 1]),
-            Err(WorldError::BadArgument)
+            Err(WorldError::BadArgs)
         );
         assert_eq!(
             voxels.read(VoxelPos::new(0, 0, 0), [1 << 30, 1 << 30, 16]),
-            Err(WorldError::BadArgument),
+            Err(WorldError::BadArgs),
             "a count that overflows is refused, not wrapped"
         );
     }

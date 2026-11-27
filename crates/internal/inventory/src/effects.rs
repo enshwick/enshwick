@@ -452,7 +452,7 @@ impl Effects {
     /// [`WorldError::Unavailable`] on a build without the event,
     /// [`WorldError::WrongThread`] off the game thread and
     /// [`WorldError::Refused`] when the step holds no room for more events
-    /// and [`WorldError::BadArgument`] for a position not finite or at 2^31
+    /// and [`WorldError::BadArgs`] for a position not finite or at 2^31
     /// metres or more on an axis.
     ///
     /// # Examples
@@ -571,7 +571,7 @@ impl Effects {
     ///
     /// # Errors
     ///
-    /// [`WorldError::BadArgument`] for a size that is not the type's;
+    /// [`WorldError::BadArgs`] for a size that is not the type's;
     /// [`WorldError::Refused`] for a type the loader does not allow, a full
     /// step, or a notify event past the mod's 32 in one step; [`WorldError::WrongThread`] off the game
     /// thread.
@@ -591,7 +591,7 @@ impl Effects {
     /// }
     /// ```
     pub fn emit_raw(self, ty: EventType, bytes: &[u8]) -> Result<(), WorldError> {
-        let size = u32::try_from(bytes.len()).map_err(|_| WorldError::BadArgument)?;
+        let size = u32::try_from(bytes.len()).map_err(|_| WorldError::BadArgs)?;
         let status =
             (self.0.host.api().emit)(self.0.host.handle(), ty.hash(), bytes.as_ptr(), size);
         world_status(status)
@@ -606,8 +606,8 @@ impl Effects {
     /// [`WorldError::Gone`] for an entity not in the world or without a
     /// place, [`WorldError::Refused`] for one the game's teleport does not
     /// move, such as a prop (it moves actors and characters),
-    /// [`WorldError::BadArgument`] for a position not finite or at 2^31
-    /// metres or more on an axis,
+    /// [`WorldError::BadArgs`] for entity 0 or a position not finite or at
+    /// 2^31 metres or more on an axis,
     /// [`WorldError::OutsideWorld`] for a target past the box the world's
     /// scene keeps players in (on the game's world, 0 to 10,240 m across),
     /// where the game moves a player back and removes anything else and a
@@ -732,7 +732,7 @@ impl Effects {
     ///
     /// # Errors
     ///
-    /// [`WorldError::BadArgument`] for a count of 0 or over 65535, an item the
+    /// [`WorldError::BadArgs`] for a count of 0 or over 65535, an item the
     /// game does not know or a position not finite or at 2^31 metres or
     /// more on an axis; [`WorldError::WrongThread`] off the game
     /// thread; [`WorldError::Unavailable`] on a client, a build without the
@@ -764,13 +764,14 @@ impl Effects {
             rarity: u32::from(how.rarity.to_raw()),
         });
         let mut entity = Entity::NONE;
+        // The loader answers MISSING only for an item the game does not know.
         world_check(
             (self.0.host.api().drop_items)(
                 self.0.host.handle(),
                 &raw const request,
                 &raw mut entity,
             ),
-            WorldError::Refused,
+            WorldError::BadArgs,
         )?;
         Ok(entity)
     }
@@ -784,7 +785,7 @@ impl Effects {
     ///
     /// # Errors
     ///
-    /// [`WorldError::BadArgument`] for a zero template or a position not
+    /// [`WorldError::BadArgs`] for a zero template or a position not
     /// finite or at 2^31 metres or more on an axis; [`WorldError::Refused`]
     /// for a request the world turns away;
     /// [`WorldError::WrongThread`] off the game thread.
@@ -859,7 +860,7 @@ fn put_at<T: Scalar>(bytes: &mut [u8], at: u64, value: T) -> Result<(), WorldErr
 }
 
 fn put_position(bytes: &mut [u8], at: u64, position: [f64; 3]) -> Result<(), WorldError> {
-    let fixed = crate::ecs::checked_fixed(position).ok_or(WorldError::BadArgument)?;
+    let fixed = crate::ecs::checked_fixed(position).ok_or(WorldError::BadArgs)?;
     for (i, axis) in fixed.into_iter().enumerate() {
         put_at(bytes, at + 8 * i as u64, axis)?;
     }

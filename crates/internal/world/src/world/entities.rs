@@ -115,6 +115,7 @@ impl World {
     ///
     /// # Errors
     ///
+    /// [`WorldError::BadArgs`] for entity 0,
     /// [`WorldError::Refused`] for a player's character,
     /// [`WorldError::Gone`] for an entity not in the world,
     /// [`WorldError::WrongThread`] off the game thread and

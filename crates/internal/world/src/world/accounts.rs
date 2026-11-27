@@ -44,7 +44,7 @@ impl World {
     ///
     /// [`WorldError::Refused`] for a kick or a ban of an administrator
     /// online, whom the game never removes, or of a hosted game's host, a
-    /// kick or a ban of an account not online; [`WorldError::BadArgument`]
+    /// kick or a ban of an account not online; [`WorldError::BadArgs`]
     /// for account 0; [`WorldError::WrongThread`] off the server's game
     /// thread or inside a step; [`WorldError::Unavailable`] while no server
     /// runs or on a game build that lacks the action.
@@ -78,7 +78,7 @@ impl World {
     ///
     /// # Errors
     ///
-    /// [`WorldError::BadArgument`] for account 0; [`WorldError::Refused`]
+    /// [`WorldError::BadArgs`] for account 0; [`WorldError::Refused`]
     /// for a mute of an administrator online or of a hosted game's host, and
     /// when the world's file is not written; [`WorldError::Unavailable`] outside a server, the dedicated one
     /// or the one a client hosts, and while no world runs.
@@ -107,7 +107,7 @@ impl World {
     ///
     /// # Errors
     ///
-    /// [`WorldError::BadArgument`] for account 0; [`WorldError::Unavailable`]
+    /// [`WorldError::BadArgs`] for account 0; [`WorldError::Unavailable`]
     /// outside a server, the dedicated one or the one a client hosts.
     ///
     /// # Examples

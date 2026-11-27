@@ -55,7 +55,7 @@ mod tests {
             assert_eq!(world.prop_placement_info(ITEM).unwrap(), read);
             assert_eq!(
                 world.prop_placement_info(ItemId::new(31)),
-                Err(WorldError::BadArgument)
+                Err(WorldError::BadArgs)
             );
             assert_eq!(
                 world.prop_placement_info(ItemId::new(32)),
@@ -63,7 +63,7 @@ mod tests {
             );
             assert_eq!(
                 world.prop_placement_info(ItemId::new(99)),
-                Err(WorldError::BadArgument)
+                Err(WorldError::BadArgs)
             );
             assert_eq!(host.props(), before);
             assert!(host.transactions().is_empty());

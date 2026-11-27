@@ -74,7 +74,7 @@ mod tests {
         );
         assert_eq!(
             terrain.dig([-1.0, 0.0, 0.0], 2.0, Shape::Round, &[]),
-            Err(WorldError::BadArgument)
+            Err(WorldError::BadArgs)
         );
 
         let edits = loader.terrain_edits();

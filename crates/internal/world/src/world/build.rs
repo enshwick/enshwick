@@ -160,7 +160,7 @@ impl World {
         a: [f64; 3],
         b: [f64; 3],
     ) -> Result<(), BuildRefusal> {
-        let (min, max) = edit_box(a, b).ok_or(BuildRefusal::Unchecked(WorldError::BadArgument))?;
+        let (min, max) = edit_box(a, b).ok_or(BuildRefusal::Unchecked(WorldError::BadArgs))?;
         let character = player.into().entity_in(self.0.host)?;
         let mut check = enshwick_abi::headed!(BuildRights {
             character,
@@ -181,7 +181,7 @@ impl World {
     ///
     /// # Errors
     ///
-    /// [`WorldError::BadArgument`] for a corner not finite or at 2^31 metres
+    /// [`WorldError::BadArgs`] for a corner not finite or at 2^31 metres
     /// or more on an axis;
     /// [`WorldError::WrongThread`] off the server's game thread or inside a
     /// step; [`WorldError::Unavailable`] while no world is loaded or on a game
@@ -200,7 +200,7 @@ impl World {
     /// ```
     #[script]
     pub fn persists(self, a: [f64; 3], b: [f64; 3]) -> Result<bool, WorldError> {
-        let (min, max) = edit_box(a, b).ok_or(WorldError::BadArgument)?;
+        let (min, max) = edit_box(a, b).ok_or(WorldError::BadArgs)?;
         let mut kept = 0u8;
         let status = (self.0.host.api().world_persists)(
             self.0.host.handle(),
@@ -228,7 +228,7 @@ impl World {
     ///
     /// # Errors
     ///
-    /// [`WorldError::BadArgument`] for account 0;
+    /// [`WorldError::BadArgs`] for account 0;
     /// [`WorldError::Refused`] for a new change to an account not in game;
     /// [`WorldError::WrongThread`] off
     /// the server's game thread; [`WorldError::Unavailable`] outside a

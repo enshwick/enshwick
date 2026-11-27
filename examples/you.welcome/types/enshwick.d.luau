@@ -4110,7 +4110,7 @@ export type WorkshopSurvivor = {
 }
 
 --- Why the server's world refused a request.
-export type WorldError = "WrongThread" | "Gone" | "Unavailable" | "Busy" | "Failed" | "Refused" | "BadArgument" | "Lacks" | "NotLoaded" | "OutsideWorld" | "StaticHalf" | { HoldsState: {HeldState} } | "NotAProp" | "NotASpawnPoint"
+export type WorldError = "WrongThread" | "Gone" | "Unavailable" | "Busy" | "Failed" | "Refused" | "BadArgs" | "Lacks" | "NotLoaded" | "OutsideWorld" | "StaticHalf" | { HoldsState: {HeldState} } | "NotAProp" | "NotASpawnPoint"
 
 --- The mod's data for the world running now, saved beside it.
 export type WorldStore = {

@@ -53,7 +53,7 @@ mod tests {
         for far in [[0.0, 1e300, 0.0], [0.0, 0.0, -2_147_483_648.0]] {
             assert_eq!(
                 effects.notify(&at(far)),
-                Err(WorldError::BadArgument),
+                Err(WorldError::BadArgs),
                 "{far:?}"
             );
         }
@@ -110,12 +110,12 @@ mod tests {
 
         assert_eq!(
             effects.notify(&Notify::new(BELL, NotifyAt::Entity(Entity::NONE))),
-            Err(WorldError::BadArgument),
+            Err(WorldError::BadArgs),
             "entity 0 names none"
         );
         assert_eq!(
             effects.notify(&Notify::new(BELL, NotifyAt::Position([f64::NAN, 0.0, 0.0]))),
-            Err(WorldError::BadArgument),
+            Err(WorldError::BadArgs),
             "a position that is not finite"
         );
         let off_thread = std::thread::scope(|scope| {

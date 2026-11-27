@@ -133,25 +133,25 @@ mod tests {
         let unknown = KnowledgeId::new(0x99);
         assert_eq!(
             knowledge.revoke(Entity::from_engine(2), unknown, Revoke::Clear),
-            Err(WorldError::BadArgument)
+            Err(WorldError::BadArgs)
         );
         assert_eq!(
             knowledge.revoke(Entity::from_engine(2), RECIPE, Revoke::Clear),
-            Err(WorldError::BadArgument),
+            Err(WorldError::BadArgs),
             "a bool revoke of flags"
         );
         assert_eq!(
             knowledge.revoke_account(ACCOUNT, RECIPE, Revoke::Clear),
-            Err(WorldError::BadArgument),
+            Err(WorldError::BadArgs),
             "a bool revoke of flags"
         );
         assert_eq!(
             knowledge.revoke_account(ACCOUNT, unknown, Revoke::Clear),
-            Err(WorldError::BadArgument)
+            Err(WorldError::BadArgs)
         );
         assert_eq!(
             knowledge.grant_account(ACCOUNT, PLACE, Grant::Set),
-            Err(WorldError::BadArgument),
+            Err(WorldError::BadArgs),
             "an account grant of a world id"
         );
         assert!(loader.revokes().is_empty());
@@ -181,7 +181,7 @@ mod tests {
         let refused = [
             (
                 knowledge.revoke(Entity::from_engine(2), RECIPE, Revoke::Unflag(32)),
-                WorldError::BadArgument,
+                WorldError::BadArgs,
             ),
             (
                 knowledge.revoke_world(RECIPE, Revoke::Unflag(1)),
@@ -189,11 +189,11 @@ mod tests {
             ),
             (
                 knowledge.grant(Entity::from_engine(2), RECIPE, Grant::Flag(32)),
-                WorldError::BadArgument,
+                WorldError::BadArgs,
             ),
             (
                 knowledge.grant(Entity::from_engine(2), listed, Grant::Flag(1)),
-                WorldError::BadArgument,
+                WorldError::BadArgs,
             ),
             (
                 knowledge.grant_world(listed, Grant::Flag(2)),

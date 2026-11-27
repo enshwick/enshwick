@@ -428,17 +428,31 @@ pub(crate) unsafe fn read(
         })
     });
     STATE.parts.write(read.pack(at));
-    let Some(slots) = layout.slots.as_ref().filter(|_| !SLOTS_FUSE.is_off()) else {
-        return;
-    };
-    // The action bar's read found the same `SlotSelection`.
-    let selection = selection.filter(|_| {
+    if let Some(slots) = layout.slots.as_ref().filter(|_| !SLOTS_FUSE.is_off()) {
+        read_selected(&component, layout, slots, player, selection, at);
+    }
+}
+
+/// Reads `player`'s equipment slots each step and, while a mod asks, its
+/// slots at `at`; `selection` is the `SlotSelection` the action bar's read
+/// found, which flags the action bar's slots whatever the equipment's layout.
+fn read_selected(
+    component: &dyn Fn(u32, u32) -> Option<*const u8>,
+    layout: &Layout,
+    slots: &SlotLayout,
+    player: u32,
+    selection: Option<*const u8>,
+    at: u64,
+) {
+    // The action bar's read found the same `SlotSelection` the equipment's
+    // layout names.
+    let same = selection.filter(|_| {
         layout
             .actionbar
             .zip(slots.equipment.as_ref())
             .is_some_and(|((bar, _), equipment)| bar == equipment.selection)
     });
-    let named = equipment_step(&component, slots, player, selection);
+    let named = equipment_step(component, slots, player, same);
     if slots_wanted(at) {
         let bar = selection
             .zip(slots.actionbar_entities)
@@ -447,7 +461,7 @@ pub(crate) unsafe fn read(
                 // two action bar entity ids sit at the reflected offset.
                 unsafe { enshwick_core::raw::read_at::<[u32; 2]>(data, entities) }
             });
-        read_slots(&component, slots, player, bar, named.as_ref(), at);
+        read_slots(component, slots, player, bar, named.as_ref(), at);
     }
 }
 
@@ -906,6 +920,50 @@ mod tests {
         assert!(!watch_fresh(1500), "a new watch waits for its baseline");
         inventories[1] = stacks_of(6, 1);
         assert_eq!(step(&inventories, 1500), base + 2, "its baseline");
+    }
+
+    #[test]
+    fn the_action_bar_flags_its_slots_on_a_build_without_the_equipment_layout() {
+        let slots = SlotLayout {
+            actionbar_entities: Some(0),
+            ..TEST_SLOTS
+        };
+        let layout = Layout {
+            position: None,
+            look: None,
+            vitals: None,
+            actionbar: Some((3, 8)),
+            slots: None,
+        };
+        let mut selection = [0u8; 16];
+        selection[..4].copy_from_slice(&70u32.to_ne_bytes());
+        let mut setup = [0u8; 6 * LINKS];
+        setup[..4].copy_from_slice(&70u32.to_ne_bytes());
+        setup[5 * LINKS] = 1;
+        let stacks = stacks_of(5, 0);
+        let component = |entity: u32, hash: u32| -> Option<*const u8> {
+            match (entity, hash) {
+                (7, 1) => Some(setup.as_ptr()),
+                (70, 2) => Some(stacks.as_ptr()),
+                _ => None,
+            }
+        };
+        STATE.slots_asked.store(1000, Ordering::Relaxed);
+        read_selected(
+            &component,
+            &layout,
+            &slots,
+            7,
+            Some(selection.as_ptr()),
+            1000,
+        );
+        let words = STATE.slots.load().unwrap();
+        let first = unpack_slot(words[2..5].try_into().unwrap());
+        assert_eq!(
+            first.flags & ClientSlot::ACTIONBAR,
+            ClientSlot::ACTIONBAR,
+            "the action bar's inventory 70 is flagged"
+        );
     }
 
     /// A time past the last read's freshness.

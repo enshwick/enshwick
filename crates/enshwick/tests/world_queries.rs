@@ -95,6 +95,11 @@ mod tests {
 
         assert_eq!(world.destroy(Entity::from_engine(11)), Ok(()));
         assert_eq!(
+            world.destroy(Entity::from_engine(0)),
+            Err(WorldError::BadArgs),
+            "entity 0, as the loader refuses it"
+        );
+        assert_eq!(
             world.destroy(Entity::from_engine(2)),
             Err(WorldError::Refused)
         );

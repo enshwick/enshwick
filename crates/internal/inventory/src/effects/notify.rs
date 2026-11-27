@@ -112,7 +112,7 @@ impl Effects {
     ///
     /// # Errors
     ///
-    /// [`WorldError::BadArgument`] for entity 0 and a position not finite or
+    /// [`WorldError::BadArgs`] for entity 0 and a position not finite or
     /// at 2^31 metres or more on an axis; [`WorldError::Refused`] for a
     /// notifier past the step's bound or when the step holds no room for
     /// more events;
@@ -137,7 +137,7 @@ impl Effects {
         let event = self.0.notify.ok_or(WorldError::Unavailable)?;
         let layout = event.layout;
         let (source, position) = match notify.at {
-            NotifyAt::Entity(entity) if entity.is_none() => return Err(WorldError::BadArgument),
+            NotifyAt::Entity(entity) if entity.is_none() => return Err(WorldError::BadArgs),
             NotifyAt::Entity(entity) => (entity, None),
             NotifyAt::Position(at) => (Entity::NONE, Some(at)),
         };

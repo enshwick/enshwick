@@ -83,13 +83,14 @@ The grant must fit the id's kind:
 A grant only adds; a revoke takes back.
 
 A grant fails with a [`WorldError`](world.md#writing-components). It is
-`WrongThread` off the game thread. It is `Refused` for:
+`WrongThread` off the game thread. It is `BadArgs` for:
 
 - an id the game does not know
 - a grant that does not fit the kind
 - a bit the game does not expect
-- a player not in the game
-- a step that already holds the game's limit of grants
+
+It is `Refused` for a player not in the game. It is `Busy` for a step that
+already holds the game's limit of grants, which a later step may take.
 
 Granting a quest's or a recipe's own id skips what leads to it. So the
 journal may show a quest done without its steps. Granting the knowledge its

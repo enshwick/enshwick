@@ -1,4 +1,4 @@
 ### Changed
 
-- The Luau definitions list `BadArgument` among the `WorldError` kinds
+- The Luau definitions list `BadArgs` among the `WorldError` kinds
   (#1306).

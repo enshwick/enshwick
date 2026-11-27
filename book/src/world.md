@@ -260,7 +260,7 @@ fail with a `WorldError`:
 | `Gone` | the entity is not in the world |
 | `Lacks` | the entity lacks the component |
 | `Refused` | the loader will not write the type |
-| `BadArgument` | a value is malformed, past its bounds or unknown to the game build |
+| `BadArgs` | a value is malformed, past its bounds or unknown to the game build |
 | `WrongThread` | the write runs off the game thread or inside a step |
 | `Missing` | no server runs, as on a client in another player's game, or the build has no writes |
 
@@ -305,8 +305,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 `destroy(entity)` asks the server to remove an entity after the systems of
 the next step. It removes it the way the game removes things itself: no loot
-drops and no death is raised. It refuses a player's character with
-`WorldError::Refused`. It refuses an entity not in the world with
+drops and no death is raised. It refuses entity 0 with `WorldError::BadArgs`
+and a player's character with `WorldError::Refused`. It refuses an entity
+not in the world with
 `WorldError::Gone`. It fails with `WorldError::Unavailable` where no server runs
 or on a build without the command.
 

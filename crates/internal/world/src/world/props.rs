@@ -215,7 +215,7 @@ impl World {
     ///
     /// # Errors
     ///
-    /// `Refused` for an unknown item or one that places nothing; `NotAProp` for
+    /// `BadArgs` for an unknown item or one that places nothing; `NotAProp` for
     /// creatures and flame altars; `Unavailable` without the running server,
     /// registry or required reads. Missing box reads return `local_box=None`,
     /// not a fallback footprint or a placement permission.
@@ -256,7 +256,7 @@ impl World {
     ///
     /// # Errors
     ///
-    /// [`WorldError::BadArgument`] for a corner that is not finite;
+    /// [`WorldError::BadArgs`] for a corner that is not finite;
     /// [`WorldError::WrongThread`] off the server's game thread or inside a
     /// step; [`WorldError::Unavailable`] before a world runs or on a game build
     /// without the reads, the marks of creatures and altars included.
@@ -275,7 +275,7 @@ impl World {
     /// ```
     #[script]
     pub fn props_in(self, a: [f64; 3], b: [f64; 3]) -> Result<Vec<Prop>, WorldError> {
-        let (low, high) = span(a, b).ok_or(WorldError::BadArgument)?;
+        let (low, high) = span(a, b).ok_or(WorldError::BadArgs)?;
         let orientation = self.0.orientation.ok_or(WorldError::Unavailable)?;
         let no_props = self.0.no_props.ok_or(WorldError::Unavailable)?;
         let mut templates = Templates::default();

@@ -164,7 +164,7 @@ mod tests {
         ] {
             assert_eq!(
                 world.can_build(player(BUILDER), far, [1.0; 3]),
-                Err(BuildRefusal::Unchecked(WorldError::BadArgument)),
+                Err(BuildRefusal::Unchecked(WorldError::BadArgs)),
                 "{far:?}"
             );
         }

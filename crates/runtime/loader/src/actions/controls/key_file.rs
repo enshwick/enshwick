@@ -1,6 +1,7 @@
 //! The player's key file, `mod-controls.toml`: read at link and again when
 //! the loader gives up on a rebind kept for it, written by each rebind.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -9,6 +10,16 @@ use enshwick_base::Relock;
 use super::{Bound, DECLARED, Declared, STATE, bindings, game_dir, in_force, with_carried};
 use crate::engine::loader::Loader;
 
+/// The key file's text, a rebind still waiting for a held file included;
+/// a file that does not exist reads as empty.
+fn read(path: &Path) -> std::io::Result<String> {
+    match crate::base::frame_writes::waiting(path).map_or_else(|| std::fs::read_to_string(path), Ok)
+    {
+        Err(why) if why.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        read => read,
+    }
+}
+
 /// Reads the player's key file at `path` into the keys in force and the
 /// entries kept for controls no running mod declares; the server's carried
 /// controls stay, with the file's keys. Its overrides, which a file that
@@ -16,22 +27,28 @@ use crate::engine::loader::Loader;
 pub(super) fn take_file(
     declared: &[Declared],
     path: &Path,
-) -> std::collections::BTreeMap<String, bindings::Override> {
-    let read = match std::fs::read_to_string(path) {
-        Ok(text) => Some(text),
-        Err(why) if why.kind() == std::io::ErrorKind::NotFound => Some(String::new()),
-        Err(why) => {
-            crate::log!(WARN, "{}: {why}; the mods' keys apply", bindings::FILE);
-            None
-        }
-    };
+) -> BTreeMap<String, bindings::Override> {
+    let mut kept = STATE.kept.relock();
+    let read = read(path)
+        .inspect_err(|why| crate::log!(WARN, "{}: {why}; the mods' keys apply", bindings::FILE))
+        .ok();
+    take(declared, read, &mut kept)
+}
+
+/// Takes the key file's text `read`, `None` for a file that does not read,
+/// into the keys in force and `kept`, under the lock every rebind holds.
+fn take(
+    declared: &[Declared],
+    read: Option<String>,
+    kept: &mut Option<toml::Table>,
+) -> BTreeMap<String, bindings::Override> {
     let text = read.clone().unwrap_or_default();
     let (overrides, problems) = bindings::parse(&text);
     let table = read.and_then(|text| text.parse::<toml::Table>().ok());
     for problem in &problems {
         crate::log!(WARN, "{}: {problem}; the mod's key applies", bindings::FILE);
     }
-    *STATE.kept.relock() = table.map(|table| {
+    *kept = table.map(|table| {
         table
             .into_iter()
             .filter(|(id, _)| !declared.iter().any(|d| d.id == *id))
@@ -53,9 +70,12 @@ pub(super) fn take_file(
             carried_at: bound.as_ref().map_or(0, |b| b.carried_at),
         };
         Some(Arc::new(match bound.as_ref() {
-            Some(bound) if !bound.carried.is_empty() => {
-                with_carried(&own, declared, bound.carried.clone(), &overrides)
-            }
+            // The same carried controls keep their trackers, so a held key
+            // does not press again.
+            Some(bound) if !bound.carried.is_empty() => Bound {
+                carried_at: bound.carried_at,
+                ..with_carried(&own, declared, bound.carried.clone(), &overrides)
+            },
             _ => own,
         }))
     });
@@ -73,12 +93,29 @@ pub(crate) fn given_up(path: &Path) {
     if file != path {
         return;
     }
-    crate::log!(
-        INFO,
-        "controls: back to {}, whose change was given up",
-        path.display()
-    );
-    let _overrides = take_file(declared, path);
+    reread(declared, path);
+}
+
+/// Reads the key file at `path` again after a give-up; a file that does not
+/// read now leaves the keys in force and the kept entries as they are, so a
+/// failed read loses nothing the player bound.
+pub(super) fn reread(declared: &[Declared], path: &Path) {
+    let mut kept = STATE.kept.relock();
+    match read(path) {
+        Ok(text) => {
+            crate::log!(
+                INFO,
+                "controls: back to {}, whose change was given up",
+                path.display()
+            );
+            let _overrides = take(declared, Some(text), &mut kept);
+        }
+        Err(why) => crate::log!(
+            WARN,
+            "controls: {} does not read again: {why}; the keys in force stay",
+            path.display()
+        ),
+    }
 }
 
 /// Sets control `index`'s key in `slot` to `bits` (0 unbinds) and writes
@@ -105,6 +142,9 @@ pub(crate) fn set_key(
     let mut entries: Vec<(String, bindings::Override)> = Vec::new();
     let mut carried_set = None;
     let mut bound_once = false;
+    // Held to the write: a re-read after a give-up on the writer thread
+    // then sees this key in the file's waiting text, never in memory only.
+    let mut kept = STATE.kept.relock();
     // A server's message may change the carried list meanwhile, on the chat
     // thread: this key goes on top of whatever list stands.
     STATE.keys.rcu(|bound| {
@@ -144,20 +184,16 @@ pub(crate) fn set_key(
     if !bound_once {
         return Ok(());
     }
-    let kept = {
-        let mut kept = STATE.kept.relock();
-        let Some(kept) = kept.as_mut() else {
-            return Err(SetKeyError::Unread);
-        };
-        if let Some((id, set)) = &carried_set {
-            bindings::set_kept(kept, id, *set);
-        }
-        kept.clone()
+    let Some(kept) = kept.as_mut() else {
+        return Err(SetKeyError::Unread);
     };
+    if let Some((id, set)) = &carried_set {
+        bindings::set_kept(kept, id, *set);
+    }
     let path = game_dir(loader).join(bindings::FILE);
     crate::base::frame_writes::write(
         &path,
-        &bindings::render(&entries, &kept),
+        &bindings::render(&entries, kept),
         crate::base::frame_writes::whole,
     )?;
     Ok(())

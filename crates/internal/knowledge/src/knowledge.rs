@@ -322,7 +322,7 @@ impl Knowledge {
     ///
     /// # Errors
     ///
-    /// [`WorldError::BadArgument`] for an id the game does not know, a grant
+    /// [`WorldError::BadArgs`] for an id the game does not know, a grant
     /// that does not fit the id's kind or a bit the game does not expect;
     /// [`WorldError::Refused`] for a player not in the game;
     /// [`WorldError::Busy`] for a step with too many grants, which a later
@@ -378,7 +378,7 @@ impl Knowledge {
     ///
     /// # Errors
     ///
-    /// [`WorldError::BadArgument`] for an id the game does not know, a
+    /// [`WorldError::BadArgs`] for an id the game does not know, a
     /// revoke that does not fit the id's kind or a bit past 31;
     /// [`WorldError::Refused`] for a player not in the game or whose save
     /// has not loaded yet;
@@ -453,7 +453,7 @@ impl Knowledge {
     ///
     /// # Errors
     ///
-    /// [`WorldError::BadArgument`] for an id the game does not know, a bool
+    /// [`WorldError::BadArgs`] for an id the game does not know, a bool
     /// above 1 or a gained bit the game does not expect when shown;
     /// [`WorldError::Refused`] for a player not in the game or whose save
     /// has not loaded yet;
@@ -526,7 +526,7 @@ impl Knowledge {
     ///
     /// # Errors
     ///
-    /// [`WorldError::BadArgument`] for an id the game does not know, an id
+    /// [`WorldError::BadArgs`] for an id the game does not know, an id
     /// of the world's or a grant that does not fit the id's kind, and as for
     /// [`Knowledge::grant`] when the character is in the game;
     /// [`WorldError::Gone`] for a character no connected player has;

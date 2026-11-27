@@ -294,12 +294,12 @@ mod tests {
         );
         assert_eq!(
             inventories.show_pickup(Entity::from_engine(CHEST), IRON_ORE, 3),
-            Err(WorldError::BadArgument),
+            Err(WorldError::BadArgs),
             "a chest is no player"
         );
         assert_eq!(
             inventories.show_pickup(Entity::from_engine(PLAYER), IRON_ORE, 0),
-            Err(WorldError::BadArgument)
+            Err(WorldError::BadArgs)
         );
         assert_eq!(
             loader.pickups_shown(),

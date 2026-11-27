@@ -356,7 +356,7 @@ impl Terrain {
     ///
     /// # Errors
     ///
-    /// As for [`Terrain::dig`]; also [`WorldError::BadArgument`] for a material
+    /// As for [`Terrain::dig`]; also [`WorldError::BadArgs`] for a material
     /// outside 1 to 127 or a height outside 0 to [`MAX_RADIUS`].
     ///
     /// # Examples
@@ -388,7 +388,7 @@ impl Terrain {
     ///
     /// # Errors
     ///
-    /// [`WorldError::BadArgument`] for a radius outside 0 to [`MAX_RADIUS`] or a
+    /// [`WorldError::BadArgs`] for a radius outside 0 to [`MAX_RADIUS`] or a
     /// position below 0 on any axis, [`WorldError::OutsideWorld`] for an
     /// edit reaching past the world's edge or above 1,024 metres,
     /// [`WorldError::NotLoaded`] while part of what it can reach is not

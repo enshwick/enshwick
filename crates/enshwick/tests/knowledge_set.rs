@@ -130,11 +130,11 @@ mod tests {
                     1,
                     KnowledgeNotice::Quiet,
                 ),
-                WorldError::BadArgument,
+                WorldError::BadArgs,
             ),
             (
                 knowledge.set_world(PLACE, 2, KnowledgeNotice::Quiet),
-                WorldError::BadArgument,
+                WorldError::BadArgs,
             ),
             (
                 knowledge.set_world(RECIPE, 1, KnowledgeNotice::Quiet),
@@ -157,7 +157,7 @@ mod tests {
                 0b011,
                 KnowledgeNotice::Shown
             ),
-            Err(WorldError::BadArgument)
+            Err(WorldError::BadArgs)
         );
         knowledge
             .set(

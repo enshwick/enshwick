@@ -458,7 +458,7 @@ game builds it, so they act through the game's own camera and movement.
 | `Look` | each turn at most a quarter turn, in radians | with Observed | the frame's look was written |
 | `Move` | x right and y forward, length above 0 and at most 1; 1 to 250 ms | the first step holds the direction | the hold ran out |
 
-A command outside its bounds returns `WorldError::BadArgument`. A look is in
+A command outside its bounds returns `WorldError::BadArgs`. A look is in
 radians before the player's camera sensitivity. The camera turns by the
 look times the sensitivity, so a turn of an exact angle divides by it. A
 positive yaw turns right.
@@ -654,7 +654,7 @@ step, and the server takes it as the player's own.
 | `ClearWaypoint` | none | the same |
 | `Ping` | a finite position below 2,147,483,648 metres on each axis, inside the map | the same |
 
-A position that is not finite returns `WorldError::BadArgument`. So does a
+A position that is not finite returns `WorldError::BadArgs`. So does a
 position whose metres on an axis reach 2,147,483,648 (2^31) either way, the
 range of the game's fixed-point world positions. So does a position outside
 the map's frame in a hosted world. The loader reads that frame shortly after
@@ -702,7 +702,7 @@ player's own line, on any server the client plays on, a joined one included.
 The loader posts it through the game's own chat, as the chat window's Enter
 does. The server's chat filter and mute see it as any line the player types.
 A line of 1 to 1,024 bytes (`CommandAction::MAX_CHAT`, the game's own limit)
-is taken; an empty or longer one returns `WorldError::BadArgument`.
+is taken; an empty or longer one returns `WorldError::BadArgs`.
 
 The command runs in a world, on any screen. It is observed once the game's
 interface queue takes the line, in the next frame; a full queue retries in
@@ -869,7 +869,7 @@ cancelled with `TimedOut`. While the Mods screen or both menus' entries
 are turned off, the call returns `WorldError::Unavailable`. `CommandAction::OpenMod(id)` opens a mod's page,
 and `CommandAction::OpenModSettings(id)` presses its settings gear. Both
 name the mod by its id and open the screen first. An id that no loaded mod
-has returns `WorldError::Refused`.
+has returns `WorldError::BadArgs`.
 
 The snapshot's `loader_screen()` names the page that shows, at the main
 menu too, before any world. `loader_screen_mod()` names the page's mod
@@ -978,7 +978,7 @@ dialog closes with that answer, and the dialog's mod hears it as from the
 player. While the named dialog does not show, the command returns
 `WorldError::Unavailable`, and it ends `Unavailable` when that dialog
 closes before the answer lands. A response the dialog has no
-button for returns `WorldError::Refused`. A dialog the loader shows as a
+button for returns `WorldError::BadArgs`. A dialog the loader shows as a
 system message box, where dialogs do not show in game, takes no command.
 
 ```rust

@@ -79,8 +79,8 @@ pub(super) fn equipment_words(
 
 /// The equipment copy after a step in which `SlotSelection` named `named`,
 /// when the slot named for an equipment slot moved since `before`: it keeps
-/// the slot named before as the equipment slot's home and `item_at` the slot
-/// named now, the item that moved there. `None` when none moved, so the
+/// the slot named before as the equipment slot's home, unless one is kept
+/// already, and `item_at` the slot named now, the item that moved there. `None` when none moved, so the
 /// step writes nothing. The time stays the last slot read's, 0 before one,
 /// so [`equip_move`] still takes it only beside that read.
 ///
@@ -104,7 +104,11 @@ pub(super) fn moved_words(
     for (entry, &now) in named.iter().enumerate() {
         let was = core::mem::replace(&mut words[1 + 3 * entry], now);
         if was != now && was != 0 && now != 0 {
-            words[2 + 3 * entry] = was;
+            // A home kept stays through moves inside the bag; a slot read
+            // names the equipment slot again.
+            if words[2 + 3 * entry] == 0 {
+                words[2 + 3 * entry] = was;
+            }
             words[3 + 3 * entry] = item_at(now);
         }
     }
@@ -296,6 +300,32 @@ mod tests {
             ),
             None,
             "the first step knows no slot named before"
+        );
+
+        let bag2 = 6859;
+        named[18] = bag2;
+        let item_at2 = |slot| {
+            if slot == bag2 {
+                u64::from(glider_item)
+            } else {
+                0
+            }
+        };
+        let twice = moved_words(Some(&stepped), &named, item_at2).unwrap();
+        let slots2 = packed(&[
+            (glider, C::EQUIPMENT, 0),
+            (ring, C::EQUIPMENT, 0),
+            (bag2, C::GENERIC, glider_item),
+        ]);
+        assert_eq!(
+            home(
+                &equipment_words(Some(&twice), &named, &slots2, 3),
+                &slots2,
+                18,
+                bag2
+            ),
+            Some(glider),
+            "a second move inside the bag keeps the glider's slot"
         );
     }
 }

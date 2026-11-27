@@ -89,37 +89,41 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
         return;
     }
     let path = path(loader);
-    keep(path.as_deref().map_or_else(Vec::new, file_keys));
+    keep(path.as_deref().and_then(file_keys).unwrap_or_default());
     *STATE.file.relock() = path;
 }
 
 /// Reads the mutes' file again once the loader gave up on a change kept for
 /// it, so the mutes in force are the file's and the next change starts from
-/// its text; a file not the running world's mutes' is left alone. On the
-/// held files' writer thread.
+/// its text; a file not the running world's mutes' is left alone, and one
+/// that does not read now leaves the mutes in force. On the held files'
+/// writer thread.
 pub(crate) fn given_up(path: &Path) {
     let _one = STATE.writing.relock();
     if STATE.file.relock().as_deref() != Some(path) {
         return;
     }
+    let Some(keys) = file_keys(path) else {
+        crate::log!(WARN, "chat mutes: the mutes in force stay");
+        return;
+    };
     crate::log!(
         INFO,
         "chat mutes: back to {}, whose change was given up",
         path.display()
     );
-    keep(file_keys(path));
+    keep(keys);
 }
 
-/// The accounts the file at `path` mutes; none for a file that does not
-/// read, which says so.
-fn file_keys(path: &Path) -> Vec<u64> {
+/// The accounts the file at `path` mutes, none for a file that does not
+/// exist; `None` for one that does not read, which says so.
+fn file_keys(path: &Path) -> Option<Vec<u64>> {
     let text = match read(path) {
         Ok(text) => text,
+        Err(e) if e.kind() == ErrorKind::NotFound => return Some(Vec::new()),
         Err(e) => {
-            if e.kind() != ErrorKind::NotFound {
-                crate::log!(WARN, "chat mutes: {} does not read: {e}", path.display());
-            }
-            return Vec::new();
+            crate::log!(WARN, "chat mutes: {} does not read: {e}", path.display());
+            return None;
         }
     };
     let (keys, bad) = parse(&text);
@@ -133,7 +137,7 @@ fn file_keys(path: &Path) -> Vec<u64> {
     if !keys.is_empty() {
         crate::log!(INFO, "chat mutes: {} accounts muted", keys.len());
     }
-    keys
+    Some(keys)
 }
 
 /// Whether `key` is muted.
@@ -240,6 +244,15 @@ mod tests {
         given_up(&path);
         assert!(muted(7), "the file's mute holds");
         assert!(!muted(9), "the mute whose write was given up is gone");
+
+        // A folder does not read as a file, as one a program holds unshared.
+        *STATE.file.relock() = Some(dir.clone());
+        keep(vec![7, 9]);
+        given_up(&dir);
+        assert!(
+            muted(7) && muted(9),
+            "a file that does not read keeps the mutes in force"
+        );
         let _gone = std::fs::remove_dir_all(&dir);
     }
 }

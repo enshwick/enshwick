@@ -1,5 +1,6 @@
 ### Changed
 
 - Effects, drops, notifies and pickup messages return
-  `WorldError::BadArgument` for a malformed argument instead of
-  `WorldError::Refused` (#1306).
+  `WorldError::BadArgs` for a malformed argument instead of
+  `WorldError::Refused`, and a drop of an item the game does not know
+  does too (#1306).
