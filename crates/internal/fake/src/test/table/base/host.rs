@@ -19,7 +19,7 @@ entries! {
             return Status::WRONG_THREAD;
         }
         let address = with(Ok(None), |s| {
-            if s.host.world.lacks(crate::test::world::Lacks::WorldReads) {
+            if s.host.world.lacks_world_reads() {
                 return Err(Status::UNAVAILABLE);
             }
             Ok(s.host

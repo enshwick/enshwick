@@ -64,6 +64,12 @@ impl WorldPresets {
     pub(crate) fn lacks(&self, part: Lacks) -> bool {
         self.lacks.contains(&part)
     }
+
+    /// Whether the build lacks the world's reads, for the base domain's
+    /// component reads, which may not name this domain's types.
+    pub(crate) fn lacks_world_reads(&self) -> bool {
+        self.lacks(Lacks::WorldReads)
+    }
 }
 
 /// Whether the fake's game build has the base code the loader hooks to
