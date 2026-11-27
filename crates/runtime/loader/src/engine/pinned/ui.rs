@@ -109,6 +109,11 @@ pub(crate) const POST_BACK: Symbol = Symbol::new("ui.post_back");
 pub(crate) const POST_JOIN: Symbol = Symbol::new("ui.post_join");
 pub(crate) const POST_PASSWORD: Symbol = Symbol::new("ui.post_password");
 pub(crate) const POST_START_PLAY: Symbol = Symbol::new("ui.post_start_play");
+/// The quit command's poster (4), which the main menu's command switch
+/// takes as the game flow's `PreGame::Shutdown` and play as `Play::Quit`
+/// (client 26430625, `0x140b12cc0`, `0x140873710` case 4, read in the
+/// decompiler; not seen live).
+pub(crate) const POST_QUIT: Symbol = Symbol::new("ui.post_quit");
 /// The chat line's poster (0x74): `post(ui context, &text, type, a u32, a
 /// u32) -> bool`, which copies the text, at most 0x400 bytes, into its
 /// command (client 26430625).

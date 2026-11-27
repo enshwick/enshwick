@@ -216,7 +216,7 @@ pub(crate) fn register(
     }
     let control = Declared {
         owner,
-        id: format!("{mod_id}:{name}"),
+        id: crate::base::remote::control_id(mod_id, name),
         name: name.to_owned(),
         label: spec.label.to_owned(),
         defaults: spec.keys,
@@ -691,6 +691,8 @@ pub(crate) fn forget() {
 pub(crate) struct Row {
     /// The control's index among the declared, then the carried.
     pub(crate) index: usize,
+    /// Its id, as [`control_id`](crate::base::remote::control_id) gives it.
+    pub(crate) id: String,
     /// Its mod's id, which groups the page.
     pub(crate) mod_id: String,
     /// Its mod's name, which heads the group.
@@ -720,6 +722,7 @@ pub(crate) fn rows() -> Vec<Row> {
             let record = loader.mods.get(d.owner.get());
             Row {
                 index,
+                id: d.id.clone(),
                 mod_id: d.mod_id().to_owned(),
                 mod_name: record.map_or_default(crate::base::manifest::label),
                 label: record.map_or_else(|| d.label.clone(), |r| label_of(r, &d.label)),
@@ -733,6 +736,7 @@ pub(crate) fn rows() -> Vec<Row> {
         .enumerate()
         .map(|(at, (heard, k))| Row {
             index: declared.len() + at,
+            id: heard.id(),
             mod_id: heard.mod_id.clone(),
             mod_name: heard.mod_name.clone(),
             label: heard.control.label.clone(),

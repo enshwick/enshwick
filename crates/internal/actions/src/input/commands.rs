@@ -247,12 +247,58 @@ pub enum CommandAction {
     /// server's chat filter and mute see it as any player's line, and a
     /// server whose chat is off drops it.
     Chat(String),
+    /// Binds `key`, or no key for `None`, to the control `mod_id` declared
+    /// as `control`, in its first key or, `second`, its second, on that
+    /// mod's page of the Mods screen, as the page's key capture or its Clear
+    /// does: the key works at once and the loader keeps it for this player
+    /// in `mod-controls.toml`. A mod of the joined server that this client
+    /// does not have counts too, while its key bindings show. Observed once
+    /// the file's write is queued; [`CommandState::Unavailable`] while the
+    /// Mods screen does not show that mod's page, and
+    /// [`CancelReason::ChangeRefused`] when the file cannot be written.
+    Rebind {
+        /// The mod's id.
+        mod_id: String,
+        /// The control's name, as the mod declared it.
+        control: String,
+        /// Whether it sets the control's second key, not its first.
+        second: bool,
+        /// The key, `None` to clear it.
+        key: Option<crate::controls::Key>,
+    },
+    /// Sets `mod_id`'s setting `key` to `value`, one TOML value such as
+    /// `true`, `3`, `0.5` or `"text"`, at most
+    /// [`CommandAction::MAX_SETTING`] bytes, on that mod's page of the Mods
+    /// screen, as the page's own field does: checked against the mod's
+    /// schema and by the mod, written to the world's settings file of the
+    /// mod with its comments kept, and the mod told. Only in a world this
+    /// process runs, whose settings the page changes. Observed once the
+    /// change is written; [`CommandState::Unavailable`] while the page does
+    /// not show the setting, and [`CancelReason::ChangeRefused`] for a value
+    /// the schema or the mod refuses, or a setting the page shows read-only.
+    SetSetting {
+        /// The mod's id.
+        mod_id: String,
+        /// The setting's key, as the mod's settings name it.
+        key: String,
+        /// The value, as TOML.
+        value: String,
+    },
+    /// Quits the game from the main menu through the game's own quit
+    /// command, so the game ends on its own shutdown path. Its command's
+    /// session is 0; refused outside the main menu and while a join or a
+    /// host runs. Observed once the interface's queue takes it; the process
+    /// then ends, so its status reads at most once more.
+    Quit,
 }
 
 impl CommandAction {
     /// The longest line, in bytes, [`CommandAction::Chat`] sends: the
     /// game's own limit.
     pub const MAX_CHAT: usize = RawCommand::MAX_CHAT;
+
+    /// The longest value, in bytes, [`CommandAction::SetSetting`] sets.
+    pub const MAX_SETTING: usize = RawCommand::MAX_SETTING;
 }
 
 /// A server's password for [`CommandAction::Join`]: the loader hands it to
@@ -441,6 +487,25 @@ impl ClientCommand {
                 raw.kind = RawCommand::CHAT;
                 raw.text = Str::new(text);
             }
+            CommandAction::Rebind {
+                mod_id,
+                control,
+                second,
+                key,
+            } => {
+                raw.kind = RawCommand::REBIND;
+                raw.target = Str::new(mod_id);
+                raw.item = Str::new(control);
+                raw.key_slot = u32::from(*second);
+                raw.key = key.map_or(0, crate::controls::Key::bits);
+            }
+            CommandAction::SetSetting { mod_id, key, value } => {
+                raw.kind = RawCommand::SET_SETTING;
+                raw.target = Str::new(mod_id);
+                raw.item = Str::new(key);
+                raw.text = Str::new(value);
+            }
+            CommandAction::Quit => raw.kind = RawCommand::QUIT,
             CommandAction::Craft { .. }
             | CommandAction::MoveItem { .. }
             | CommandAction::Equip { .. }
@@ -543,11 +608,12 @@ impl Input {
     /// # Errors
     ///
     /// [`WorldError::Refused`] while one of its kind waits or the mod holds
-    /// four presses; [`WorldError::BadArgs`] for a value past its bound, a
-    /// name the build does not know, such as an equipment slot, tab or game
-    /// action, a mod id no loaded mod has, a response the dialog has no
-    /// button for, or a command for another screen or session than the
-    /// client's; [`WorldError::Unavailable`] on a server and on a build
+    /// four presses, and for a join, a host or a quit where it cannot start;
+    /// [`WorldError::BadArgs`] for a value past its bound, a name the build
+    /// does not know, such as an equipment slot, tab or game action, a mod
+    /// id no loaded mod has, a control its mod did not declare, a response
+    /// the dialog has no button for, or a command for another screen or
+    /// session than the client's; [`WorldError::Unavailable`] on a server and on a build
     /// without what it needs, a screen to open among them.
     ///
     /// # Examples
@@ -622,376 +688,4 @@ impl Input {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::luau::LuauCommand;
-    use super::*;
-
-    #[test]
-    fn each_action_fills_its_own_fields_of_the_raw_command() {
-        let open =
-            ClientCommand::new(CommandAction::OpenScreen("Map".to_owned()), 2).on_screen("InGame");
-        let raw = open.raw();
-        assert_eq!((raw.kind, raw.session), (RawCommand::OPEN_SCREEN, 2));
-        // SAFETY: the view points at `open`'s target, alive here.
-        let target = unsafe { raw.target.as_str() };
-        // SAFETY: the view points at `open`'s screen, alive here.
-        let screen = unsafe { raw.expected_screen.as_str() };
-        assert_eq!((target, screen), (Some("Map"), Some("InGame")));
-        let walk = ClientCommand::new(
-            CommandAction::Move {
-                direction: [0.0, 1.0],
-                hold_ms: 250,
-            },
-            2,
-        )
-        .raw();
-        assert_eq!(
-            (walk.kind, walk.direction, walk.hold_ms),
-            (RawCommand::MOVE, [0.0, 1.0], 250)
-        );
-    }
-
-    #[test]
-    fn a_luau_command_needs_what_its_kind_takes() {
-        let luau = |kind: &str, target: Option<&str>| LuauCommand {
-            kind: kind.to_owned(),
-            session: 1,
-            expected_screen: None,
-            target: target.map(str::to_owned),
-            look: None,
-            direction: None,
-            hold_ms: None,
-            recipe: None,
-            password: None,
-            action: None,
-            position: None,
-            world: None,
-            character: None,
-            online: None,
-            window: None,
-            item: None,
-            text: None,
-            answer: None,
-            dialog: None,
-            count: None,
-            entity: None,
-            slot: None,
-            target_slot: None,
-            equipment: None,
-        };
-        assert!(ClientCommand::try_from(luau("open_screen", Some("Map"))).is_ok());
-        assert!(ClientCommand::try_from(luau("open_screen", None)).is_err());
-        assert!(ClientCommand::try_from(luau("dance", None)).is_err());
-        assert!(
-            ClientCommand::try_from(luau("answer_dialog", None)).is_err(),
-            "an answer needs its response"
-        );
-        let answer = |dialog| LuauCommand {
-            answer: Some(Response::Ok),
-            dialog,
-            count: None,
-            entity: None,
-            slot: None,
-            target_slot: None,
-            equipment: None,
-            ..luau("answer_dialog", None)
-        };
-        assert!(
-            ClientCommand::try_from(answer(None)).is_err(),
-            "an answer needs its dialog"
-        );
-        let command = ClientCommand::try_from(answer(Some(4))).expect("a whole answer");
-        let raw = command.raw();
-        assert_eq!(
-            (raw.kind, raw.dialog, raw.answer),
-            (RawCommand::ANSWER_DIALOG, 4, Response::Ok.to_raw())
-        );
-        assert!(
-            ClientCommand::try_from(luau("close_screen", None))
-                .is_ok_and(|c| c.action == CommandAction::CloseScreen)
-        );
-    }
-
-    #[test]
-    fn a_press_carries_its_action_s_game_name_and_its_hold() {
-        let press = ClientCommand::new(
-            CommandAction::Press {
-                action: GameAction::ContextualActionTap,
-                hold_ms: 60,
-            },
-            3,
-        )
-        .raw();
-        // SAFETY: the view points at the action's static name.
-        let target = unsafe { press.target.as_str() };
-        assert_eq!(
-            (press.kind, target, press.hold_ms, press.session),
-            (RawCommand::PRESS, Some("ContextualAction_Tap"), 60, 3)
-        );
-    }
-
-    #[test]
-    fn item_commands_carry_their_slots_counts_and_entities_within_bounds() {
-        let craft = ClientCommand::new(
-            CommandAction::Craft {
-                recipe: RecipeId(0x7cd8_0a04),
-                count: 2,
-                station: None,
-            },
-            1,
-        )
-        .raw();
-        assert_eq!(
-            (craft.kind, craft.amount, craft.entity),
-            (RawCommand::CRAFT, 2, Entity::from_engine(0))
-        );
-        assert!(craft.in_bounds());
-        assert!(
-            !enshwick_abi::headed!(RawCommand { amount: 0, ..craft }).in_bounds(),
-            "no craft"
-        );
-        let (from, to) = (
-            SlotRef::new(Entity::from_engine(0x41), 2),
-            SlotRef::new(Entity::from_engine(0x42), 0),
-        );
-        let split = ClientCommand::new(
-            CommandAction::MoveItem {
-                from,
-                to,
-                count: NonZeroU16::new(5),
-            },
-            1,
-        )
-        .raw();
-        assert_eq!(
-            (split.slot, split.target_slot, split.amount),
-            (from.0, to.0, 5)
-        );
-        assert!(split.in_bounds());
-        assert!(
-            !enshwick_abi::headed!(RawCommand {
-                target_slot: from.0,
-                ..split
-            })
-            .in_bounds(),
-            "a move onto its own slot"
-        );
-        let whole = ClientCommand::new(
-            CommandAction::MoveItem {
-                from,
-                to,
-                count: None,
-            },
-            1,
-        )
-        .raw();
-        assert_eq!(whole.amount, 0, "the whole stack");
-        let take = ClientCommand::new(CommandAction::TakeAll(Entity::from_engine(500)), 1).raw();
-        assert_eq!(
-            (take.kind, take.entity),
-            (RawCommand::TAKE_ALL, Entity::from_engine(500))
-        );
-        assert!(
-            !enshwick_abi::headed!(RawCommand {
-                entity: Entity::from_engine(0),
-                ..take
-            })
-            .in_bounds()
-        );
-        let trash = ClientCommand::new(CommandAction::Trash(from), 1).raw();
-        assert_eq!((trash.kind, trash.slot), (RawCommand::TRASH, from.0));
-    }
-
-    #[test]
-    fn a_luau_move_item_takes_a_count_above_zero_or_none_for_the_whole_stack() {
-        let (from, to) = (
-            SlotRef::new(Entity::from_engine(9), 0),
-            SlotRef::new(Entity::from_engine(9), 1),
-        );
-        let luau = |count: Option<u16>| LuauCommand {
-            kind: "move_item".to_owned(),
-            session: 1,
-            expected_screen: None,
-            target: None,
-            look: None,
-            direction: None,
-            hold_ms: None,
-            recipe: None,
-            password: None,
-            action: None,
-            position: None,
-            world: None,
-            character: None,
-            online: None,
-            window: None,
-            item: None,
-            text: None,
-            answer: None,
-            dialog: None,
-            count,
-            entity: None,
-            slot: Some(from),
-            target_slot: Some(to),
-            equipment: None,
-        };
-        let moved = |count| ClientCommand::try_from(luau(count)).map(|c| c.action).ok();
-        assert_eq!(
-            moved(Some(4)),
-            Some(CommandAction::MoveItem {
-                from,
-                to,
-                count: NonZeroU16::new(4),
-            })
-        );
-        assert_eq!(
-            moved(None),
-            Some(CommandAction::MoveItem {
-                from,
-                to,
-                count: None,
-            })
-        );
-        assert_eq!(moved(Some(0)), None, "a count of 0 moves nothing");
-    }
-
-    #[test]
-    fn a_luau_press_needs_a_game_action_by_its_game_name_and_a_hold() {
-        let luau = |action: Option<&str>, hold_ms: Option<u32>| LuauCommand {
-            kind: "press".to_owned(),
-            session: 1,
-            expected_screen: None,
-            target: None,
-            look: None,
-            direction: None,
-            hold_ms,
-            recipe: None,
-            password: None,
-            action: action.map(str::to_owned),
-            position: None,
-            world: None,
-            character: None,
-            online: None,
-            window: None,
-            item: None,
-            text: None,
-            answer: None,
-            dialog: None,
-            count: None,
-            entity: None,
-            slot: None,
-            target_slot: None,
-            equipment: None,
-        };
-        assert!(
-            ClientCommand::try_from(luau(Some("MainhandAction_Tap"), Some(16))).is_ok_and(|c| {
-                c.action
-                    == CommandAction::Press {
-                        action: GameAction::MainhandActionTap,
-                        hold_ms: 16,
-                    }
-            })
-        );
-        assert!(ClientCommand::try_from(luau(Some("Dance"), Some(16))).is_err());
-        assert!(ClientCommand::try_from(luau(None, Some(16))).is_err());
-        assert!(ClientCommand::try_from(luau(Some("Jump"), None)).is_err());
-    }
-
-    #[test]
-    fn a_cancelled_status_names_its_reason() {
-        let raw = enshwick_abi::headed!(Raw {
-            state: Raw::CANCELLED,
-            reason: Raw::PLAYER_INPUT,
-            ..Raw::EMPTY
-        });
-        assert_eq!(
-            CommandState::from_raw(&raw),
-            CommandState::Cancelled(CancelReason::PlayerInput)
-        );
-        assert_eq!(CancelReason::PlayerInput.name(), "player_input");
-    }
-
-    #[test]
-    fn a_luau_join_never_shows_its_password_in_a_debug_print() {
-        let luau = LuauCommand {
-            kind: "join".to_owned(),
-            session: 0,
-            expected_screen: None,
-            target: Some("127.0.0.1:15637".to_owned()),
-            look: None,
-            direction: None,
-            hold_ms: None,
-            recipe: None,
-            password: Some("hunter2".to_owned()),
-            action: None,
-            position: None,
-            world: None,
-            character: None,
-            online: None,
-            window: None,
-            item: None,
-            text: None,
-            answer: None,
-            dialog: None,
-            count: None,
-            entity: None,
-            slot: None,
-            target_slot: None,
-            equipment: None,
-        };
-        let shown = format!("{luau:?}");
-        assert!(!shown.contains("hunter2"), "{shown}");
-        assert!(shown.contains("127.0.0.1:15637"));
-    }
-
-    #[test]
-    fn a_join_carries_its_server_and_password_and_a_failed_one_names_why() {
-        let join = ClientCommand::new(
-            CommandAction::Join {
-                server: "127.0.0.1:15637".to_owned(),
-                password: Some(Password::new("hunter2")),
-            },
-            0,
-        );
-        let raw = join.raw();
-        assert_eq!(raw.kind, RawCommand::JOIN);
-        // SAFETY: the view points at `join`'s server, alive here.
-        let target = unsafe { raw.target.as_str() };
-        // SAFETY: the view points at `join`'s password, alive here.
-        let password = unsafe { raw.password.as_str() };
-        assert_eq!(
-            (target, password),
-            (Some("127.0.0.1:15637"), Some("hunter2"))
-        );
-        assert!(
-            !format!("{join:?}").contains("hunter2"),
-            "the password never shows"
-        );
-        let failed = enshwick_abi::headed!(Raw {
-            state: Raw::FAILED,
-            failure: Raw::FULL,
-            phase: Raw::PHASE_MENU,
-            ..Raw::EMPTY
-        });
-        assert_eq!(
-            CommandState::from_raw(&failed),
-            CommandState::Failed(JoinFailure::Full)
-        );
-        assert_eq!(JoinPhase::from_raw(failed.phase), Some(JoinPhase::Menu));
-        assert_eq!(JoinPhase::from_raw(0), None, "no phase for other kinds");
-        assert_eq!(JoinFailure::from_raw(99), JoinFailure::Other(99));
-    }
-
-    #[test]
-    fn a_reason_a_newer_loader_adds_reads_as_other_not_as_a_known_one() {
-        let raw = enshwick_abi::headed!(Raw {
-            state: Raw::CANCELLED,
-            reason: 99,
-            ..Raw::EMPTY
-        });
-        assert_eq!(
-            CommandState::from_raw(&raw),
-            CommandState::Cancelled(CancelReason::Other(99))
-        );
-        assert_eq!(CancelReason::Other(99).name(), "other");
-    }
-}
+mod tests;

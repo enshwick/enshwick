@@ -7,7 +7,7 @@ use enshwick_core::controls::GameAction;
 use enshwick_gamedata::catalogue;
 
 use super::play::Host;
-use super::{CommandError, Kind, ModsAsk, dialogs, windows};
+use super::{CommandError, Kind, ModsAsk, dialogs, edits, windows};
 use crate::actions::client_control::{Act, Mark, MenuTab};
 use crate::engine::loader::Loader;
 
@@ -138,7 +138,66 @@ pub(super) fn kind(loader: &Loader, spec: &Spec) -> Result<Kind, CommandError> {
             })
         }),
         Spec::TRASH => Ok(Kind::Act(Act::Trash { slot: spec.slot })),
+        // Its names are read once, by `edit_ask`, when it is queued.
+        Spec::REBIND => Ok(Kind::Edit(edits::Edit::Rebind)),
+        Spec::SET_SETTING => Ok(Kind::Edit(edits::Edit::Setting)),
+        Spec::QUIT => Ok(Kind::Quit),
         _ => Err(CommandError::BadArgs),
+    }
+}
+
+/// The change `spec`, of kind `edit`, asks of the Mods screen, its names
+/// read and checked on `loader`: a rebind names a control some mod's page
+/// shows, with no key or one a control can hold, and a setting names a
+/// loaded mod; the page checks the rest when it makes the change.
+///
+/// # Errors
+///
+/// [`CommandError::BadArgs`] for names no page shows, a key no control
+/// can hold, and a value that is not text.
+pub(super) fn edit_ask(
+    loader: &Loader,
+    spec: &Spec,
+    edit: edits::Edit,
+) -> Result<edits::Ask, CommandError> {
+    // SAFETY: the mod's spec, its target borrowed for the call; the ask
+    // copies it.
+    let mod_id = unsafe { text(spec.target) }?;
+    // SAFETY: the same spec's item, borrowed for the call; the ask copies
+    // it.
+    let item = unsafe { text(spec.item) }?;
+    match edit {
+        edits::Edit::Rebind => {
+            let key = enshwick_core::controls::Key::from_bits(spec.key);
+            if spec.key != 0 && key.is_none() {
+                return Err(CommandError::BadArgs);
+            }
+            let id = crate::base::remote::control_id(mod_id, item);
+            if !crate::actions::controls::rows()
+                .iter()
+                .any(|row| row.id == id)
+            {
+                return Err(CommandError::BadArgs);
+            }
+            Ok(edits::Ask::Rebind {
+                mod_id: mod_id.to_owned(),
+                control: item.to_owned(),
+                slot: usize::from(spec.key_slot != 0),
+                bits: spec.key,
+            })
+        }
+        edits::Edit::Setting => {
+            if !loader.mods.iter().any(|m| m.id == mod_id) {
+                return Err(CommandError::BadArgs);
+            }
+            Ok(edits::Ask::Setting {
+                mod_id: mod_id.to_owned(),
+                key: item.to_owned(),
+                // SAFETY: the mod's spec, its text borrowed for the call;
+                // the ask copies it.
+                value: unsafe { text(spec.text) }?.to_owned(),
+            })
+        }
     }
 }
 
@@ -270,9 +329,9 @@ pub(super) fn expected_screen(kind: Kind, name: &str) -> Result<Option<u8>, Comm
             .map(Some)
             .ok_or(CommandError::Unavailable);
     }
-    if matches!(kind, Kind::Join | Kind::Host(_)) {
-        // A join or a host starts at the main menu, which no HUD screen
-        // names.
+    if matches!(kind, Kind::Join | Kind::Host(_) | Kind::Quit) {
+        // A join, a host or a quit starts at the main menu, which no HUD
+        // screen names.
         return if name.is_empty() {
             Ok(None)
         } else {

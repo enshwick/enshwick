@@ -8,7 +8,7 @@ use enshwick_inventory::inventory::SlotRef;
 
 /// [`ClientCommand`] as Luau gives it; its `Debug` shows none of the
 /// password.
-#[derive(Clone, PartialEq, crate::Script)]
+#[derive(Clone, Default, PartialEq, crate::Script)]
 #[script(name = "ClientCommand")]
 pub(super) struct LuauCommand {
     /// `"open_screen"`, `"close_screen"`, `"choose_tab"`, `"look"`,
@@ -17,14 +17,15 @@ pub(super) struct LuauCommand {
     /// `"open_mods"`, `"open_mod"`, `"open_mod_settings"`,
     /// `"press_window_item"`, `"pick_window_item"`, `"set_window_text"` or
     /// `"answer_dialog"`, `"craft"`, `"move_item"`, `"equip"`, `"take_all"`,
-    /// `"deposit_all"`, `"trash"` or `"chat"`.
+    /// `"deposit_all"`, `"trash"`, `"chat"`, `"rebind"`, `"set_setting"` or `"quit"`.
     pub kind: String,
     /// The session, as `client_snapshot().session` gives it.
     pub session: u64,
     /// The HUD screen the client must show.
     pub expected_screen: Option<String>,
-    /// The screen to open, the tab to choose, the server to join or the
-    /// mod whose page to open, by its id.
+    /// The screen to open, the tab to choose, the server to join, or the
+    /// mod, by its id, whose page to open, control to rebind or setting to
+    /// set.
     pub target: Option<String>,
     /// A look's yaw and pitch in radians.
     pub look: Option<[f32; 2]>,
@@ -73,6 +74,17 @@ pub(super) struct LuauCommand {
     /// The equipment slot an equip fills, by the game's `EquipmentSlot`
     /// member.
     pub equipment: Option<String>,
+    /// The control a rebind binds, by the name its mod declared.
+    pub control: Option<String>,
+    /// Whether a rebind sets the control's second key; its first without
+    /// it.
+    pub second: Option<bool>,
+    /// The key a rebind binds; it clears the key without one.
+    pub key: Option<crate::controls::Key>,
+    /// The setting a set changes, by its key in the mod's settings.
+    pub setting: Option<String>,
+    /// The value a set gives the setting, as TOML.
+    pub value: Option<String>,
 }
 
 impl core::fmt::Debug for LuauCommand {
@@ -102,6 +114,11 @@ impl core::fmt::Debug for LuauCommand {
             .field("slot", &self.slot)
             .field("target_slot", &self.target_slot)
             .field("equipment", &self.equipment)
+            .field("control", &self.control)
+            .field("second", &self.second)
+            .field("key", &self.key)
+            .field("setting", &self.setting)
+            .field("value", &self.value)
             .finish()
     }
 }
@@ -184,6 +201,18 @@ impl TryFrom<LuauCommand> for ClientCommand {
                 response: luau.answer.ok_or_else(|| missing("an answer"))?,
             },
             "chat" => CommandAction::Chat(luau.text.clone().ok_or_else(|| missing("a text"))?),
+            "rebind" => CommandAction::Rebind {
+                mod_id: luau.target.clone().ok_or_else(|| missing("a target"))?,
+                control: luau.control.clone().ok_or_else(|| missing("a control"))?,
+                second: luau.second.unwrap_or(false),
+                key: luau.key,
+            },
+            "set_setting" => CommandAction::SetSetting {
+                mod_id: luau.target.clone().ok_or_else(|| missing("a target"))?,
+                key: luau.setting.clone().ok_or_else(|| missing("a setting"))?,
+                value: luau.value.clone().ok_or_else(|| missing("a value"))?,
+            },
+            "quit" => CommandAction::Quit,
             "craft" | "move_item" | "equip" | "take_all" | "deposit_all" | "trash" => {
                 item_action(&luau)?
             }

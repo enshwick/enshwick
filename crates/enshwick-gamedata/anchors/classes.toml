@@ -1030,6 +1030,7 @@ entries = [
   "ui.post_password_len",
   "ui.post_password_text",
   "ui.post_play_world",
+  "ui.post_quit",
   "ui.post_session",
   "ui.post_session_kind",
   "ui.post_start_play",

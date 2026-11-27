@@ -504,6 +504,7 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
         if let Some(asked) = asked {
             open_asked(loader, screen, asked);
         }
+        edit::run(loader, screen);
         if let Some(entries) = screen.page.entries() {
             entries.ending = false;
         }
@@ -840,6 +841,7 @@ fn server_page(id: String, from_mod: bool) -> Next {
 }
 
 mod controls;
+mod edit;
 mod list;
 mod mismatch;
 mod server;

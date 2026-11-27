@@ -10,8 +10,11 @@
 //! [`Handoff`]). Until a mod queues, each runs nothing but one atomic load.
 
 mod chat;
+mod desk;
 pub(crate) mod dialogs;
+pub(crate) mod edits;
 mod handoff;
+mod kind;
 mod play;
 mod spec;
 pub(crate) mod windows;
@@ -21,23 +24,27 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick_base::Relock;
-use enshwick_core::RecipeId;
 use enshwick_core::abi::Side;
 use enshwick_core::abi::{
     ClientCommand as Spec, ClientCommandStatus as Status, ClientSnapshot as Snapshot,
 };
 
 pub(crate) use self::handoff::Handoff;
-pub(crate) use self::play::{Host, Post, place, server_str};
+pub(crate) use self::kind::Kind;
+pub(crate) use self::play::{Post, place, server_str};
 #[cfg(test)]
 use self::spec::inside_frame;
-use self::spec::{expected_screen, kind, text, window_ask};
-use crate::actions::client_control::{Act, Mark, MenuTab};
+use self::spec::{edit_ask, expected_screen, kind, text, window_ask};
+#[cfg(test)]
+use crate::actions::client_control::Mark;
+use crate::actions::client_control::MenuTab;
 use crate::actions::client_input::{self, Ask};
 use crate::actions::client_recipes;
 use crate::actions::client_snapshot::{LoaderScreen, RecipeRead, TabRead};
 use crate::actions::local_held;
 use enshwick_core::__private::rules;
+#[cfg(test)]
+use enshwick_core::RecipeId;
 
 use crate::engine::fuse::Fuse;
 use crate::engine::loader::Loader;
@@ -53,151 +60,6 @@ const TIMEOUT_MS: u64 = 2000;
 /// How many commands' outcomes the loader keeps for their status.
 const KEPT: usize = 64;
 
-/// What a queued command does, its arguments checked.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum Kind {
-    /// Opens the screen byte.
-    Open(u8),
-    /// Closes the open screen, to the world's screen byte.
-    Close(u8),
-    /// Shows the tab.
-    Tab(MenuTab),
-    /// Turns the camera by yaw and pitch radians once.
-    Look([f32; 2]),
-    /// Holds the direction for the milliseconds.
-    Move([f32; 2], u32),
-    /// Highlights the recipe in the open crafting menu.
-    Highlight(RecipeId),
-    /// Joins a server from the main menu; its target and password live in
-    /// [`play`] from the queue on.
-    Join,
-    /// Leaves play back to the main menu.
-    Leave,
-    /// Holds the game action of the digital input's bit for the
-    /// milliseconds; `true` for a form of the interact key, whose screen of
-    /// what the player faces is the press's own effect.
-    Press(u8, u32, bool),
-    /// Sets, moves or clears the local player's waypoint, or pings a
-    /// position, through its input's waypoint request.
-    Mark(Mark),
-    /// Writes a crafting, item transfer, equipment or item request into the
-    /// local player's input.
-    Act(Act),
-    /// Hosts a world from the main menu; [`play`] runs it from the queue
-    /// on, as a join.
-    Host(Host),
-    /// Shows a page of the loader's own Mods screen.
-    Mods(ModsAsk),
-    /// Acts on an item of a carried window; its ask lives in [`windows`]
-    /// from the queue on.
-    Window(windows::Act),
-    /// Answers the loader's dialog of one number with the raw answer,
-    /// through [`dialogs`].
-    Answer(dialogs::Ask),
-    /// Sends a chat line as the local player's own; its line lives in
-    /// [`chat`] from the queue on.
-    Chat,
-}
-
-impl Kind {
-    const fn raw(self) -> u32 {
-        match self {
-            Self::Open(_) => Spec::OPEN_SCREEN,
-            Self::Close(_) => Spec::CLOSE_SCREEN,
-            Self::Tab(_) => Spec::CHOOSE_TAB,
-            Self::Look(_) => Spec::LOOK,
-            Self::Move(..) => Spec::MOVE,
-            Self::Highlight(_) => Spec::HIGHLIGHT_RECIPE,
-            Self::Join => Spec::JOIN,
-            Self::Host(_) => Spec::HOST,
-            Self::Mods(ModsAsk {
-                mod_index: None, ..
-            }) => Spec::OPEN_MODS,
-            Self::Mods(ModsAsk { gear: false, .. }) => Spec::OPEN_MOD,
-            Self::Mods(ModsAsk { gear: true, .. }) => Spec::OPEN_MOD_SETTINGS,
-            Self::Leave => Spec::LEAVE,
-            Self::Press(..) => Spec::PRESS,
-            Self::Mark(Mark::Set(_)) => Spec::SET_WAYPOINT,
-            Self::Mark(Mark::Clear) => Spec::CLEAR_WAYPOINT,
-            Self::Mark(Mark::Ping(_)) => Spec::PING,
-            Self::Act(Act::Craft { .. }) => Spec::CRAFT,
-            Self::Act(Act::Move { .. }) => Spec::MOVE_ITEM,
-            Self::Act(Act::MoveAll { to: 0, .. }) => Spec::TAKE_ALL,
-            Self::Act(Act::MoveAll { .. }) => Spec::DEPOSIT_ALL,
-            Self::Act(Act::Equip { .. }) => Spec::EQUIP,
-            Self::Act(Act::Trash { .. }) => Spec::TRASH,
-            Self::Window(windows::Act::Press) => Spec::WINDOW_PRESS,
-            Self::Window(windows::Act::Pick) => Spec::WINDOW_PICK,
-            Self::Window(windows::Act::Text) => Spec::WINDOW_TEXT,
-            Self::Answer(_) => Spec::ANSWER_DIALOG,
-            Self::Chat => Spec::CHAT,
-        }
-    }
-
-    /// Whether a command of this kind waits beside one of `other` from the
-    /// same mod: one of each kind, one press of each action, and one
-    /// waypoint or ping.
-    fn waits_beside(self, other: Self) -> bool {
-        match (self, other) {
-            (Self::Press(bit, ..), Self::Press(other, ..)) => bit != other,
-            (Self::Mark(_), Self::Mark(_)) | (Self::Act(_), Self::Act(_)) => false,
-            _ => self.raw() != other.raw(),
-        }
-    }
-
-    /// The longest hold of its kind, which its timeout waits past once its
-    /// detour took it, so a move or a press holds its whole hold.
-    const fn longest_hold(self) -> u64 {
-        match self {
-            Self::Move(..) => Spec::MAX_HOLD_MS as u64,
-            Self::Press(..) => Spec::MAX_PRESS_MS as u64,
-            _ => 0,
-        }
-    }
-
-    /// Whether it drives the player's input, which only the world's own
-    /// screen takes, from the queue to its end.
-    const fn drives(self) -> bool {
-        matches!(self, Self::Look(_) | Self::Move(..) | Self::Press(..))
-    }
-
-    /// The change the interface frame applies for it; `None` for a kind a
-    /// detour of the game's own code runs through a [`Handoff`], and for a
-    /// chat, whose line the frame borrows from [`chat`].
-    const fn frame_change(self) -> Option<FrameChange<'static>> {
-        match self {
-            Self::Open(screen) => Some(FrameChange::Open(screen)),
-            Self::Close(screen) => Some(FrameChange::Close(screen)),
-            Self::Tab(tab) => Some(FrameChange::Tab(tab)),
-            Self::Mods(ask) => Some(FrameChange::Mods(ask)),
-            _ => None,
-        }
-    }
-
-    /// Whether a detour of the game's own code runs it, through a
-    /// [`Handoff`], rather than the interface frame.
-    const fn handed(self) -> bool {
-        self.frame_change().is_none() && !matches!(self, Self::Chat)
-    }
-
-    /// Whether it joins or leaves play, at the game's own pace once handed:
-    /// no session, screen or two-second check ends it then.
-    const fn plays(self) -> bool {
-        matches!(self, Self::Join | Self::Leave | Self::Host(_))
-    }
-
-    /// Its phase when queued: a join waits for the server's answer, a leave
-    /// starts in play; 0 for kinds without phases.
-    const fn queued_phase(self) -> u32 {
-        match self {
-            Self::Join => Status::PHASE_QUEUED,
-            Self::Host(_) => Status::PHASE_MENU,
-            Self::Leave => Status::PHASE_IN_WORLD,
-            _ => 0,
-        }
-    }
-}
-
 /// What the interface frame applies for a command, the only kinds it runs
 /// itself; every other kind runs in a detour.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -212,6 +74,8 @@ pub(crate) enum FrameChange<'a> {
     Mods(ModsAsk),
     /// Posts the line as the local player's own chat line.
     Chat(&'a str),
+    /// Posts the game's own quit command at the main menu.
+    Quit,
 }
 
 /// A page of the loader's Mods screen a command asks for: the list, or a
@@ -294,6 +158,7 @@ impl Command {
             Kind::Act(_) => client_input::act_progress(self.id),
             Kind::Window(_) => windows::progress(self.id),
             Kind::Answer(_) => dialogs::progress(self.id),
+            Kind::Edit(_) => edits::progress(self.id),
             Kind::Join
             | Kind::Leave
             | Kind::Host(_)
@@ -301,7 +166,8 @@ impl Command {
             | Kind::Close(_)
             | Kind::Tab(_)
             | Kind::Mods(_)
-            | Kind::Chat => None,
+            | Kind::Chat
+            | Kind::Quit => None,
         };
         Some(progress.unwrap_or(Progress::Waiting))
     }
@@ -321,6 +187,7 @@ impl Command {
             Kind::Act(act) => client_input::act(self.id, self.owner, act),
             Kind::Window(_) => windows::hand(self.id),
             Kind::Answer(answer) => dialogs::hand(self.id, answer),
+            Kind::Edit(_) => edits::hand(self.id),
             // A join and a host are handed when queued, a join with its
             // target and password.
             Kind::Join
@@ -329,16 +196,21 @@ impl Command {
             | Kind::Close(_)
             | Kind::Tab(_)
             | Kind::Mods(_)
-            | Kind::Chat => false,
+            | Kind::Chat
+            | Kind::Quit => false,
         }
     }
 
     /// Takes it back from its detour once it ended; `by_mod` when its mod
     /// cancelled it, so a join the game took goes back to the menu.
     fn release(&self, by_mod: bool) {
+        // Their asks were parked at the queue, handed or not.
         if let Kind::Window(_) = self.kind {
-            // Its ask was parked at the queue, handed or not.
             windows::release(self.id);
+            return;
+        }
+        if let Kind::Edit(_) = self.kind {
+            edits::release(self.id);
             return;
         }
         if self.kind == Kind::Chat {
@@ -365,7 +237,9 @@ impl Command {
             | Kind::Tab(_)
             | Kind::Mods(_)
             | Kind::Window(_)
-            | Kind::Chat => {}
+            | Kind::Chat
+            | Kind::Edit(_)
+            | Kind::Quit => {}
         }
     }
 }
@@ -462,7 +336,9 @@ fn next(
         | Kind::Act(_)
         | Kind::Window(_)
         | Kind::Answer(_)
-        | Kind::Chat => false,
+        | Kind::Chat
+        | Kind::Edit(_)
+        | Kind::Quit => false,
     };
     if shows {
         return Next::End(Status::OBSERVED, 0);
@@ -497,12 +373,19 @@ fn next(
             return Next::Applied;
         }
     } else {
-        if elsewhere {
+        // A quit runs at the main menu, where no HUD screen shows.
+        if elsewhere || (command.kind == Kind::Quit && seen.screen.is_some()) {
             return cancel(Status::OTHER_SCREEN);
         }
-        // A waypoint, a ping or a chat line drives none of the player's
-        // input to give way.
-        if pressed && !matches!(command.kind, Kind::Mark(_) | Kind::Act(_) | Kind::Chat) {
+        // A change on the Mods screen goes to a mod's page, which the draw
+        // checks is the command's mod.
+        if matches!(command.kind, Kind::Edit(_))
+            && progress.is_none()
+            && !seen.loader.shows_mod_page()
+        {
+            return Next::End(Status::UNAVAILABLE, 0);
+        }
+        if pressed && command.kind.gives_way() {
             return cancel(Status::PLAYER_INPUT);
         }
         let ready = match command.kind {
@@ -522,7 +405,9 @@ fn next(
             | Kind::Act(_)
             | Kind::Window(_)
             | Kind::Answer(_)
-            | Kind::Chat => true,
+            | Kind::Chat
+            | Kind::Edit(_)
+            | Kind::Quit => true,
         };
         // One that waits for its detour, such as for a press's slot, times
         // out as one that waits for its effect.
@@ -637,11 +522,11 @@ impl From<play::StartError> for CommandError {
 /// read for tabs, the builder's detour for looks and moves, the recipe
 /// browser's for recipes.
 fn runs(kind: Kind) -> bool {
-    // Every kind but the dialog's answer, which reads no screen, checks
-    // itself against the frame's screen reads.
-    if FUSE.is_off()
-        || (!matches!(kind, Kind::Answer(_)) && crate::engine::screens::READS_FUSE.is_off())
-    {
+    // Every kind but the dialog's answer, a change on the Mods screen and a
+    // quit, which read none of the game's screens, checks itself against
+    // the frame's screen reads.
+    let reads_screens = !matches!(kind, Kind::Answer(_) | Kind::Edit(_) | Kind::Quit);
+    if FUSE.is_off() || (reads_screens && crate::engine::screens::READS_FUSE.is_off()) {
         return false;
     }
     let groups = &crate::actions::client_control::GROUPS;
@@ -655,12 +540,13 @@ fn runs(kind: Kind) -> bool {
         Kind::Host(_) => play::hosts_run(),
         // The screen draws only while its menu shows: an ask no menu takes
         // times out.
-        Kind::Mods(_) => mods_screen_opens(),
+        Kind::Mods(_) | Kind::Edit(_) => mods_screen_opens(),
         Kind::Mark(_) => client_input::marks_run(),
         Kind::Act(_) => client_input::acts_run(),
         Kind::Window(_) => windows::runs(),
         Kind::Answer(_) => dialogs::runs(),
         Kind::Chat => groups.chat.get().is_some(),
+        Kind::Quit => groups.quit.get().is_some(),
     }
 }
 
@@ -704,6 +590,10 @@ pub(crate) fn queue(loader: &Loader, owner: ModIndex, spec: &Spec) -> Result<u64
         Kind::Chat => Some(unsafe { text(spec.text) }?.to_owned()),
         _ => None,
     };
+    let edit = match kind {
+        Kind::Edit(edit) => Some(edit_ask(loader, spec, edit)?),
+        _ => None,
+    };
     crate::actions::client_snapshot::ask();
     if !runs(kind) {
         return Err(CommandError::Unavailable);
@@ -725,6 +615,9 @@ pub(crate) fn queue(loader: &Loader, owner: ModIndex, spec: &Spec) -> Result<u64
         // could not start, as the fake host refuses it.
         play::can_leave(now)?;
     }
+    if kind == Kind::Quit {
+        play::can_quit(now)?;
+    }
     if let Kind::Host(host) = kind {
         play::host(id, host, now)?;
     }
@@ -742,6 +635,9 @@ pub(crate) fn queue(loader: &Loader, owner: ModIndex, spec: &Spec) -> Result<u64
     }
     if let Some(line) = line {
         chat::park(id, line);
+    }
+    if let Some(edit) = edit {
+        edits::park(id, edit);
     }
     commands.next_id += 1;
     commands.kept.push_back(Command {
@@ -871,8 +767,12 @@ fn run(
         let off = crate::engine::loader::is_off(command.owner)
             || (command.kind.handed() && !runs(command.kind));
         let seen = game.as_ref().or_else(|| {
-            menu.as_ref()
-                .filter(|_| matches!(command.kind, Kind::Mods(_) | Kind::Answer(_)))
+            menu.as_ref().filter(|_| {
+                matches!(
+                    command.kind,
+                    Kind::Mods(_) | Kind::Answer(_) | Kind::Edit(_) | Kind::Quit
+                )
+            })
         });
         let next = if off {
             Next::End(Status::CANCELLED, Status::MOD_OFF)
@@ -904,9 +804,10 @@ fn run(
                 };
                 match applied {
                     None => command.handed = command.hand().then_some(now),
-                    // The line is in the game's own queue, as the chat
-                    // window's Enter leaves it: nothing later shows it.
-                    Some(Applied::Taken) if command.kind == Kind::Chat => {
+                    // The line or the quit is in the game's own queue, as
+                    // the chat window's Enter leaves a line: nothing later
+                    // shows it.
+                    Some(Applied::Taken) if matches!(command.kind, Kind::Chat | Kind::Quit) => {
                         command.release(false);
                         command.state = Status::OBSERVED;
                     }

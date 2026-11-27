@@ -46,6 +46,13 @@ pub(crate) struct FakeControls {
     targets: Vec<Option<enshwick_core::actions::ActionTarget>>,
 }
 
+impl FakeControls {
+    /// Whether the mod declared a control named `name`.
+    pub(crate) fn declares(&self, name: &str) -> bool {
+        self.controls.iter().any(|c| c.name == name)
+    }
+}
+
 entries! {
     pub(crate) fn control(
         me as Mod,

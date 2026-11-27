@@ -43,7 +43,15 @@ entries! {
                 unsafe { id.write(spec.cancels) };
                 return Status::OK;
             }
-            if !(Spec::OPEN_SCREEN..=Spec::CHAT).contains(&spec.kind) || !spec.in_bounds() {
+            if !(Spec::OPEN_SCREEN..=Spec::QUIT).contains(&spec.kind) || !spec.in_bounds() {
+                return Status::BAD_ARGS;
+            }
+            // As the loader: a rebind names a control a mod declared, which
+            // in the fake is one of the mod's own, and a key a control can
+            // hold or none. Controls come with `unstable`, as the rebind API
+            // does.
+            #[cfg(feature = "unstable")]
+            if spec.kind == Spec::REBIND && !rebinds_a_declared_control(s, me, &spec) {
                 return Status::BAD_ARGS;
             }
             // As the loader: an answer goes to the dialog it names while that
@@ -123,7 +131,10 @@ entries! {
             let expects = unsafe { spec.expected_screen.as_str() }.is_some_and(|s| !s.is_empty());
             // As the loader: a mod's page by the id of a mod the test
             // loaded.
-            let names_mod = matches!(spec.kind, Spec::OPEN_MOD | Spec::OPEN_MOD_SETTINGS);
+            let names_mod = matches!(
+                spec.kind,
+                Spec::OPEN_MOD | Spec::OPEN_MOD_SETTINGS | Spec::SET_SETTING
+            );
             if names_mod
                 && !s.host.base.mods.iter().any(|loaded| {
                     // SAFETY: the test's own mod info, its id text kept for
@@ -133,7 +144,7 @@ entries! {
             {
                 return Status::BAD_ARGS;
             }
-            if spec.kind == Spec::HOST && expects {
+            if matches!(spec.kind, Spec::HOST | Spec::QUIT) && expects {
                 return Status::BAD_ARGS;
             }
             if !named_as_the_loader_takes(&spec) {
@@ -153,10 +164,10 @@ entries! {
             // play runs one; a join from the main menu, outside a world, which
             // the snapshot's session names, and a leave inside one.
             let plays = |kind: u32| matches!(kind, Spec::JOIN | Spec::LEAVE | Spec::HOST);
-            if plays(spec.kind) {
+            if plays(spec.kind) || spec.kind == Spec::QUIT {
                 let in_world = s.ui.client_snapshot.session != 0;
                 let running = s.ui.client_commands.iter().any(|c| plays(c.kind) && c.open());
-                let from_menu = matches!(spec.kind, Spec::JOIN | Spec::HOST);
+                let from_menu = matches!(spec.kind, Spec::JOIN | Spec::HOST | Spec::QUIT);
                 if running || in_world == from_menu {
                     return Status::REFUSED;
                 }
@@ -209,6 +220,24 @@ fn on_screen(
             asked.owner(),
         )
     }))
+}
+
+/// Whether rebind `spec` from mod `me` names one of its own declared
+/// controls, by the caller's id, with no key or bits a key holds, as the
+/// loader checks a rebind against every declared control.
+#[cfg(feature = "unstable")]
+fn rebinds_a_declared_control(
+    s: &crate::test::table::State,
+    me: enshwick_core::abi::ModHandle,
+    spec: &enshwick_core::abi::ClientCommand,
+) -> bool {
+    // SAFETY: the mod's spec, its target borrowed for the call.
+    let target = unsafe { spec.target.as_str() };
+    // SAFETY: the same spec's item, borrowed for the call.
+    let item = unsafe { spec.item.as_str() };
+    let own = crate::test::table::base::mods::id_of(s, me).is_some_and(|id| target == Some(id));
+    let key = spec.key == 0 || enshwick_core::controls::Key::from_bits(spec.key).is_some();
+    own && key && item.is_some_and(|name| s.actions.controls.declares(name))
 }
 
 fn reflects_action(host: &crate::test::FakeHost, name: &str) -> bool {

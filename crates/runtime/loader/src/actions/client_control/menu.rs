@@ -101,6 +101,35 @@ impl SelectedCharacter {
     }
 }
 
+/// The interface's own quit command (4), which the main menu's command
+/// switch ends the game flow on (`PreGame::Shutdown`), so the game closes
+/// on its own path; a build without its poster still joins and hosts
+/// (client 26430625, read in the decompiler, not seen live).
+#[derive(Debug)]
+pub(crate) struct QuitPost {
+    quit: PostFn,
+}
+
+impl QuitPost {
+    pub(super) fn resolve(loader: &Loader) -> Result<Self, &'static str> {
+        Ok(Self {
+            quit: poster(loader, pinned::ui::POST_QUIT)?,
+        })
+    }
+
+    /// Posts the quit command to the interface's queue; whether the queue
+    /// took it. The command is its kind byte alone.
+    ///
+    /// # Safety
+    ///
+    /// - As for [`post`].
+    pub(crate) unsafe fn post(&self, context: usize) -> bool {
+        // SAFETY: the matched poster of its type; the caller's contract
+        // gives the live context on the interface thread.
+        !unsafe { (self.quit)(context) }.is_null()
+    }
+}
+
 /// A poster: the UI context in, its command or null out.
 type PostFn = unsafe extern "system" fn(context: usize) -> *mut u8;
 

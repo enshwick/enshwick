@@ -88,15 +88,23 @@ pub(super) fn settings(
     }
     pages(paint, listing, first, rows.len());
     let (key, value) = changed?;
-    Some(
-        match crate::base::configure::apply(loader, index, &key, &value, "the Mods screen") {
-            Ok(change) => (
-                crate::base::configure::changed(&record.id, &key, &change),
-                true,
-            ),
-            Err(why) => (why.reply(), false),
-        },
-    )
+    Some(change(loader, index, &key, &value))
+}
+
+/// Sets mod `index`'s setting `key` to the TOML `value`, as the page's
+/// field does: checked against the schema and by the mod, then written;
+/// the line the page shows and whether the change went through.
+pub(super) fn change(loader: &Loader, index: usize, key: &str, value: &str) -> (String, bool) {
+    let Some(record) = loader.mods.get(index) else {
+        return (String::new(), false);
+    };
+    match crate::base::configure::apply(loader, index, key, value, "the Mods screen") {
+        Ok(change) => (
+            crate::base::configure::changed(&record.id, key, &change),
+            true,
+        ),
+        Err(why) => (why.reply(), false),
+    }
 }
 
 /// Draws one row, its text field kept in `entries`; the TOML of the

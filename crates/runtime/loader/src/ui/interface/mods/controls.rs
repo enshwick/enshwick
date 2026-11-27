@@ -138,7 +138,7 @@ pub(super) fn body(loader: &Loader, paint: &Painter<'_>, view: &mut View, mod_id
         if paint.button(texts::text("controls.clear").as_bytes(), true)
             && let Some((index, slot, _)) = view.waiting.take()
         {
-            view.message = Some(saved(loader, index, slot, 0));
+            let _saved = rebind(loader, view, index, slot, 0);
         }
     }
     // Clashes count every mod's keys; the page lists this mod's controls.
@@ -245,8 +245,7 @@ fn look(loader: &Loader, view: &mut View) {
     match capture.look(&down, &keys, modifiers, escape) {
         Some(Captured::Key(key)) => {
             let (index, slot) = (*index, *slot);
-            view.waiting = None;
-            view.message = Some(saved(loader, index, slot, key.bits()));
+            let _saved = rebind(loader, view, index, slot, key.bits());
         }
         Some(Captured::Cancelled) => {
             view.waiting = None;
@@ -254,6 +253,23 @@ fn look(loader: &Loader, view: &mut View) {
         }
         None => {}
     }
+}
+
+/// Binds `bits`, 0 for none, in `slot` of control `index`, as a key the
+/// capture took or the Clear button does, ending any capture and showing
+/// the outcome; whether the file took it.
+pub(super) fn rebind(
+    loader: &Loader,
+    view: &mut View,
+    index: usize,
+    slot: usize,
+    bits: u32,
+) -> bool {
+    view.waiting = None;
+    let outcome = saved(loader, index, slot, bits);
+    let ok = outcome.1;
+    view.message = Some(outcome);
+    ok
 }
 
 /// Sets the key and says whether the file took it.

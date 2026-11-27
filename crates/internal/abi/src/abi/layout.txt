@@ -208,7 +208,7 @@ ChunkData size 20 align 4 born 20
     x at 8 size 4 type u32
     z at 12 size 4 type u32
     size at 16 size 4 type u32
-ClientCommand size 200 align 8 born 200
+ClientCommand size 208 align 8 born 208
     header at 0 size 8 type Header
     kind at 8 size 4 type u32
     hold_ms at 12 size 4 type u32
@@ -233,6 +233,8 @@ ClientCommand size 200 align 8 born 200
     target_slot at 184 size 8 type u64
     entity at 192 size 4 type Entity
     amount at 196 size 4 type u32
+    key at 200 size 4 type u32
+    key_slot at 204 size 4 type u32
 ClientCommandStatus size 40 align 8 born 40
     header at 0 size 8 type Header
     state at 8 size 4 type u32
@@ -1467,6 +1469,7 @@ const ClientCommand::MAX_HOLD_MS = 250
 const ClientCommand::MAX_LOOK = 1.5707964
 const ClientCommand::MAX_PASSWORD = 1024
 const ClientCommand::MAX_PRESS_MS = 2000
+const ClientCommand::MAX_SETTING = 1024
 const ClientCommand::MAX_SLOTS = 16
 const ClientCommand::MAX_TEXT = 255
 const ClientCommand::MOVE = 6
@@ -1477,6 +1480,9 @@ const ClientCommand::OPEN_MOD_SETTINGS = 17
 const ClientCommand::OPEN_SCREEN = 1
 const ClientCommand::PING = 13
 const ClientCommand::PRESS = 10
+const ClientCommand::QUIT = 31
+const ClientCommand::REBIND = 29
+const ClientCommand::SET_SETTING = 30
 const ClientCommand::SET_WAYPOINT = 11
 const ClientCommand::TAKE_ALL = 25
 const ClientCommand::TRASH = 27
@@ -1486,6 +1492,7 @@ const ClientCommand::WINDOW_TEXT = 20
 const ClientCommandStatus::APPLIED = 1
 const ClientCommandStatus::BY_MOD = 4
 const ClientCommandStatus::CANCELLED = 3
+const ClientCommandStatus::CHANGE_REFUSED = 9
 const ClientCommandStatus::FAILED = 5
 const ClientCommandStatus::FULL = 2
 const ClientCommandStatus::INPUT_BLOCKED = 6

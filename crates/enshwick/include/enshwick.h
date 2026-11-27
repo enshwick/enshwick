@@ -1044,7 +1044,7 @@ typedef uint32_t EnshwickRecipeId;
 typedef struct EnshwickClientCommand {
   // Size and version of this struct.
   struct EnshwickHeader header;
-  // What to do: `EnshwickClientCommand_OPEN_SCREEN` to `EnshwickClientCommand_CHAT`.
+  // What to do: `EnshwickClientCommand_OPEN_SCREEN` to `EnshwickClientCommand_QUIT`.
   uint32_t kind;
   // A move's hold in milliseconds, 1 to `EnshwickClientCommand_MAX_HOLD_MS`;
   // a press's, 1 to `EnshwickClientCommand_MAX_PRESS_MS`.
@@ -1128,6 +1128,12 @@ typedef struct EnshwickClientCommand {
   // `EnshwickClientCommand_MAX_AMOUNT`; items `EnshwickClientCommand_MOVE_ITEM`
   // moves, 0 for the whole stack.
   uint32_t amount;
+  // The key `EnshwickClientCommand_REBIND` binds, as a control's keys hold
+  // one (the API's `Key` bits), 0 to clear the binding.
+  uint32_t key;
+  // Which of the control's two keys `EnshwickClientCommand_REBIND` sets: 0
+  // its first, 1 its second.
+  uint32_t key_slot;
 } EnshwickClientCommand;
 // Opens `target`, one of the screens the game opens from a key in the
 // world.
@@ -1204,12 +1210,25 @@ typedef struct EnshwickClientCommand {
 // Sends `text` to the world's chat as the local player's own line, as
 // the chat window's Enter does, in a world.
 #define EnshwickClientCommand_CHAT 28
+// Binds `key` in `key_slot` to the control `item`, by the name it was
+// declared with, of mod `target`, by its id, on that mod's page of the
+// Mods screen, as its key capture or Clear does.
+#define EnshwickClientCommand_REBIND 29
+// Sets the setting `item` of mod `target` to `text`, one TOML value,
+// on that mod's page of the Mods screen, as its field does.
+#define EnshwickClientCommand_SET_SETTING 30
+// Quits the game from the main menu through the interface's own quit
+// command; `session` is 0.
+#define EnshwickClientCommand_QUIT 31
 // The most crafts or items one command asks for.
 #define EnshwickClientCommand_MAX_AMOUNT 65535
 // The longest text, in bytes, a window's field takes.
 #define EnshwickClientCommand_MAX_TEXT 255
 // The longest chat line, in bytes, the game's chat takes.
 #define EnshwickClientCommand_MAX_CHAT 1024
+// The longest TOML value, in bytes, `EnshwickClientCommand_SET_SETTING`
+// sets.
+#define EnshwickClientCommand_MAX_SETTING 1024
 // How many worlds and characters the main menu lists at most.
 #define EnshwickClientCommand_MAX_SLOTS 16
 // The longest password, in bytes, the game's join takes.
@@ -1238,7 +1257,7 @@ typedef struct EnshwickClientCommandStatus {
   // `EnshwickClientCommandStatus_PENDING` to `EnshwickClientCommandStatus_UNAVAILABLE`.
   uint32_t state;
   // Why a cancelled command ended: `EnshwickClientCommandStatus_SESSION_CHANGED` to
-  // `EnshwickClientCommandStatus_ITEM_OFF`; 0 otherwise.
+  // `EnshwickClientCommandStatus_CHANGE_REFUSED`; 0 otherwise.
   uint32_t reason;
   // The command's kind.
   uint32_t kind;
@@ -1287,6 +1306,10 @@ typedef struct EnshwickClientCommandStatus {
 // empty or an action the player may not run now, or the item has no
 // option of that name or takes no such text.
 #define EnshwickClientCommandStatus_ITEM_OFF 8
+// The Mods screen refused a rebind or a setting: the setting's schema
+// or its mod refuses the value, the setting is not open to change
+// here, or the file did not write.
+#define EnshwickClientCommandStatus_CHANGE_REFUSED 9
 // The game ended a join or a host without reaching the world, for
 // `failure`.
 #define EnshwickClientCommandStatus_FAILED 5
@@ -8037,7 +8060,7 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, header) == 0, "offset of Chun
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, x) == 8, "offset of ChunkData.x");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, z) == 12, "offset of ChunkData.z");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickChunkData, size) == 16, "offset of ChunkData.size");
-ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientCommand) == 200, "size of ClientCommand");
+ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientCommand) == 208, "size of ClientCommand");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientCommand) == 8, "alignment of ClientCommand");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, header) == 0, "offset of ClientCommand.header");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, kind) == 8, "offset of ClientCommand.kind");
@@ -8063,6 +8086,8 @@ ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, slot) == 176, "offset of 
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, target_slot) == 184, "offset of ClientCommand.target_slot");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, entity) == 192, "offset of ClientCommand.entity");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, amount) == 196, "offset of ClientCommand.amount");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, key) == 200, "offset of ClientCommand.key");
+ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommand, key_slot) == 204, "offset of ClientCommand.key_slot");
 ENSHWICK_STATIC_ASSERT(sizeof(EnshwickClientCommandStatus) == 40, "size of ClientCommandStatus");
 ENSHWICK_STATIC_ASSERT(ENSHWICK_ALIGNOF(EnshwickClientCommandStatus) == 8, "alignment of ClientCommandStatus");
 ENSHWICK_STATIC_ASSERT(offsetof(EnshwickClientCommandStatus, header) == 0, "offset of ClientCommandStatus.header");
