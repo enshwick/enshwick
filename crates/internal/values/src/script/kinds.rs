@@ -155,6 +155,9 @@ mod tests {
     #[derive(Debug, crate::script::ErrorKind)]
     enum NeverFails {}
 
+    // An enum without variants derives a kind that compiles.
+    const _: fn(&NeverFails) -> &'static str = NeverFails::kind;
+
     #[test]
     fn a_derived_kind_is_the_variant_name_whatever_its_fields() {
         assert_eq!(PlantError::NoSeed.kind(), "NoSeed");
@@ -164,10 +167,9 @@ mod tests {
     }
 
     #[test]
-    fn a_raw_name_answers_without_its_prefix_and_an_empty_enum_derives() {
+    fn a_raw_name_answers_without_its_prefix() {
         assert_eq!(r#Raw::r#Type.kind(), "Type");
         assert_eq!(r#Raw::r#Match.kind(), "Match");
-        let _never: fn(&NeverFails) -> &'static str = NeverFails::kind;
     }
 
     /// An error whose hand-written kind is empty.
