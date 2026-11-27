@@ -47,7 +47,6 @@ mod tests {
             "no world runs yet"
         );
         loader.set_default_game_settings();
-        let defaults = loader.game_settings().unwrap().0;
         let elsewhere = std::thread::spawn(|| SETTINGS.get().unwrap().read().err())
             .join()
             .unwrap();
@@ -81,11 +80,19 @@ mod tests {
             })
             .unwrap();
         assert!((changed.enemy_damage_factor - 2.5).abs() < f32::EPSILON);
-        let (bytes, preset) = loader.game_settings().unwrap();
-        assert_eq!(preset, 4, "a change makes the preset custom");
-        assert_eq!(&bytes[0x58..0x5c], &2.5f32.to_le_bytes());
-        assert_eq!(bytes[0x2e], 0);
-        assert_eq!(&bytes[0x78..0x80], &defaults[0x78..0x80], "untouched");
+        let SettingsRead {
+            settings: after,
+            preset,
+            ..
+        } = settings.read().unwrap();
+        assert_eq!(
+            preset,
+            GameSettingsPreset::Custom,
+            "a change makes the preset custom"
+        );
+        assert!((after.enemy_damage_factor - 2.5).abs() < f32::EPSILON);
+        assert_eq!(after.weather_frequency, WeatherFrequency::Disabled);
+        assert_eq!(after.day_time_duration, now.day_time_duration, "untouched");
 
         assert_eq!(
             settings.change(|s| s.night_time_duration = Duration::ZERO),

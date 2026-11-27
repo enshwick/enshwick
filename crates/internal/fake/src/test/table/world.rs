@@ -360,8 +360,11 @@ entries! {
 
     pub(crate) fn save_world(me as Caller) -> Status {
         with(Status::MISSING, |s| {
-            if s.host.world.lacks(crate::test::world::Lacks::SaveCode) {
+            if s.host.world.lacks(crate::test::world::Lacks::SaveCode) || no_world(s) {
                 return Status::UNAVAILABLE;
+            }
+            if !crate::test::table::on_game_thread() {
+                return Status::WRONG_THREAD;
             }
             if s.world.save.held || s.world.save.refused {
                 return Status::REFUSED;

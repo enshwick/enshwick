@@ -20,6 +20,7 @@ pub(crate) mod tags;
 pub(crate) mod transactions;
 pub(crate) mod voxel_edits;
 
+pub(crate) use game_settings::CUSTOM_PRESET;
 pub(crate) use presets::{BaseCode, GAME_WORLD_BOX, Lacks, WorldPresets};
 
 impl FakeHost {

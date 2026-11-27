@@ -13,9 +13,8 @@ const SIZE: u16 = 144;
 enum Value {
     F32(f32),
     Bool(bool),
+    /// A byte, an enum's variant included.
     U8(u8),
-    /// An enum's variant, by the id of its constant in [`ENUM_VALUES`].
-    Variant(&'static str),
     /// A length of time, in nanoseconds.
     Nanos(i64),
 }
@@ -68,7 +67,7 @@ const FIELDS: [(&str, u16, Value); 38] = [
     (
         ids::GAME_SETTINGS_TOMBSTONE_MODE,
         0x2c,
-        Value::Variant(ids::TOMBSTONE_MODE_ADD_BACKPACK_MATERIALS),
+        Value::U8(value_of(ids::TOMBSTONE_MODE_ADD_BACKPACK_MATERIALS)),
     ),
     (
         ids::GAME_SETTINGS_ENABLE_GLIDER_TURBULENCES,
@@ -78,12 +77,12 @@ const FIELDS: [(&str, u16, Value); 38] = [
     (
         ids::GAME_SETTINGS_WEATHER_FREQUENCY,
         0x2e,
-        Value::Variant(ids::WEATHER_FREQUENCY_NORMAL),
+        Value::U8(value_of(ids::WEATHER_FREQUENCY_NORMAL)),
     ),
     (
         ids::GAME_SETTINGS_FISHING_DIFFICULTY,
         0x2f,
-        Value::Variant(ids::GENERIC_DIFFICULTY_NORMAL),
+        Value::U8(value_of(ids::GENERIC_DIFFICULTY_NORMAL)),
     ),
     (
         ids::GAME_SETTINGS_MINING_DAMAGE_FACTOR,
@@ -129,12 +128,12 @@ const FIELDS: [(&str, u16, Value); 38] = [
     (
         ids::GAME_SETTINGS_RANDOM_SPAWNER_AMOUNT,
         0x54,
-        Value::Variant(ids::RANDOM_SPAWNER_AMOUNT_AUTOMATIC),
+        Value::U8(value_of(ids::RANDOM_SPAWNER_AMOUNT_AUTOMATIC)),
     ),
     (
         ids::GAME_SETTINGS_AGGRO_POOL_AMOUNT,
         0x55,
-        Value::Variant(ids::AGGRO_POOL_AMOUNT_NORMAL),
+        Value::U8(value_of(ids::AGGRO_POOL_AMOUNT_NORMAL)),
     ),
     (
         ids::GAME_SETTINGS_ENEMY_DAMAGE_FACTOR,
@@ -167,7 +166,9 @@ const FIELDS: [(&str, u16, Value); 38] = [
     (
         ids::GAME_SETTINGS_TAMING_STARTLE_REPERCUSSION,
         0x75,
-        Value::Variant(ids::TAMING_STARTLE_REPERCUSSION_LOSE_SOME_PROGRESS),
+        Value::U8(value_of(
+            ids::TAMING_STARTLE_REPERCUSSION_LOSE_SOME_PROGRESS,
+        )),
     ),
     (
         ids::GAME_SETTINGS_DAY_TIME_DURATION,
@@ -182,7 +183,7 @@ const FIELDS: [(&str, u16, Value); 38] = [
     (
         ids::GAME_SETTINGS_CURSE_MODIFIER,
         0x88,
-        Value::Variant(ids::CURSE_MODIFIER_NORMAL),
+        Value::U8(value_of(ids::CURSE_MODIFIER_NORMAL)),
     ),
     (
         ids::GAME_SETTINGS_FLAME_LEVEL_FOG_REMOVAL,
@@ -198,7 +199,7 @@ const ENUM_VALUES: [(&str, u8); 32] = [
     (ids::GAME_SETTINGS_PRESET_RELAXED, 1),
     (ids::GAME_SETTINGS_PRESET_HARD, 2),
     (ids::GAME_SETTINGS_PRESET_SURVIVAL, 3),
-    (ids::GAME_SETTINGS_PRESET_CUSTOM, 4),
+    (ids::GAME_SETTINGS_PRESET_CUSTOM, CUSTOM_PRESET),
     (ids::TOMBSTONE_MODE_ADD_BACKPACK_MATERIALS, 0),
     (ids::TOMBSTONE_MODE_EVERYTHING, 1),
     (ids::TOMBSTONE_MODE_NO_TOMBSTONE, 2),
@@ -228,13 +229,42 @@ const ENUM_VALUES: [(&str, u8); 32] = [
     (ids::CURSE_MODIFIER_HARD, 2),
 ];
 
-/// The game's value of the enum constant `id`; 0 for one [`ENUM_VALUES`]
-/// lacks, which its test rules out.
-fn value_of(id: &str) -> u8 {
-    ENUM_VALUES
-        .iter()
-        .find(|&&(named, _)| named == id)
-        .map_or(0, |&(_, value)| value)
+/// The preset the game names custom settings with, which a change sets.
+pub(crate) const CUSTOM_PRESET: u8 = 4;
+
+/// The game's value of the enum constant `id`, found while compiling, so an
+/// id [`ENUM_VALUES`] lacks fails the build.
+const fn value_of(id: &str) -> u8 {
+    let mut i = 0;
+    while i < ENUM_VALUES.len() {
+        if same(ENUM_VALUES[i].0, id) {
+            return ENUM_VALUES[i].1;
+        }
+        i += 1;
+    }
+    #[expect(
+        clippy::panic,
+        reason = "only reached while compiling, where it stops the build"
+    )]
+    {
+        panic!("an enum id ENUM_VALUES lacks")
+    }
+}
+
+/// Whether `a` and `b` are the same text, as `==` cannot be in a `const fn`.
+const fn same(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < a.len() {
+        if a[i] != b[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
 }
 
 /// The Default preset's settings as bytes of the game's layout.
@@ -246,7 +276,6 @@ fn defaults() -> Vec<u8> {
             Value::F32(factor) => bytes[at..at + 4].copy_from_slice(&factor.to_le_bytes()),
             Value::Bool(on) => bytes[at] = u8::from(on),
             Value::U8(raw) => bytes[at] = raw,
-            Value::Variant(id) => bytes[at] = value_of(id),
             Value::Nanos(ns) => bytes[at..at + 8].copy_from_slice(&ns.to_le_bytes()),
         }
     }
@@ -299,15 +328,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_default_variant_has_a_value_and_every_field_fits() {
+    fn every_field_fits_inside_the_settings_struct() {
         for (id, at, value) in FIELDS {
-            if let Value::Variant(variant) = value {
-                assert!(
-                    ENUM_VALUES.iter().any(|&(named, _)| named == variant),
-                    "{id}"
-                );
-            }
-            assert!(at < SIZE, "{id}");
+            let width = match value {
+                Value::F32(_) => 4,
+                Value::Bool(_) | Value::U8(_) => 1,
+                Value::Nanos(_) => 8,
+            };
+            assert!(at + width <= SIZE, "{id}");
         }
     }
 }

@@ -119,7 +119,7 @@ fn set(data: *const u8, size: u32) -> Status {
     let bytes = unsafe { core::slice::from_raw_parts(data, size as usize) }.to_vec();
     with(Status::MISSING, |s| match s.world.game_settings.as_mut() {
         Some(current) if current.0.len() == bytes.len() => {
-            *current = (bytes, 4);
+            *current = (bytes, u32::from(crate::test::world::CUSTOM_PRESET));
             Status::OK
         }
         Some(_) => Status::BAD_ARGS,

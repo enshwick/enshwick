@@ -160,6 +160,26 @@ mod tests {
     }
 
     #[test]
+    fn a_save_off_the_game_thread_or_with_no_world_is_refused_as_the_loader_refuses_it() {
+        let loader = enshwick::test::FakeHost::new().world().install();
+        // SAFETY: the three functions are the exports of this file's `declare_mod!(Keeper)`.
+        let status =
+            unsafe { loader.start(enshwick_mod_query, enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+
+        let elsewhere = std::thread::spawn(|| WORLD.get().unwrap().save())
+            .join()
+            .unwrap();
+        assert_eq!(elsewhere, Err(enshwick::WorldError::WrongThread));
+        loader.stop_world();
+        assert_eq!(
+            WORLD.get().unwrap().save(),
+            Err(enshwick::WorldError::Unavailable)
+        );
+        assert_eq!(loader.saves(), 0, "neither save counts");
+    }
+
+    #[test]
     fn a_mod_stops_a_dedicated_server_once_and_a_second_stop_is_refused() {
         let loader = enshwick::test::FakeHost::new().world().install();
         // SAFETY: the three functions are the exports of this file's `declare_mod!(Keeper)`.
