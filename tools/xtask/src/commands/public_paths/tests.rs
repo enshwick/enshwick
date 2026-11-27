@@ -422,3 +422,101 @@ fn a_trait_impl_gives_its_type_the_methods_a_path_reaches_and_no_associated_type
         set(&["Ext", "Thing", "Thing::provided", "Thing::written", "kept"])
     );
 }
+
+/// A crate whose stable `Thing` implements `Kind`, declared in a private
+/// module and re-exported from `script` only when `unstable`.
+fn gated_trait(unstable: bool) -> BTreeMap<String, Crate> {
+    use Visibility::{Crate as Private, Default, Public};
+    let root = if unstable { &[1, 2, 3][..] } else { &[1, 2] };
+    let own = krate(
+        0,
+        vec![
+            item(0, Some("own"), Public, module(root)),
+            item(
+                1,
+                Some("Thing"),
+                Public,
+                ItemEnum::Struct(Struct {
+                    kind: StructKind::Unit,
+                    generics: generics(),
+                    impls: vec![Id(20), Id(21)],
+                }),
+            ),
+            item(2, Some("traits"), Private, module(&[10])),
+            item(3, Some("script"), Public, module(&[4])),
+            item(4, Some("Kind"), Public, used("Kind", Some(10), false)),
+            item(
+                10,
+                Some("Kind"),
+                Public,
+                ItemEnum::Trait(Trait {
+                    is_auto: false,
+                    is_unsafe: false,
+                    is_dyn_compatible: true,
+                    items: vec![Id(11)],
+                    generics: generics(),
+                    bounds: Vec::new(),
+                    implementations: vec![Id(20)],
+                }),
+            ),
+            item(11, Some("kind"), Default, function()),
+            item(
+                20,
+                None,
+                Default,
+                ItemEnum::Impl(Impl {
+                    trait_: Some(Path {
+                        path: "Kind".to_owned(),
+                        id: Id(10),
+                        args: None,
+                    }),
+                    for_: Type::ResolvedPath(Path {
+                        path: "Thing".to_owned(),
+                        id: Id(1),
+                        args: None,
+                    }),
+                    ..block(None, &[22])
+                }),
+            ),
+            item(
+                21,
+                None,
+                Default,
+                ItemEnum::Impl(Impl {
+                    for_: Type::ResolvedPath(Path {
+                        path: "Thing".to_owned(),
+                        id: Id(1),
+                        args: None,
+                    }),
+                    ..block(None, &[23])
+                }),
+            ),
+            item(22, Some("kind"), Default, function()),
+            item(23, Some("new"), Public, function()),
+        ],
+        vec![(10, summary(0, &["own", "traits", "Kind"], ItemKind::Trait))],
+        &[],
+    );
+    [("own".to_owned(), own)].into()
+}
+
+#[test]
+fn a_member_of_a_trait_only_the_unstable_build_names_is_unstable_on_a_stable_type() {
+    let (stable, unstable) = (gated_trait(false), gated_trait(true));
+    let stable = Surface::new(&stable).paths("own").unwrap();
+    let unstable = Surface::new(&unstable).paths("own").unwrap();
+    assert_eq!(stable, set(&["Thing", "Thing::new"]));
+    let text = render(&stable, &unstable);
+    let lines: Vec<&str> = text.lines().filter(|line| !line.starts_with('#')).collect();
+    assert_eq!(
+        lines,
+        [
+            "Thing",
+            "Thing::kind unstable",
+            "Thing::new",
+            "script unstable",
+            "script::Kind unstable",
+            "script::Kind::kind unstable",
+        ]
+    );
+}

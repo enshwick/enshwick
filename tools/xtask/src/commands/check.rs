@@ -311,7 +311,7 @@ fn public_paths_hold(
     root: &Path,
     packages: &[Package],
 ) -> bool {
-    if !lists_public_paths(scope, changed) {
+    if !lists_public_paths(scope, changed, packages) {
         let problems = if names_file(changed, public_paths::chapter::FILE) {
             public_paths::check_chapter(root)
         } else {
@@ -330,13 +330,21 @@ fn public_paths_hold(
 }
 
 /// Whether a change can move [`public_paths::FILE`], so the facade is
-/// documented again to check it: it reaches the facade, changes this task,
-/// which writes the list, or edits the list, which no package owns. An edit
-/// of the book's stability chapter alone is checked against the committed
-/// list.
-fn lists_public_paths(scope: &Scope, changed: Option<&[String]>) -> bool {
+/// documented again to check it: it reaches the facade, edits this task's
+/// own files, since it writes the list, or edits the list, which no package
+/// owns. This task only depending on a changed package, as it does on the
+/// loader, cannot move the list: the facade documented twice took 13 to
+/// 22 s of each loader change's check (2026-11-27). An edit of the book's
+/// stability chapter alone is checked against the committed list.
+fn lists_public_paths(scope: &Scope, changed: Option<&[String]>, packages: &[Package]) -> bool {
+    let own = packages
+        .iter()
+        .find(|package| package.name == env!("CARGO_PKG_NAME"))
+        .map(|package| format!("{}/", package.dir));
     reaches(scope, FACADE)
-        || touches(scope, env!("CARGO_PKG_NAME"))
+        || own.is_some_and(|dir| {
+            changed.is_some_and(|files| files.iter().any(|file| file.starts_with(&dir)))
+        })
         || names_file(changed, public_paths::FILE)
 }
 

@@ -6,7 +6,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use rustdoc_types::{Attribute, Crate, Id, Item, ItemEnum, StructKind, Type, Visibility};
 
 /// What a path separator joins.
@@ -15,6 +15,26 @@ pub(crate) const SEPARATOR: &str = "::";
 /// An item of one of the documented crates: its crate's library name and its
 /// id in that crate's JSON.
 type Key<'a> = (&'a str, Id);
+
+/// What brings a member to its type: `None` when a mod names it through the
+/// type alone, else the trait of a documented crate whose impl gives it, which
+/// a mod calls only where it can name that trait.
+type Via<'a> = Option<Key<'a>>;
+
+/// The members of a type, each with what brings it ([`Via`]).
+type Members<'a> = BTreeMap<&'a str, Vec<Via<'a>>>;
+
+/// What a walk from the root found.
+#[derive(Default)]
+struct Found<'a> {
+    /// The paths a mod can write.
+    paths: BTreeSet<String>,
+    /// The paths of members only traits bring, each with those traits: one
+    /// stands once the walk reaches one of them.
+    gated: BTreeMap<String, Vec<Key<'a>>>,
+    /// Every item a path reaches.
+    reached: FxHashSet<Key<'a>>,
+}
 
 /// What a name of a module reaches.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,7 +56,7 @@ pub(crate) struct Surface<'a> {
     by_path: FxHashMap<&'a str, FxHashMap<Vec<String>, Vec<Id>>>,
     /// The names `Type::name` reaches through impl blocks, wherever they are
     /// written: an inherent block's public items and a trait impl's items.
-    impl_members: FxHashMap<Key<'a>, BTreeSet<&'a str>>,
+    impl_members: FxHashMap<Key<'a>, Members<'a>>,
 }
 
 impl<'a> Surface<'a> {
@@ -65,15 +85,28 @@ impl<'a> Surface<'a> {
     }
 
     /// Every public path of the crate `root`, without the crate's name, as
-    /// a mod writes it after `root::`.
+    /// a mod writes it after `root::`. A member a trait's impl brings counts
+    /// only where the crate names the trait: a build without the trait's
+    /// module leaves its methods out, so the list marks them as the trait.
     pub(crate) fn paths(&self, root: &'a str) -> Result<BTreeSet<String>, String> {
         let krate = self
             .crates
             .get(root)
             .ok_or_else(|| format!("no rustdoc JSON of {root}"))?;
-        let mut found = BTreeSet::new();
+        let mut found = Found::default();
         self.walk_module((root, krate.root), &[], &mut Vec::new(), &mut found);
-        Ok(found)
+        let Found {
+            mut paths,
+            gated,
+            reached,
+        } = found;
+        paths.extend(
+            gated
+                .into_iter()
+                .filter(|(_, traits)| traits.iter().any(|t| reached.contains(t)))
+                .map(|(path, _)| path),
+        );
+        Ok(paths)
     }
 
     /// Records the paths below the module `module`, reached at `prefix`;
@@ -83,7 +116,7 @@ impl<'a> Surface<'a> {
         module: Key<'a>,
         prefix: &[&'a str],
         chain: &mut Vec<Key<'a>>,
-        found: &mut BTreeSet<String>,
+        found: &mut Found<'a>,
     ) {
         if chain.contains(&module) {
             return;
@@ -101,8 +134,18 @@ impl<'a> Surface<'a> {
                 let Target::Item(key) = target else {
                     continue;
                 };
-                for member in self.members(key) {
-                    found.insert(format!("{joined}{SEPARATOR}{}", written(member)));
+                found.reached.insert(key);
+                for (member, vias) in self.members(key) {
+                    let member = format!("{joined}{SEPARATOR}{}", written(member));
+                    if vias.contains(&None) {
+                        found.paths.insert(member);
+                    } else {
+                        found
+                            .gated
+                            .entry(member)
+                            .or_default()
+                            .extend(vias.into_iter().flatten());
+                    }
                 }
                 if matches!(
                     self.item(key).map(|item| &item.inner),
@@ -111,7 +154,7 @@ impl<'a> Surface<'a> {
                     self.walk_module(key, &path, chain, found);
                 }
             }
-            found.insert(joined);
+            found.paths.insert(joined);
         }
         chain.pop();
     }
@@ -202,9 +245,9 @@ impl<'a> Surface<'a> {
 
     /// What `Item::member` reaches beside the item: a type's public fields,
     /// an enum's variants, a trait's items, and the impl blocks' items.
-    fn members(&self, key: Key<'a>) -> BTreeSet<&'a str> {
+    fn members(&self, key: Key<'a>) -> Members<'a> {
         let Some(item) = self.item(key) else {
-            return BTreeSet::new();
+            return Members::new();
         };
         let declared: &[Id] = match &item.inner {
             ItemEnum::Struct(inner) => match &inner.kind {
@@ -216,7 +259,7 @@ impl<'a> Surface<'a> {
             ItemEnum::Trait(inner) => &inner.items,
             _ => &[],
         };
-        let mut members: BTreeSet<&'a str> = declared
+        let mut members: Members<'a> = declared
             .iter()
             .filter_map(|id| self.item((key.0, *id)))
             .filter(|member| {
@@ -225,9 +268,12 @@ impl<'a> Surface<'a> {
                         || member.visibility == Visibility::Public)
             })
             .filter_map(|member| member.name.as_deref())
+            .map(|name| (name, vec![None]))
             .collect();
-        if let Some(added) = self.impl_members.get(&key) {
-            members.extend(added);
+        for (name, vias) in self.impl_members.get(&key).into_iter().flatten() {
+            for via in vias {
+                bring(&mut members, name, *via);
+            }
         }
         members
     }
@@ -241,8 +287,9 @@ impl<'a> Surface<'a> {
     /// auto-trait impls give none, or every type would list `into` and
     /// `type_id`, and neither do `#[derive]`d ones, whose `clone`, `fmt` and
     /// `eq` no table names and which would move the list with each derive.
-    fn impls(&self) -> FxHashMap<Key<'a>, BTreeSet<&'a str>> {
-        let mut members: FxHashMap<Key<'a>, BTreeSet<&'a str>> = FxHashMap::default();
+    /// A member of a documented crate's trait comes by that trait ([`Via`]).
+    fn impls(&self) -> FxHashMap<Key<'a>, Members<'a>> {
+        let mut members: FxHashMap<Key<'a>, Members<'a>> = FxHashMap::default();
         for (crate_name, krate) in self.crates {
             for item in krate.index.values() {
                 let ItemEnum::Impl(block) = &item.inner else {
@@ -272,16 +319,17 @@ impl<'a> Surface<'a> {
                             && (block.trait_.is_some() || member.visibility == Visibility::Public)
                     })
                     .filter_map(|member| member.name.as_deref());
-                let provided = block
-                    .trait_
-                    .as_ref()
-                    .filter(|used| {
-                        matches!(self.resolve(crate_name, used.id), Some(Target::Item(_)))
-                    })
-                    .map(|_| block.provided_trait_methods.iter().map(String::as_str));
+                let via = block.trait_.as_ref().and_then(|used| {
+                    match self.resolve(crate_name, used.id) {
+                        Some(Target::Item(key)) => Some(key),
+                        _ => None,
+                    }
+                });
+                let provided = via.map(|_| block.provided_trait_methods.iter().map(String::as_str));
                 let listed = members.entry(owner).or_default();
-                listed.extend(names);
-                listed.extend(provided.into_iter().flatten());
+                for name in names.chain(provided.into_iter().flatten()) {
+                    bring(listed, name, via);
+                }
             }
         }
         members
@@ -391,6 +439,14 @@ fn declared(
             declared(krate, *id, path, found);
         }
         path.pop();
+    }
+}
+
+/// Adds the member `name`, brought by `via`, beside what else brings it.
+fn bring<'a>(members: &mut Members<'a>, name: &'a str, via: Via<'a>) {
+    let vias = members.entry(name).or_default();
+    if !vias.contains(&via) {
+        vias.push(via);
     }
 }
 
