@@ -176,7 +176,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror",
- "toml 1.2.2+spec-1.1.0",
+ "toml 1.2.3+spec-1.1.0",
  "toml_edit",
  "windows-sys",
  "zip",
@@ -560,7 +560,7 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_json",
- "toml 1.2.2+spec-1.1.0",
+ "toml 1.2.3+spec-1.1.0",
  "trybuild",
 ]
 
@@ -615,7 +615,7 @@ dependencies = [
  "serde",
  "strsim",
  "thiserror",
- "toml 1.2.2+spec-1.1.0",
+ "toml 1.2.3+spec-1.1.0",
 ]
 
 [[package]]
@@ -655,7 +655,7 @@ dependencies = [
  "enshwick-values",
  "enshwick-world",
  "serde",
- "toml 1.2.2+spec-1.1.0",
+ "toml 1.2.3+spec-1.1.0",
 ]
 
 [[package]]
@@ -732,7 +732,7 @@ dependencies = [
  "rustc-hash",
  "serde",
  "thiserror",
- "toml 1.2.2+spec-1.1.0",
+ "toml 1.2.3+spec-1.1.0",
 ]
 
 [[package]]
@@ -755,7 +755,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
- "toml 1.2.2+spec-1.1.0",
+ "toml 1.2.3+spec-1.1.0",
  "twox-hash",
 ]
 
@@ -828,7 +828,7 @@ dependencies = [
  "serde",
  "sha2",
  "thiserror",
- "toml 1.2.2+spec-1.1.0",
+ "toml 1.2.3+spec-1.1.0",
  "toml_edit",
  "windows-sys",
 ]
@@ -860,7 +860,7 @@ dependencies = [
  "rustc-hash",
  "syn 3.0.10",
  "thiserror",
- "toml 1.2.2+spec-1.1.0",
+ "toml 1.2.3+spec-1.1.0",
 ]
 
 [[package]]
@@ -870,7 +870,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.10",
- "toml 1.2.2+spec-1.1.0",
+ "toml 1.2.3+spec-1.1.0",
 ]
 
 [[package]]
@@ -892,7 +892,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
- "toml 1.2.2+spec-1.1.0",
+ "toml 1.2.3+spec-1.1.0",
 ]
 
 [[package]]
@@ -1932,9 +1932,9 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "1.2.2+spec-1.1.0"
+version = "1.2.3+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5426cb1b964690d913f6c5c1a1ae0b42f428ec506bb4d452876d7a209c9bca3b"
+checksum = "26b1f26e9485c1fa43ee89fe76e9f3fb9e2e52bb227f8594b4d687496b83d073"
 dependencies = [
  "indexmap",
  "serde_core",
@@ -1978,9 +1978,9 @@ dependencies = [
 
 [[package]]
 name = "toml_parser"
-version = "1.1.6+spec-1.1.0"
+version = "1.1.7+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6769c452d71ba30696c6b37770c439a9cc9110f47f7d5cdbeda79840ef5ea31"
+checksum = "0bb28d6e049a9766c3bd91a8326e6179f5b132dec87906bb97018ef7a2f3431a"
 dependencies = [
  "winnow 1.0.5",
 ]
@@ -2062,7 +2062,7 @@ dependencies = [
  "serde_json",
  "target-tuple",
  "termcolor",
- "toml 1.2.2+spec-1.1.0",
+ "toml 1.2.3+spec-1.1.0",
 ]
 
 [[package]]
@@ -2321,7 +2321,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "syn 3.0.10",
- "toml 1.2.2+spec-1.1.0",
+ "toml 1.2.3+spec-1.1.0",
  "toml_edit",
  "zip",
 ]
