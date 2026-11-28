@@ -148,7 +148,7 @@ jobs:
           key: xwin-release-${{ runner.os }}-0.24.1-v1
       - uses: ./.github/actions/setup-rust
         with:
-          tools: cargo-cyclonedx@0.5.10,cargo-auditable@0.7.7
+          tools: cargo-cyclonedx@0.5.10,cargo-auditable@0.7.8
 
       - uses: ./.github/actions/release-files
         with:
@@ -207,7 +207,7 @@ jobs:
           key: xwin-release-${{ runner.os }}-0.24.1-v1
       - uses: ./.github/actions/setup-rust
         with:
-          tools: cargo-cyclonedx@0.5.10,cargo-auditable@0.7.7
+          tools: cargo-cyclonedx@0.5.10,cargo-auditable@0.7.8
       - uses: ./.github/actions/reproducible
 
       - name: Build
