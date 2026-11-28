@@ -94,7 +94,7 @@ jobs:
 
       - uses: ./.github/actions/setup-rust
         with:
-          tools: cargo-nextest@0.9.152,cargo-deny@0.22.0,cargo-machete@0.10.1${{ inputs.semver != '' && (inputs.part == 'semver' || inputs.part == 'all') && ',cargo-semver-checks@0.51.0' || '' }}
+          tools: cargo-nextest@0.9.152,cargo-deny@0.22.1,cargo-machete@0.10.1${{ inputs.semver != '' && (inputs.part == 'semver' || inputs.part == 'all') && ',cargo-semver-checks@0.51.0' || '' }}
           ast-grep: ${{ inputs.part == 'host' || inputs.part == 'all' }}
           sanitizers: ${{ inputs.part == 'fuzz' }}
           fuzz: ${{ inputs.part == 'fuzz' }}
